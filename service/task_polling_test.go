@@ -20,6 +20,8 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type taskPollingFetchAdaptor struct {
@@ -564,9 +566,14 @@ func TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels(t *testing.T) {
 	fastFirst := seedPollingTask(t, fastChannelID, "task_public_fast_1", "upstream_fast_parallel_1")
 	fastSecond := seedPollingTask(t, fastChannelID, "task_public_fast_2", "upstream_fast_parallel_2")
 
+	// Polling updates these task pointers; capture immutable IDs before workers start.
+	slowUpstreamID := slowTask.GetUpstreamTaskID()
+	fastFirstUpstreamID := fastFirst.GetUpstreamTaskID()
+	fastSecondUpstreamID := fastSecond.GetUpstreamTaskID()
+
 	adaptor := &taskPollingFetchAdaptor{
 		fetched:      make(chan string, 4),
-		blockTaskID:  slowTask.GetUpstreamTaskID(),
+		blockTaskID:  slowUpstreamID,
 		blockStarted: make(chan struct{}),
 		releaseBlock: make(chan struct{}),
 	}
@@ -585,16 +592,16 @@ func TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels(t *testing.T) {
 	gopool.Go(func() {
 		errCh <- UpdateVideoTasks(context.Background(), constant.TaskPlatform("kling"), map[int][]string{
 			slowChannelID: {
-				slowTask.GetUpstreamTaskID(),
+				slowUpstreamID,
 			},
 			fastChannelID: {
-				fastFirst.GetUpstreamTaskID(),
-				fastSecond.GetUpstreamTaskID(),
+				fastFirstUpstreamID,
+				fastSecondUpstreamID,
 			},
 		}, map[string]*model.Task{
-			slowTask.GetUpstreamTaskID():   slowTask,
-			fastFirst.GetUpstreamTaskID():  fastFirst,
-			fastSecond.GetUpstreamTaskID(): fastSecond,
+			slowUpstreamID:       slowTask,
+			fastFirstUpstreamID:  fastFirst,
+			fastSecondUpstreamID: fastSecond,
 		})
 	})
 
@@ -607,16 +614,16 @@ func TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels(t *testing.T) {
 	require.Eventually(t, func() bool {
 		fetchedTaskIDs := adaptor.fetchedTaskIDs()
 		return len(fetchedTaskIDs) == 2 &&
-			fetchedTaskIDs[0] == fastFirst.GetUpstreamTaskID() &&
-			fetchedTaskIDs[1] == fastSecond.GetUpstreamTaskID()
+			fetchedTaskIDs[0] == fastFirstUpstreamID &&
+			fetchedTaskIDs[1] == fastSecondUpstreamID
 	}, 500*time.Millisecond, 10*time.Millisecond)
 
 	releaseBlockedTask()
 	require.NoError(t, <-errCh)
 	assert.ElementsMatch(t, []string{
-		slowTask.GetUpstreamTaskID(),
-		fastFirst.GetUpstreamTaskID(),
-		fastSecond.GetUpstreamTaskID(),
+		slowUpstreamID,
+		fastFirstUpstreamID,
+		fastSecondUpstreamID,
 	}, adaptor.fetchedTaskIDs())
 }
 
@@ -795,7 +802,7 @@ func TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce(t *testing.T) {
 	truncate(t)
 	const userID, initialQuota, taskQuota = 404, 10_000, 1_500
 	seedUser(t, userID, initialQuota)
-	now := time.Unix(1_800_000_000, 0)
+	now := time.Now()
 
 	makeRunning := func(id string, age time.Duration) *model.Task {
 		task := makeTask(userID, 0, taskQuota, 0, BillingSourceWallet)
@@ -815,8 +822,53 @@ func TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce(t *testing.T) {
 	constant.TaskTimeoutMinutes = 72 * 60
 	t.Cleanup(func() { constant.TaskTimeoutMinutes = previousTimeout })
 
-	sweepTimedOutTasksAt(context.Background(), now)
-	sweepTimedOutTasksAt(context.Background(), now)
+	// Align the fixture rows to the real cutoff after the clock is read. This
+	// tests the exact boundary without injecting a clock or using a time margin.
+	const callback = "test:exact-task-timeout-boundary"
+	var observedCutoffs []int64
+	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if tx.Statement.Schema == nil || tx.Statement.Schema.Name != "Task" {
+			return
+		}
+		where, ok := tx.Statement.Clauses["WHERE"].Expression.(clause.Where)
+		if !ok {
+			return
+		}
+		for _, expression := range where.Exprs {
+			expr, ok := expression.(clause.Expr)
+			if !ok || expr.SQL != "submit_time < ?" || len(expr.Vars) != 1 {
+				continue
+			}
+			cutoff, ok := expr.Vars[0].(int64)
+			require.True(t, ok, "timeout cutoff must be an integer timestamp")
+			observedCutoffs = append(observedCutoffs, cutoff)
+			for _, sample := range []struct {
+				task   *model.Task
+				offset time.Duration
+			}{
+				{oldBoundary, 47 * time.Hour},
+				{atOldDeadline, 48 * time.Hour},
+				{insideDeadline, 12 * time.Hour},
+				{exactDeadline, 0},
+				{afterDeadline, -time.Hour},
+			} {
+				require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Model(&model.Task{}).
+					Where("id = ?", sample.task.ID).
+					UpdateColumn("submit_time", cutoff+int64(sample.offset/time.Second)).Error)
+			}
+			return
+		}
+	}))
+	t.Cleanup(func() { require.NoError(t, model.DB.Callback().Query().Remove(callback)) })
+	beforeSweep := time.Now().Unix()
+	sweepTimedOutTasks(context.Background())
+	sweepTimedOutTasks(context.Background())
+	afterSweep := time.Now().Unix()
+	require.Len(t, observedCutoffs, 2, "both sweeps must use the real cutoff query")
+	for _, cutoff := range observedCutoffs {
+		assert.GreaterOrEqual(t, cutoff, beforeSweep-int64(72*time.Hour/time.Second))
+		assert.LessOrEqual(t, cutoff, afterSweep-int64(72*time.Hour/time.Second))
+	}
 
 	var gotOld, gotAtOldDeadline, gotInside, gotExact, gotAfter model.Task
 	for task, target := range map[*model.Task]*model.Task{
@@ -825,6 +877,7 @@ func TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce(t *testing.T) {
 	} {
 		require.NoError(t, model.DB.First(target, task.ID).Error)
 	}
+	assert.Equal(t, observedCutoffs[1], gotExact.SubmitTime, "the sample must be exactly at the cutoff")
 	assert.EqualValues(t, model.TaskStatusInProgress, gotOld.Status)
 	assert.EqualValues(t, model.TaskStatusInProgress, gotAtOldDeadline.Status)
 	assert.EqualValues(t, model.TaskStatusInProgress, gotInside.Status)
@@ -838,7 +891,7 @@ func TestSweepTimedOutTasksDisabledAtZero(t *testing.T) {
 	truncate(t)
 	const userID, initialQuota, taskQuota = 405, 10_000, 1_500
 	seedUser(t, userID, initialQuota)
-	now := time.Unix(1_800_000_000, 0)
+	now := time.Now()
 	task := makeTask(userID, 0, taskQuota, 0, BillingSourceWallet)
 	task.TaskID = "timeout_disabled_at_zero"
 	task.Progress = "50%"
@@ -849,7 +902,7 @@ func TestSweepTimedOutTasksDisabledAtZero(t *testing.T) {
 	constant.TaskTimeoutMinutes = 0
 	t.Cleanup(func() { constant.TaskTimeoutMinutes = previousTimeout })
 
-	sweepTimedOutTasksAt(context.Background(), now)
+	sweepTimedOutTasks(context.Background())
 
 	var reloaded model.Task
 	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)

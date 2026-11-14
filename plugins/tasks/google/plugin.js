@@ -132,27 +132,6 @@ function resolutionForSize(size) {
   return "720p";
 }
 
-function videoParameters(req) {
-  const metadata = Object.assign({}, req.metadata || {});
-  if (req.duration !== undefined) metadata.durationSeconds = req.duration;
-  if (req.size !== undefined) {
-    const parts = sizeParts(req.size);
-    if (!parts || !parts.every(function (part) { return Number.isFinite(part) && part > 0; })) throw new Error("size must be positive width x height");
-    if (!metadata.resolution) metadata.resolution = resolutionForSize(req.size);
-    if (!metadata.aspectRatio) metadata.aspectRatio = aspectForSize(req.size);
-  }
-  let seconds = 8;
-  if (metadata.durationSeconds !== undefined) {
-    seconds = Number(metadata.durationSeconds);
-    if (![4, 6, 8].includes(seconds)) throw new Error("durationSeconds must be one of 4, 6, or 8");
-    metadata.durationSeconds = seconds;
-  }
-  let resolution = metadata.resolution === undefined ? "720p" : String(metadata.resolution).toLowerCase();
-  if (!["720p", "1080p", "4k"].includes(resolution)) throw new Error("resolution must be one of 720p, 1080p, or 4k");
-  if (metadata.resolution !== undefined) metadata.resolution = resolution;
-  return { metadata: metadata, seconds: seconds, resolution: resolution };
-}
-
 function aspectForSize(size) {
   const parts = sizeParts(size);
   if (!parts || parts[0] <= 0 || parts[1] <= 0) return "16:9";
@@ -193,9 +172,12 @@ function imageInput(value, files) {
 
 function converted(ctx) {
   const req = ctx.requestBody || {};
-  const parameters = videoParameters(req);
-  const metadata = parameters.metadata;
+  const metadata = Object.assign({}, req.metadata || {});
   const params = Object.assign({}, metadata);
+  if (Number(req.duration) > 0) params.durationSeconds = Number(req.duration);
+  if (!params.resolution && req.size) params.resolution = resolutionForSize(req.size);
+  if (!params.aspectRatio && req.size) params.aspectRatio = aspectForSize(req.size);
+  if (params.resolution) params.resolution = String(params.resolution).toLowerCase();
   params.numberOfVideos = 1;
   const instance = { prompt: req.prompt };
   const image = imageInput((req.images || [])[0], ctx.files);
@@ -285,8 +267,11 @@ export function parseSubmitResponse(ctx, resp) {
 
 export function extractUsage(ctx) {
   const req = ctx.requestBody || {};
-  const parameters = videoParameters(req);
-  return { seconds: parameters.seconds, resolution: parameters.resolution };
+  const metadata = req.metadata || {};
+  let seconds = Number(req.duration);
+  if (!Number.isFinite(seconds) || seconds <= 0) seconds = 8;
+  const resolution = String(metadata.resolution || resolutionForSize(req.size) || "720p").toLowerCase();
+  return { seconds: seconds, resolution: resolution };
 }
 
 export function extractUsageOnComplete() {

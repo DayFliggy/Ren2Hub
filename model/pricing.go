@@ -1,11 +1,9 @@
 package model
 
 import (
-	"maps"
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -63,8 +61,6 @@ type PricingVendor struct {
 	Icon        string `json:"icon,omitempty"`
 }
 
-// updatePricing 只在 updatePricingLock 下写这组变量，作为构建快照的工作区；
-// 读者只读 pricingCache 发布的不可变快照，不再碰这组变量。
 var (
 	pricingMap           []Pricing
 	vendorsList          []PricingVendor
@@ -75,92 +71,53 @@ var (
 	// 缓存映射：模型名 -> 计费类型
 	modelQuotaTypeMap  = make(map[string]int)
 	modelQuotaTypeLock = sync.RWMutex{}
-
-	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
 )
 
-// pricingSnapshot 是一次成功 updatePricing 的完整产物，发布后不再修改。
-// builtAt 为零表示已作废：下一次读价格时重建，端点查询仍读最后一次成功的结果。
-type pricingSnapshot struct {
-	prices         []Pricing
-	vendors        []PricingVendor
-	endpointMap    map[string]common.EndpointInfo
-	modelEndpoints map[string][]constant.EndpointType
-	builtAt        time.Time
-}
-
-var pricingCache atomic.Pointer[pricingSnapshot]
-
-func (s *pricingSnapshot) fresh() bool {
-	return s != nil && len(s.prices) > 0 && !s.builtAt.IsZero() && time.Since(s.builtAt) <= time.Minute
-}
-
-// currentPricingSnapshot 命中时无锁返回；过期时在 updatePricingLock 下双重检查后重建。
-// 重建失败返回错误，不发布半成品。
-func currentPricingSnapshot() (*pricingSnapshot, error) {
-	if snapshot := pricingCache.Load(); snapshot.fresh() {
-		return snapshot, nil
-	}
-	updatePricingLock.Lock()
-	defer updatePricingLock.Unlock()
-	if snapshot := pricingCache.Load(); snapshot.fresh() {
-		return snapshot, nil
-	}
-	return rebuildPricingLocked()
-}
-
-// rebuildPricingLocked 是唯一的重建入口，调用方必须持有 updatePricingLock。
-// 锁顺序仍是 updatePricingLock -> channelSyncLock（见 loadPricingAdvancedCustomConfigs）。
-func rebuildPricingLocked() (*pricingSnapshot, error) {
-	if err := updatePricing(); err != nil {
-		return nil, err
-	}
-	snapshot := &pricingSnapshot{
-		prices:         pricingMap,
-		vendors:        vendorsList,
-		endpointMap:    supportedEndpointMap,
-		modelEndpoints: modelSupportEndpointTypes,
-		builtAt:        lastGetPricingTime,
-	}
-	pricingCache.Store(snapshot)
-	return snapshot, nil
-}
-
-// invalidatePricingLocked 是唯一的作废入口，调用方必须持有 updatePricingLock。
-func invalidatePricingLocked() {
-	previous := pricingCache.Load()
-	if previous == nil {
-		return
-	}
-	stale := *previous
-	stale.prices, stale.vendors, stale.endpointMap = nil, nil, nil
-	stale.builtAt = time.Time{}
-	pricingCache.Store(&stale)
-}
+var (
+	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
+	modelSupportEndpointsLock = sync.RWMutex{}
+)
 
 func GetPricing() []Pricing {
-	snapshot, err := currentPricingSnapshot()
-	if err != nil {
-		common.SysError(common.LogText("read pricing: %s", err.Error()))
-		return nil
+	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
+		updatePricingLock.Lock()
+		defer updatePricingLock.Unlock()
+		// Double check after acquiring the lock
+		if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
+			modelSupportEndpointsLock.Lock()
+			defer modelSupportEndpointsLock.Unlock()
+			updatePricing()
+		}
 	}
-	return snapshot.prices
+	return pricingMap
 }
 
 func InvalidatePricingCache() {
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
-	invalidatePricingLocked()
+
+	pricingMap = nil
+	vendorsList = nil
+	lastGetPricingTime = time.Time{}
+}
+
+// GetVendors 返回当前定价接口使用到的供应商信息
+func GetVendors() []PricingVendor {
+	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
+		// 保证先刷新一次
+		GetPricing()
+	}
+	return vendorsList
 }
 
 func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 	if model == "" {
 		return make([]constant.EndpointType, 0)
 	}
-	if snapshot := pricingCache.Load(); snapshot != nil {
-		if endpoints, ok := snapshot.modelEndpoints[model]; ok {
-			return slices.Clone(endpoints)
-		}
+	modelSupportEndpointsLock.RLock()
+	defer modelSupportEndpointsLock.RUnlock()
+	if endpoints, ok := modelSupportEndpointTypes[model]; ok {
+		return endpoints
 	}
 	return make([]constant.EndpointType, 0)
 }
@@ -190,11 +147,11 @@ func pricingUsesRelayRoutes(channelType int) bool {
 // updatePricingLock is held, and nests channelSyncLock.RLock. This defines the
 // global lock order updatePricingLock -> channelSyncLock: any code path holding
 // channelSyncLock must release it before touching the pricing cache (see
-// InitChannelCache), otherwise it deadlocks.
+// InitChannelCache / CacheUpdateChannel), otherwise it deadlocks.
 // The returned configs are pointers shared with the channel cache; they are
 // replaced wholesale on update and never mutated in place, so reading them after
 // RUnlock is safe.
-func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) (map[int]*dto.AdvancedCustomConfig, error) {
+func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) map[int]*dto.AdvancedCustomConfig {
 	channelIDs := make([]int, 0)
 	seen := make(map[int]struct{})
 	for _, ability := range enableAbilities {
@@ -208,7 +165,7 @@ func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) (map
 		channelIDs = append(channelIDs, ability.ChannelId)
 	}
 	if len(channelIDs) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	configs := make(map[int]*dto.AdvancedCustomConfig, len(channelIDs))
@@ -224,29 +181,27 @@ func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) (map
 				}
 			}
 		}
-		return configs, nil
+		return configs
 	}
 
-	var channels []Channel
-	if err := DB.Select("id", "type", "setting", "settings").Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
-		return nil, err
-	}
-	for _, channel := range channels {
-		if config := channelRelayConfig(&channel); config != nil {
-			configs[channel.Id] = config
+	for _, channelID := range channelIDs {
+		channel, err := CacheGetChannel(channelID)
+		if err != nil {
+			common.SysLog(common.LogText("load advanced custom channel settings error: channel_id=%d, error=%v", channelID, err))
 			continue
 		}
-		var settings dto.ChannelOtherSettings
-		if channel.OtherSettings != "" {
-			if err := common.UnmarshalJsonStr(channel.OtherSettings, &settings); err != nil {
-				return nil, err
-			}
+		if config := channelRelayConfig(channel); config != nil {
+			configs[channelID] = config
+			continue
 		}
-		if settings.AdvancedCustom != nil {
-			configs[channel.Id] = settings.AdvancedCustom
+		if channel.Type != constant.ChannelTypeAdvancedCustom {
+			continue
+		}
+		if config := channel.GetOtherSettings().AdvancedCustom; config != nil {
+			configs[channelID] = config
 		}
 	}
-	return configs, nil
+	return configs
 }
 
 func appendPricingEndpoint(endpoints []string, endpoint string) []string {
@@ -256,17 +211,16 @@ func appendPricingEndpoint(endpoints []string, endpoint string) []string {
 	return append(endpoints, endpoint)
 }
 
-func updatePricing() error {
+func updatePricing() {
 	//modelRatios := common.GetModelRatios()
 	enableAbilities, err := GetAllEnableAbilityWithChannels()
 	if err != nil {
-		return err
+		common.SysLog(common.LogText("GetAllEnableAbilityWithChannels error: %v", err))
+		return
 	}
 	// 预加载模型元数据与供应商一次，避免循环查询
 	var allMeta []Model
-	if err := DB.Find(&allMeta).Error; err != nil {
-		return err
-	}
+	_ = DB.Find(&allMeta).Error
 	names := make([]string, 0, len(enableAbilities))
 	for _, ability := range enableAbilities {
 		names = append(names, ability.Model)
@@ -275,9 +229,7 @@ func updatePricing() error {
 
 	// 预加载供应商
 	var vendors []Vendor
-	if err := DB.Find(&vendors).Error; err != nil {
-		return err
-	}
+	_ = DB.Find(&vendors).Error
 	vendorMap := make(map[int]*Vendor)
 	for i := range vendors {
 		vendorMap[vendors[i].Id] = &vendors[i]
@@ -299,6 +251,8 @@ func updatePricing() error {
 
 	modelNames := make(map[string]bool)
 	pluginGeneration := jsplugin.DefaultRegistry.Generation()
+	// Models an ordinary channel serves: neither a task plugin channel nor a
+	// legacy channel type that one of the model's plugins claims.
 	ordinaryChannelModels := make(map[string]bool)
 	for _, ability := range enableAbilities {
 		modelNames[ability.Model] = true
@@ -313,10 +267,7 @@ func updatePricing() error {
 
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
-	advancedCustomConfigs, err := loadPricingAdvancedCustomConfigs(enableAbilities)
-	if err != nil {
-		return err
-	}
+	advancedCustomConfigs := loadPricingAdvancedCustomConfigs(enableAbilities)
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
@@ -528,16 +479,9 @@ func updatePricing() error {
 	modelQuotaTypeLock.Unlock()
 
 	lastGetPricingTime = time.Now()
-	return nil
 }
 
-// ReadPricing returns a consistent snapshot or the actual refresh failure.
-// The outer slices and map are cloned; nested values stay shared with the
-// immutable snapshot, so callers may reassign fields but must not mutate them in place.
-func ReadPricing() ([]Pricing, []PricingVendor, map[string]common.EndpointInfo, error) {
-	snapshot, err := currentPricingSnapshot()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return slices.Clone(snapshot.prices), slices.Clone(snapshot.vendors), maps.Clone(snapshot.endpointMap), nil
+// GetSupportedEndpointMap 返回全局端点到路径的映射
+func GetSupportedEndpointMap() map[string]common.EndpointInfo {
+	return supportedEndpointMap
 }

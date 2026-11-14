@@ -361,7 +361,7 @@ func (info *RelayInfo) ToString() string {
 	fmt.Fprintf(b, "RelayFormat: %s, ", info.RelayFormat)
 	fmt.Fprintf(b, "RelayMode: %d, ", info.RelayMode)
 	fmt.Fprintf(b, "IsStream: %t, ", info.IsStream)
-	fmt.Fprintf(b, "RequestURLPath: %q, ", SanitizeURLForLog(info.RequestURLPath))
+	fmt.Fprintf(b, "RequestURLPath: %q, ", info.RequestURLPath)
 	fmt.Fprintf(b, "OriginModelName: %q, ", info.OriginModelName)
 	if info.BillingModelName != "" && info.BillingModelName != info.OriginModelName {
 		fmt.Fprintf(b, "BillingModelName: %q, ", info.BillingModelName)

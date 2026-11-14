@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -300,9 +299,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake failed to create checkout session user_id=%d trade_no=%s error=%q", id, tradeNo, err.Error()))
 		topUp.Status = common.TopUpStatusFailed
-		if updateErr := topUp.Update(); updateErr != nil {
-			logger.LogError(c.Request.Context(), common.LogText("failed to mark payment order: %s", updateErr.Error()))
-		}
+		_ = topUp.Update()
 		paymentError(c, common.NewMessage("Failed to start payment"))
 		return
 	}
@@ -323,7 +320,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 
 func WaffoPancakeWebhook(c *gin.Context) {
 	if !isWaffoPancakeWebhookEnabled() {
-		logger.LogWarn(c.Request.Context(), common.LogText("Waffo Pancake webhook rejected reason=webhook_disabled path=%q client_ip=%s", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP()))
+		logger.LogWarn(c.Request.Context(), common.LogText("Waffo Pancake webhook rejected reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
 		c.String(http.StatusForbidden, "webhook disabled")
 		return
 	}
@@ -335,7 +332,7 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	if expectedEnv != "test" && expectedEnv != "prod" {
 		logger.LogWarn(c.Request.Context(), common.LogText(
 			"Waffo Pancake webhook invalid env path segment env=%q path=%q client_ip=%s",
-			expectedEnv, relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(),
+			expectedEnv, c.Request.RequestURI, c.ClientIP(),
 		))
 		c.String(http.StatusNotFound, "unknown env")
 		return
@@ -343,17 +340,17 @@ func WaffoPancakeWebhook(c *gin.Context) {
 
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake webhook failed to read request body path=%q client_ip=%s error=%q", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(), err.Error()))
+		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake webhook failed to read request body path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
 		c.String(http.StatusBadRequest, "bad request")
 		return
 	}
 
 	signature := c.GetHeader("X-Waffo-Signature")
-	logger.LogInfo(c.Request.Context(), common.LogText("Waffo Pancake webhook received request path=%q client_ip=%s signature=%q body=%q", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(), signature, string(bodyBytes)))
+	logger.LogInfo(c.Request.Context(), common.LogText("Waffo Pancake webhook received request path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(bodyBytes)))
 
 	event, err := service.VerifyConfiguredWaffoPancakeWebhook(string(bodyBytes), signature)
 	if err != nil {
-		logger.LogWarn(c.Request.Context(), common.LogText("Waffo Pancake webhook signature verification failed path=%q client_ip=%s signature=%q body=%q error=%q", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(), signature, string(bodyBytes), err.Error()))
+		logger.LogWarn(c.Request.Context(), common.LogText("Waffo Pancake webhook signature verification failed path=%q client_ip=%s signature=%q body=%q error=%q", c.Request.RequestURI, c.ClientIP(), signature, string(bodyBytes), err.Error()))
 		c.String(http.StatusUnauthorized, "invalid signature")
 		return
 	}
@@ -378,7 +375,6 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	rawTradeNo := strings.TrimSpace(event.Data.OrderMerchantExternalID)
 	if strings.HasPrefix(rawTradeNo, "WAFFO_PANCAKE_SUB-") {
 		// 订阅已退役：确认收到，不让 Pancake 重试一个永远不会成功的回调。
-		model.RecordTopUpCallbackRejection(c.ClientIP(), model.PaymentProviderWaffoPancake, rawTradeNo, 0, model.ErrTopUpTypeUnsupported)
 		c.String(http.StatusOK, "OK")
 		return
 	}
@@ -401,11 +397,7 @@ func WaffoPancakeWebhook(c *gin.Context) {
 
 	if err := model.RechargeWaffoPancake(tradeNo); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake top-up processing failed trade_no=%s event_id=%s order_id=%s client_ip=%s error=%q", tradeNo, event.ID, event.Data.OrderID, c.ClientIP(), err.Error()))
-		if model.TopUpCallbackRetryable(err) {
-			c.String(http.StatusInternalServerError, "retry")
-			return
-		}
-		c.String(http.StatusOK, "OK")
+		c.String(http.StatusInternalServerError, "retry")
 		return
 	}
 

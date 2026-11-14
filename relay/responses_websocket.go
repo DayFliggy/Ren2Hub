@@ -208,7 +208,9 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 		s.clientWriteMu.Lock()
 		s.stateMu.Lock()
 		if outgoing != nil {
-			if err := s.writeClientLocked(outgoing.kind, outgoing.body); err != nil {
+			if err := s.client.SetWriteDeadline(s.clientWriteBudget.Deadline(time.Now(), len(outgoing.body))); err != nil {
+				state.closeCode = websocket.CloseInternalServerErr
+			} else if err := s.client.WriteMessage(outgoing.kind, outgoing.body); err != nil {
 				state.closeCode = websocket.CloseInternalServerErr
 			}
 		}
@@ -675,10 +677,7 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 	// The channel type is not rechecked: a locked channel keeps its type, and
 	// the FilterResponsesWebSocket rules were applied when it was selected.
 	channel, err := appmodel.CacheGetChannel(s.lockedChannelID)
-	if err != nil {
-		return service.PinnedRouteError(err)
-	}
-	if channel == nil || channel.Status != common.ChannelStatusEnabled || !channel.GetSetting().ResponsesWebSocketEnabled {
+	if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled || !channel.GetSetting().ResponsesWebSocketEnabled {
 		return types.NewErrorWithStatusCode(errors.New("Responses WebSocket is disabled for this channel"), types.ErrorCode(appdto.FilterResponsesWebSocket), http.StatusForbidden, types.ErrOptionWithSkipRetry())
 	}
 	keyEnabled := channel.Key == s.lockedKey
@@ -888,12 +887,6 @@ func (s *responsesWSSession) writeTarget(kind int, message []byte) error {
 func (s *responsesWSSession) writeClient(kind int, message []byte) error {
 	s.clientWriteMu.Lock()
 	defer s.clientWriteMu.Unlock()
-	return s.writeClientLocked(kind, message)
-}
-
-// writeClientLocked applies the session-wide budget. Callers hold
-// clientWriteMu so deadline accounting follows the order of client writes.
-func (s *responsesWSSession) writeClientLocked(kind int, message []byte) error {
 	if err := s.client.SetWriteDeadline(s.clientWriteBudget.Deadline(time.Now(), len(message))); err != nil {
 		return err
 	}

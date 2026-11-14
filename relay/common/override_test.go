@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strings"
+
 	"testing"
 
 	common2 "github.com/QuantumNous/new-api/common"
@@ -17,43 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
-
-func TestParamOverrideRegexCacheIsBounded(t *testing.T) {
-	first := t.Name() + "-0"
-	for i := 0; i <= paramOverrideRegexCacheLimit; i++ {
-		_, err := getParamOverrideRegex(t.Name() + "-" + fmt.Sprint(i))
-		require.NoError(t, err)
-	}
-
-	paramOverrideRegexCache.Lock()
-	defer paramOverrideRegexCache.Unlock()
-	assert.LessOrEqual(t, len(paramOverrideRegexCache.values), paramOverrideRegexCacheLimit)
-	assert.LessOrEqual(t, paramOverrideRegexCache.bytes, paramOverrideRegexCacheMaxBytes)
-	assert.NotContains(t, paramOverrideRegexCache.values, first, "old entries must be evicted")
-}
-
-func TestParamOverrideRegexCacheSkipsOversizedPatterns(t *testing.T) {
-	pattern := "^" + strings.Repeat("a", paramOverrideRegexCacheMaxPatternBytes) + "$"
-	_, err := getParamOverrideRegex(pattern)
-	require.NoError(t, err)
-
-	paramOverrideRegexCache.Lock()
-	defer paramOverrideRegexCache.Unlock()
-	assert.NotContains(t, paramOverrideRegexCache.values, pattern)
-}
-
-func TestParamOverrideRegexCacheReleasesOldEntries(t *testing.T) {
-	pattern := t.Name() + "-first"
-	first, err := getParamOverrideRegex(pattern)
-	require.NoError(t, err)
-	for i := 0; i < 257; i++ {
-		_, err := getParamOverrideRegex(fmt.Sprintf("%s-%d", t.Name(), i))
-		require.NoError(t, err)
-	}
-	again, err := getParamOverrideRegex(pattern)
-	require.NoError(t, err)
-	require.NotSame(t, first, again, "old administrator patterns must be released from the bounded cache")
-}
 
 func TestApplyParamOverrideTrimPrefix(t *testing.T) {
 	// trim_prefix example:

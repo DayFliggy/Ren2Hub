@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
-	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -240,9 +239,6 @@ func validateOptionValue(key string, value string) error {
 	if err := operation_setting.ValidateQuotaOption(key, value); err != nil {
 		return err
 	}
-	if err := operation_setting.ValidateCurrencyOption(key, value); err != nil {
-		return err
-	}
 	if err := operation_setting.ValidateEpaySignOption(key, value); err != nil {
 		return err
 	}
@@ -300,22 +296,13 @@ func UpdateOption(key string, value string) error {
 	option := Option{
 		Key: key,
 	}
-	// 两步写入放在同一事务里：FirstOrCreate 插入了空值行而 Save 失败时一起回滚，
-	// 不会留下“报告失败但库里已变”的配置，下一轮同步也读不到这行空值。
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		// https://gorm.io/docs/update.html#Save-All-Fields
-		if err := tx.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
-			return err
-		}
-		option.Value = value
-		// Save is a combination function.
-		// If save value does not contain primary key, it will execute Create,
-		// otherwise it will execute Update (with all fields).
-		return tx.Save(&option).Error
-	})
-	if err != nil {
-		return err
-	}
+	// https://gorm.io/docs/update.html#Save-All-Fields
+	DB.FirstOrCreate(&option, Option{Key: key})
+	option.Value = value
+	// Save is a combination function.
+	// If save value does not contain primary key, it will execute Create,
+	// otherwise it will execute Update (with all fields).
+	DB.Save(&option)
 	BumpSyncTopic(SyncTopicOptions)
 	// Update OptionMap
 	return updateOptionMap(key, value)
@@ -390,7 +377,6 @@ func UpdateOptionsBulk(values map[string]string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
-	value = console_setting.NormalizeOptionValue(key, value)
 	if key == retiredThemeOptionKey || key == legacyAccessTokenRetireAtKey || setting.IsRetiredBusinessOption(key) {
 		common.OptionMapRWMutex.Lock()
 		delete(common.OptionMap, key)

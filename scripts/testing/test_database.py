@@ -47,6 +47,9 @@ class DatabaseRunnerTests(unittest.TestCase):
             source = Path(directory)
             subprocess.run(["git", "init", "-q"], cwd=source, check=True)
             (source / "tracked_test.go").write_text("package test\n")
+            (source / "removed_test.go").write_text("package test\n")
+            subprocess.run(["git", "add", "removed_test.go"], cwd=source, check=True)
+            (source / "removed_test.go").unlink()
             subprocess.run(["git", "add", "tracked_test.go"], cwd=source, check=True)
             untracked = source / "new_test.go"
             untracked.write_text("package test\n")
@@ -207,6 +210,24 @@ func TestFreshDatabase(t *testing.T) {
         result = database.database_inventory(source, database.database_test_files(source))
         self.assertEqual(result["unclassified"], [])
         self.assertEqual(result["missing_required"], [])
+        self.assertEqual(result["missing_restored_diagnostics"], [])
+        self.assertEqual(len(result["restored_diagnostics"]), len(database.RESTORED_DATABASE_TESTS))
+        self.assertTrue(all(not item["regular_matrix_pass"] for item in result["restored_diagnostics"]))
+
+    def test_diagnostic_name_without_build_tag_is_not_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            (source / "model").mkdir()
+            path = source / "model/probe_test.go"
+            path.write_text('''package model
+func TestRestoredNativeControlAdminQuota(t *testing.T) {
+    dsn := os.Getenv("TEST_CONTROL_DSN")
+}
+''')
+            result = database.database_inventory(source, ["model/probe_test.go"])
+            self.assertEqual(result["restored_diagnostics"], [])
+            self.assertEqual(result["unclassified"][0]["test"], "TestRestoredNativeControlAdminQuota")
+            self.assertIn("model/TestRestoredNativeControlAdminQuota", result["missing_restored_diagnostics"])
 
     def test_readiness_requires_two_consecutive_tcp_successes(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -89,7 +89,9 @@ func WeChatAuth(c *gin.Context) {
 			user.Status = common.UserStatusEnabled
 
 			if err := user.Insert(0); err != nil {
-				writeSecurityOperationError(c, err)
+				if !writeAffiliateRegistrationError(c, err) {
+					common.ApiError(c, err)
+				}
 				return
 			}
 		} else {

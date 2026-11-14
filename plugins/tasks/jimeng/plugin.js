@@ -223,17 +223,15 @@ function submitReqKey(ctx) {
 
 // 3.0 req_keys render 121 frames (5 s) or 241 (10 s); S2.0 Pro is fixed at 5 s.
 function outboundSeconds(req, reqKey) {
-  const metadata = (req && (req.vendorBody || req.metadata)) || {};
   if (!isV3ReqKey(reqKey)) return 5;
-  const requested = req && req.duration !== undefined && req.duration !== null ? validateSecondsForReqKey(reqKey, req.duration) : undefined;
-  if (metadata.frames !== undefined && metadata.frames !== null) {
-    const frames = Number(metadata.frames);
-    if (frames !== 121 && frames !== 241) throw new Error("frames must be 121 or 241");
-    const frameSeconds = frames === 241 ? 10 : 5;
-    if (requested !== undefined && requested !== frameSeconds) throw new Error("frames and duration must describe the same output length");
-    return frameSeconds;
+  const source = (req && (req.vendorBody || req.metadata)) || {};
+  if (source.frames !== undefined && source.frames !== null) {
+    if (Number(source.frames) === 241) return 10;
+    if (Number(source.frames) === 121) return 5;
+    throw new Error("frames must be 121 or 241");
   }
-  return requested === undefined ? 5 : requested;
+  const seconds = Number(req && req.duration);
+  return seconds === 10 ? 10 : 5;
 }
 
 function aspectRatioFromSize(size) {
@@ -345,7 +343,9 @@ export function buildSubmitRequest(ctx) {
   if (!converted) throw new Error("req_key is required");
   body.req_key = converted;
   productForReqKey(body.req_key);
-  if (isV3ReqKey(body.req_key)) body.frames = outboundSeconds(req, body.req_key) === 10 ? 241 : 121;
+  if (isV3ReqKey(body.req_key) && (body.frames === undefined || body.frames === null)) {
+    body.frames = outboundSeconds(req, body.req_key) === 10 ? 241 : 121;
+  }
   if (!isV3ReqKey(body.req_key)) delete body.frames;
 
   const ordered = { req_key: body.req_key };

@@ -336,7 +336,7 @@ func Register(c *gin.Context) {
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
-	users, total, err := model.GetAllUsers(c.GetInt("role"), pageInfo, sortOptions)
+	users, total, err := model.GetAllUsers(pageInfo, sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -365,7 +365,7 @@ func SearchUsers(c *gin.Context) {
 	}
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
-	users, total, err := model.SearchUsers(c.GetInt("role"), keyword, role, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
+	users, total, err := model.SearchUsers(keyword, role, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -378,7 +378,7 @@ func SearchUsers(c *gin.Context) {
 }
 
 func canManageTargetRole(myRole int, targetRole int) bool {
-	return model.CanManageUserRole(myRole, targetRole)
+	return myRole == common.RoleRootUser || myRole > targetRole
 }
 
 func GetUser(c *gin.Context) {

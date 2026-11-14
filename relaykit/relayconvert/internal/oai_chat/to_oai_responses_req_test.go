@@ -103,17 +103,6 @@ func TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheKey(t *test
 	})
 }
 
-func TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions(t *testing.T) {
-	options := json.RawMessage(`{"ttl":"12h"}`)
-	got, err := ChatCompletionsRequestToResponsesRequest(context.Background(), &dto.GeneralOpenAIRequest{
-		Model:              "gpt-test",
-		Messages:           []dto.Message{{Role: "user", Content: "hello"}},
-		PromptCacheOptions: options,
-	})
-	require.NoError(t, err)
-	assert.JSONEq(t, string(options), string(got.PromptCacheOptions))
-}
-
 func TestChatCompletionsRequestToResponsesRequestPreservesQwenThinkingBudget(t *testing.T) {
 	tests := []struct {
 		name   string

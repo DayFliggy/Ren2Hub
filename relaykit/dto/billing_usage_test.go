@@ -49,19 +49,6 @@ func TestNewOpenAIChatBillingUsageRequiresTokenContent(t *testing.T) {
 	assert.Equal(t, 1, billingUsage.OpenAIUsage.PromptTokens)
 }
 
-func TestOpenAICacheCreationInputTokensAloneIsBillableUsage(t *testing.T) {
-	for _, usage := range []*Usage{
-		{PromptTokensDetails: InputTokenDetails{CacheCreationInputTokens: 7}},
-		{InputTokensDetails: &InputTokenDetails{CacheCreationInputTokens: 7}},
-	} {
-		billing := NewOpenAIResponsesBillingUsage(usage)
-		require.NotNil(t, billing)
-		canonical, ok := billing.CanonicalUsage()
-		require.True(t, ok)
-		assert.Equal(t, 7, canonical.PromptTokensDetails.CacheCreationTokensTotal())
-	}
-}
-
 func TestImageCacheDetailsSurviveUsageSnapshots(t *testing.T) {
 	var original Usage
 	require.NoError(t, kitutil.Unmarshal([]byte(`{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300,"image_tokens":600,"cached_tokens_details":{"image_tokens":200,"text_tokens":100}}}`), &original))

@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -65,7 +64,7 @@ var LOG_DB *gorm.DB
 func createRootAccountIfNeed() error {
 	var user User
 	//if user.Status != common.UserStatusEnabled {
-	if err := DB.First(&user).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := DB.First(&user).Error; err != nil {
 		common.SysLog(common.LogText("no user exists, create a root user for you: username is root, password is 123456"))
 		hashedPassword, err := common.Password2Hash("123456")
 		if err != nil {
@@ -88,8 +87,6 @@ func createRootAccountIfNeed() error {
 		}); err != nil {
 			return err
 		}
-	} else if err != nil {
-		return err
 	}
 	return nil
 }

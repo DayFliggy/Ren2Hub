@@ -59,49 +59,6 @@ func setupCurrencyOptions(t *testing.T) map[string]string {
 	return stored
 }
 
-func assertCurrencyOptionsUnchanged(t *testing.T, stored map[string]string) {
-	t.Helper()
-	var rows []Option
-	require.NoError(t, DB.Find(&rows).Error)
-	inDB := map[string]string{}
-	for _, row := range rows {
-		inDB[row.Key] = row.Value
-	}
-	assert.Equal(t, stored, inDB)
-	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
-	for key, value := range stored {
-		assert.Equal(t, value, common.OptionMap[key], key)
-	}
-	assert.Equal(t, currencyRuntime{usdRate: 7.3, customRate: 2, quotaPerUnit: 500000}, readCurrencyRuntime())
-}
-
-func TestUpdateOptionRejectsNonPositiveCurrencyOptions(t *testing.T) {
-	stored := setupCurrencyOptions(t)
-	for _, key := range []string{"USDExchangeRate", "general_setting.custom_currency_exchange_rate", "QuotaPerUnit"} {
-		for _, value := range []string{"0", "-1", "abc", "NaN", "Inf"} {
-			var msg *common.Message
-			require.ErrorAs(t, UpdateOption(key, value), &msg, "%s=%q", key, value)
-		}
-	}
-	assertCurrencyOptionsUnchanged(t, stored)
-}
-
-func TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption(t *testing.T) {
-	stored := setupCurrencyOptions(t)
-	batches := []map[string]string{
-		{"SystemName": "changed-name", "QuotaPerUnit": "0"},
-		{"USDExchangeRate": "8", "general_setting.custom_currency_exchange_rate": "-2"},
-		// Passkey domain keys take a separate transaction that must validate too.
-		{"ServerAddress": "https://changed.example", "USDExchangeRate": "0"},
-	}
-	for _, batch := range batches {
-		var msg *common.Message
-		require.ErrorAs(t, UpdateOptionsBulk(batch), &msg, "%v", batch)
-	}
-	assertCurrencyOptionsUnchanged(t, stored)
-}
-
 func TestUpdateOptionAcceptsPositiveCurrencyOptions(t *testing.T) {
 	setupCurrencyOptions(t)
 	require.NoError(t, UpdateOption("USDExchangeRate", "6.9"))

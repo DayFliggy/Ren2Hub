@@ -1,0 +1,243 @@
+{
+  "baseline": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "fixtures": {
+    "restored_control_controller_test.go.txt": "ea7cf8415e25c7ac350acb02f7b50020736404528f6684dedd0546ea39de5daf",
+    "restored_control_pricing_race_test.go.txt": "e5f4933aa22b039bb2269c0eac05df83d6aae8253bdb602c093a8da4220db7cc",
+    "native_controller_adapter.go.txt": "4102301cf3e23d6a9e4e9eee4eeea5f93c92a8789b405e726a19c6ad3da3703c",
+    "native_model_adapter.go.txt": "e740fc875cc3861b4e6de03818ea48a5e9c855347262ddebf821ff7372dc595d",
+    "baseline_model_adapter.go.txt": "8328ac60f0edfd490dcdae678ce9218808010c29de6a70ef6838e8485eca9719",
+    "baseline_controller_adapter.go.txt": "8d8d7238d3490efab9b9f0cc2889fb781a7f4877d9221c222bb5d3df86fa31bb",
+    "restored_control_model_test.go.txt": "b79e5cfe84d8bd05cd19fd8f3a44c2e0c6149d7f7e2a1bc960d29c38d778a47a"
+  },
+  "reports": [
+    {
+      "tree": "control-baseline-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/retry-2/report.json",
+      "report_sha256": "eb8d5a0460cd4362e446c1bf80030504dd6f064fb5b472bc560ac1132e721854",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/retry-2/control-baseline-probes.jsonl",
+      "log_sha256": "0946a2f1cb5074fba5d69031bd9a7b6fe3697595d467a054c5495150b89d14bd",
+      "exit_code": 0,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlOptionWriteFailure",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlOptionCreatedRowRollback",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/0",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/-1",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/NaN",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/Inf",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlConsoleNormalization",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlCredentialSQL",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlSelfStatIdentity",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlAdminLogs",
+          "action": "pass"
+        },
+        {
+          "test": "TestRestoredNativeControlPricingFailure",
+          "action": "pass"
+        }
+      ],
+      "markers": []
+    },
+    {
+      "tree": "control-native-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/retry-2/report.json",
+      "report_sha256": "eb8d5a0460cd4362e446c1bf80030504dd6f064fb5b472bc560ac1132e721854",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/retry-2/control-native-probes.jsonl",
+      "log_sha256": "d05131a6b4cc8800005c3fb13e47a98c2354b281a1d62a3ae1bab51314d412d2",
+      "exit_code": 1,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlOptionWriteFailure",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlOptionCreatedRowRollback",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/0",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/-1",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/NaN",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation/Inf",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlCurrencyValidation",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlConsoleNormalization",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlCredentialSQL",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlSelfStatIdentity",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlAdminLogs",
+          "action": "fail"
+        },
+        {
+          "test": "TestRestoredNativeControlPricingFailure",
+          "action": "fail"
+        }
+      ],
+      "markers": [
+        "OPTION_WRITE_FAILURE: storage failure was acknowledged",
+        "OPTION_WRITE_FAILURE: unpersisted option was published",
+        "OPTION_ROLLBACK: failed save not returned",
+        "OPTION_ROLLBACK: created row persisted after failed save",
+        "CURRENCY: invalid global rate accepted",
+        "CURRENCY: invalid global rate accepted",
+        "CURRENCY: invalid global rate accepted",
+        "CURRENCY: invalid global rate accepted",
+        "CONSOLE: empty list remains unnormalized",
+        "CREDENTIAL_SQL: credential included in SQL diagnostics",
+        "SELF_STAT: unrelated user quota included: 100",
+        "ADMIN_LOGS: root row visible to administrator",
+        "PRICING: broken settings published partial price table"
+      ]
+    },
+    {
+      "tree": "control-baseline-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/root/report.json",
+      "report_sha256": "63eb31712ea4fffbed45705c2defcf9d7f0706810566357c138bdd7a6b71dba5",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/root/control-baseline-probes.jsonl",
+      "log_sha256": "f7b60f0d40eeafd80e7a7b96f170a0c49122ed52ae18bc3e589bc2c103a6dabb",
+      "exit_code": 0,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlRootReadFailure",
+          "action": "pass"
+        }
+      ],
+      "markers": []
+    },
+    {
+      "tree": "control-native-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/root/report.json",
+      "report_sha256": "63eb31712ea4fffbed45705c2defcf9d7f0706810566357c138bdd7a6b71dba5",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/root/control-native-probes.jsonl",
+      "log_sha256": "56c2af152dcc62218400246965414627c1d615498301574c4dfff7a5b3d0d299",
+      "exit_code": 1,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlRootReadFailure",
+          "action": "fail"
+        }
+      ],
+      "markers": [
+        "ROOT_LOOKUP: failed initial lookup triggered root creation"
+      ]
+    },
+    {
+      "tree": "control-baseline-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/controller-2/report.json",
+      "report_sha256": "1291e16d03895d320865792ed77028d7a29cf83161f8c2ca29092f462a0e50a8",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/controller-2/control-baseline-probes.jsonl",
+      "log_sha256": "1b1da4dc710bcb84ace2f10eda1b75d8a9e85151e045f6720980595d5bde3d7c",
+      "exit_code": 0,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlModelFetchCancellation",
+          "action": "pass"
+        }
+      ],
+      "markers": []
+    },
+    {
+      "tree": "control-native-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/controller-2/report.json",
+      "report_sha256": "1291e16d03895d320865792ed77028d7a29cf83161f8c2ca29092f462a0e50a8",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/controller-2/control-native-probes.jsonl",
+      "log_sha256": "196c3528a97fdc4ac7963246c2c2143ce3f986e3050fe83ceb312fbf0b7dc8e4",
+      "exit_code": 1,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlModelFetchCancellation",
+          "action": "fail"
+        }
+      ],
+      "markers": [
+        "MANAGEMENT_CANCEL: cancelled management request still dispatched"
+      ]
+    },
+    {
+      "tree": "control-baseline-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/quota/report.json",
+      "report_sha256": "d5490ba78379500768fc6aebee9bc9ebcb6131ccbcbf7bc0ea72bd84f0ffd5e3",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/quota/control-baseline-probes.jsonl",
+      "log_sha256": "ec79e87d687b06336aaa3fbae178e357e7c9782035612cdae2e9cf7761b1122c",
+      "exit_code": 0,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlAdminQuota",
+          "action": "pass"
+        }
+      ],
+      "markers": []
+    },
+    {
+      "tree": "control-native-probes",
+      "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/quota/report.json",
+      "report_sha256": "d5490ba78379500768fc6aebee9bc9ebcb6131ccbcbf7bc0ea72bd84f0ffd5e3",
+      "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/quota/control-native-probes.jsonl",
+      "log_sha256": "440e5345f20fb71679ec96f8b9558dbefab2ae96bad1a3d5a3181e2a9cc827ee",
+      "exit_code": 1,
+      "test_actions": [
+        {
+          "test": "TestRestoredNativeControlAdminQuota",
+          "action": "fail"
+        }
+      ],
+      "markers": [
+        "ADMIN_QUOTA: root usage visible to administrator"
+      ]
+    }
+  ]
+}

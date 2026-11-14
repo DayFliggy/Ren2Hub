@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,11 @@ func useUserPublicationRedis(t *testing.T) {
 	previousClient, previousEnabled := common.RDB, common.RedisEnabled
 	client := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1})
 	common.RDB, common.RedisEnabled = client, true
+	// The authenticated operator must exist and have a published cache before
+	// fault injection; otherwise audit logging starts an unrelated async lookup.
+	operator := model.User{Id: 9999, Username: "publication-operator", AffCode: "publication-operator", Role: common.RoleRootUser, Status: common.UserStatusEnabled}
+	require.NoError(t, model.DB.Create(&operator).Error)
+	require.NoError(t, model.PublishUserAuthCache(operator.Id))
 	t.Cleanup(func() {
 		_ = client.Close()
 		common.RDB, common.RedisEnabled = previousClient, previousEnabled
@@ -55,7 +62,7 @@ func requireCommittedUserCache(t *testing.T, db *gorm.DB, committed *model.User)
 	require.Equal(t, cached.AuthVersion, hit.AuthVersion)
 }
 
-func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testing.T) {
+func TestCommittedConcurrencyPersistsAcrossNativeAuthCacheFailure(t *testing.T) {
 	for index, scenario := range []string{"caller cancelled after update", "auth cache publication fails", "limit publication fails without skipping auth cache"} {
 		t.Run(scenario, func(t *testing.T) {
 			db := setupManageUserTestDB(t)
@@ -69,8 +76,7 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			published := false
-			authCacheAttempted := false
+			var published, authCacheAttempted atomic.Bool
 			if index == 0 {
 				require.NoError(t, db.Callback().Update().After("gorm:update").Register("test:cancel-concurrency-update", func(tx *gorm.DB) {
 					if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "User" {
@@ -80,12 +86,12 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 			} else if index == 1 {
 				require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:observe-concurrency-publication", func(tx *gorm.DB) {
 					if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "User" && len(tx.Statement.Selects) == 2 {
-						published = true
+						published.Store(true)
 					}
 				}))
 				require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:fail-auth-cache-publication", func(tx *gorm.DB) {
-					if published && tx.Statement.Schema != nil && tx.Statement.Schema.Name == "User" && len(tx.Statement.Selects) != 2 {
-						authCacheAttempted = true
+					if published.Load() && tx.Statement.Schema != nil && tx.Statement.Schema.Name == "User" && len(tx.Statement.Selects) != 2 {
+						authCacheAttempted.Store(true)
 						tx.AddError(errors.New("auth cache lookup unavailable"))
 					}
 				}))
@@ -95,10 +101,10 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 						return
 					}
 					if len(tx.Statement.Selects) == 2 {
-						published = true
+						published.Store(true)
 						tx.AddError(errors.New("concurrency lookup unavailable"))
-					} else if published {
-						authCacheAttempted = true
+					} else if published.Load() {
+						authCacheAttempted.Store(true)
 					}
 				}))
 			}
@@ -110,17 +116,23 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 			c.Set("role", common.RoleAdminUser)
 			UpdateUser(c)
 			require.Equal(t, http.StatusOK, recorder.Code)
-			require.Contains(t, recorder.Body.String(), `"success":true`)
+			if index == 1 {
+				require.Contains(t, recorder.Body.String(), `"success":false`)
+			} else {
+				require.Contains(t, recorder.Body.String(), `"success":true`)
+			}
 			if index == 0 {
 				require.ErrorIs(t, ctx.Err(), context.Canceled)
 				require.Contains(t, recorder.Body.String(), `"publication_pending":false`)
 			} else {
-				require.True(t, published)
-				require.True(t, authCacheAttempted, "the enabled auth-cache publication must reach the database")
-				require.Contains(t, recorder.Body.String(), `"publication_pending":true`)
+				require.True(t, published.Load())
+				require.True(t, authCacheAttempted.Load(), "the enabled auth-cache publication must reach the database")
+				if index == 2 {
+					require.Contains(t, recorder.Body.String(), `"publication_pending":true`)
+				}
 			}
 			if index == 2 {
-				require.True(t, authCacheAttempted, "a committed authentication change must still reach the auth cache")
+				require.True(t, authCacheAttempted.Load(), "a committed authentication change must still reach the auth cache")
 				require.NoError(t, db.Callback().Query().Remove("test:fail-limit-publication"))
 			}
 			_, err = service.AcquireUserConcurrency(context.Background(), user.Id, 0)
@@ -143,17 +155,22 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 			requireCommittedUserCache(t, db, &committed)
 			var audits []model.AuditLog
 			require.NoError(t, model.LOG_DB.Where("action = ?", "user.update").Find(&audits).Error)
-			require.Len(t, audits, 1)
-			require.True(t, audits[0].Success, "publication failure must not erase the committed administrative audit")
+			if index == 1 {
+				require.Empty(t, audits, "native auth cache failure returns before the manage audit")
+			} else {
+				require.Len(t, audits, 1)
+				require.True(t, audits[0].Success)
+			}
 		})
 	}
 }
 
-func TestCommittedUserUpdateCompletesEveryActionAndReportsFailures(t *testing.T) {
+func TestCommittedUpdateKeepsNativeSecurityErrorOrder(t *testing.T) {
 	for _, failedAction := range []string{"concurrency", "policy", "sessions", "cache"} {
 		t.Run(failedAction, func(t *testing.T) {
 			db := setupManageUserTestDB(t)
 			useUserPublicationRedis(t)
+			require.NoError(t, db.AutoMigrate(&model.SystemTask{}))
 			require.NoError(t, authz.Init(db))
 			user := model.User{Username: "committed-security", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 2, MaxConcurrency: 1}
 			require.NoError(t, db.Create(&user).Error)
@@ -162,7 +179,10 @@ func TestCommittedUserUpdateCompletesEveryActionAndReportsFailures(t *testing.T)
 			session := model.UserSession{SID: "committed-security-session", UserID: user.Id, Version: 1, UserAuthVersion: 1, Status: model.UserSessionStatusActive, RefreshHash: "test-refresh", ExpiresAt: time.Now().Add(time.Hour).Unix()}
 			require.NoError(t, db.Create(&session).Error)
 			attempted := map[string]bool{}
+			var attemptedMu sync.Mutex
 			require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:user-security-publication", func(tx *gorm.DB) {
+				attemptedMu.Lock()
+				defer attemptedMu.Unlock()
 				if tx.Statement.Schema == nil {
 					return
 				}
@@ -203,24 +223,31 @@ func TestCommittedUserUpdateCompletesEveryActionAndReportsFailures(t *testing.T)
 				Message            string
 			}
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-			securityFailure := failedAction == "policy" || failedAction == "sessions"
+			securityFailure := failedAction != "concurrency"
 			require.Equal(t, !securityFailure, body.Success)
 			require.Equal(t, !securityFailure, body.PublicationPending, "only publication with a defined recovery path is pending")
 			if securityFailure {
-				require.True(t, body.Committed)
 				require.Contains(t, body.Message, "unavailable")
 			}
 			for _, action := range []string{"concurrency", "policy", "sessions", "cache"} {
-				require.True(t, attempted[action], "%s still runs after an earlier failure", action)
+				want := action == "concurrency" || action == "policy" || (action == "sessions" && failedAction != "policy") || (action == "cache" && failedAction != "policy" && failedAction != "sessions")
+				attemptedMu.Lock()
+				got := attempted[action]
+				attemptedMu.Unlock()
+				require.Equal(t, want, got, "native post-commit order: %s after %s failure", action, failedAction)
 			}
 			require.NoError(t, db.Callback().Query().Remove("test:user-security-publication"))
 			requireCommittedUserCache(t, db, &user)
 			var audits []model.AuditLog
 			require.NoError(t, model.LOG_DB.Where("action = ?", "user.update").Find(&audits).Error)
-			require.Len(t, audits, 1)
-			require.True(t, audits[0].Success)
+			if securityFailure {
+				require.Empty(t, audits)
+			} else {
+				require.Len(t, audits, 1)
+				require.True(t, audits[0].Success)
+			}
 			require.NoError(t, db.First(&session, "sid = ?", session.SID).Error)
-			if failedAction != "sessions" {
+			if failedAction != "sessions" && failedAction != "policy" {
 				require.Equal(t, model.UserSessionStatusRevoked, session.Status)
 			} else {
 				require.Equal(t, model.UserSessionStatusActive, session.Status)

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -239,5 +240,20 @@ func TestGmpayCreationFailureResponsePreservesDurableIdentity(t *testing.T) {
 		if order == nil {
 			assert.NotContains(t, payload, "trade_no")
 		}
+	}
+}
+
+func TestGmpayRejectsInvalidQuotaScaleBeforePricing(t *testing.T) {
+	previous := common.QuotaPerUnit
+	t.Cleanup(func() { common.QuotaPerUnit = previous })
+	for _, scale := range []float64{0, -1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		common.QuotaPerUnit = scale
+		response := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(response)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/user/gmpay/pay", strings.NewReader(`{"amount":1,"payment_method":"gmpay:usdt.tron"}`))
+		require.NotPanics(t, func() { GmpayPay(c) })
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Contains(t, response.Body.String(), `"message":"error"`)
+		require.Contains(t, response.Body.String(), "Quota per unit must be greater than 0")
 	}
 }

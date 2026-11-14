@@ -1,0 +1,1959 @@
+{
+  "schema_version": 1,
+  "stage": "known_upstream_logger_race",
+  "baseline": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "image": "sha256:0d494ea9b5863337de0dfb4f938062bf0261a919016eb162d2be26381dbadafe",
+  "groups": [
+    {
+      "id": "stream",
+      "package": "relay/helper",
+      "file": "relay/helper/stream_scanner_test.go",
+      "names": [
+        "TestStreamScannerHandler_EmptyBody",
+        "TestStreamScannerHandler_1000Chunks",
+        "TestStreamScannerHandler_OrderPreserved",
+        "TestStreamScannerHandler_DoneStopsScanner",
+        "TestStreamScannerHandler_StopStopsStream",
+        "TestStreamScannerHandler_SkipsNonDataLines",
+        "TestStreamScannerHandler_DataWithExtraSpaces",
+        "TestStreamScannerHandler_StreamStatus_DoneReason",
+        "TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+        "TestStreamScannerHandler_StreamStatus_HandlerStop",
+        "TestStreamScannerHandler_StreamStatus_HandlerDone",
+        "TestStreamScannerHandler_StreamStatus_SoftErrors",
+        "TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+        "TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+        "TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+        "TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized"
+      ],
+      "nodes": [
+        "TestStreamScannerHandler_1000Chunks",
+        "TestStreamScannerHandler_DataWithExtraSpaces",
+        "TestStreamScannerHandler_DoneStopsScanner",
+        "TestStreamScannerHandler_DoneStopsScanner/bare",
+        "TestStreamScannerHandler_DoneStopsScanner/bare_prefix_is_not_done",
+        "TestStreamScannerHandler_DoneStopsScanner/bare_with_whitespace",
+        "TestStreamScannerHandler_DoneStopsScanner/data_prefix_is_not_done",
+        "TestStreamScannerHandler_DoneStopsScanner/data_prefixed",
+        "TestStreamScannerHandler_DoneStopsScanner/data_with_whitespace",
+        "TestStreamScannerHandler_DoneStopsScanner/data_without_space",
+        "TestStreamScannerHandler_EmptyBody",
+        "TestStreamScannerHandler_OrderPreserved",
+        "TestStreamScannerHandler_SkipsNonDataLines",
+        "TestStreamScannerHandler_StopStopsStream",
+        "TestStreamScannerHandler_StreamStatus_DoneReason",
+        "TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+        "TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+        "TestStreamScannerHandler_StreamStatus_HandlerDone",
+        "TestStreamScannerHandler_StreamStatus_HandlerStop",
+        "TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+        "TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+        "TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized",
+        "TestStreamScannerHandler_StreamStatus_SoftErrors"
+      ]
+    },
+    {
+      "id": "task",
+      "package": "service",
+      "file": "service/task_polling_test.go",
+      "names": [
+        "TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels",
+        "TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels",
+        "TestUpdateVideoTasksMixedChannelSleepSettings"
+      ],
+      "nodes": [
+        "TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels",
+        "TestUpdateVideoTasksMixedChannelSleepSettings",
+        "TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels"
+      ]
+    }
+  ],
+  "logger_sha256": "12b8d70c2be48748f88bdf816cbabbd33d0ad2375694e9cba9c3eeb3534b5095",
+  "fixture_functions": {
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_EmptyBody": "a7699e63d0cd84e129775a1ecf6ad3d8b60fc4021b7753e19d4a5abc0e176b80",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_1000Chunks": "0def4c136d2a754b76781239be05966d7b65116fa22bd726f4f8c6dfefc37568",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_OrderPreserved": "3fe70b5abffb8adca853b2f45b026ef70f5473a1dc3d8c7fd0627a98b6e68d5d",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_DoneStopsScanner": "87b13eb5453ee05dd76c92b0065bf3d42e80f35c40561a41bdc75fc25221c383",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StopStopsStream": "c0fd61403310eee03db83ca0fc01ad902d3a3dee878708cd3c450d06172fbf5d",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_SkipsNonDataLines": "38fe1b665d1945641e4ada8182225da2f9f4f3960c93f62ec09eef7d69e9753a",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_DataWithExtraSpaces": "f2f9e2180b6e9810d2982bc5bfab7050e08d951a288784f81a526a1b60acd577",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_DoneReason": "9b416843d555a8e7a63e8ac2ce8515b70da5d771d86b09bb7c9b3004caf2c0e4",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_EOFWithoutDone": "7654b11b3f05b8b3f400a690ecb27816aec82be9bfb025c3fc95875d1f1df305",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_HandlerStop": "d4864dd086a7b1c847e4dc6b6da3c22046eec7592f53bbde861ffbbb75f1f4aa",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_HandlerDone": "c91d53b7a902e90209b7d7f1f1ea4643d4fbc9449263553537c7ae85743ca0ae",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_SoftErrors": "91be05f3e69ba57dd8ff292d38e3d22601377a6927d8d9f24b9e396c5f45a475",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk": "8aac459c6eff2f691ce12704bca6cb8c8388e34a55e6b5641a06761fd75c1675",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_ErrorThenStop": "3827ca63fd9e9e8ac3d2a5fc570e68650bd3033cb77c8fdb423b8fd7c19dd469",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_InitializedIfNil": "31c46eedb33ca2ed907bc771107a207a887cb3a8e54349968c5ebbed657a541b",
+    "relay/helper/stream_scanner_test.go:TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized": "b500c2aaf945f22165d3bc2150041ed1caa17c8323740fee4c3278cbbfb4ef46",
+    "service/task_polling_test.go:TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels": "83a373073b384dfdff4184eadb7aa246323dcd4503adbb4293eeadaa8cc1825a",
+    "service/task_polling_test.go:TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels": "b8d006d592b40f9c0ad242f076fea6beaa8a274adfae231ba5a48e8753bd6bbd",
+    "service/task_polling_test.go:TestUpdateVideoTasksMixedChannelSleepSettings": "0db44ca9f5248fea2e94acc7389b84d9fdbd512810077d0a5716c1b79337b51d"
+  },
+  "local_fixture_files": {
+    "relay/helper/stream_scanner_test.go": "f66f3f14b7efea1914ebd71c4f7123aaf6b69ec63525dfb904dedbad7ce1a850",
+    "service/task_polling_test.go": "812bbbaffdbb429065133bbf73ee40ea0ddd7ecb7749c9bf7cfb2f5bfadcb4b8"
+  },
+  "external_files": {
+    "github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go": "d875eee23d46f9927936ec5228e5b665b108706aa4cd492d232ca4d301af398b",
+    "github.com/bytedance/gopkg@v0.1.3/util/gopool/pool.go": "8c6a793bf01303ff4a4d6c7e597962f5a6b34d0161f9cfec556ee807d821cd3f",
+    "github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go": "3114f07fc6c331ca73f400e5afa39d3c2ac49ea2e6ceea116be685dc1cb92f8c"
+  },
+  "preflight": {
+    "path": "/home/work/ren2hub-native-b388-20261114/preflight/data/logger-full-scope-retry1/report.json",
+    "sha256": "e17a5b291a54c15ea2bdac44bed67c42b664bc27af4d847e50a4318f3175db3b",
+    "inputs_unchanged": {
+      "baseline": true,
+      "native": true
+    },
+    "logs": [
+      {
+        "label": "baseline",
+        "group": "stream",
+        "sha256": "5f9f01e3b891b49fc47f95c4861a82a3e8c207edccb8ab5c1fd6343b110b545a",
+        "returncode": 1,
+        "race_count": 1
+      },
+      {
+        "label": "baseline",
+        "group": "task",
+        "sha256": "1e853b40660c4a1ca81c6f0be51f8fecf5e0c8c3cf6a695b9046dba3140bb46c",
+        "returncode": 1,
+        "race_count": 2
+      },
+      {
+        "label": "native",
+        "group": "stream",
+        "sha256": "299216e3ae4320b24bc88dfbae37eac24684b8dac9636d854c020d88c49719bb",
+        "returncode": 1,
+        "race_count": 1
+      },
+      {
+        "label": "native",
+        "group": "task",
+        "sha256": "16b0c8b289ef08a4c99fecd250842d636b7178e88f05a525b1c2729305fb6cf8",
+        "returncode": 1,
+        "race_count": 2
+      }
+    ],
+    "slow_creation": {
+      "path": "/home/work/ren2hub-native-b388-20261114/preflight/data/logger-slow-creation/report.json",
+      "sha256": "879ddcd3b56694975347e00c0240669d29b1debd92f514f8f5688a2c400de836",
+      "log_sha256": "3eebaafcddec59bff6b8ad737153e6b93e8ecee5f8ce30a6dd52976e5b330c0a"
+    },
+    "creation_observations": {
+      "path": "/home/work/ren2hub-native-b388-20261114/preflight/data/logger-creation-observations/report.json",
+      "sha256": "89fc5c7fbb57ce4fea7b8781ca1bd826f098c03fc4d6101748cb94812812207a",
+      "all_three_observed_in_both_trees": true,
+      "all_attempts_retained": 9,
+      "logs": [
+        {
+          "label": "baseline",
+          "target": "done-nested",
+          "attempt": 1,
+          "sha256": "c636e43f95cd865301c5f3782d25a6ddae1ccb7d5ad1cdc963dff10ee3200db5",
+          "returncode": 1,
+          "race_count": 5
+        },
+        {
+          "label": "baseline",
+          "target": "mixed",
+          "attempt": 1,
+          "sha256": "61733c685f8cdf0cdf3260e7e2a7232feb0b1548646b08e371c6a51e65d764d5",
+          "returncode": 1,
+          "race_count": 1
+        },
+        {
+          "label": "baseline",
+          "target": "slow-func4",
+          "attempt": 1,
+          "sha256": "256942b329ea5fb8b068eb9c69253897f2e994302311ca1323da9487345a1879",
+          "returncode": 1,
+          "race_count": 1
+        },
+        {
+          "label": "native",
+          "target": "done-nested",
+          "attempt": 1,
+          "sha256": "93582b8f786d0a76a69cde0bf44345c5a0ecfadb41564ee46a35c07c7a928b49",
+          "returncode": 1,
+          "race_count": 3
+        },
+        {
+          "label": "native",
+          "target": "done-nested",
+          "attempt": 2,
+          "sha256": "d23875ee272f12737b3a34eca3e539282fcc89a1694d99f649ab7dfba0c44106",
+          "returncode": 0,
+          "race_count": 0
+        },
+        {
+          "label": "native",
+          "target": "done-nested",
+          "attempt": 3,
+          "sha256": "1165d7074794fd69ca04ff6d39ead16ec200354b5cbfa602995ab8a0680b0bc2",
+          "returncode": 1,
+          "race_count": 2
+        },
+        {
+          "label": "native",
+          "target": "done-nested",
+          "attempt": 4,
+          "sha256": "a565a2e7dc1fcde11bb083c34debb54642f907d5dde95f9c62b2ffd24ab7d33e",
+          "returncode": 1,
+          "race_count": 4
+        },
+        {
+          "label": "native",
+          "target": "mixed",
+          "attempt": 1,
+          "sha256": "321aa72d3e1553b95f80919660a543b7d5260f0963cb03d4646c6965e798d784",
+          "returncode": 1,
+          "race_count": 1
+        },
+        {
+          "label": "native",
+          "target": "slow-func4",
+          "attempt": 1,
+          "sha256": "70f7744b4ead601d31c66e9954b610eb17b5e90bc7e6625a2b31cc0aac700b73",
+          "returncode": 1,
+          "race_count": 1
+        }
+      ]
+    }
+  },
+  "policy": {
+    "zero_races": "clean success / exit 0",
+    "only_frozen_races": "success=false; contracts_success=true; exit 2",
+    "unknown_race_or_business_failure": "BLOCK / exit 1",
+    "concurrency": "t.Parallel unchanged; GOMAXPROCS=2; -p=2; no -parallel override",
+    "boundary": "Only logger logCount increment/threshold accesses; pricing and generic restored diagnostics remain separate."
+  },
+  "local_fixture_functions": {
+    "service/task_billing_test.go:TestMain": "7f2acca64c909168d8279c6b460aa5bac417b9f466e38236d9e2be7d769bf0d3"
+  },
+  "fixture_deviation": {
+    "test": "TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels",
+    "change": "Same approved immutable-ID capture applied to both isolated trees; original native test race archived separately.",
+    "original_race_report": "/home/work/ren2hub-native-b388-20261114/preflight/data/task-race-original/report.json",
+    "diff": "/home/work/ren2hub-native-b388-20261114/preflight/data/task-race-original/fixed-fixture.diff"
+  },
+  "source_inferred_not_all_observed": [
+    "Threshold read at if logCount > maxLogCount && !setupLogWorking was not observed. It is permitted only as a read paired at the same address with a write to logCount++; no other logger global or threshold write is accepted. Approved as the same counter race."
+  ],
+  "paths": {
+    "stream_access": [
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_EmptyBody",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_EmptyBody",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_1000Chunks",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_1000Chunks",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_OrderPreserved",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_OrderPreserved",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DoneStopsScanner.func1",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, _ *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DoneStopsScanner.func1",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, _ *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StopStopsStream",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StopStopsStream",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_SkipsNonDataLines",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_SkipsNonDataLines",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DataWithExtraSpaces",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DataWithExtraSpaces",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_DoneReason",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_DoneReason",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_HandlerStop",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_HandlerStop",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_HandlerDone",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_HandlerDone",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_SoftErrors",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_SoftErrors",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogInfo(c, common.LogText(\"stream ended: %s\", info.StreamStatus.Summary()))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.StreamScannerHandler",
+          "path": "/src/relay/helper/stream_scanner.go",
+          "source_line": "logger.LogError(c, common.LogText(\"stream ended: %s, received=%d\", info.StreamStatus.Summary(), info.ReceivedResponseCount))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ]
+    ],
+    "stream_creation": {
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_EmptyBody": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_1000Chunks": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_OrderPreserved": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DoneStopsScanner.func1": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DoneStopsScanner",
+          "path": "/src/relay/helper/stream_scanner_test.go",
+          "source_line": "t.Run(test.name, func(t *testing.T) {"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StopStopsStream": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_SkipsNonDataLines": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_DataWithExtraSpaces": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_DoneReason": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_EOFWithoutDone": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_HandlerStop": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_HandlerDone": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_SoftErrors": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_ErrorThenStop": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_InitializedIfNil": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ],
+      "github.com/QuantumNous/new-api/relay/helper.TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized": [
+        {
+          "function": "testing.(*T).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        },
+        {
+          "function": "testing.runTests.func1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "t.Run(test.Name, test.F)",
+          "line": 2585
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.runTests",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "tRunner(t, func(t *T) {",
+          "line": 2583
+        },
+        {
+          "function": "testing.(*M).Run",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "testRan, testOk := runTests(m.deps.ModulePath(), m.deps.ImportPath(), m.deps.MatchString, m.tests, deadline)",
+          "line": 2443
+        },
+        {
+          "function": "main.main",
+          "path": "_testmain.go"
+        }
+      ]
+    },
+    "task_access": [
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogInfo",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerINFO, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.updateVideoTasks",
+          "path": "/src/service/task_polling.go",
+          "source_line": "logger.LogInfo(ctx, common.LogText(\"Channel #%d pending video tasks: %d\", channelId, len(taskIds)))"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.UpdateVideoTasks.func1",
+          "path": "/src/service/task_polling.go",
+          "source_line": "if err := updateVideoTasks(ctx, platform, channelId, taskIds, taskM); err != nil {"
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run.func1.1",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "t.f()",
+          "line": 69
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run.func1",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "}()",
+          "line": 70
+        }
+      ],
+      [
+        {
+          "function": "github.com/QuantumNous/new-api/logger.LogError",
+          "path": "/src/logger/logger.go",
+          "source_line": "logHelper(ctx, loggerError, msg)"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.UpdateVideoTasks.func1",
+          "path": "/src/service/task_polling.go",
+          "source_line": "logger.LogError(ctx, common.LogText(\"Channel #%d failed to update video async tasks: %s\", channelId, err.Error()))"
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run.func1.1",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "t.f()",
+          "line": 69
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run.func1",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "}()",
+          "line": 70
+        }
+      ]
+    ],
+    "task_creation": [
+      [
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "go func() {",
+          "line": 41
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*pool).CtxGo",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/pool.go",
+          "source_line": "w.run()",
+          "line": 137
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.CtxGo",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go",
+          "source_line": "defaultPool.CtxGo(ctx, f)",
+          "line": 43
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.Go",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go",
+          "source_line": "CtxGo(context.Background(), f)",
+          "line": 38
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.UpdateVideoTasks",
+          "path": "/src/service/task_polling.go",
+          "source_line": "gopool.Go(func() {"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels",
+          "path": "/src/service/task_polling_test.go",
+          "source_line": "err := UpdateVideoTasks(ctx, constant.TaskPlatform(\"kling\"), map[int][]string{"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ],
+      [
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "go func() {",
+          "line": 41
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*pool).CtxGo",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/pool.go",
+          "source_line": "w.run()",
+          "line": 137
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.CtxGo",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go",
+          "source_line": "defaultPool.CtxGo(ctx, f)",
+          "line": 43
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.Go",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go",
+          "source_line": "CtxGo(context.Background(), f)",
+          "line": 38
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.UpdateVideoTasks",
+          "path": "/src/service/task_polling.go",
+          "source_line": "gopool.Go(func() {"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels.func4",
+          "path": "/src/service/task_polling_test.go",
+          "source_line": "errCh <- UpdateVideoTasks(context.Background(), constant.TaskPlatform(\"kling\"), map[int][]string{"
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run.func1.1",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "t.f()",
+          "line": 69
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run.func1",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "}()",
+          "line": 70
+        }
+      ],
+      [
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*worker).run",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/worker.go",
+          "source_line": "go func() {",
+          "line": 41
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.(*pool).CtxGo",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/pool.go",
+          "source_line": "w.run()",
+          "line": 137
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.CtxGo",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go",
+          "source_line": "defaultPool.CtxGo(ctx, f)",
+          "line": 43
+        },
+        {
+          "function": "github.com/bytedance/gopkg/util/gopool.Go",
+          "path": "/go/pkg/mod/github.com/bytedance/gopkg@v0.1.3/util/gopool/gopool.go",
+          "source_line": "CtxGo(context.Background(), f)",
+          "line": 38
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.UpdateVideoTasks",
+          "path": "/src/service/task_polling.go",
+          "source_line": "gopool.Go(func() {"
+        },
+        {
+          "function": "github.com/QuantumNous/new-api/service.TestUpdateVideoTasksMixedChannelSleepSettings",
+          "path": "/src/service/task_polling_test.go",
+          "source_line": "err := UpdateVideoTasks(ctx, constant.TaskPlatform(\"kling\"), map[int][]string{"
+        },
+        {
+          "function": "testing.tRunner",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "fn(t)",
+          "line": 2036
+        },
+        {
+          "function": "testing.(*T).Run.gowrap1",
+          "path": "/usr/local/go/src/testing/testing.go",
+          "source_line": "go tRunner(t, f)",
+          "line": 2101
+        }
+      ]
+    ]
+  },
+  "current_functions": {
+    "relay/helper/stream_scanner.go:StreamScannerHandler": "90abb1d395716d2969dba07451d0fe165569c0a6217f938c4ed5edc67559f078",
+    "service/task_polling.go:UpdateVideoTasks": "1f4bdb51ba1f117afda5971c5a470f9f6d85293014f7e2b4cafd99a00a32624a",
+    "service/task_polling.go:updateVideoTasks": "5b942e68b1e068f79c5e1fef6399be9d7595b07ad8e27c5a7d69ffdc80a75227"
+  },
+  "current_function_note": "Current accepted contract adapters differ from upstream. Hashes bind the exact tested implementation; only the four native-equivalent logging call sites below are allowed race paths.",
+  "fixture_file_update": {
+    "previous_manifest_sha256": "d0d6aeaeb44cebf463de4d49a3c378f88169b99b42338e9904fb0e7adca83237",
+    "reason": "Restore strict 72-hour boundary fixture in an unrelated ordinary test. All nineteen selected functions and all race paths unchanged. Before current stage execution."
+  },
+  "creation_path_correction": {
+    "previous_manifest_sha256": "f9f66d49e5060b30d5606011224e8b497bb73483312443973788cb0d019f7b10",
+    "reason": "Fixed-baseline and fixed-native M2 preflight observed a leading testing.(*T).Run frame before the DoneStopsScanner parent. The complete four-frame chain replaces the prior incomplete source inference before any current stage run."
+  }
+}

@@ -15,10 +15,36 @@ import (
 )
 
 func setupRouteTest(t *testing.T) *gorm.DB {
+	return setupRouteDatabase(t, false)
+}
+
+func setupCatalogRouteTest(t *testing.T) *gorm.DB {
+	return setupRouteDatabase(t, true)
+}
+
+func setupRouteDatabase(t *testing.T, nativeOptions bool) *gorm.DB {
 	t.Helper()
 	previous, cache, redis, manager := model.DB, common.MemoryCacheEnabled, common.RedisEnabled, gatewayConcurrency
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	var db *gorm.DB
+	if nativeOptions {
+		// Native option queries use dialect columns initialized by InitDB.
+		master, sqlitePath := common.IsMasterNode, common.SQLitePath
+		mainType, logType := common.MainDatabaseType(), common.LogDatabaseType()
+		common.IsMasterNode = false
+		common.SQLitePath = t.TempDir() + "/catalog.db"
+		t.Setenv("SQL_DSN", "")
+		t.Setenv("LOG_SQL_DSN", "")
+		t.Cleanup(func() {
+			common.IsMasterNode, common.SQLitePath = master, sqlitePath
+			common.SetDatabaseTypes(mainType, logType)
+		})
+		require.NoError(t, model.InitDB())
+		db = model.DB
+	} else {
+		var err error
+		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+		require.NoError(t, err)
+	}
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)

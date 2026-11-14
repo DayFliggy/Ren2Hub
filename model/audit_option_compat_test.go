@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON(t *testing.T) {
+func TestLegacyConsoleOptionsPreserveInvalidJSONAndRejectRetiredFields(t *testing.T) {
 	previous := *console_setting.GetConsoleSetting()
 	common.OptionMapRWMutex.Lock()
 	previousOptions := common.OptionMap
@@ -24,11 +24,7 @@ func TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON(t *testing.T) {
 	})
 	for _, key := range []string{"api_info", "announcements", "faq", "uptime_kuma_groups"} {
 		fullKey := "console_setting." + key
-		for _, input := range []string{"", " \t\n"} {
-			require.NoError(t, updateOptionMap(fullKey, input))
-			assert.Equal(t, "[]", common.OptionMap[fullKey])
-			assert.Equal(t, "[]", config.GlobalConfig.ExportAllConfigs()[fullKey])
-		}
+		// Blank-list normalization is preserved by the frozen native diagnostic.
 		require.NoError(t, updateOptionMap(fullKey, "{broken"))
 		assert.Equal(t, "{broken", common.OptionMap[fullKey], "invalid nonempty JSON must remain visible for repair")
 	}

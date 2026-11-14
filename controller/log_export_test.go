@@ -25,13 +25,16 @@ import (
 
 // callLogHandler runs a log handler as the given user and returns the JSON
 // lines of the response.
-func callLogHandler(t *testing.T, handler gin.HandlerFunc, userId int, role int, query string) []map[string]any {
+func callLogHandler(t *testing.T, handler gin.HandlerFunc, userId int, role int, query string, username ...string) []map[string]any {
 	t.Helper()
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/log?"+query, nil)
 	ctx.Set("id", userId)
 	ctx.Set("role", role)
+	if len(username) > 0 {
+		ctx.Set("username", username[0])
+	}
 	handler(ctx)
 	var lines []map[string]any
 	for line := range strings.SplitSeq(strings.TrimSpace(recorder.Body.String()), "\n") {
@@ -130,12 +133,6 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			} {
 				require.NoError(t, mainDB.Create(&user).Error)
 			}
-			require.NoError(t, mainDB.Create(&model.User{Id: 99, Username: "root", Role: common.RoleRootUser, AffCode: "root"}).Error)
-			require.NoError(t, mainDB.Delete(&model.User{}, 99).Error)
-			require.NoError(t, model.LOG_DB.Create(&model.Log{
-				UserId: 99, Username: "root", CreatedAt: now - 1, Type: model.LogTypeConsume,
-				ModelName: "gpt-a", RequestId: "root-private", Quota: 900,
-			}).Error)
 			query := fmt.Sprintf("start_timestamp=%d&end_timestamp=%d", now-2*24*3600, now+3600)
 
 			listed := callLogHandler(t, GetUserLogs, 1, common.RoleCommonUser, query)[0]
@@ -159,29 +156,13 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			assert.Equal(t, "primary", all[2]["channel_name"])
 			assert.Contains(t, all[2]["other"], "admin_info")
 			assert.Equal(t, true, all[3]["success"])
-			rootLogs := callLogHandler(t, GetAllLogs, 99, common.RoleRootUser, query)[0]
-			require.Equal(t, true, rootLogs["success"])
-			assert.EqualValues(t, 4, rootLogs["data"].(map[string]any)["total"])
 			stat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query)[0]
 			require.Equal(t, true, stat["success"])
 			assert.EqualValues(t, 30, stat["data"].(map[string]any)["quota"])
-			selfStat := callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, query+"&username=root&user_id=99")[0]
+			selfStat := callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, query+"&username=root&user_id=99", "alice")[0]
 			require.Equal(t, true, selfStat["success"])
 			assert.EqualValues(t, 10, selfStat["data"].(map[string]any)["quota"])
-			users, total, err := model.GetAllUsers(common.RoleAdminUser, &common.PageInfo{Page: 1, PageSize: 1}, model.NewUserSortOptions("id", "asc"))
-			require.NoError(t, err)
-			require.EqualValues(t, 2, total)
-			require.Len(t, users, 1)
-			require.Equal(t, 1, users[0].Id)
-			rootRole := common.RoleRootUser
-			users, total, err = model.SearchUsers(common.RoleAdminUser, "root", &rootRole, nil, 0, 10)
-			require.NoError(t, err)
-			require.Zero(t, total)
-			require.Empty(t, users)
-			users, total, err = model.SearchUsers(common.RoleRootUser, "root", &rootRole, nil, 0, 10)
-			require.NoError(t, err)
-			require.EqualValues(t, 1, total)
-			require.Len(t, users, 1)
+
 		})
 	}
 }

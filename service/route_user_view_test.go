@@ -12,7 +12,7 @@ import (
 
 // C1: ordinary users see pricing and capacity limits, never other users' live load.
 func TestUserRouteViewsHideRuntimeOccupancy(t *testing.T) {
-	db := setupRouteTest(t)
+	db := setupCatalogRouteTest(t)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Model{}, &model.Vendor{}, &model.Option{}))
 	require.NoError(t, db.Create(&model.User{Id: 17, Username: "view-owner"}).Error)
 	createRouteChannel(t, db, 11, "route-model")

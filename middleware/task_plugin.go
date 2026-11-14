@@ -1230,7 +1230,7 @@ func buildTaskPluginRouteRequest(c *gin.Context) (pluginruntime.RouteRequestCont
 				return requestContext, fmt.Errorf("multipart file exceeds %d MB", fileLimitMB)
 			}
 		}
-		form, parseErr := common.ParseTaskMultipartFormReusable(c)
+		form, parseErr := common.ParseMultipartFormReusable(c)
 		if parseErr != nil {
 			return requestContext, parseErr
 		}
@@ -1412,8 +1412,8 @@ func applyOriginTaskIntent(c *gin.Context, intent map[string]any, meta pluginrun
 		tasks = append(tasks, task)
 	}
 
-	channel, err := service.LoadOriginTaskChannel(channelID)
-	if err != nil {
+	channel, err := model.CacheGetChannel(channelID)
+	if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
 		return &originTaskIntentError{Code: "origin_task_channel_disabled", Message: "origin task channel is disabled", StatusCode: http.StatusBadRequest}
 	}
 	service.GetChannelConstraints(c).AddPin(dto.ChannelPin{

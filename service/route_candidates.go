@@ -340,26 +340,6 @@ func (e *originTaskFilterError) Error() string {
 	return fmt.Sprintf("the channel of the origin task does not satisfy %s", e.kind)
 }
 
-// LoadOriginTaskChannel reads an origin task's channel. A memory-cache miss is
-// not a deletion: only the database's not-found is, and any other database
-// error is a storage failure. A disabled channel is unavailable too.
-func LoadOriginTaskChannel(channelID int) (*model.Channel, error) {
-	channel, err := model.CacheGetChannel(channelID)
-	if err != nil {
-		channel, err = model.GetChannelById(channelID, true)
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("%w: %w", errOriginTaskChannelUnavailable, err)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if channel.Status != common.ChannelStatusEnabled {
-		return nil, errOriginTaskChannelUnavailable
-	}
-	return channel, nil
-}
-
 // originTaskFilters keeps the request's explicit constraints (path, WebSocket
 // capability, plugin identity or endpoint naming a plugin). An accepted task
 // does not follow the Key's current manual list, and the ordinary-request

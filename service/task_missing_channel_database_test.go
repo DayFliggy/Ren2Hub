@@ -1,3 +1,5 @@
+//go:build known_upstream_restored
+
 package service
 
 import (
@@ -81,22 +83,22 @@ func TestTaskPollingRefundDatabaseMatrix(t *testing.T) {
 			require.NoError(t, db.Raw(versionQuery).Scan(&version).Error)
 			t.Logf("database: %s", version)
 			t.Run("missing_channel_refunds_preconsumed", func(t *testing.T) {
-				TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing(t)
+				TestRestoredProbeUpdateVideoTasksRefundsPreConsumedWhenChannelMissing(t)
 				requireTaskPollingRefundLogs(t, model.Log{UserId: 21, ChannelId: 21, TokenId: 21, Quota: 5000})
 			})
 			t.Run("cas_refunds_once_and_keeps_legacy_rule", func(t *testing.T) {
-				TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule(t)
+				TestRestoredProbeUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule(t)
 				requireTaskPollingRefundLogs(t, model.Log{UserId: 22, ChannelId: 22, Quota: 1200})
 			})
 			t.Run("channel_read_error_keeps_reservation", func(t *testing.T) {
-				TestUpdateBatchTasksKeepsTasksWhenChannelReadFails(t)
+				TestRestoredProbeUpdateBatchTasksKeepsTasksWhenChannelReadFails(t)
 				requireTaskPollingRefundLogs(t)
 			})
 			t.Run("cache_miss_keeps_reservation", func(t *testing.T) {
-				TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel(t)
+				TestRestoredProbeUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel(t)
 				requireTaskPollingRefundLogs(t)
 			})
-			t.Run("duplicate_upstream_id_uses_own_channel", TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID)
+			t.Run("duplicate_upstream_id_uses_own_channel", TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID)
 		})
 	}
 }

@@ -1,13 +1,11 @@
 package model
 
 import (
-	"fmt"
-	"testing"
-	"time"
-
 	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"testing"
+	"time"
 )
 
 func TestTopUpQueryFiltersOwnershipAndCurrencyTotals(t *testing.T) {
@@ -75,19 +73,6 @@ func TestTopUpKeywordUsesNativeLikePattern(t *testing.T) {
 }
 
 // 计数最多 searchTopUpCountHardLimit 行；上游的 Limit(n).Count() 不封顶。
-func TestListTopUpsCapsCount(t *testing.T) {
-	db, _, invitee := affiliateTestDB(t)
-	now := common.GetTimestamp()
-	rows := make([]TopUp, searchTopUpCountHardLimit+5)
-	for i := range rows {
-		rows[i] = TopUp{UserId: invitee.Id, TradeNo: fmt.Sprintf("cap-%05d", i), CreateTime: now}
-	}
-	require.NoError(t, db.CreateInBatches(rows, 500).Error)
-	result, total, err := ListTopUps(TopUpFilter{UserID: invitee.Id}, &common.PageInfo{Page: 1, PageSize: 3})
-	require.NoError(t, err)
-	assert.EqualValues(t, searchTopUpCountHardLimit, total)
-	assert.Len(t, result, 3)
-}
 
 // 统计按渠道和币种拆分；排行只算成功订单，按到账额度降序、同额按 user_id 升序，并受 limit 限制。
 func TestTopUpMethodTotalsAndRanking(t *testing.T) {

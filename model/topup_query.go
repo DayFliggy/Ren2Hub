@@ -110,11 +110,12 @@ func ListTopUps(filter TopUpFilter, page *common.PageInfo) ([]TopUp, int64, erro
 	if err != nil {
 		return nil, 0, err
 	}
-	// 计数最多 searchTopUpCountHardLimit 行，避免对大表做无界 COUNT。
-	// GORM 的 Limit(n).Count() 不限制计数，所以用子查询封顶。
 	var total int64
-	capped := query.Session(&gorm.Session{}).Select("id").Limit(searchTopUpCountHardLimit)
-	if err = DB.Table("(?) AS capped_top_ups", capped).Count(&total).Error; err != nil {
+	countQuery := query.Session(&gorm.Session{})
+	if filter.Keyword != "" {
+		countQuery = countQuery.Limit(searchTopUpCountHardLimit)
+	}
+	if err = countQuery.Count(&total).Error; err != nil {
 		common.SysError(common.LogText("failed to count topups: %s", err.Error()))
 		return nil, 0, common.NewMessage("Failed to search top-up records")
 	}

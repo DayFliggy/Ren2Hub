@@ -489,7 +489,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 	} {
 		t.Run(key, func(t *testing.T) {
 			channel := insertPluginChannel(t, key, upstream.URL, "sk-static", false)
-			models, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+			models, err := fetchChannelUpstreamModelIDs(channel)
 			require.NoError(t, err)
 			assert.Equal(t, want, models)
 		})
@@ -508,13 +508,13 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 	}
 	t.Run("an expiring credential is refreshed first", func(t *testing.T) {
 		channel := insertPluginChannel(t, "fetch-refresh", upstream.URL, expiring(t, "fetch-refresh"), false)
-		models, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"credential-a"}, models)
 	})
 	t.Run("a converted route goes out as a relay request with a static key", func(t *testing.T) {
 		channel := insertPluginChannel(t, "fetch-converted", upstream.URL, "sk-static", false)
-		models, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"converted-a", "converted-b"}, models)
 		sent := converted.Load()
@@ -527,7 +527,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 	})
 	t.Run("a converted route refreshes an expiring credential and sends it", func(t *testing.T) {
 		channel := insertPluginChannel(t, "fetch-converted", upstream.URL, expiring(t, "fetch-converted"), false)
-		models, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"converted-a", "converted-b"}, models)
 		sent := converted.Load()
@@ -542,10 +542,10 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 		tlsUpstream := httptest.NewTLSServer(http.HandlerFunc(serve))
 		t.Cleanup(tlsUpstream.Close)
 		channel := insertPluginChannel(t, "fetch-converted", tlsUpstream.URL, "sk-static", false)
-		_, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+		_, err := fetchChannelUpstreamModelIDs(channel)
 		require.Error(t, err)
 		channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "fetch-converted", TLSInsecureSkipVerify: true})
-		models, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"converted-a", "converted-b"}, models)
 	})
@@ -567,7 +567,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 			vendorStatus.Store(int32(tc.status))
 			vendorBody.Store(tc.body)
 			channel := insertPluginChannel(t, "fetch-reply", upstream.URL, "sk-static", false)
-			_, err := fetchChannelUpstreamModelIDs(context.Background(), channel)
+			_, err := fetchChannelUpstreamModelIDs(channel)
 			require.ErrorContains(t, err, tc.wants)
 		})
 	}

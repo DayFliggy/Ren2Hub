@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "stage": "known_upstream_race",
+  "baseline": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "image": "sha256:0d494ea9b5863337de0dfb4f938062bf0261a919016eb162d2be26381dbadafe",
+  "package": "./model",
+  "test": "TestRestoredNativeControlPricingConcurrentRefresh",
+  "fixtures": {
+    "model/native_pricing_race_test.go": "3d82973f63f979e9c415b046dd64f7b92aaa43ec44891dceda6bfe805b46506e"
+  },
+  "access_lines": {
+    "GetPricing": [
+      "if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {",
+      "return pricingMap"
+    ],
+    "InvalidatePricingCache": [
+      "pricingMap = nil",
+      "lastGetPricingTime = time.Time{}"
+    ],
+    "updatePricing": [
+      "pricingMap = make([]Pricing, 0)",
+      "pricingMap = append(pricingMap, pricing)",
+      "lastGetPricingTime = time.Now()"
+    ]
+  },
+  "native_functions": {
+    "GetPricing": "9b76ac697a3281ca2656fff46abfb2493142f9c2c98808c2278db9672bbe3c1a",
+    "InvalidatePricingCache": "9508c62839907077fd0ef2290907fe14334b98b9b6ea47ca11f93778b4c09876",
+    "RefreshPricing": "1440647aecbc731cbb41c19de5c324db21d47c17a054c38a5aaad79fc9660ddf"
+  },
+  "preflight": {
+    "baseline_exit": 0,
+    "native_exit": 1,
+    "baseline_log_sha256": "5a379e85498d278c5a19422e7461aedd3083c65ed8534d14c910fb41dba36c48",
+    "native_log_sha256": "ad5fdcd8430fa1a8ab79abb4fce424d821fbc5408f992f41746933f59bf8acc0",
+    "comparisons": [
+      {
+        "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/race-docker/report.json",
+        "report_sha256": "c927afc33b429a71bf19012d1f5bae9b116d5c2854cdf9b0727f76a7cbb99383",
+        "logs": [
+          {
+            "tree": "control-baseline-probes",
+            "command": [
+              "sudo",
+              "-n",
+              "docker",
+              "run",
+              "--rm",
+              "--network",
+              "none",
+              "--user",
+              "1000:1000",
+              "-v",
+              "/home/work/ren2hub-native-b388-20261114/control-baseline-probes:/src:ro",
+              "-v",
+              "/home/work/go/pkg/mod:/go/pkg/mod:ro",
+              "-v",
+              "/home/work/.cache/go-build:/cache",
+              "-w",
+              "/src",
+              "-e",
+              "GOCACHE=/cache",
+              "-e",
+              "GOWORK=off",
+              "-e",
+              "GOTOOLCHAIN=local",
+              "-e",
+              "GOENV=off",
+              "-e",
+              "GOMAXPROCS=2",
+              "-e",
+              "CGO_ENABLED=1",
+              "-e",
+              "GOPROXY=off",
+              "-e",
+              "GOSUMDB=off",
+              "-e",
+              "GOFLAGS=-mod=readonly",
+              "-e",
+              "CI=1",
+              "-e",
+              "LOG_SQL_DSN=",
+              "sha256:0d494ea9b5863337de0dfb4f938062bf0261a919016eb162d2be26381dbadafe",
+              "go",
+              "test",
+              "-buildvcs=false",
+              "-race",
+              "-json",
+              "-count=1",
+              "-timeout=60s",
+              "-p=2",
+              "./model",
+              "-run",
+              "^TestRestoredNativeControlPricingConcurrentRefresh$"
+            ],
+            "exit_code": 0,
+            "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/race-docker/control-baseline-probes.jsonl",
+            "sha256": "f6f110beb7509421dcf5113ff2ed35b13d39443eaa1b20bdccde772ac4852018"
+          },
+          {
+            "tree": "control-native-probes",
+            "command": [
+              "sudo",
+              "-n",
+              "docker",
+              "run",
+              "--rm",
+              "--network",
+              "none",
+              "--user",
+              "1000:1000",
+              "-v",
+              "/home/work/ren2hub-native-b388-20261114/control-native-probes:/src:ro",
+              "-v",
+              "/home/work/go/pkg/mod:/go/pkg/mod:ro",
+              "-v",
+              "/home/work/.cache/go-build:/cache",
+              "-w",
+              "/src",
+              "-e",
+              "GOCACHE=/cache",
+              "-e",
+              "GOWORK=off",
+              "-e",
+              "GOTOOLCHAIN=local",
+              "-e",
+              "GOENV=off",
+              "-e",
+              "GOMAXPROCS=2",
+              "-e",
+              "CGO_ENABLED=1",
+              "-e",
+              "GOPROXY=off",
+              "-e",
+              "GOSUMDB=off",
+              "-e",
+              "GOFLAGS=-mod=readonly",
+              "-e",
+              "CI=1",
+              "-e",
+              "LOG_SQL_DSN=",
+              "sha256:0d494ea9b5863337de0dfb4f938062bf0261a919016eb162d2be26381dbadafe",
+              "go",
+              "test",
+              "-buildvcs=false",
+              "-race",
+              "-json",
+              "-count=1",
+              "-timeout=60s",
+              "-p=2",
+              "./model",
+              "-run",
+              "^TestRestoredNativeControlPricingConcurrentRefresh$"
+            ],
+            "exit_code": 1,
+            "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/race-docker/control-native-probes.jsonl",
+            "sha256": "49de90978febfdf001cb526440f2473dce1cd153fc8413cee7c756ca0885fc5c",
+            "observed": {
+              "nodes": {
+                "TestRestoredNativeControlPricingConcurrentRefresh": "fail"
+              },
+              "race_reports": 2,
+              "pairs": [
+                {
+                  "read": {
+                    "function": "github.com/QuantumNous/new-api/model.GetPricing",
+                    "source_line": "if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {",
+                    "path": [
+                      "GetPricing",
+                      "TestRestoredNativeControlPricingConcurrentRefresh.func1"
+                    ]
+                  },
+                  "write": {
+                    "function": "github.com/QuantumNous/new-api/model.InvalidatePricingCache",
+                    "source_line": "lastGetPricingTime = time.Time{}",
+                    "path": [
+                      "InvalidatePricingCache",
+                      "TestRestoredNativeControlPricingConcurrentRefresh"
+                    ]
+                  }
+                },
+                {
+                  "write": {
+                    "function": "github.com/QuantumNous/new-api/model.InvalidatePricingCache",
+                    "source_line": "pricingMap = nil",
+                    "path": [
+                      "InvalidatePricingCache",
+                      "TestRestoredNativeControlPricingConcurrentRefresh"
+                    ]
+                  },
+                  "read": {
+                    "function": "github.com/QuantumNous/new-api/model.GetPricing",
+                    "source_line": "if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {",
+                    "path": [
+                      "GetPricing",
+                      "TestRestoredNativeControlPricingConcurrentRefresh.func1"
+                    ]
+                  }
+                }
+              ],
+              "failure_reason": "race detected during execution of test"
+            }
+          }
+        ]
+      },
+      {
+        "report": "/home/work/ren2hub-native-b388-20261114/preflight/control/race-frozen/report.json",
+        "report_sha256": "ba766060101f6179ff93b43db476523142aca319bcb6a3f77f98c52c7f3e4311",
+        "logs": [
+          {
+            "tree": "control-baseline-probes",
+            "command": [
+              "sudo",
+              "-n",
+              "docker",
+              "run",
+              "--rm",
+              "--network",
+              "none",
+              "--user",
+              "1000:1000",
+              "-v",
+              "/home/work/ren2hub-native-b388-20261114/control-baseline-probes:/src:ro",
+              "-v",
+              "/home/work/go/pkg/mod:/go/pkg/mod:ro",
+              "-v",
+              "/home/work/.cache/go-build:/cache",
+              "-w",
+              "/src",
+              "-e",
+              "GOCACHE=/cache",
+              "-e",
+              "GOWORK=off",
+              "-e",
+              "GOTOOLCHAIN=local",
+              "-e",
+              "GOENV=off",
+              "-e",
+              "GOMAXPROCS=2",
+              "-e",
+              "CGO_ENABLED=1",
+              "-e",
+              "GOPROXY=off",
+              "-e",
+              "GOSUMDB=off",
+              "-e",
+              "GOFLAGS=-mod=readonly",
+              "-e",
+              "CI=1",
+              "-e",
+              "LOG_SQL_DSN=",
+              "sha256:0d494ea9b5863337de0dfb4f938062bf0261a919016eb162d2be26381dbadafe",
+              "go",
+              "test",
+              "-buildvcs=false",
+              "-race",
+              "-json",
+              "-count=1",
+              "-timeout=60s",
+              "-p=2",
+              "-tags=known_upstream_race",
+              "./model",
+              "-run",
+              "^TestRestoredNativeControlPricingConcurrentRefresh$"
+            ],
+            "exit_code": 0,
+            "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/race-frozen/control-baseline-probes.jsonl",
+            "sha256": "5a379e85498d278c5a19422e7461aedd3083c65ed8534d14c910fb41dba36c48"
+          },
+          {
+            "tree": "control-native-probes",
+            "command": [
+              "sudo",
+              "-n",
+              "docker",
+              "run",
+              "--rm",
+              "--network",
+              "none",
+              "--user",
+              "1000:1000",
+              "-v",
+              "/home/work/ren2hub-native-b388-20261114/control-native-probes:/src:ro",
+              "-v",
+              "/home/work/go/pkg/mod:/go/pkg/mod:ro",
+              "-v",
+              "/home/work/.cache/go-build:/cache",
+              "-w",
+              "/src",
+              "-e",
+              "GOCACHE=/cache",
+              "-e",
+              "GOWORK=off",
+              "-e",
+              "GOTOOLCHAIN=local",
+              "-e",
+              "GOENV=off",
+              "-e",
+              "GOMAXPROCS=2",
+              "-e",
+              "CGO_ENABLED=1",
+              "-e",
+              "GOPROXY=off",
+              "-e",
+              "GOSUMDB=off",
+              "-e",
+              "GOFLAGS=-mod=readonly",
+              "-e",
+              "CI=1",
+              "-e",
+              "LOG_SQL_DSN=",
+              "sha256:0d494ea9b5863337de0dfb4f938062bf0261a919016eb162d2be26381dbadafe",
+              "go",
+              "test",
+              "-buildvcs=false",
+              "-race",
+              "-json",
+              "-count=1",
+              "-timeout=60s",
+              "-p=2",
+              "-tags=known_upstream_race",
+              "./model",
+              "-run",
+              "^TestRestoredNativeControlPricingConcurrentRefresh$"
+            ],
+            "exit_code": 1,
+            "log": "/home/work/ren2hub-native-b388-20261114/preflight/control/race-frozen/control-native-probes.jsonl",
+            "sha256": "ad5fdcd8430fa1a8ab79abb4fce424d821fbc5408f992f41746933f59bf8acc0",
+            "observed": {
+              "nodes": {
+                "TestRestoredNativeControlPricingConcurrentRefresh": "fail"
+              },
+              "race_reports": 2,
+              "pairs": [
+                {
+                  "write": {
+                    "function": "github.com/QuantumNous/new-api/model.updatePricing",
+                    "source_line": "pricingMap = make([]Pricing, 0)",
+                    "path": [
+                      "updatePricing",
+                      "RefreshPricing",
+                      "TestRestoredNativeControlPricingConcurrentRefresh"
+                    ]
+                  },
+                  "read": {
+                    "function": "github.com/QuantumNous/new-api/model.GetPricing",
+                    "source_line": "if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {",
+                    "path": [
+                      "GetPricing",
+                      "TestRestoredNativeControlPricingConcurrentRefresh.func1"
+                    ]
+                  }
+                },
+                {
+                  "write": {
+                    "function": "github.com/QuantumNous/new-api/model.updatePricing",
+                    "source_line": "lastGetPricingTime = time.Now()",
+                    "path": [
+                      "updatePricing",
+                      "RefreshPricing",
+                      "TestRestoredNativeControlPricingConcurrentRefresh"
+                    ]
+                  },
+                  "read": {
+                    "function": "github.com/QuantumNous/new-api/model.GetPricing",
+                    "source_line": "if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {",
+                    "path": [
+                      "GetPricing",
+                      "TestRestoredNativeControlPricingConcurrentRefresh.func1"
+                    ]
+                  }
+                }
+              ],
+              "failure_reason": "race detected during execution of test"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "unobserved_positions": "return pricingMap、append写入及GetPricing慢路径调用updatePricing是根据同一未同步共享变量事先推导的允许位置；两轮preflight只直接观测快路径读对InvalidatePricingCache的nil/Time{}及updatePricing的make/time.Now写。每条日志仍要求源码行文本与固定调用链匹配，未知位置阻断。",
+  "disclosure": "上游同源并发缺陷按回归原生单列验收；普通race和known_upstream_restored仍拒绝DATA RACE。",
+  "creation_paths": [
+    [
+      "github.com/QuantumNous/new-api/model.TestRestoredNativeControlPricingConcurrentRefresh",
+      "testing.tRunner",
+      "testing.(*T).Run.gowrap1"
+    ],
+    [
+      "testing.(*T).Run",
+      "testing.runTests.func1",
+      "testing.tRunner",
+      "testing.runTests",
+      "testing.(*M).Run",
+      "github.com/QuantumNous/new-api/model.TestMain",
+      "main.main"
+    ]
+  ],
+  "creation_stack_basis": "两个preflight和当前日志均实际包含model.TestMain/main.main测试入口；完整序列冻结，禁止任意额外函数。",
+  "creation_sites": {
+    "test_entry": {
+      "path": "model/task_cas_test.go",
+      "source_line": "os.Exit(m.Run())"
+    },
+    "reader_spawn": {
+      "path": "model/native_pricing_race_test.go",
+      "source_line": "go func() {"
+    }
+  },
+  "local_fixture_functions": {
+    "model/task_cas_test.go:TestMain": "6d6495739b8f2e70e1aed5e39a45d26d36eeb53ee050f1a8b1e48b902fe9d353"
+  },
+  "local_fixture_function_basis": {
+    "model/task_cas_test.go:TestMain": {
+      "native_equal": false,
+      "upstream_body_sha256": "5c05ec87f184608d5935639c06593be1f05d710b005d07c95638df23fcc53779",
+      "basis": "已批准的本地表结构测试夹具：增加TokenRouteProfile/TokenRouteEntry，移除退役SubscriptionPlan/SubscriptionOrder/UserSubscription/SystemInstance；保留原生测试入口机制。该TestMain函数体与b388不同，不冒称原生相同。"
+    }
+  }
+}

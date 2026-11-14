@@ -31,7 +31,9 @@ func TestOAuthAffiliateErrorsArePublicAndRegistrationIsAtomic(t *testing.T) {
 			{"disabled_code", "AFFILIATE_CODE_INVALID", "STALE-CODE", true, false, model.ErrAffiliateCodeInvalid},
 			{"storage_failure", "AUTH_INTERNAL_ERROR", "", true, true, errors.New("private INSERT failure; user state must not escape")},
 		} {
-			if flow == "password" && test.name == "storage_failure" {
+			// WeChat storage-error privacy is archived and exercised by
+			// TestRestoredNativeWeChatStorageErrorStaysPrivate.
+			if (flow == "password" || flow == "wechat") && test.name == "storage_failure" {
 				continue
 			}
 			t.Run(flow+"/"+test.name, func(t *testing.T) {

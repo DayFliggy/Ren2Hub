@@ -258,8 +258,8 @@ func TestInitChannelCacheInvalidatesStartupPricingBuiltBeforeChannelCache(t *tes
 	}, rebuiltByModel["gemini-3.5-flash"])
 }
 
-// The full channel sync is the only writer of channel2advancedCustomConfig; it
-// must replace changed configs and drop configs of channels that changed type.
+// Full channel sync must replace changed configs and drop configs of channels
+// that changed type.
 func TestInitChannelCacheSyncsAdvancedCustomConfig(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
@@ -286,6 +286,41 @@ func TestInitChannelCacheSyncsAdvancedCustomConfig(t *testing.T) {
 
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 401).Update("type", constant.ChannelTypeOpenAI).Error)
 	InitChannelCache()
+
+	assert.Nil(t, channel2advancedCustomConfig[401])
+}
+
+func TestCacheUpdateChannelSyncsAdvancedCustomConfig(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+
+	channel := &Channel{
+		Id:     401,
+		Type:   constant.ChannelTypeAdvancedCustom,
+		Key:    "key-401",
+		Status: common.ChannelStatusEnabled,
+		Name:   "channel-401",
+	}
+	channel.SetOtherSettings(pricingEndpointAdvancedCustomConfig(dto.AdvancedCustomRoute{
+		IncomingPath: "/v1/responses",
+		UpstreamPath: "/v1beta/models/{model}:generateContent",
+		Converter:    "openai_responses_to_gemini_generate_content",
+	}))
+	CacheUpdateChannel(channel)
+
+	require.NotNil(t, channel2advancedCustomConfig[401])
+	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAIResponse}, channel2advancedCustomConfig[401].SupportedEndpointTypesForModel("gemini-3.5-flash"))
+
+	channel.SetOtherSettings(pricingEndpointAdvancedCustomConfig(dto.AdvancedCustomRoute{
+		IncomingPath: "/v1/chat/completions",
+		UpstreamPath: "/v1/chat/completions",
+	}))
+	CacheUpdateChannel(channel)
+
+	require.NotNil(t, channel2advancedCustomConfig[401])
+	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, channel2advancedCustomConfig[401].SupportedEndpointTypesForModel("gemini-3.5-flash"))
+
+	channel.Type = constant.ChannelTypeOpenAI
+	CacheUpdateChannel(channel)
 
 	assert.Nil(t, channel2advancedCustomConfig[401])
 }

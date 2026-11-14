@@ -36,6 +36,7 @@ MATRIX_TESTS = {
         "TestMigrationSchemaStability", "TestRedemptionSortingDatabases",
         "TestRequestPolicyDatabaseMatrix", "TestAdminTicketsKeepDeletedOwnersDatabases",
         "TestTopUpQueryDatabases", "TestTopUpDiscountDatabaseMatrix", "TestChannelUpstreamRatioDatabases",
+        "TestNativeTopUpFacadeDatabaseMatrix",
     ),
     "controller": (
         "TestModelPricingConversionDatabaseMatrix", "TestProviderChannelManagementDatabaseMatrix", "TestModelManagementDatabaseMatrix",
@@ -46,7 +47,7 @@ MATRIX_TESTS = {
         "TestAPITokenAuditDatabaseMatrix",
     ),
     "pkg/perf_metrics": ("TestPerformanceAggregationAndFlush",),
-    "service": ("TestFixedPriceBillingDatabaseMatrix", "TestTaskPollingRefundDatabaseMatrix"),
+    "service": ("TestFixedPriceBillingDatabaseMatrix", "TestTaskPollingContractDatabaseMatrix"),
 }
 SINGLE_DIALECT_TESTS = (
     ("model", "TestMigratePrefillGroupUniquenessMySQL", "mysql"),
@@ -189,10 +190,27 @@ DEFERRED_DATABASE_HELPERS = {
 }
 DEFERRED_DATABASE_TESTS = {}
 
+# 这些正向断言随原生恢复转入独立诊断，不能计为普通三库通过或 deferred。
+RESTORED_DATABASE_TESTS = {
+    ("model", "TestRestoredNativeControl" + suffix):
+        "scripts/testing/fixtures/known_upstream_restored/control/database-preflight.json"
+    for suffix in (
+        "OptionWriteFailure", "OptionCreatedRowRollback", "CurrencyValidation",
+        "ConsoleNormalization", "CredentialSQL", "SelfStatIdentity", "AdminLogs",
+        "PricingFailure", "RootReadFailure", "AdminQuota",
+    )
+}
+RESTORED_DATABASE_TESTS[("service", "TestTaskPollingRefundDatabaseMatrix")] = (
+    "docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json"
+)
+RESTORED_DATABASE_TESTS[("model", "TestRestoredNativeControlChannelPostCommitReadFailure")] = (
+    "docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json"
+)
+
 
 def database_inventory(source: Path, tracked_files: list[str]) -> dict:
     """发现新增数据库测试和 helper 调用，显式报告未归类的覆盖范围。"""
-    functions = {}
+    functions, diagnostic_functions = {}, set()
     for relative in tracked_files:
         if not relative.endswith("_test.go"):
             continue
@@ -204,11 +222,13 @@ def database_inventory(source: Path, tracked_files: list[str]) -> dict:
         # Go 测试遵循 gofmt；顶层闭括号位于列首，内层块均有缩进。
         for match in re.finditer(r"^func (\w+)\([^\n]*\{(.*?)^}", content, re.M | re.S):
             functions[(package, match[1])] = match[2]
+            if content.startswith("//go:build known_upstream_restored\n"):
+                diagnostic_functions.add((package, match[1]))
     external = {key for key, body in functions.items()
                 if "os.Getenv" in body and ("DSN" in body or "DIALECT" in body)}
     calls = {key: {(key[0], name) for name in re.findall(r"\b(\w+)\s*\(", body)
                    if (key[0], name) in functions} for key, body in functions.items()}
-    result = {"covered": [], "deferred": [], "unclassified": []}
+    result = {"covered": [], "deferred": [], "restored_diagnostics": [], "unclassified": []}
     for key in sorted(functions):
         if not key[1].startswith("Test"):
             continue
@@ -224,6 +244,10 @@ def database_inventory(source: Path, tracked_files: list[str]) -> dict:
         item = {"package": key[0], "test": key[1], "environment_functions": roots}
         if key[1] in REQUIRED_TESTS:
             result["covered"].append(item)
+        elif key in RESTORED_DATABASE_TESTS and key in diagnostic_functions:
+            item.update(stage="known_upstream_restored", regular_matrix_pass=False,
+                        evidence_reference=RESTORED_DATABASE_TESTS[key])
+            result["restored_diagnostics"].append(item)
         elif key[1] in DEFERRED_DATABASE_TESTS:
             item["reason"] = DEFERRED_DATABASE_TESTS[key[1]]
             result["deferred"].append(item)
@@ -234,6 +258,9 @@ def database_inventory(source: Path, tracked_files: list[str]) -> dict:
             result["unclassified"].append(item)
     existing = {name for _, name in functions}
     result["missing_required"] = sorted(set(REQUIRED_TESTS) - existing)
+    result["missing_restored_diagnostics"] = sorted(
+        package + "/" + test for package, test in RESTORED_DATABASE_TESTS
+        if (package, test) not in diagnostic_functions)
     return result
 
 
@@ -244,7 +271,8 @@ def database_test_files(source: Path) -> list[str]:
          "--", "*_test.go", ":(exclude)docs/developer-notes/**"],
         cwd=source, check=True, stdout=subprocess.PIPE, text=False,
     )
-    return [path for path in result.stdout.decode().split("\0") if path]
+    return [path for path in result.stdout.decode().split("\0")
+            if path and (source / path).is_file()]
 
 
 class Failure(RuntimeError):
@@ -412,7 +440,8 @@ class Runner:
         self.report["go_version"] = version
         tests = database_test_files(self.source)
         self.report["discovery"] = database_inventory(self.source, tests)
-        if self.report["discovery"]["unclassified"] or self.report["discovery"]["missing_required"]:
+        if any(self.report["discovery"][key] for key in
+               ("unclassified", "missing_required", "missing_restored_diagnostics")):
             raise Failure("发现未归类或缺失的数据库测试；见报告 discovery，拒绝缩减覆盖范围")
         # 固定本机 socket，绕开 Docker context 和 DOCKER_HOST 的远程目标。
         self.docker = ["docker", "--host", "unix:///var/run/docker.sock"]

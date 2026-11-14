@@ -5,7 +5,6 @@ import (
 	"context"
 	"embed"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -357,14 +356,13 @@ func InitResources() error {
 			common.SysError(common.LogText("failed to migrate retired frontend options: %s", err.Error()))
 		}
 		if err := model.MigrateSensitiveWords(); err != nil {
-			return fmt.Errorf("migrate sensitive words: %w", err)
+			common.SysError(common.LogText("failed to migrate sensitive words: %s", err.Error()))
 		}
 	}
 	model.InitOptionMap()
 	// Top-up quotes apply the saved discount; never serve without it.
 	if _, err = model.CurrentTopUpDiscountSettings(); err != nil {
 		common.FatalLog(common.LogText("failed to load top-up discount config: %s", err.Error()))
-		return err
 	}
 
 	// 清理旧的磁盘缓存文件

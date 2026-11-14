@@ -623,9 +623,7 @@ func (channel *Channel) Update() error {
 	if ChannelRoutingChanged != nil {
 		routingErr = ChannelRoutingChanged(channel.Id)
 	}
-	if err = DB.Model(channel).First(channel, "id = ?", channel.Id).Error; err != nil {
-		return err
-	}
+	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	if err = channel.UpdateAbilities(nil); err != nil {
 		return err
 	}

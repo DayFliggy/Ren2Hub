@@ -239,8 +239,8 @@ func collectPendingUpstreamModelChangesFromModels(
 	return normalizeModelNames(pendingAdd), normalizeModelNames(pendingRemove)
 }
 
-func collectPendingUpstreamModelChanges(ctx context.Context, channel *model.Channel, settings dto.ChannelOtherSettings) (pendingAddModels []string, pendingRemoveModels []string, err error) {
-	upstreamModels, err := fetchChannelUpstreamModelIDs(ctx, channel)
+func collectPendingUpstreamModelChanges(channel *model.Channel, settings dto.ChannelOtherSettings) (pendingAddModels []string, pendingRemoveModels []string, err error) {
+	upstreamModels, err := fetchChannelUpstreamModelIDs(channel)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -334,8 +334,8 @@ func sanitizeAdvancedCustomRequestError(err error, key string, requestURL string
 	return errors.New(message)
 }
 
-func getFetchModelsResponseBody(ctx context.Context, method string, requestURL string, channel *model.Channel, headers http.Header) ([]byte, error) {
-	response, err := sendFetchModelsRequest(ctx, method, requestURL, channel, headers)
+func getFetchModelsResponseBody(method string, requestURL string, channel *model.Channel, headers http.Header) ([]byte, error) {
+	response, err := sendFetchModelsRequest(method, requestURL, channel, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -352,8 +352,8 @@ func readFetchModelsResponse(response *http.Response) ([]byte, error) {
 
 // sendFetchModelsRequest sends a model list request through the channel's
 // proxy and TLS setting. The caller closes the response body.
-func sendFetchModelsRequest(ctx context.Context, method string, requestURL string, channel *model.Channel, headers http.Header) (*http.Response, error) {
-	request, err := http.NewRequestWithContext(ctx, method, requestURL, nil)
+func sendFetchModelsRequest(method string, requestURL string, channel *model.Channel, headers http.Header) (*http.Response, error) {
+	request, err := http.NewRequest(method, requestURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func sendFetchModelsRequest(ctx context.Context, method string, requestURL strin
 	return client.Do(request)
 }
 
-func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) ([]string, error) {
+func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 	if err := rejectRetiredChannelType(channel.Type); err != nil {
 		return nil, err
 	}
@@ -383,16 +383,9 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 			return nil, fmt.Errorf("task plugin %q is not registered", channel.GetSetting().TaskPluginKey)
 		}
 		if _, ok := plugin.Meta.ModelListRoute(); ok {
-			return fetchProviderPluginUpstreamModelIDs(ctx, channel, plugin)
+			return fetchProviderPluginUpstreamModelIDs(channel, plugin)
 		}
 		return normalizeModelNames(plugin.Meta.Models), nil
-	}
-	if channel.Id > 0 {
-		permit, err := service.AcquireChannelConcurrency(ctx, channel)
-		if err != nil {
-			return nil, err
-		}
-		defer permit.Release()
 	}
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
@@ -401,7 +394,7 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 
 	if channel.Type == constant.ChannelTypeOllama {
 		key := strings.TrimSpace(strings.Split(channel.Key, "\n")[0])
-		models, err := ollama.FetchOllamaModels(ctx, baseURL, key)
+		models, err := ollama.FetchOllamaModels(baseURL, key)
 		if err != nil {
 			return nil, err
 		}
@@ -416,7 +409,7 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 			return nil, fmt.Errorf("failed to get channel key: %w", apiErr)
 		}
 		key = strings.TrimSpace(key)
-		models, err := gemini.FetchGeminiModels(ctx, baseURL, key, channel.GetSetting())
+		models, err := gemini.FetchGeminiModels(baseURL, key, channel.GetSetting())
 		if err != nil {
 			return nil, err
 		}
@@ -424,7 +417,7 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 	}
 
 	if constant.IsAdvancedCustomChannel(channel.Type) {
-		return fetchAdvancedCustomUpstreamModelIDs(ctx, channel, baseURL)
+		return fetchAdvancedCustomUpstreamModelIDs(channel, baseURL)
 	}
 
 	var url string
@@ -467,7 +460,7 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 		return nil, sanitizeFetchModelsError(err, key)
 	}
 
-	body, err := getFetchModelsResponseBody(ctx, http.MethodGet, url, channel, headers)
+	body, err := getFetchModelsResponseBody(http.MethodGet, url, channel, headers)
 	if err != nil {
 		return nil, sanitizeAdvancedCustomRequestError(err, key, url)
 	}
@@ -485,7 +478,7 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 	return normalizeModelNames(ids), nil
 }
 
-func fetchAdvancedCustomUpstreamModelIDs(ctx context.Context, channel *model.Channel, baseURL string) ([]string, error) {
+func fetchAdvancedCustomUpstreamModelIDs(channel *model.Channel, baseURL string) ([]string, error) {
 	key, _, apiErr := channel.GetNextEnabledKey()
 	if apiErr != nil {
 		return nil, fmt.Errorf("failed to get channel key: %w", apiErr)
@@ -513,7 +506,7 @@ func fetchAdvancedCustomUpstreamModelIDs(ctx context.Context, channel *model.Cha
 		return nil, sanitizeFetchModelsError(err, key)
 	}
 
-	body, err := getFetchModelsResponseBody(ctx, http.MethodGet, url, channel, headers)
+	body, err := getFetchModelsResponseBody(http.MethodGet, url, channel, headers)
 	if err != nil {
 		return nil, sanitizeFetchModelsError(err, key)
 	}
@@ -525,8 +518,8 @@ func fetchAdvancedCustomUpstreamModelIDs(ctx context.Context, channel *model.Cha
 // route with the plugin converter answers in the vendor's format and
 // convertResponse turns the reply into an OpenAI model list, chaining more
 // pages when the vendor pages it.
-func fetchProviderPluginUpstreamModelIDs(ctx context.Context, channel *model.Channel, plugin *jsplugin.LoadedPlugin) ([]string, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+func fetchProviderPluginUpstreamModelIDs(channel *model.Channel, plugin *jsplugin.LoadedPlugin) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	key, err := service.PluginModelListKey(ctx, channel, plugin)
 	if err != nil {
@@ -597,7 +590,7 @@ func updateChannelUpstreamModelSettings(channel *model.Channel, settings dto.Cha
 }
 
 func checkAndPersistChannelUpstreamModelUpdates(
-	ctx context.Context, channel *model.Channel,
+	channel *model.Channel,
 	settings *dto.ChannelOtherSettings,
 	force bool,
 	allowAutoApply bool,
@@ -611,10 +604,7 @@ func checkAndPersistChannelUpstreamModelUpdates(
 		}
 	}
 
-	pendingAddModels, pendingRemoveModels, fetchErr := collectPendingUpstreamModelChanges(ctx, channel, *settings)
-	if errors.Is(fetchErr, service.ErrConcurrencyFull) || ctx.Err() != nil {
-		return false, 0, fetchErr
-	}
+	pendingAddModels, pendingRemoveModels, fetchErr := collectPendingUpstreamModelChanges(channel, *settings)
 	settings.UpstreamModelUpdateLastCheckTime = now
 	if fetchErr != nil {
 		if err = updateChannelUpstreamModelSettings(channel, *settings, false); err != nil {
@@ -864,14 +854,7 @@ scanLoop:
 			}
 
 			checkedChannels++
-			modelsChanged, autoAdded, err := checkAndPersistChannelUpstreamModelUpdates(ctx, channel, &settings, force, allowAutoApply)
-			if errors.Is(err, service.ErrConcurrencyFull) {
-				checkedChannels--
-				continue
-			}
-			if ctx.Err() != nil {
-				break scanLoop
-			}
+			modelsChanged, autoAdded, err := checkAndPersistChannelUpstreamModelUpdates(channel, &settings, force, allowAutoApply)
 			if err != nil {
 				failedChannels++
 				failedChannelIDs = append(failedChannelIDs, channel.Id)
@@ -1051,10 +1034,7 @@ func DetectChannelUpstreamModelUpdates(c *gin.Context) {
 	}
 
 	settings := channel.GetOtherSettings()
-	modelsChanged, autoAdded, err := checkAndPersistChannelUpstreamModelUpdates(c.Request.Context(), channel, &settings, true, false)
-	if rejectBusyChannelManagement(c, err) {
-		return
-	}
+	modelsChanged, autoAdded, err := checkAndPersistChannelUpstreamModelUpdates(channel, &settings, true, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return

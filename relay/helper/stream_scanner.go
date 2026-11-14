@@ -121,24 +121,6 @@ func (w *streamResponseWriter) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
-// streamReadTracker preserves failures returned while the stream is live even
-// if cleanup runs before the scanner processes them. Errors caused by closing
-// the body after cancellation do not become upstream failures.
-type streamReadTracker struct {
-	reader         io.Reader
-	ctx            context.Context
-	requestContext context.Context
-	err            error // Only the scanner writes; inspected after it has joined.
-}
-
-func (r *streamReadTracker) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
-	if err != nil && err != io.EOF && r.ctx.Err() == nil && r.requestContext.Err() == nil {
-		r.err = err
-	}
-	return n, err
-}
-
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
 
 	if resp == nil || dataHandler == nil {
@@ -155,20 +137,18 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	info.StreamStatus = relaycommon.NewStreamStatus()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	upstreamReader := &streamReadTracker{reader: resp.Body, ctx: ctx, requestContext: c.Request.Context()}
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 
 	var (
 		stopChan    = make(chan bool, 3) // 增加缓冲区避免阻塞
-		scanner     = NewStreamScanner(upstreamReader)
+		scanner     = NewStreamScanner(resp.Body)
 		ticker      = time.NewTicker(streamingTimeout)
 		pingTicker  *time.Ticker
 		writeMutex  sync.Mutex     // Mutex to protect concurrent writes
 		wg          sync.WaitGroup // 用于等待所有 goroutine 退出
 		cleanupOnce sync.Once
 		stopOnce    sync.Once
-		scannerErr  error // Written by the scanner; read only after cleanup joins it.
 	)
 
 	stop := func() {
@@ -348,15 +328,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 		}
 
-		// Closing the upstream body is part of stopping the scanner. Ignore the
-		// errors caused by that cleanup, while preserving a real read failure
-		// that was already returned before the body was closed.
-		if err := scanner.Err(); err != nil && err != io.EOF &&
-			(ctx.Err() == nil && c.Request.Context().Err() == nil || upstreamReader.err != nil) {
-			scannerErr = err
-			logger.LogError(c, common.LogText("scanner error: %s", err.Error()))
-			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
-		}
 		// The upstream read may observe a client cancellation before the main
 		// select. Do not let its EOF win the first terminal status in that race.
 		if err := c.Request.Context().Err(); err != nil {
@@ -365,6 +336,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		}
 		if ctx.Err() != nil {
 			return
+		}
+		if err := scanner.Err(); err != nil {
+			if err != io.EOF {
+				logger.LogError(c, common.LogText("scanner error: %s", err.Error()))
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
+			}
 		}
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
 	})
@@ -386,19 +363,10 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	cleanup()
-	if scannerErr == nil {
-		scannerErr = upstreamReader.err
-	}
-	// Completion and the final upstream read run concurrently. A callback's
-	// successful delivery must not hide a real read failure observed before join.
-	if scannerErr != nil && info.StreamStatus.IsNormalEnd() {
-		info.StreamStatus.EndReason = relaycommon.StreamEndReasonScannerErr
-		info.StreamStatus.EndError = scannerErr
-	}
 	// All stream goroutines have joined. Done from a successfully delivered
 	// protocol completion can now correct a cancellation that won while its
 	// callback was still running. Bare EOF and failed writes never qualify.
-	if sr.done && scannerErr == nil && info.StreamStatus.ResponseOutcome() == string(relaycommon.ResponseOutcomeCompleted) &&
+	if sr.done && info.StreamStatus.ResponseOutcome() == string(relaycommon.ResponseOutcomeCompleted) &&
 		info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone &&
 		errors.Is(info.StreamStatus.EndError, context.Canceled) && !info.StreamStatus.HasErrors() {
 		info.StreamStatus.EndReason = relaycommon.StreamEndReasonDone

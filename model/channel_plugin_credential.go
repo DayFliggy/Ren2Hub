@@ -50,8 +50,6 @@ func sqliteChannelKeyLock(channelID int) *sync.Mutex {
 // stored channel afterwards is returned, a new key is published to this
 // node's channel cache, and a new status to the channel's abilities.
 func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*Channel, error) {
-	// Credential parameters must never be written to SQL diagnostics.
-	db := DB.Session(&gorm.Session{Logger: logger.Discard})
 	var channel Channel
 	var keyChanged, statusChanged, written bool
 	// changes runs update on channel and returns the columns it changed.
@@ -86,7 +84,7 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 		lock := sqliteChannelKeyLock(channelID)
 		lock.Lock()
 		defer lock.Unlock()
-		if err := db.Where("id = ?", channelID).First(&channel).Error; err != nil {
+		if err := DB.Where("id = ?", channelID).First(&channel).Error; err != nil {
 			return nil, err
 		}
 		stored := channel.Key
@@ -95,7 +93,7 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 			return nil, err
 		}
 		if len(updates) > 0 {
-			result := db.Model(&Channel{}).Where("id = ?", channelID).Where(map[string]any{"key": stored}).Updates(updates)
+			result := DB.Model(&Channel{}).Where("id = ?", channelID).Where(map[string]any{"key": stored}).Updates(updates)
 			if result.Error != nil {
 				return nil, result.Error
 			}
@@ -105,7 +103,7 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 			written = true
 		}
 	} else {
-		err := db.Transaction(func(tx *gorm.DB) error {
+		err := DB.Transaction(func(tx *gorm.DB) error {
 			if err := lockForUpdate(tx).Where("id = ?", channelID).First(&channel).Error; err != nil {
 				return err
 			}
@@ -159,7 +157,7 @@ func UpdateTaskPluginChannelLocked(channelID int, update func(channel *Channel, 
 	}
 	var statusChanged bool
 	var enabled bool
-	err := DB.Session(&gorm.Session{Logger: logger.Discard}).Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		var channels []*Channel
 		if err := lockForUpdate(tx).Where("type = ?", constant.ChannelTypeTaskPlugin).Order("id").Find(&channels).Error; err != nil {
 			return err

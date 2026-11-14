@@ -1,0 +1,14 @@
+package model
+import (
+ "sync"
+ "testing"
+ "github.com/QuantumNous/new-api/common"
+ "github.com/QuantumNous/new-api/constant"
+ "github.com/stretchr/testify/require"
+)
+func TestRestoredNativeControlPricingConcurrentRefresh(t *testing.T){
+ db:=restoredControlDB(t,&Channel{},&Ability{},&Model{},&Vendor{});require.NoError(t,db.Create(&Channel{Id:79,Type:constant.ChannelTypeOpenAI,Status:common.ChannelStatusEnabled,Key:"fixture-key"}).Error);require.NoError(t,db.Create(&Ability{ChannelId:79,Enabled:true,Model:"fixture-race"}).Error)
+ InvalidatePricingCache();_ =GetPricing();var wg sync.WaitGroup
+ for range 4 {wg.Add(1);go func(){defer wg.Done();for range 100{_ =GetPricing()}}()}
+ for range 20{RefreshPricing();InvalidatePricingCache()};wg.Wait()
+}

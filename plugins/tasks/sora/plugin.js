@@ -86,30 +86,9 @@ function responsesVideoText(ctx) {
   return '<video controls src="' + escaped + '"></video>';
 }
 
-const VIDEO_SIZES = ["720x1280", "1280x720", "1792x1024", "1024x1792"];
-
-function videoSeconds(value) {
-  const seconds = Number(value);
-  if (!["number", "string"].includes(typeof value) || ![4, 8, 12].includes(seconds))
-    throw new Error("seconds must be one of 4, 8, or 12");
-  return seconds;
-}
-
-function requestValues(req, model, validateBillingInput) {
+function requestValues(req, model) {
   const values = Object.assign({}, req || {});
   values.model = model;
-  if (validateBillingInput) {
-    const hasSeconds = Object.prototype.hasOwnProperty.call(values, "seconds");
-    const hasDuration = Object.prototype.hasOwnProperty.call(values, "duration");
-    const seconds = videoSeconds(hasSeconds ? values.seconds : hasDuration ? values.duration : 4);
-    if (hasSeconds && hasDuration && seconds !== videoSeconds(values.duration))
-      throw new Error("seconds and duration must match");
-    // The Videos API uses a string enum; usage facts remain numeric.
-    values.seconds = String(seconds);
-    delete values.duration;
-    if (values.size !== undefined && !VIDEO_SIZES.includes(trimmed(values.size))) throw new Error("size is not supported");
-    if (values.size === undefined) values.size = "720x1280";
-  }
   return values;
 }
 
@@ -120,11 +99,11 @@ export function buildSubmitRequest(ctx) {
   const headers = { Authorization: "Bearer " + ctx.apiKey };
   if (action === "remix") {
     headers["Content-Type"] = "application/json";
-    return { url: ctx.baseUrl + "/v1/videos/" + ctx.originTaskId + "/remix", method: "POST", headers, body: requestValues(req, ctx.upstreamModel, false), action };
+    return { url: ctx.baseUrl + "/v1/videos/" + ctx.originTaskId + "/remix", method: "POST", headers, body: requestValues(req, ctx.upstreamModel), action };
   }
   if ((ctx.files || []).length) {
     const parts = [];
-    const values = requestValues(req, ctx.upstreamModel, true);
+    const values = requestValues(req, ctx.upstreamModel);
     for (const key of Object.keys(values)) {
       if (values[key] !== undefined && values[key] !== null && typeof values[key] !== "object") parts.push({ name: key, value: values[key] });
     }
@@ -135,7 +114,7 @@ export function buildSubmitRequest(ctx) {
     return { url: ctx.baseUrl + "/v1/videos", method: "POST", headers, bodyType: "multipart", parts };
   }
   headers["Content-Type"] = "application/json";
-  return { url: ctx.baseUrl + "/v1/videos", method: "POST", headers, body: requestValues(req, ctx.upstreamModel, true) };
+  return { url: ctx.baseUrl + "/v1/videos", method: "POST", headers, body: requestValues(req, ctx.upstreamModel) };
 }
 
 export function parseSubmitResponse(ctx, resp) {
@@ -147,8 +126,10 @@ export function parseSubmitResponse(ctx, resp) {
 
 export function extractUsage(ctx) {
   if (ctx.action === "remix") return {};
-  const req = requestValues(ctx.requestBody || {}, ctx.upstreamModel, true);
-  return { seconds: Number(req.seconds), size: req.size };
+  const req = ctx.requestBody || {};
+  let seconds = Number(req.seconds || req.duration || 4);
+  if (!Number.isFinite(seconds) || seconds <= 0) seconds = 4;
+  return { seconds: Math.min(seconds, 3600), size: req.size || "720x1280" };
 }
 
 export function extractUsageOnComplete(task, taskResult, body) {

@@ -17,8 +17,10 @@
 
 - Go 1.26；独立 relaykit/ 和 tokenkit/ 不得依赖根模块，受影响时以 GOWORK=off 单独验证。
 - 保持 Router → Controller → Service → Model 分层；核心代码优先保持上游一致，必要差异记入 docs/upstream/SYNC_LEDGER.md。
+- 2026-11-14 后端原生回归：从 `2382fbdd55a6d76d73d8e5b314c7765c98cd8da6` 对齐固定 b388。仅保留批准产品合同及 Vue 实际对接的最小差异；历史 `verified_fix` 不构成保留理由。混合文件逐段拆分，来源及裁定见 `docs/upstream/NATIVE_B388_REVIEW.json`。
 - JSON 使用 common.Marshal / Unmarshal 等共享封装。数据库支持 SQLite、MySQL、PostgreSQL；保持上游锁和事务习惯。
 - 不吞掉异常、不添加假成功或无依据回退；支付回调和人工补单必须保证最多入账一次。
+- 严格预扣、渠道倍率与即时并发保留；管理员拉取或删除模型不占中继并发槽。保留易支付折扣冻结金额、GMPay 核验和支付单次入账；Stripe 的 Money 仍表示原生数量含义，不能改写成实付金额或重算历史额度。
 - Vue 使用 Composition API、TypeScript、Pinia、Vue Router、Vue I18n 和 Bun。保留真实后端合同，不能伪造旧预留余额或版本字段。
 - 所有 UI 文本使用现有 i18n。翻译工作先读 .agents/skills/i18n-translate/SKILL.md。
 - Vue 是唯一前端，Go 嵌入 frontend/embed-dist，所有启用页面使用实际接口。权限和导航共享来源；失效请求应取消或防止覆盖新结果。
@@ -31,3 +33,5 @@
 本地统一入口和分层门槛见 docs/testing/LOCAL_TESTING.md。Vue 执行适用的 test:run、typecheck、lint、format:check、build，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
 
 独立候选必须隔离数据库、Redis、网络、密钥与存储。旧合同测试记录退役，不算通过。源码、候选和正式部署分别记录证据；未提交工作 candidate_sha=null。
+
+恢复原生造成的已知行为差异独立进入 `known_upstream_restored`：保留正确历史断言和原始失败日志，改动前冻结旧版/原生对照及精确指纹。不扩大既有 12 项上游诊断和 30 项阻断；新增、缺失、超时、编译错误、意外跳过或行为变化阻断交付。已接受诊断仍为退出 2、candidate_success=false，不能称全绿。正式切换另行授权。

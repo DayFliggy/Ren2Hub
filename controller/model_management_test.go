@@ -1097,8 +1097,7 @@ func TestVendorManagementDatabaseMatrix(t *testing.T) {
 				require.NoError(t, db.Create(&model.Ability{Model: "gemini-vendor-fixture", ChannelId: channel.Id, Enabled: true}).Error)
 				model.RefreshPricing()
 				readVendors := func() []model.PricingVendor {
-					_, vendors, _, err := model.ReadPricing()
-					require.NoError(t, err)
+					vendors := model.GetVendors()
 					return vendors
 				}
 				vendors := readVendors()

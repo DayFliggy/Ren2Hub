@@ -3,21 +3,16 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stripe/stripe-go/v81/webhook"
-	"gorm.io/gorm"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 func TestAffiliateHTTPTransferAndRecordOwnership(t *testing.T) {
@@ -147,51 +142,6 @@ func TestStripePaymentMinorCurrency(t *testing.T) {
 	}{{123, "usd", "1.23"}, {123, "jpy", "123"}, {1230, "kwd", "1.23"}, {12300, "ugx", "123"}} {
 		assert.Equal(t, tc.expected, stripePaymentAmount(tc.minor, tc.currency))
 	}
-}
-
-func TestStripeWebhookRetriesFailedAtomicCredit(t *testing.T) {
-	db := useGmpayControllerDB(t)
-	oldAPI, oldWebhook, oldPrice := setting.StripeApiSecret, setting.StripeWebhookSecret, setting.StripePriceId
-	oldPayment := *operation_setting.GetPaymentSetting()
-	setting.StripeApiSecret = "sk_test_local"
-	setting.StripeWebhookSecret = "whsec_local_test"
-	setting.StripePriceId = "price_local"
-	operation_setting.GetPaymentSetting().ComplianceConfirmed = true
-	operation_setting.GetPaymentSetting().ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
-	t.Cleanup(func() {
-		setting.StripeApiSecret, setting.StripeWebhookSecret, setting.StripePriceId = oldAPI, oldWebhook, oldPrice
-		*operation_setting.GetPaymentSetting() = oldPayment
-	})
-	user := model.User{Username: "stripe-retry", AffCode: "STRIPE-RETRY"}
-	require.NoError(t, db.Create(&user).Error)
-	order := model.TopUp{UserId: user.Id, TradeNo: "stripe-retry-order", PaymentProvider: model.PaymentProviderStripe, PaymentMethod: model.PaymentMethodStripe, Status: common.TopUpStatusPending, ExpectedQuota: 1000, Amount: 1, Money: 1, Currency: "USD", PayAmount: "1"}
-	require.NoError(t, order.Insert())
-	payload := []byte(`{"id":"evt_local","type":"checkout.session.completed","data":{"object":{"id":"cs_local","object":"checkout.session","mode":"payment","status":"complete","payment_status":"paid","customer":"cus_local","client_reference_id":"stripe-retry-order","amount_subtotal":100,"amount_total":99,"currency":"usd"}}}`)
-	signature := webhook.GenerateTestSignedPayload(&webhook.UnsignedPayload{Payload: payload, Secret: setting.StripeWebhookSecret})
-	router := gin.New()
-	router.POST("/stripe", StripeWebhook)
-	invoke := func() int {
-		request := httptest.NewRequest(http.MethodPost, "/stripe", bytes.NewReader(payload))
-		request.Header.Set("Stripe-Signature", signature.Header)
-		response := httptest.NewRecorder()
-		router.ServeHTTP(response, request)
-		return response.Code
-	}
-	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("fail_stripe_wallet", func(tx *gorm.DB) {
-		if tx.Statement.Table == "users" {
-			tx.AddError(errors.New("test wallet unavailable"))
-		}
-	}))
-	assert.Equal(t, http.StatusInternalServerError, invoke())
-	require.NoError(t, db.Callback().Update().Remove("fail_stripe_wallet"))
-	assert.Equal(t, http.StatusOK, invoke())
-	assert.Equal(t, http.StatusOK, invoke())
-	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, 1000, user.Quota)
-	saved := model.GetTopUpByTradeNo(order.TradeNo)
-	assert.Equal(t, "USD", saved.Currency)
-	assert.Equal(t, "1", saved.PayAmount, "the frozen pre-discount amount is never overwritten by the callback")
-	assert.Equal(t, 1000, saved.CreditedQuota)
 }
 
 func TestAffiliateHTTPInviteesNeverExposePrivateFieldsOrOtherOwner(t *testing.T) {

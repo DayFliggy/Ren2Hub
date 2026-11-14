@@ -1,0 +1,163 @@
+[
+  {
+    "source": "model/pricing_snapshot_test.go",
+    "tests": [
+      "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh",
+      "TestPricingInvalidationRebuildsOnNextRead",
+      "TestPricingRefreshFailureNeverPublishesPartialState"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__pricing_snapshot_test.go.txt",
+    "original_sha256": "ff7b8990eeea1cec21ce212436cff5af3d1df848c0600472e91374d01cee8a0c",
+    "diagnostics": [
+      "TestRestoredNativeControlPricingFailure",
+      "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
+    ],
+    "retained": [
+      "TestPricingInvalidationRebuildsOnNextRead"
+    ],
+    "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
+  },
+  {
+    "source": "controller/log_visibility_test.go",
+    "tests": [
+      "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames",
+      "TestAdminLogVisibilityWithSeparateLogDatabase"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
+    "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
+    "diagnostics": [
+      "TestRestoredNativeControlSelfStatIdentity",
+      "TestRestoredNativeControlAdminLogs"
+    ]
+  },
+  {
+    "source": "setting/operation_setting/currency_option_test.go",
+    "tests": [
+      "TestValidateCurrencyOptionRequiresFinitePositiveNumbers",
+      "TestValidateCurrencyOptionIgnoresOtherKeys"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/setting__operation_setting__currency_option_test.go.txt",
+    "original_sha256": "0c65675312e1f3b771a209651891fe333e96b9679ff27efd7577dd76db7fe44a",
+    "diagnostics": [
+      "TestRestoredNativeControlCurrencyValidation",
+      "TestUpdateOptionAcceptsPositiveCurrencyOptions"
+    ]
+  },
+  {
+    "source": "model/currency_option_test.go",
+    "tests": [
+      "TestUpdateOptionRejectsNonPositiveCurrencyOptions",
+      "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
+    "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
+    "diagnostics": [
+      "TestRestoredNativeControlCurrencyValidation"
+    ]
+  },
+  {
+    "source": "model/option_failure_test.go",
+    "tests": [
+      "TestOptionDatabaseFailuresKeepMemory",
+      "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__option_failure_test.go.txt",
+    "original_sha256": "675d5424045318ad68b97dd3295c88ddbb055cad0bd5c4c23be4cc3d87f94ad5",
+    "diagnostics": [
+      "TestRestoredNativeControlOptionWriteFailure",
+      "TestRestoredNativeControlOptionCreatedRowRollback"
+    ]
+  },
+  {
+    "source": "model/install_guard_test.go",
+    "tests": [
+      "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__install_guard_test.go.txt",
+    "original_sha256": "bedd1415a2aeb7946e5d4424d417c123a4e28f5404eb07cc4ec6a92f6e6bdd7f",
+    "diagnostics": [
+      "TestRestoredNativeControlRootReadFailure"
+    ],
+    "retained": [
+      "TestRootCreationAffiliateTransactionPropagatesDatabaseFailure"
+    ]
+  },
+  {
+    "source": "controller/usedata_flow_test.go",
+    "tests": [
+      "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__usedata_flow_test.go.txt",
+    "original_sha256": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2",
+    "diagnostics": [
+      "TestRestoredNativeControlAdminQuota"
+    ]
+  },
+  {
+    "source": "controller/log_export_test.go",
+    "tests": [
+      "TestLogExportDatabaseMatrix/root visibility and account hierarchy assertions"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_export_test.go.txt",
+    "original_sha256": "3ddfd86675f87e78b9533b88e90384e2c98be0c14df4afa52e37218d912be17f",
+    "diagnostics": [
+      "TestRestoredNativeControlAdminLogs",
+      "TestRestoredNativeControlSelfStatIdentity",
+      "funds admin user visibility probe"
+    ],
+    "retained": "三库日志导出、字段权限、分页、筛选、self身份断言保留；只有root排除和用户层级段移出，未反转断言。"
+  },
+  {
+    "source": "service/origin_task_route_test.go",
+    "tests": [
+      "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/service__origin_task_route_test.go.txt",
+    "original_sha256": "e3226d29980ca3c733831fbf4cf05e8a552f5499162274524185a9fc0c34eb9c",
+    "diagnostics": [
+      "TestRestoredProbeOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+      "TestRestoredProbeApplyChannelPinReadsOriginChannelThroughCache",
+      "TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache"
+    ],
+    "reason": "LoadOriginTaskChannel has no remaining production consumer after the approved restoration; archive its correct former assertions, retain AcquireOriginTaskRouteChannel and its active route contract tests."
+  },
+  {
+    "source": "service/concurrency_test.go",
+    "tests": [
+      "TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/concurrency_test.go.txt",
+    "original_sha256": "0f98539e6bee71ff275506ad2e3c4faae372d2c5f1f32d3fa103bd145ba5acfa",
+    "diagnostics": [
+      "TestRestoredNativeControlChannelPostCommitReadFailure"
+    ],
+    "retained": [
+      "TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure"
+    ],
+    "reason": "发布被观察；故障恰好命中一次；新请求受限；Limit=1/InFlight=1；未加入NoError反向断言",
+    "added_after_full_verification_failure": true,
+    "migration_record": "implementation/control/concurrency-test-migration.json",
+    "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/control/channel-update/comparison.json"
+  },
+  {
+    "source": "model/audit_option_compat_test.go",
+    "tests": [
+      "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
+    ],
+    "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt",
+    "original_sha256": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df",
+    "diagnostics": [
+      "TestRestoredNativeControlConsoleNormalizationMatrix"
+    ],
+    "retained": [
+      "TestLegacyConsoleOptionsPreserveInvalidJSONAndRejectRetiredFields"
+    ],
+    "reason": [
+      "four invalid nonempty JSON values remain visible",
+      "retired trust_quota_usd and amount_discount are dropped and rejected"
+    ],
+    "added_after_full_verification_failure": true,
+    "migration_record": "implementation/control/console-test-migration.json",
+    "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/control/console-normalization/comparison.json"
+  }
+]

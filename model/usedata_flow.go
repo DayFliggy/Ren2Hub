@@ -56,14 +56,10 @@ func getAdminFlowQuotaData(startTime int64, endTime int64, username string) ([]*
 	rows := make([]*FlowQuotaData, 0)
 	query := flowQuotaBaseQuery(startTime, endTime).
 		Select("user_id, username, model_name, channel_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used")
-	query, err := scopeAdminUsageQuery(query, common.RoleAdminUser)
-	if err != nil {
-		return nil, err
-	}
 	if username != "" {
 		query = query.Where("username = ?", username)
 	}
-	err = query.
+	err := query.
 		Group("user_id, username, model_name, channel_id").
 		Order("quota DESC").
 		Find(&rows).Error

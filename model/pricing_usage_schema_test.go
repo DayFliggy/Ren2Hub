@@ -60,9 +60,7 @@ func TestPricingCarriesTaskUsageSchemaAndRefreshesWithPluginGeneration(t *testin
 }`)
 	_, err = jsplugin.DefaultRegistry.Register(updatedSource, jsplugin.Options{})
 	require.NoError(t, err)
-	aged := *pricingCache.Load()
-	aged.builtAt = time.Now().Add(-2 * time.Minute)
-	pricingCache.Store(&aged)
+	lastGetPricingTime = time.Now().Add(-2 * time.Minute)
 
 	refreshedPricing := pricingByModel(GetPricing())
 	require.Len(t, refreshedPricing["pricing-usage-model"].BillingUsageSchema, 2)

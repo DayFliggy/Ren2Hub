@@ -1,0 +1,2880 @@
+{
+  "schema_version": 1,
+  "application_base": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "policy": "正确原断言原文留档。普通保留合同仍正常运行，原生退步独立诊断，不反写断言制造通过。映射记录只表明处置，不声明运行通过。",
+  "sources": [
+    {
+      "path": "implementation/root/test-migrations.json",
+      "sha256": "d77818643191984acee4a1def23369618cf3aad473dcef01a17600c2ac319b73"
+    },
+    {
+      "path": "implementation/data/test-migrations.json",
+      "sha256": "0e07208a622dd5eea2d4986b1807efdd9436f22b2f5d143d1476719c47e6fb72"
+    },
+    {
+      "path": "implementation/funds/test-mapping.json",
+      "sha256": "13b49fd6e9c8e9522b25eee24e4050ac5618c1dc6d38ad55a2da6827087c7403"
+    },
+    {
+      "path": "implementation/control/test-migration.json",
+      "sha256": "7366171d3196fdc3553a003a5fe24035ddf4fb48b8a3992bbcb82fac978167fa"
+    }
+  ],
+  "records": [
+    {
+      "scope": "root",
+      "original": "common/task_multipart_test.go:TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/common/task_multipart_test.go.txt",
+      "diagnostic": "common/native_restored_multipart_test.go:TestRestoredNativeTaskTextBudget",
+      "assertions_changed": false,
+      "api_adapter": "ParseTaskMultipartFormReusable -> ParseMultipartFormReusable"
+    },
+    {
+      "scope": "root",
+      "original": "common/task_multipart_test.go:TestReadTaskMultipartFormRemovesFilesAfterParseError",
+      "destination": "common/task_multipart_test.go",
+      "status": "normal_regression",
+      "assertions_changed": false,
+      "api_adapter": "readTaskMultipartForm -> mime/multipart.Reader.ReadForm"
+    },
+    {
+      "scope": "root",
+      "original": "preflight/cache-total/native_restore_cache_total_test.go:TestRestoredNativeCacheWriteLogTotalIncludes12h",
+      "destination": "service/native_restored_cache_total_test.go",
+      "status": "known_upstream_restored",
+      "assertions_changed": false,
+      "preflight": "preflight/cache-total/report.json"
+    },
+    {
+      "scope": "root",
+      "original": "upstream/e2e/doc_parse_test.go",
+      "destination": "e2e/doc_parse_test.go",
+      "status": "restored_normal_regression",
+      "adaptation": "仅移除已退役的Group字段；上游import顺序未通过Go1.26.10 gofmt，因此保留gofmt排序。",
+      "format_evidence": "implementation/root/upstream-e2e-gofmt.diff",
+      "runtime_evidence": "implementation/root/restored-e2e-first.jsonl"
+    },
+    {
+      "scope": "root",
+      "original": "service/route_test_helpers_test.go",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/route_test_helpers_test.go.txt",
+      "destination": "service/route_test_helpers_test.go",
+      "status": "native_database_fixture",
+      "assertions_changed": false,
+      "adaptation": "仅三个目录/视图用例通过原生InitDB初始化SQL方言列；其余路由夹具不变，所有价格、权限、倍率和负载隐藏断言保留。",
+      "evidence": "implementation/root/catalog-fixture/change.json"
+    },
+    {
+      "scope": "root",
+      "original": "service/model_catalog_test.go",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/model_catalog_test.go.txt",
+      "destination": "service/model_catalog_test.go",
+      "status": "native_database_fixture",
+      "assertions_changed": false,
+      "adaptation": "仅三个目录/视图用例通过原生InitDB初始化SQL方言列；其余路由夹具不变，所有价格、权限、倍率和负载隐藏断言保留。",
+      "evidence": "implementation/root/catalog-fixture/change.json"
+    },
+    {
+      "scope": "root",
+      "original": "service/route_user_view_test.go",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/route_user_view_test.go.txt",
+      "destination": "service/route_user_view_test.go",
+      "status": "native_database_fixture",
+      "assertions_changed": false,
+      "adaptation": "仅三个目录/视图用例通过原生InitDB初始化SQL方言列；其余路由夹具不变，所有价格、权限、倍率和负载隐藏断言保留。",
+      "evidence": "implementation/root/catalog-fixture/change.json"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/billing_input_validation_test.go",
+      "test": "TestVeoSubmitValidatesFinalBillingParameters",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "10494f1a6110d0e8a6d199dde3063acee9756024e4cdbfd748183397ec43e7d6",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/billing_input_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/billing_input_validation_test.go",
+      "test": "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "e571b7d937026be38274c63e2df93b550c68e869374421744150f361268e8bcd",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/billing_input_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_duration_validation_test.go",
+      "test": "TestDoubaoResponsesDurationFallbackValidation",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "c1211f121490e91457d18e99ed2868dd260e35b1d33255c719fa4ef6d364635a",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_duration_validation_test.go",
+      "test": "TestDoubaoDurationSelectionMatchesSubmissionAndReservation",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "1ada7615689ae8cbdd86aafb0908d3eb8f92141d207509dd8f238944d91db8f0",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_duration_validation_test.go",
+      "test": "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "cb4bdbbe6a6bfba83ce3a8c976de4f171875ee803900341edb039825f4002bd9",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/hailuo_duration_validation_test.go",
+      "test": "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "63c4bd2863257986a32a5d1efe709b8881d402315c8e226aa2b73f0b29e8275b",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/hailuo_duration_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/sora_protocol_validation_test.go",
+      "test": "TestSoraVideoProtocolPreservesDurationConflictForValidation",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "1588939d08183595bc50f44b3598874b9d20cd10ca74d56052ce19f4fed10148",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_protocol_validation_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relaykit/dto/billing_usage_test.go",
+      "test": "TestOpenAICacheCreationInputTokensAloneIsBillableUsage",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "9fabfacfed131666a0cf50d520ca5b8442ab4b0d528904e6aded8b6851acbddc",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/dto/billing_usage_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relaykit/relayconvert/internal/oai_chat/to_oai_responses_req_test.go",
+      "test": "TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "25a9df83e10423b3c0a0a933ad6900a6b45523c893dbacd4c234442ecadaa267",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/relayconvert/internal/oai_chat/to_oai_responses_req_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relay/channel/openai/relay_responses_billing_test.go",
+      "test": "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "9ebc4cee596827debe3d1fa9daa12f584b1e708a94e90ecbe69b4820556cff94",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/channel/openai/relay_responses_billing_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relay/common/override_test.go",
+      "test": "TestParamOverrideRegexCacheIsBounded",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "b2e7754f6e0631ed920a0f1a0f5f2798c90f3bcd1330d61ba81694b97023fe41",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt",
+      "diagnostic": "TestRestoredProbeRegexCacheBound",
+      "coverage_completion_evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/regex-assertion-completion/verified-run/report.json"
+    },
+    {
+      "scope": "data",
+      "file": "relay/common/override_test.go",
+      "test": "TestParamOverrideRegexCacheSkipsOversizedPatterns",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "f16c82f54bc4694d83524967479ff64b067089990e0fc2661784723a622f398e",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt",
+      "diagnostic": "TestRestoredProbeRegexCacheOversize",
+      "coverage_completion_evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/regex-assertion-completion/verified-run/report.json"
+    },
+    {
+      "scope": "data",
+      "file": "relay/common/override_test.go",
+      "test": "TestParamOverrideRegexCacheReleasesOldEntries",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "d330faeb9496698a8177fafc47b9f261351da9c1335b48f0a7234f4dcda3cc6a",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt",
+      "diagnostic": "TestRestoredProbeRegexCacheReleasesOldEntries",
+      "coverage_completion_evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/regex-assertion-completion/verified-run/report.json"
+    },
+    {
+      "scope": "data",
+      "file": "relay/common/relay_utils_test.go",
+      "test": "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "4e0cecd227b978d580b18e0f1a15e3f968cb490ae2edc08c1ba5add2204176ed",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/relay_utils_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relay/common/relay_info_test.go",
+      "test": "TestRelayInfoToStringMasksURLCredentials",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "3a67367b788582e566f4117238c4f4431664cf10f2ed090bf7b9a3df16c7aaf7",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/relay_info_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relay/helper/stream_scanner_test.go",
+      "test": "TestStreamScannerHandler_ReadFailureWithCompletion",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "5bfa41abca2b5868a1cf6fd34aff3f44e066f522e77c2bd6ce084b1621cecc1f",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/helper/stream_scanner_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_missing_channel_test.go",
+      "test": "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_missing_channel_test.go",
+      "test": "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_missing_channel_test.go",
+      "test": "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeUpdateBatchTasksKeepsTasksWhenChannelReadFails",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_missing_channel_test.go",
+      "test": "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_missing_channel_test.go",
+      "test": "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_missing_channel_database_test.go",
+      "test": "TestTaskPollingRefundDatabaseMatrix",
+      "action": "moved_to_known_upstream_restored",
+      "requires": [
+        "SQLite",
+        "TEST_MYSQL_DSN",
+        "TEST_POSTGRES_DSN"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_database_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relaykit/relayconvert/internal/oai_responses/to_oai_chat_req_test.go",
+      "test": "TestResponsesRequestToChatCompletionsRequestInstructionsAndScalarInput",
+      "action": "split_cache_options_assertion_to_TestRestoredProbeResponsesPromptCacheOptions",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/relayconvert/internal/oai_responses/to_oai_chat_req_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_polling_test.go",
+      "test": "TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce",
+      "action": "retained_strict_boundary_in_regular_unit_with_real_cutoff_query_fixture",
+      "replacement": "TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_polling_test.go.txt",
+      "evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/exact-timeout-boundary/verified-run/report.json",
+      "note": "Exact sample equals real sweep cutoff; original four in-progress statuses, overdue failure, wallet amount and single refund assertions retained. First temporary one-minute-margin mapping superseded."
+    },
+    {
+      "scope": "data",
+      "file": "relay/relay_task_route_test.go",
+      "test": "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/relay_task_route_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "relay/relay_task_route_test.go",
+      "test": "TestApplyChannelPinReadsOriginChannelThroughCache",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeApplyChannelPinReadsOriginChannelThroughCache",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/relay_task_route_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "middleware/task_plugin_origin_task_test.go",
+      "test": "TestApplyOriginTaskIntentReadsOriginChannelThroughCache",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/middleware/task_plugin_origin_task_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/sora_responses_test.go",
+      "test": "TestSoraSubmitSecondsMatchNumericUsage",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeSoraSubmitSecondsMatchNumericUsage",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_responses_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/sora_responses_test.go",
+      "test": "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeSoraRejectsInvalidSecondsBeforeSubmissionAndBilling",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_responses_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_seedream55_test.go",
+      "test": "TestSeedream55KeepsOlderImageAndVideoBoundaries",
+      "action": "split_video_guard_to_TestRestoredProbeSeedance25DurationBoundary; older_image_assertions_retained",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_seedream55_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "middleware/task_plugin_test.go",
+      "test": "TestBuildTaskPluginRouteRequestRejectsUnsafeBodies/multipart_text_can_exceed_file_memory_threshold",
+      "action": "split_to_TestRestoredProbePluginMultipartTextBudget; other_unsafe_body_assertions_retained",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/middleware/task_plugin_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "middleware/logger_sync_test.go",
+      "test": "TestRequestLoggerRedactsSensitiveQueryParameters",
+      "action": "moved_to_known_upstream_restored",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/middleware/logger_sync_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "service/task_poll_admission_test.go",
+      "test": "TestTaskPollAdmissionFailuresAreNotUpstreamFailures/*/channel_deleted_before_send/*",
+      "action": "explicit_local_admission_contract_change; original_assertions_archived; not_known_upstream_restored",
+      "replacement": "TestTaskPollAdmissionDeletionSkipsWithoutSideEffects",
+      "basis": "本地准入删除仅跳过；上游无此API，未计原生对照",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_poll_admission_test.go.txt"
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_duration_validation_test.go",
+      "test": "TestDoubaoHostDurationNumberAndStringSurviveDecoding",
+      "action": "retained_in_regular_unit",
+      "diagnostic_copy": "TestRestoredProbeDoubaoHostDurationNumberAndStringSurviveDecoding",
+      "note": "Baseline and native PASS; not a restored regression or accepted known failure. Normal unit retained unchanged."
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_duration_validation_test.go",
+      "test": "TestDoubaoResponsesNullSecondsUsesOnlyRealDecodedSeconds",
+      "action": "retained_in_regular_unit",
+      "diagnostic_copy": "TestRestoredProbeDoubaoResponsesNullSecondsUsesOnlyRealDecodedSeconds",
+      "note": "Baseline and native PASS; not a restored regression or accepted known failure. Normal unit retained unchanged."
+    },
+    {
+      "scope": "data",
+      "file": "plugins/doubao_duration_validation_test.go",
+      "test": "TestDoubaoVendorBodyDurationTypesRemainNative",
+      "action": "retained_in_regular_unit",
+      "diagnostic_copy": "TestRestoredProbeDoubaoVendorBodyDurationTypesRemainNative",
+      "note": "Baseline and native PASS; not a restored regression or accepted known failure. Normal unit retained unchanged."
+    },
+    {
+      "scope": "data",
+      "file": "controller/relay_route_selection_test.go",
+      "test": "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+      "action": "moved_to_known_upstream_restored",
+      "diagnostic": "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/controller/relay_route_selection_test.go.txt",
+      "original_sha256": "63fd46dceadae9fa4b02cc0dae07e9fffc82f1c35fa0dc523902ba32c2848604",
+      "reason": "approved SetupContext error-priority restoration; same behavioral family as pre-frozen middleware SetupError diagnostic; no production change",
+      "discovered_by": "go-checks/root-4-batch-14.log",
+      "baseline_native_report": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/report.json"
+    },
+    {
+      "scope": "data",
+      "file": "router/video_remix_route_test.go",
+      "test": "TestNativeRemixRouteOriginLookupFailureIsPrivate500",
+      "action": "moved_to_known_upstream_restored",
+      "original_sha256": "75eff1667d20aec0d13427274acfdfd2a4ebe7f56a12a180462829c5ca5aac1a",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/video_remix_route_test.go.txt",
+      "diagnostic_file": "router/native_restored_remix_storage_test.go",
+      "diagnostic_test": "TestRestoredProbeNativeRemixRouteOriginLookupFailureIsPrivate500",
+      "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/data/remix-storage-private/report.json",
+      "reason": "Approved restoration of native origin-task database error response; original four status/code/privacy/no-provider assertions retained, only test name and build-tag location changed."
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_callback_test.go",
+      "test": "TestStripeWebhookAcknowledgesPermanentRejections",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections"
+      ],
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_callback_test.go",
+      "test": "TestCreemWebhookRetriesOnlyTransientFailures",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures"
+      ],
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_callback_test.go",
+      "test": "TestUpstreamSyncStripeRetriesTransientWalletFailure",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure"
+      ],
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_callback_test.go",
+      "test": "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
+      ],
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_callback_test.go",
+      "test": "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+      ],
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_logging_test.go",
+      "test": "TestEpayNotifyLogsExcludeCredentials",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_logging_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeEpayNotifyLogsExcludeCredentials"
+      ],
+      "archive_sha256": "2688f453e44ded5d0dff2d35b2ed68be14f80c4f1828ffbbdca2d8597eb42175",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/user_visibility_test.go",
+      "test": "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_visibility_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeAdminListHidesRoot",
+        "TestRestoredNativeUserDirectoryScopeBeforePaging"
+      ],
+      "archive_sha256": "6699631eb150987c29532edce5a34f9ca5d8bc804920b5a1ab372c9756fb7896",
+      "original_assertions_preserved_in_archive": true,
+      "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+      "supplement_before_production_edits": false
+    },
+    {
+      "scope": "funds",
+      "source": "controller/user_concurrency_test.go",
+      "test": "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_concurrency_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeCommittedCacheFailureHasRecoveryFeedback"
+      ],
+      "normal_tests": [
+        "TestCommittedConcurrencyPersistsAcrossNativeAuthCacheFailure"
+      ],
+      "archive_sha256": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/user_concurrency_test.go",
+      "test": "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_concurrency_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeCommittedCacheFailureHasRecoveryFeedback",
+        "TestRestoredNativeCommittedSecurityStepsContinue"
+      ],
+      "normal_tests": [
+        "TestCommittedUpdateKeepsNativeSecurityErrorOrder"
+      ],
+      "archive_sha256": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811",
+      "original_assertions_preserved_in_archive": true,
+      "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+      "supplement_before_production_edits": false,
+      "covered_behaviors": [
+        "concurrency failure and admission recovery stay normal",
+        "policy/sessions/cache faults exercise real UpdateUser with valid proof in fixed sources",
+        "original success, committed, publication_pending, continued side effects, audit, session revocation and auth-version rejection assertions preserved",
+        "no local helper copied into native implementation"
+      ]
+    },
+    {
+      "scope": "funds",
+      "source": "model/topup_query_test.go",
+      "test": "TestListTopUpsCapsCount",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_query_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeTopUpCountIsCapped"
+      ],
+      "archive_sha256": "bf362d7d9bc42381a5c08b55cfdd2283669d8177b831beb1019ed34de644e0b4",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/affiliate_test.go",
+      "test": "TestStripeWebhookRetriesFailedAtomicCredit",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/affiliate_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure"
+      ],
+      "normal_tests": [
+        "TestNativeTopUpFacadeDatabaseMatrix"
+      ],
+      "archive_sha256": "e97f4e4ada9bc22549d7d8b5932d3ae0f39308ed635f1e020ce3e5d5e915742c",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "model/topup_settlement_test.go",
+      "test": "TestSettleTopUpReturnsTypedErrorsForEveryChannel",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+      "disposition": "上游接口不存在统一receipt/retryable API；原文归档，真实HTTP同义诊断核验原生ACK/错误类别变化。渠道隔离、资金原子和金额合同继续由正常钱包/三库测试验证。",
+      "diagnostic_tests": [
+        "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+        "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+        "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+        "TestRestoredNativeProviderTypedErrors"
+      ],
+      "normal_tests": [
+        "TestNativeTopUpFacadeDatabaseMatrix",
+        "TestGmpaySettlementKeepsTypedBoundaryErrors"
+      ],
+      "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+      "original_assertions_preserved_in_archive": true,
+      "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+      "supplement_before_production_edits": false,
+      "covered_behaviors": [
+        "all five native providers: missing, empty, foreign, expired, exact query-outage identity and no credit",
+        "GMPay typed boundary errors retained normal",
+        "receipt-bearing local signatures only adapted in fixtures; no compatibility API added to production"
+      ]
+    },
+    {
+      "scope": "funds",
+      "source": "model/topup_settlement_test.go",
+      "test": "TestSettleTopUpRejectsMismatchedReceipt",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+        "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged",
+        "TestRestoredNativeEpayRejectedReceiptHasAudit"
+      ],
+      "normal_tests": [
+        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit"
+      ],
+      "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+      "original_assertions_preserved_in_archive": true,
+      "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+      "supplement_before_production_edits": false,
+      "covered_behaviors": [
+        "Epay wrong/unfrozen receipt and after-completion mismatch remain normal",
+        "Stripe wrong currency/amount/missing receipt independently use original signed HTTP caller and zero-wallet/pending assertions",
+        "callback audit count and Epay actor/operation params are preserved in separate audit diagnosis",
+        "same-value decimal spelling and frozen quota/metadata remain normal wallet tests"
+      ]
+    },
+    {
+      "scope": "funds",
+      "source": "model/topup_settlement_test.go",
+      "test": "TestUpstreamSyncReceiptMismatchNeverCreditsWallet",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+        "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged"
+      ],
+      "normal_tests": [
+        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit"
+      ],
+      "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+      "original_assertions_preserved_in_archive": true,
+      "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+      "supplement_before_production_edits": false
+    },
+    {
+      "scope": "funds",
+      "source": "model/topup_settlement_test.go",
+      "test": "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "diagnostic_tests": [
+        "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure",
+        "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+        "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+        "TestRestoredNativeProviderTypedErrors"
+      ],
+      "normal_tests": [
+        "TestNativeTopUpFacadeDatabaseMatrix"
+      ],
+      "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+      "original_assertions_preserved_in_archive": true,
+      "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+      "supplement_before_production_edits": false,
+      "covered_behaviors": [
+        "deleted retry classification helper original archived",
+        "five provider underlying missing/outage identity explicitly diagnosed",
+        "real callers ACK/retry outcomes diagnosed by Stripe/Creem/Waffo/Pancake HTTP handlers; Epay never used deleted retry helper"
+      ]
+    },
+    {
+      "scope": "funds",
+      "source": "model/topup_settlement_test.go",
+      "test": "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders",
+      "replacement": "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade",
+      "disposition": "金额/配置变化/重复零增量断言保留；原生公共入口适配及重复错误语义独立验收",
+      "normal_tests": [
+        "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade"
+      ],
+      "original_assertions_preserved_in_archive": true,
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+      "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+      "diagnostic_tests": [
+        "TestRestoredNativeProviderReplayAcknowledged"
+      ],
+      "supplemental_freeze": "preflight/funds/replay-frozen.json",
+      "supplement_before_production_edits": false
+    },
+    {
+      "scope": "funds",
+      "source": "controller/oauth_affiliate_test.go",
+      "test": "TestOAuthAffiliateErrorsArePublicAndRegistrationIsAtomic/wechat/storage_failure",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/oauth_affiliate_test.go.fixture",
+      "replacement": "TestRestoredNativeWeChatStorageErrorStaysPrivate",
+      "disposition": "非affiliate存储错误恢复原生；原隐私与500断言同义迁移至独立诊断，其他三流程affiliate和OAuth存储错误仍正常运行。",
+      "preflight": "preflight/funds/completion-frozen.json",
+      "frozen_before_production_edits": false,
+      "archive_sha256": "ea2ca6b6107d3f200ebf7b2598262cd05fffe4290bdd68bddbe926ed27aa5f9b",
+      "original_assertions_preserved_in_archive": true,
+      "diagnostic_tests": [
+        "TestRestoredNativeWeChatStorageErrorStaysPrivate"
+      ]
+    },
+    {
+      "scope": "funds",
+      "source": "model/affiliate_test.go",
+      "test": "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction",
+      "replacement": "TestAffiliateNativeProviderFacadesAndManualShareSuccessfulTransaction",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/affiliate_test.go.fixture",
+      "archive_sha256": "93da5fa2c7bdff5d8c7ded424a4de54bb4b0f2fdeb2f2e8ebe996e34e3a9d475",
+      "disposition": "原金额100003、返利20000、单条记录及人工重放断言保留；Stripe/Creem仅恢复公共入口重复错误语义。",
+      "original_assertions_preserved_in_archive": true,
+      "diagnostic_tests": [
+        "TestRestoredNativeProviderReplayAcknowledged"
+      ],
+      "supplemental_freeze": "preflight/funds/replay-frozen.json",
+      "supplement_before_production_edits": false,
+      "normal_tests": [
+        "TestAffiliateNativeProviderFacadesAndManualShareSuccessfulTransaction"
+      ]
+    },
+    {
+      "scope": "funds",
+      "source": "model/user_pagination_test.go",
+      "test": "*",
+      "replacement": "same_tests",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/user_pagination_test.go.fixture",
+      "archive_sha256": "fdf3e5fe2784c0c2708fdc64bff653bea160c4933ef6e44743551fd3de76906f",
+      "disposition": "仅去除被恢复原生接口删除的viewerRole形参，其他断言原样。",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/user_manage_test.go",
+      "test": "*",
+      "replacement": "same_tests",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_manage_test.go.fixture",
+      "archive_sha256": "9f2806d0d963d6bf05ca1d2bc5fddbfdca1e20c29decd6ef080f78e074e32e22",
+      "disposition": "仅去除GetAllLogs原生接口删除的viewerRole形参，其他断言原样。",
+      "original_assertions_preserved_in_archive": true
+    },
+    {
+      "scope": "funds",
+      "source": "controller/topup_callback_test.go",
+      "test": "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts",
+      "replacement": "TestStripeWebhookCreditsFrozenQuotaAcrossSettlementCurrencies",
+      "disposition": "原请求和全部金额/状态断言不变；改名与注释不再宣称原生不存在的收据匹配。",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58"
+    },
+    {
+      "scope": "control",
+      "source": "model/pricing_snapshot_test.go",
+      "tests": [
+        "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh",
+        "TestPricingInvalidationRebuildsOnNextRead",
+        "TestPricingRefreshFailureNeverPublishesPartialState"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__pricing_snapshot_test.go.txt",
+      "original_sha256": "ff7b8990eeea1cec21ce212436cff5af3d1df848c0600472e91374d01cee8a0c",
+      "diagnostics": [
+        "TestRestoredNativeControlPricingFailure",
+        "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
+      ],
+      "retained": [
+        "TestPricingInvalidationRebuildsOnNextRead"
+      ],
+      "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
+    },
+    {
+      "scope": "control",
+      "source": "controller/log_visibility_test.go",
+      "tests": [
+        "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames",
+        "TestAdminLogVisibilityWithSeparateLogDatabase"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
+      "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
+      "diagnostics": [
+        "TestRestoredNativeControlSelfStatIdentity",
+        "TestRestoredNativeControlAdminLogs"
+      ]
+    },
+    {
+      "scope": "control",
+      "source": "setting/operation_setting/currency_option_test.go",
+      "tests": [
+        "TestValidateCurrencyOptionRequiresFinitePositiveNumbers",
+        "TestValidateCurrencyOptionIgnoresOtherKeys"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/setting__operation_setting__currency_option_test.go.txt",
+      "original_sha256": "0c65675312e1f3b771a209651891fe333e96b9679ff27efd7577dd76db7fe44a",
+      "diagnostics": [
+        "TestRestoredNativeControlCurrencyValidation",
+        "TestUpdateOptionAcceptsPositiveCurrencyOptions"
+      ]
+    },
+    {
+      "scope": "control",
+      "source": "model/currency_option_test.go",
+      "tests": [
+        "TestUpdateOptionRejectsNonPositiveCurrencyOptions",
+        "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
+      "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
+      "diagnostics": [
+        "TestRestoredNativeControlCurrencyValidation"
+      ]
+    },
+    {
+      "scope": "control",
+      "source": "model/option_failure_test.go",
+      "tests": [
+        "TestOptionDatabaseFailuresKeepMemory",
+        "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__option_failure_test.go.txt",
+      "original_sha256": "675d5424045318ad68b97dd3295c88ddbb055cad0bd5c4c23be4cc3d87f94ad5",
+      "diagnostics": [
+        "TestRestoredNativeControlOptionWriteFailure",
+        "TestRestoredNativeControlOptionCreatedRowRollback"
+      ]
+    },
+    {
+      "scope": "control",
+      "source": "model/install_guard_test.go",
+      "tests": [
+        "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__install_guard_test.go.txt",
+      "original_sha256": "bedd1415a2aeb7946e5d4424d417c123a4e28f5404eb07cc4ec6a92f6e6bdd7f",
+      "diagnostics": [
+        "TestRestoredNativeControlRootReadFailure"
+      ],
+      "retained": [
+        "TestRootCreationAffiliateTransactionPropagatesDatabaseFailure"
+      ]
+    },
+    {
+      "scope": "control",
+      "source": "controller/usedata_flow_test.go",
+      "tests": [
+        "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__usedata_flow_test.go.txt",
+      "original_sha256": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2",
+      "diagnostics": [
+        "TestRestoredNativeControlAdminQuota"
+      ]
+    },
+    {
+      "scope": "control",
+      "source": "controller/log_export_test.go",
+      "tests": [
+        "TestLogExportDatabaseMatrix/root visibility and account hierarchy assertions"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_export_test.go.txt",
+      "original_sha256": "3ddfd86675f87e78b9533b88e90384e2c98be0c14df4afa52e37218d912be17f",
+      "diagnostics": [
+        "TestRestoredNativeControlAdminLogs",
+        "TestRestoredNativeControlSelfStatIdentity",
+        "funds admin user visibility probe"
+      ],
+      "retained": "三库日志导出、字段权限、分页、筛选、self身份断言保留；只有root排除和用户层级段移出，未反转断言。"
+    },
+    {
+      "scope": "control",
+      "source": "service/origin_task_route_test.go",
+      "tests": [
+        "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/service__origin_task_route_test.go.txt",
+      "original_sha256": "e3226d29980ca3c733831fbf4cf05e8a552f5499162274524185a9fc0c34eb9c",
+      "diagnostics": [
+        "TestRestoredProbeOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+        "TestRestoredProbeApplyChannelPinReadsOriginChannelThroughCache",
+        "TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache"
+      ],
+      "reason": "LoadOriginTaskChannel has no remaining production consumer after the approved restoration; archive its correct former assertions, retain AcquireOriginTaskRouteChannel and its active route contract tests."
+    },
+    {
+      "scope": "control",
+      "source": "service/concurrency_test.go",
+      "tests": [
+        "TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/concurrency_test.go.txt",
+      "original_sha256": "0f98539e6bee71ff275506ad2e3c4faae372d2c5f1f32d3fa103bd145ba5acfa",
+      "diagnostics": [
+        "TestRestoredNativeControlChannelPostCommitReadFailure"
+      ],
+      "retained": [
+        "TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure"
+      ],
+      "reason": "发布被观察；故障恰好命中一次；新请求受限；Limit=1/InFlight=1；未加入NoError反向断言",
+      "added_after_full_verification_failure": true,
+      "migration_record": "implementation/control/concurrency-test-migration.json",
+      "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/control/channel-update/comparison.json"
+    },
+    {
+      "scope": "control",
+      "source": "model/audit_option_compat_test.go",
+      "tests": [
+        "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
+      ],
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt",
+      "original_sha256": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df",
+      "diagnostics": [
+        "TestRestoredNativeControlConsoleNormalizationMatrix"
+      ],
+      "retained": [
+        "TestLegacyConsoleOptionsPreserveInvalidJSONAndRejectRetiredFields"
+      ],
+      "reason": [
+        "four invalid nonempty JSON values remain visible",
+        "retired trust_quota_usd and amount_discount are dropped and rejected"
+      ],
+      "added_after_full_verification_failure": true,
+      "migration_record": "implementation/control/console-test-migration.json",
+      "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/control/console-normalization/comparison.json"
+    }
+  ],
+  "archive_files": {
+    "scripts/testing/fixtures/known_upstream_restored/archive/common/task_multipart_test.go.txt": "995b26109a4be93b5b23a529d75488810a1b8e62f79bd13452efcfd6a2f86086",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/route_test_helpers_test.go.txt": "c838c349092b27fd24c69729e5e38a2f02e007d6501df829faacd65f2234f481",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/model_catalog_test.go.txt": "8cd6c3a9d941fe92179316f52f35ba0fc6acf3343320b338f558025c3be28fb1",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/route_user_view_test.go.txt": "389f51d06c27cde85e6c7e6bce38f0219526a69cf1d70e10501df4ab9d1e2899",
+    "scripts/testing/fixtures/known_upstream_restored/archive/plugins/billing_input_validation_test.go.txt": "99c12895d78484cb7e273cf386987f0dfee3b092232ec8961a6452395a82d3b4",
+    "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt": "529d7179c9f08e0ee3d86e0780ddaec1d692ec71cb8a98c0e9b1bf1509e250c5",
+    "scripts/testing/fixtures/known_upstream_restored/archive/plugins/hailuo_duration_validation_test.go.txt": "4d1fe47704209845ff72db3006c40444e7d532dfc5e8ac2a9afbcdc644bed3ed",
+    "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_protocol_validation_test.go.txt": "a327704e576fb7de7edf887169b05c60572cd462ddc1babc925669204de1db5f",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/dto/billing_usage_test.go.txt": "21b8f18fab409ea1790441f4996e8c4b989d3f157e1bf965e719098b29313f55",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/relayconvert/internal/oai_chat/to_oai_responses_req_test.go.txt": "456961b9c50757423f77e9f8761e7a705371d9baa3b4990fca1d1a5b6d75ae5e",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relay/channel/openai/relay_responses_billing_test.go.txt": "465c0ac47839e96f26bdecd9d26d97c09be09e22dfb406c6969e08b7eaccf6a4",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt": "99e7b3be48c77cd54c3e8e7c72202eaea2041a3562978f13d33f2311924c46b6",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/relay_utils_test.go.txt": "c4eaab0dea925b6e2de88aeb16620db28e9365a0ac2ab6cf101c5bb38dab18c0",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/relay_info_test.go.txt": "0b48a18023eb9f42a3412c52f30a5fe204642bbee89537a88013584aaa9769c2",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relay/helper/stream_scanner_test.go.txt": "6c5397f562be31797fa434557b7f3db90f75e451c6a8144d888ff1a89131e312",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt": "759f4df53dfece35bd5f323174ab83a164a41e35373daad50a76f99e3c62fed3",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_database_test.go.txt": "d7ba01bb1505f1ece2cbc8e3908d87520b764076034c26d82c724bcc59ba0152",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/relayconvert/internal/oai_responses/to_oai_chat_req_test.go.txt": "40c6fe1191f936c1436937d4daa37bc6d87c23048092236a1dd0470437f29c17",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/task_polling_test.go.txt": "f7bd2a9feb997e04b364c60b54c7d5ade8aa41ab974add62d504bbd194f752fc",
+    "scripts/testing/fixtures/known_upstream_restored/archive/relay/relay_task_route_test.go.txt": "b14ada6d9b1500cc9a09655d4f4a5f45d550e216e7e0303d74e0f3753ffd6b5e",
+    "scripts/testing/fixtures/known_upstream_restored/archive/middleware/task_plugin_origin_task_test.go.txt": "d6c5a7b3ccf6fadda42c3dec9fbaf784eaf1f8608328e545c4dba2c422e56041",
+    "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_responses_test.go.txt": "a88df6881f1a50ca1ce9fb5b2d52b1193084496d67769f6d0ac371dbfe80005b",
+    "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_seedream55_test.go.txt": "3debb168f18aaf509cf1f23da12a1922cc2dce52720eed2bd304b03d6eac82a1",
+    "scripts/testing/fixtures/known_upstream_restored/archive/middleware/task_plugin_test.go.txt": "f79efd619e53ed68f58a97aa8e79c860c6e543644a438d000b3ce88448ce51e0",
+    "scripts/testing/fixtures/known_upstream_restored/archive/middleware/logger_sync_test.go.txt": "ca404d73384652f1f6f77780ba600b89da2ef70ee9c0c6a4f0e3ba3c6933e76b",
+    "scripts/testing/fixtures/known_upstream_restored/archive/service/task_poll_admission_test.go.txt": "b44e06508069447e4c4d4c55ad5bde6b1d1ef12fbc72b1f115c055c4addc1d7c",
+    "scripts/testing/fixtures/known_upstream_restored/archive/controller/relay_route_selection_test.go.txt": "1bfe813a657a57f2445fc35a938110c50c7ced6257a676ad43dca63d3b0af7e5",
+    "scripts/testing/fixtures/known_upstream_restored/archive/router/video_remix_route_test.go.txt": "a1cb0597d9e672889ac77e3ae74499c9d98075afd8d85f6c0057f0611eecc3c2",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_logging_test.go.fixture": "2688f453e44ded5d0dff2d35b2ed68be14f80c4f1828ffbbdca2d8597eb42175",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_visibility_test.go.fixture": "6699631eb150987c29532edce5a34f9ca5d8bc804920b5a1ab372c9756fb7896",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_concurrency_test.go.fixture": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_query_test.go.fixture": "bf362d7d9bc42381a5c08b55cfdd2283669d8177b831beb1019ed34de644e0b4",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/affiliate_test.go.fixture": "e97f4e4ada9bc22549d7d8b5932d3ae0f39308ed635f1e020ce3e5d5e915742c",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/oauth_affiliate_test.go.fixture": "ea2ca6b6107d3f200ebf7b2598262cd05fffe4290bdd68bddbe926ed27aa5f9b",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/affiliate_test.go.fixture": "93da5fa2c7bdff5d8c7ded424a4de54bb4b0f2fdeb2f2e8ebe996e34e3a9d475",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/user_pagination_test.go.fixture": "fdf3e5fe2784c0c2708fdc64bff653bea160c4933ef6e44743551fd3de76906f",
+    "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_manage_test.go.fixture": "9f2806d0d963d6bf05ca1d2bc5fddbfdca1e20c29decd6ef080f78e074e32e22",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/model__pricing_snapshot_test.go.txt": "ff7b8990eeea1cec21ce212436cff5af3d1df848c0600472e91374d01cee8a0c",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/setting__operation_setting__currency_option_test.go.txt": "0c65675312e1f3b771a209651891fe333e96b9679ff27efd7577dd76db7fe44a",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/model__option_failure_test.go.txt": "675d5424045318ad68b97dd3295c88ddbb055cad0bd5c4c23be4cc3d87f94ad5",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/model__install_guard_test.go.txt": "bedd1415a2aeb7946e5d4424d417c123a4e28f5404eb07cc4ec6a92f6e6bdd7f",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__usedata_flow_test.go.txt": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_export_test.go.txt": "3ddfd86675f87e78b9533b88e90384e2c98be0c14df4afa52e37218d912be17f",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/service__origin_task_route_test.go.txt": "e3226d29980ca3c733831fbf4cf05e8a552f5499162274524185a9fc0c34eb9c",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/concurrency_test.go.txt": "0f98539e6bee71ff275506ad2e3c4faae372d2c5f1f32d3fa103bd145ba5acfa",
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df"
+  },
+  "removed_or_renamed_audit": {
+    "method": "原始/当前顶层测试符号差集逐项映射；不以归档存在推断断言覆盖，另见各领域 assertion/coverage review。",
+    "removed_or_renamed": [
+      [
+        "common",
+        "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets"
+      ],
+      [
+        "controller",
+        "TestAdminLogVisibilityWithSeparateLogDatabase"
+      ],
+      [
+        "controller",
+        "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
+      ],
+      [
+        "controller",
+        "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures"
+      ],
+      [
+        "controller",
+        "TestCreemWebhookRetriesOnlyTransientFailures"
+      ],
+      [
+        "controller",
+        "TestEpayNotifyLogsExcludeCredentials"
+      ],
+      [
+        "controller",
+        "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames"
+      ],
+      [
+        "controller",
+        "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey"
+      ],
+      [
+        "controller",
+        "TestStripeWebhookAcknowledgesPermanentRejections"
+      ],
+      [
+        "controller",
+        "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts"
+      ],
+      [
+        "controller",
+        "TestStripeWebhookRetriesFailedAtomicCredit"
+      ],
+      [
+        "controller",
+        "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects"
+      ],
+      [
+        "controller",
+        "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+      ],
+      [
+        "controller",
+        "TestUpstreamSyncStripeRetriesTransientWalletFailure"
+      ],
+      [
+        "controller",
+        "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
+      ],
+      [
+        "controller",
+        "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch"
+      ],
+      [
+        "middleware",
+        "TestApplyOriginTaskIntentReadsOriginChannelThroughCache"
+      ],
+      [
+        "middleware",
+        "TestRequestLoggerRedactsSensitiveQueryParameters"
+      ],
+      [
+        "model",
+        "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction"
+      ],
+      [
+        "model",
+        "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
+      ],
+      [
+        "model",
+        "TestListTopUpsCapsCount"
+      ],
+      [
+        "model",
+        "TestOptionDatabaseFailuresKeepMemory"
+      ],
+      [
+        "model",
+        "TestPricingRefreshFailureNeverPublishesPartialState"
+      ],
+      [
+        "model",
+        "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh"
+      ],
+      [
+        "model",
+        "TestSettleTopUpRejectsMismatchedReceipt"
+      ],
+      [
+        "model",
+        "TestSettleTopUpReturnsTypedErrorsForEveryChannel"
+      ],
+      [
+        "model",
+        "TestUpdateOptionRejectsNonPositiveCurrencyOptions"
+      ],
+      [
+        "model",
+        "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
+      ],
+      [
+        "model",
+        "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncReceiptMismatchNeverCreditsWallet"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
+      ],
+      [
+        "plugins",
+        "TestDoubaoDurationSelectionMatchesSubmissionAndReservation"
+      ],
+      [
+        "plugins",
+        "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding"
+      ],
+      [
+        "plugins",
+        "TestDoubaoResponsesDurationFallbackValidation"
+      ],
+      [
+        "plugins",
+        "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations"
+      ],
+      [
+        "plugins",
+        "TestSeedream55KeepsOlderImageAndVideoBoundaries"
+      ],
+      [
+        "plugins",
+        "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling"
+      ],
+      [
+        "plugins",
+        "TestSoraSubmitSecondsMatchNumericUsage"
+      ],
+      [
+        "plugins",
+        "TestSoraVideoProtocolPreservesDurationConflictForValidation"
+      ],
+      [
+        "plugins",
+        "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated"
+      ],
+      [
+        "plugins",
+        "TestVeoSubmitValidatesFinalBillingParameters"
+      ],
+      [
+        "relay",
+        "TestApplyChannelPinReadsOriginChannelThroughCache"
+      ],
+      [
+        "relay",
+        "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire"
+      ],
+      [
+        "relay/channel/openai",
+        "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens"
+      ],
+      [
+        "relay/common",
+        "TestParamOverrideRegexCacheIsBounded"
+      ],
+      [
+        "relay/common",
+        "TestParamOverrideRegexCacheReleasesOldEntries"
+      ],
+      [
+        "relay/common",
+        "TestParamOverrideRegexCacheSkipsOversizedPatterns"
+      ],
+      [
+        "relay/common",
+        "TestRelayInfoToStringMasksURLCredentials"
+      ],
+      [
+        "relay/common",
+        "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials"
+      ],
+      [
+        "relay/helper",
+        "TestStreamScannerHandler_ReadFailureWithCompletion"
+      ],
+      [
+        "relaykit/dto",
+        "TestOpenAICacheCreationInputTokensAloneIsBillableUsage"
+      ],
+      [
+        "relaykit/relayconvert/internal/oai_chat",
+        "TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions"
+      ],
+      [
+        "router",
+        "TestNativeRemixRouteOriginLookupFailureIsPrivate500"
+      ],
+      [
+        "service",
+        "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
+      ],
+      [
+        "service",
+        "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID"
+      ],
+      [
+        "service",
+        "TestTaskPollingRefundDatabaseMatrix"
+      ],
+      [
+        "service",
+        "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails"
+      ],
+      [
+        "service",
+        "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule"
+      ],
+      [
+        "service",
+        "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel"
+      ],
+      [
+        "service",
+        "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing"
+      ],
+      [
+        "setting/operation_setting",
+        "TestValidateCurrencyOptionIgnoresOtherKeys"
+      ],
+      [
+        "setting/operation_setting",
+        "TestValidateCurrencyOptionRequiresFinitePositiveNumbers"
+      ]
+    ],
+    "mapped": [
+      [
+        "common",
+        "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets"
+      ],
+      [
+        "controller",
+        "TestAdminLogVisibilityWithSeparateLogDatabase"
+      ],
+      [
+        "controller",
+        "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
+      ],
+      [
+        "controller",
+        "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures"
+      ],
+      [
+        "controller",
+        "TestCreemWebhookRetriesOnlyTransientFailures"
+      ],
+      [
+        "controller",
+        "TestEpayNotifyLogsExcludeCredentials"
+      ],
+      [
+        "controller",
+        "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames"
+      ],
+      [
+        "controller",
+        "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey"
+      ],
+      [
+        "controller",
+        "TestStripeWebhookAcknowledgesPermanentRejections"
+      ],
+      [
+        "controller",
+        "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts"
+      ],
+      [
+        "controller",
+        "TestStripeWebhookRetriesFailedAtomicCredit"
+      ],
+      [
+        "controller",
+        "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects"
+      ],
+      [
+        "controller",
+        "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+      ],
+      [
+        "controller",
+        "TestUpstreamSyncStripeRetriesTransientWalletFailure"
+      ],
+      [
+        "controller",
+        "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
+      ],
+      [
+        "controller",
+        "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch"
+      ],
+      [
+        "middleware",
+        "TestApplyOriginTaskIntentReadsOriginChannelThroughCache"
+      ],
+      [
+        "middleware",
+        "TestRequestLoggerRedactsSensitiveQueryParameters"
+      ],
+      [
+        "model",
+        "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction"
+      ],
+      [
+        "model",
+        "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
+      ],
+      [
+        "model",
+        "TestListTopUpsCapsCount"
+      ],
+      [
+        "model",
+        "TestOptionDatabaseFailuresKeepMemory"
+      ],
+      [
+        "model",
+        "TestPricingRefreshFailureNeverPublishesPartialState"
+      ],
+      [
+        "model",
+        "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh"
+      ],
+      [
+        "model",
+        "TestSettleTopUpRejectsMismatchedReceipt"
+      ],
+      [
+        "model",
+        "TestSettleTopUpReturnsTypedErrorsForEveryChannel"
+      ],
+      [
+        "model",
+        "TestUpdateOptionRejectsNonPositiveCurrencyOptions"
+      ],
+      [
+        "model",
+        "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
+      ],
+      [
+        "model",
+        "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncReceiptMismatchNeverCreditsWallet"
+      ],
+      [
+        "model",
+        "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
+      ],
+      [
+        "plugins",
+        "TestDoubaoDurationSelectionMatchesSubmissionAndReservation"
+      ],
+      [
+        "plugins",
+        "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding"
+      ],
+      [
+        "plugins",
+        "TestDoubaoResponsesDurationFallbackValidation"
+      ],
+      [
+        "plugins",
+        "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations"
+      ],
+      [
+        "plugins",
+        "TestSeedream55KeepsOlderImageAndVideoBoundaries"
+      ],
+      [
+        "plugins",
+        "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling"
+      ],
+      [
+        "plugins",
+        "TestSoraSubmitSecondsMatchNumericUsage"
+      ],
+      [
+        "plugins",
+        "TestSoraVideoProtocolPreservesDurationConflictForValidation"
+      ],
+      [
+        "plugins",
+        "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated"
+      ],
+      [
+        "plugins",
+        "TestVeoSubmitValidatesFinalBillingParameters"
+      ],
+      [
+        "relay",
+        "TestApplyChannelPinReadsOriginChannelThroughCache"
+      ],
+      [
+        "relay",
+        "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire"
+      ],
+      [
+        "relay/channel/openai",
+        "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens"
+      ],
+      [
+        "relay/common",
+        "TestParamOverrideRegexCacheIsBounded"
+      ],
+      [
+        "relay/common",
+        "TestParamOverrideRegexCacheReleasesOldEntries"
+      ],
+      [
+        "relay/common",
+        "TestParamOverrideRegexCacheSkipsOversizedPatterns"
+      ],
+      [
+        "relay/common",
+        "TestRelayInfoToStringMasksURLCredentials"
+      ],
+      [
+        "relay/common",
+        "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials"
+      ],
+      [
+        "relay/helper",
+        "TestStreamScannerHandler_ReadFailureWithCompletion"
+      ],
+      [
+        "relaykit/dto",
+        "TestOpenAICacheCreationInputTokensAloneIsBillableUsage"
+      ],
+      [
+        "relaykit/relayconvert/internal/oai_chat",
+        "TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions"
+      ],
+      [
+        "router",
+        "TestNativeRemixRouteOriginLookupFailureIsPrivate500"
+      ],
+      [
+        "service",
+        "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
+      ],
+      [
+        "service",
+        "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID"
+      ],
+      [
+        "service",
+        "TestTaskPollingRefundDatabaseMatrix"
+      ],
+      [
+        "service",
+        "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails"
+      ],
+      [
+        "service",
+        "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule"
+      ],
+      [
+        "service",
+        "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel"
+      ],
+      [
+        "service",
+        "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing"
+      ],
+      [
+        "setting/operation_setting",
+        "TestValidateCurrencyOptionIgnoresOtherKeys"
+      ],
+      [
+        "setting/operation_setting",
+        "TestValidateCurrencyOptionRequiresFinitePositiveNumbers"
+      ]
+    ],
+    "unmapped": [],
+    "original_tests": 3133,
+    "current_tests": 3086,
+    "diagnostic_tests": 72,
+    "bindings": [
+      {
+        "package": "common",
+        "test": "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets",
+        "original_file": "common/task_multipart_test.go",
+        "records": [
+          {
+            "scope": "root",
+            "record": {
+              "original": "common/task_multipart_test.go:TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/common/task_multipart_test.go.txt",
+              "diagnostic": "common/native_restored_multipart_test.go:TestRestoredNativeTaskTextBudget",
+              "assertions_changed": false,
+              "api_adapter": "ParseTaskMultipartFormReusable -> ParseMultipartFormReusable"
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestAdminLogVisibilityWithSeparateLogDatabase",
+        "original_file": "controller/log_visibility_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "controller/log_visibility_test.go",
+              "tests": [
+                "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames",
+                "TestAdminLogVisibilityWithSeparateLogDatabase"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
+              "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
+              "diagnostics": [
+                "TestRestoredNativeControlSelfStatIdentity",
+                "TestRestoredNativeControlAdminLogs"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints",
+        "original_file": "controller/usedata_flow_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "controller/usedata_flow_test.go",
+              "tests": [
+                "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__usedata_flow_test.go.txt",
+              "original_sha256": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2",
+              "diagnostics": [
+                "TestRestoredNativeControlAdminQuota"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures",
+        "original_file": "controller/user_concurrency_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/user_concurrency_test.go",
+              "test": "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_concurrency_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeCommittedCacheFailureHasRecoveryFeedback",
+                "TestRestoredNativeCommittedSecurityStepsContinue"
+              ],
+              "normal_tests": [
+                "TestCommittedUpdateKeepsNativeSecurityErrorOrder"
+              ],
+              "archive_sha256": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811",
+              "original_assertions_preserved_in_archive": true,
+              "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+              "supplement_before_production_edits": false,
+              "covered_behaviors": [
+                "concurrency failure and admission recovery stay normal",
+                "policy/sessions/cache faults exercise real UpdateUser with valid proof in fixed sources",
+                "original success, committed, publication_pending, continued side effects, audit, session revocation and auth-version rejection assertions preserved",
+                "no local helper copied into native implementation"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestCreemWebhookRetriesOnlyTransientFailures",
+        "original_file": "controller/topup_callback_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_callback_test.go",
+              "test": "TestCreemWebhookRetriesOnlyTransientFailures",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures"
+              ],
+              "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestEpayNotifyLogsExcludeCredentials",
+        "original_file": "controller/topup_logging_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_logging_test.go",
+              "test": "TestEpayNotifyLogsExcludeCredentials",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_logging_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeEpayNotifyLogsExcludeCredentials"
+              ],
+              "archive_sha256": "2688f453e44ded5d0dff2d35b2ed68be14f80c4f1828ffbbdca2d8597eb42175",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames",
+        "original_file": "controller/log_visibility_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "controller/log_visibility_test.go",
+              "tests": [
+                "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames",
+                "TestAdminLogVisibilityWithSeparateLogDatabase"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
+              "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
+              "diagnostics": [
+                "TestRestoredNativeControlSelfStatIdentity",
+                "TestRestoredNativeControlAdminLogs"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+        "original_file": "controller/relay_route_selection_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "controller/relay_route_selection_test.go",
+              "test": "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/controller/relay_route_selection_test.go.txt",
+              "original_sha256": "63fd46dceadae9fa4b02cc0dae07e9fffc82f1c35fa0dc523902ba32c2848604",
+              "reason": "approved SetupContext error-priority restoration; same behavioral family as pre-frozen middleware SetupError diagnostic; no production change",
+              "discovered_by": "go-checks/root-4-batch-14.log",
+              "baseline_native_report": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/report.json"
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestStripeWebhookAcknowledgesPermanentRejections",
+        "original_file": "controller/topup_callback_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_callback_test.go",
+              "test": "TestStripeWebhookAcknowledgesPermanentRejections",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections"
+              ],
+              "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts",
+        "original_file": "controller/topup_callback_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_callback_test.go",
+              "test": "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts",
+              "replacement": "TestStripeWebhookCreditsFrozenQuotaAcrossSettlementCurrencies",
+              "disposition": "原请求和全部金额/状态断言不变；改名与注释不再宣称原生不存在的收据匹配。",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+              "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58"
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestStripeWebhookRetriesFailedAtomicCredit",
+        "original_file": "controller/affiliate_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/affiliate_test.go",
+              "test": "TestStripeWebhookRetriesFailedAtomicCredit",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/affiliate_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure"
+              ],
+              "normal_tests": [
+                "TestNativeTopUpFacadeDatabaseMatrix"
+              ],
+              "archive_sha256": "e97f4e4ada9bc22549d7d8b5932d3ae0f39308ed635f1e020ce3e5d5e915742c",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects",
+        "original_file": "controller/user_concurrency_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/user_concurrency_test.go",
+              "test": "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_concurrency_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeCommittedCacheFailureHasRecoveryFeedback"
+              ],
+              "normal_tests": [
+                "TestCommittedConcurrencyPersistsAcrossNativeAuthCacheFailure"
+              ],
+              "archive_sha256": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+        "original_file": "controller/topup_callback_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_callback_test.go",
+              "test": "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+              ],
+              "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestUpstreamSyncStripeRetriesTransientWalletFailure",
+        "original_file": "controller/topup_callback_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_callback_test.go",
+              "test": "TestUpstreamSyncStripeRetriesTransientWalletFailure",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure"
+              ],
+              "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+        "original_file": "controller/topup_callback_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/topup_callback_test.go",
+              "test": "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
+              ],
+              "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "controller",
+        "test": "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch",
+        "original_file": "controller/user_visibility_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "controller/user_visibility_test.go",
+              "test": "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/user_visibility_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeAdminListHidesRoot",
+                "TestRestoredNativeUserDirectoryScopeBeforePaging"
+              ],
+              "archive_sha256": "6699631eb150987c29532edce5a34f9ca5d8bc804920b5a1ab372c9756fb7896",
+              "original_assertions_preserved_in_archive": true,
+              "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+              "supplement_before_production_edits": false
+            }
+          }
+        ]
+      },
+      {
+        "package": "middleware",
+        "test": "TestApplyOriginTaskIntentReadsOriginChannelThroughCache",
+        "original_file": "middleware/task_plugin_origin_task_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "middleware/task_plugin_origin_task_test.go",
+              "test": "TestApplyOriginTaskIntentReadsOriginChannelThroughCache",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/middleware/task_plugin_origin_task_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "middleware",
+        "test": "TestRequestLoggerRedactsSensitiveQueryParameters",
+        "original_file": "middleware/logger_sync_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "middleware/logger_sync_test.go",
+              "test": "TestRequestLoggerRedactsSensitiveQueryParameters",
+              "action": "moved_to_known_upstream_restored",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/middleware/logger_sync_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction",
+        "original_file": "model/affiliate_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/affiliate_test.go",
+              "test": "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction",
+              "replacement": "TestAffiliateNativeProviderFacadesAndManualShareSuccessfulTransaction",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/affiliate_test.go.fixture",
+              "archive_sha256": "93da5fa2c7bdff5d8c7ded424a4de54bb4b0f2fdeb2f2e8ebe996e34e3a9d475",
+              "disposition": "原金额100003、返利20000、单条记录及人工重放断言保留；Stripe/Creem仅恢复公共入口重复错误语义。",
+              "original_assertions_preserved_in_archive": true,
+              "diagnostic_tests": [
+                "TestRestoredNativeProviderReplayAcknowledged"
+              ],
+              "supplemental_freeze": "preflight/funds/replay-frozen.json",
+              "supplement_before_production_edits": false,
+              "normal_tests": [
+                "TestAffiliateNativeProviderFacadesAndManualShareSuccessfulTransaction"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON",
+        "original_file": "model/audit_option_compat_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/audit_option_compat_test.go",
+              "tests": [
+                "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt",
+              "original_sha256": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df",
+              "diagnostics": [
+                "TestRestoredNativeControlConsoleNormalizationMatrix"
+              ],
+              "retained": [
+                "TestLegacyConsoleOptionsPreserveInvalidJSONAndRejectRetiredFields"
+              ],
+              "reason": [
+                "four invalid nonempty JSON values remain visible",
+                "retired trust_quota_usd and amount_discount are dropped and rejected"
+              ],
+              "added_after_full_verification_failure": true,
+              "migration_record": "implementation/control/console-test-migration.json",
+              "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/control/console-normalization/comparison.json"
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestListTopUpsCapsCount",
+        "original_file": "model/topup_query_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/topup_query_test.go",
+              "test": "TestListTopUpsCapsCount",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_query_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeTopUpCountIsCapped"
+              ],
+              "archive_sha256": "bf362d7d9bc42381a5c08b55cfdd2283669d8177b831beb1019ed34de644e0b4",
+              "original_assertions_preserved_in_archive": true
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestOptionDatabaseFailuresKeepMemory",
+        "original_file": "model/option_failure_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/option_failure_test.go",
+              "tests": [
+                "TestOptionDatabaseFailuresKeepMemory",
+                "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__option_failure_test.go.txt",
+              "original_sha256": "675d5424045318ad68b97dd3295c88ddbb055cad0bd5c4c23be4cc3d87f94ad5",
+              "diagnostics": [
+                "TestRestoredNativeControlOptionWriteFailure",
+                "TestRestoredNativeControlOptionCreatedRowRollback"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestPricingRefreshFailureNeverPublishesPartialState",
+        "original_file": "model/pricing_snapshot_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/pricing_snapshot_test.go",
+              "tests": [
+                "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh",
+                "TestPricingInvalidationRebuildsOnNextRead",
+                "TestPricingRefreshFailureNeverPublishesPartialState"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__pricing_snapshot_test.go.txt",
+              "original_sha256": "ff7b8990eeea1cec21ce212436cff5af3d1df848c0600472e91374d01cee8a0c",
+              "diagnostics": [
+                "TestRestoredNativeControlPricingFailure",
+                "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
+              ],
+              "retained": [
+                "TestPricingInvalidationRebuildsOnNextRead"
+              ],
+              "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh",
+        "original_file": "model/pricing_snapshot_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/pricing_snapshot_test.go",
+              "tests": [
+                "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh",
+                "TestPricingInvalidationRebuildsOnNextRead",
+                "TestPricingRefreshFailureNeverPublishesPartialState"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__pricing_snapshot_test.go.txt",
+              "original_sha256": "ff7b8990eeea1cec21ce212436cff5af3d1df848c0600472e91374d01cee8a0c",
+              "diagnostics": [
+                "TestRestoredNativeControlPricingFailure",
+                "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
+              ],
+              "retained": [
+                "TestPricingInvalidationRebuildsOnNextRead"
+              ],
+              "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestSettleTopUpRejectsMismatchedReceipt",
+        "original_file": "model/topup_settlement_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/topup_settlement_test.go",
+              "test": "TestSettleTopUpRejectsMismatchedReceipt",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+                "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged",
+                "TestRestoredNativeEpayRejectedReceiptHasAudit"
+              ],
+              "normal_tests": [
+                "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit"
+              ],
+              "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+              "original_assertions_preserved_in_archive": true,
+              "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+              "supplement_before_production_edits": false,
+              "covered_behaviors": [
+                "Epay wrong/unfrozen receipt and after-completion mismatch remain normal",
+                "Stripe wrong currency/amount/missing receipt independently use original signed HTTP caller and zero-wallet/pending assertions",
+                "callback audit count and Epay actor/operation params are preserved in separate audit diagnosis",
+                "same-value decimal spelling and frozen quota/metadata remain normal wallet tests"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestSettleTopUpReturnsTypedErrorsForEveryChannel",
+        "original_file": "model/topup_settlement_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/topup_settlement_test.go",
+              "test": "TestSettleTopUpReturnsTypedErrorsForEveryChannel",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+              "disposition": "上游接口不存在统一receipt/retryable API；原文归档，真实HTTP同义诊断核验原生ACK/错误类别变化。渠道隔离、资金原子和金额合同继续由正常钱包/三库测试验证。",
+              "diagnostic_tests": [
+                "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+                "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+                "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+                "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+                "TestRestoredNativeProviderTypedErrors"
+              ],
+              "normal_tests": [
+                "TestNativeTopUpFacadeDatabaseMatrix",
+                "TestGmpaySettlementKeepsTypedBoundaryErrors"
+              ],
+              "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+              "original_assertions_preserved_in_archive": true,
+              "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+              "supplement_before_production_edits": false,
+              "covered_behaviors": [
+                "all five native providers: missing, empty, foreign, expired, exact query-outage identity and no credit",
+                "GMPay typed boundary errors retained normal",
+                "receipt-bearing local signatures only adapted in fixtures; no compatibility API added to production"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpdateOptionRejectsNonPositiveCurrencyOptions",
+        "original_file": "model/currency_option_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/currency_option_test.go",
+              "tests": [
+                "TestUpdateOptionRejectsNonPositiveCurrencyOptions",
+                "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
+              "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
+              "diagnostics": [
+                "TestRestoredNativeControlCurrencyValidation"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpdateOptionRollsBackCreatedRowWhenSaveFails",
+        "original_file": "model/option_failure_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/option_failure_test.go",
+              "tests": [
+                "TestOptionDatabaseFailuresKeepMemory",
+                "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__option_failure_test.go.txt",
+              "original_sha256": "675d5424045318ad68b97dd3295c88ddbb055cad0bd5c4c23be4cc3d87f94ad5",
+              "diagnostics": [
+                "TestRestoredNativeControlOptionWriteFailure",
+                "TestRestoredNativeControlOptionCreatedRowRollback"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption",
+        "original_file": "model/currency_option_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/currency_option_test.go",
+              "tests": [
+                "TestUpdateOptionRejectsNonPositiveCurrencyOptions",
+                "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
+              "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
+              "diagnostics": [
+                "TestRestoredNativeControlCurrencyValidation"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders",
+        "original_file": "model/topup_settlement_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/topup_settlement_test.go",
+              "test": "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders",
+              "replacement": "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade",
+              "disposition": "金额/配置变化/重复零增量断言保留；原生公共入口适配及重复错误语义独立验收",
+              "normal_tests": [
+                "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade"
+              ],
+              "original_assertions_preserved_in_archive": true,
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+              "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+              "diagnostic_tests": [
+                "TestRestoredNativeProviderReplayAcknowledged"
+              ],
+              "supplemental_freeze": "preflight/funds/replay-frozen.json",
+              "supplement_before_production_edits": false
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry",
+        "original_file": "model/topup_settlement_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/topup_settlement_test.go",
+              "test": "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure",
+                "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+                "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+                "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+                "TestRestoredNativeProviderTypedErrors"
+              ],
+              "normal_tests": [
+                "TestNativeTopUpFacadeDatabaseMatrix"
+              ],
+              "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+              "original_assertions_preserved_in_archive": true,
+              "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+              "supplement_before_production_edits": false,
+              "covered_behaviors": [
+                "deleted retry classification helper original archived",
+                "five provider underlying missing/outage identity explicitly diagnosed",
+                "real callers ACK/retry outcomes diagnosed by Stripe/Creem/Waffo/Pancake HTTP handlers; Epay never used deleted retry helper"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpstreamSyncReceiptMismatchNeverCreditsWallet",
+        "original_file": "model/topup_settlement_test.go",
+        "records": [
+          {
+            "scope": "funds",
+            "record": {
+              "source": "model/topup_settlement_test.go",
+              "test": "TestUpstreamSyncReceiptMismatchNeverCreditsWallet",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
+              "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+              "diagnostic_tests": [
+                "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+                "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged"
+              ],
+              "normal_tests": [
+                "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit"
+              ],
+              "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
+              "original_assertions_preserved_in_archive": true,
+              "supplemental_freeze": "preflight/funds/coverage-frozen.json",
+              "supplement_before_production_edits": false
+            }
+          }
+        ]
+      },
+      {
+        "package": "model",
+        "test": "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure",
+        "original_file": "model/install_guard_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "model/install_guard_test.go",
+              "tests": [
+                "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__install_guard_test.go.txt",
+              "original_sha256": "bedd1415a2aeb7946e5d4424d417c123a4e28f5404eb07cc4ec6a92f6e6bdd7f",
+              "diagnostics": [
+                "TestRestoredNativeControlRootReadFailure"
+              ],
+              "retained": [
+                "TestRootCreationAffiliateTransactionPropagatesDatabaseFailure"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestDoubaoDurationSelectionMatchesSubmissionAndReservation",
+        "original_file": "plugins/doubao_duration_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/doubao_duration_validation_test.go",
+              "test": "TestDoubaoDurationSelectionMatchesSubmissionAndReservation",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "1ada7615689ae8cbdd86aafb0908d3eb8f92141d207509dd8f238944d91db8f0",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding",
+        "original_file": "plugins/doubao_duration_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/doubao_duration_validation_test.go",
+              "test": "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "cb4bdbbe6a6bfba83ce3a8c976de4f171875ee803900341edb039825f4002bd9",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestDoubaoResponsesDurationFallbackValidation",
+        "original_file": "plugins/doubao_duration_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/doubao_duration_validation_test.go",
+              "test": "TestDoubaoResponsesDurationFallbackValidation",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "c1211f121490e91457d18e99ed2868dd260e35b1d33255c719fa4ef6d364635a",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_duration_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations",
+        "original_file": "plugins/hailuo_duration_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/hailuo_duration_validation_test.go",
+              "test": "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "63c4bd2863257986a32a5d1efe709b8881d402315c8e226aa2b73f0b29e8275b",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/hailuo_duration_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestSeedream55KeepsOlderImageAndVideoBoundaries",
+        "original_file": "plugins/doubao_seedream55_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/doubao_seedream55_test.go",
+              "test": "TestSeedream55KeepsOlderImageAndVideoBoundaries",
+              "action": "split_video_guard_to_TestRestoredProbeSeedance25DurationBoundary; older_image_assertions_retained",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/doubao_seedream55_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling",
+        "original_file": "plugins/sora_responses_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/sora_responses_test.go",
+              "test": "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeSoraRejectsInvalidSecondsBeforeSubmissionAndBilling",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_responses_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestSoraSubmitSecondsMatchNumericUsage",
+        "original_file": "plugins/sora_responses_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/sora_responses_test.go",
+              "test": "TestSoraSubmitSecondsMatchNumericUsage",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeSoraSubmitSecondsMatchNumericUsage",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_responses_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestSoraVideoProtocolPreservesDurationConflictForValidation",
+        "original_file": "plugins/sora_protocol_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/sora_protocol_validation_test.go",
+              "test": "TestSoraVideoProtocolPreservesDurationConflictForValidation",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "1588939d08183595bc50f44b3598874b9d20cd10ca74d56052ce19f4fed10148",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/sora_protocol_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated",
+        "original_file": "plugins/billing_input_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/billing_input_validation_test.go",
+              "test": "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "e571b7d937026be38274c63e2df93b550c68e869374421744150f361268e8bcd",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/billing_input_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "plugins",
+        "test": "TestVeoSubmitValidatesFinalBillingParameters",
+        "original_file": "plugins/billing_input_validation_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "plugins/billing_input_validation_test.go",
+              "test": "TestVeoSubmitValidatesFinalBillingParameters",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "10494f1a6110d0e8a6d199dde3063acee9756024e4cdbfd748183397ec43e7d6",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/plugins/billing_input_validation_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay",
+        "test": "TestApplyChannelPinReadsOriginChannelThroughCache",
+        "original_file": "relay/relay_task_route_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/relay_task_route_test.go",
+              "test": "TestApplyChannelPinReadsOriginChannelThroughCache",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeApplyChannelPinReadsOriginChannelThroughCache",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/relay_task_route_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay",
+        "test": "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+        "original_file": "relay/relay_task_route_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/relay_task_route_test.go",
+              "test": "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/relay_task_route_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/channel/openai",
+        "test": "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens",
+        "original_file": "relay/channel/openai/relay_responses_billing_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/channel/openai/relay_responses_billing_test.go",
+              "test": "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "9ebc4cee596827debe3d1fa9daa12f584b1e708a94e90ecbe69b4820556cff94",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/channel/openai/relay_responses_billing_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/common",
+        "test": "TestParamOverrideRegexCacheIsBounded",
+        "original_file": "relay/common/override_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/common/override_test.go",
+              "test": "TestParamOverrideRegexCacheIsBounded",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "b2e7754f6e0631ed920a0f1a0f5f2798c90f3bcd1330d61ba81694b97023fe41",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt",
+              "diagnostic": "TestRestoredProbeRegexCacheBound",
+              "coverage_completion_evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/regex-assertion-completion/verified-run/report.json"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/common",
+        "test": "TestParamOverrideRegexCacheReleasesOldEntries",
+        "original_file": "relay/common/override_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/common/override_test.go",
+              "test": "TestParamOverrideRegexCacheReleasesOldEntries",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "d330faeb9496698a8177fafc47b9f261351da9c1335b48f0a7234f4dcda3cc6a",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt",
+              "diagnostic": "TestRestoredProbeRegexCacheReleasesOldEntries",
+              "coverage_completion_evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/regex-assertion-completion/verified-run/report.json"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/common",
+        "test": "TestParamOverrideRegexCacheSkipsOversizedPatterns",
+        "original_file": "relay/common/override_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/common/override_test.go",
+              "test": "TestParamOverrideRegexCacheSkipsOversizedPatterns",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "f16c82f54bc4694d83524967479ff64b067089990e0fc2661784723a622f398e",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/override_test.go.txt",
+              "diagnostic": "TestRestoredProbeRegexCacheOversize",
+              "coverage_completion_evidence": "/home/work/ren2hub-native-b388-20261114/preflight/data/regex-assertion-completion/verified-run/report.json"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/common",
+        "test": "TestRelayInfoToStringMasksURLCredentials",
+        "original_file": "relay/common/relay_info_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/common/relay_info_test.go",
+              "test": "TestRelayInfoToStringMasksURLCredentials",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "3a67367b788582e566f4117238c4f4431664cf10f2ed090bf7b9a3df16c7aaf7",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/relay_info_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/common",
+        "test": "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials",
+        "original_file": "relay/common/relay_utils_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/common/relay_utils_test.go",
+              "test": "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "4e0cecd227b978d580b18e0f1a15e3f968cb490ae2edc08c1ba5add2204176ed",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/common/relay_utils_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relay/helper",
+        "test": "TestStreamScannerHandler_ReadFailureWithCompletion",
+        "original_file": "relay/helper/stream_scanner_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relay/helper/stream_scanner_test.go",
+              "test": "TestStreamScannerHandler_ReadFailureWithCompletion",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "5bfa41abca2b5868a1cf6fd34aff3f44e066f522e77c2bd6ce084b1621cecc1f",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relay/helper/stream_scanner_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relaykit/dto",
+        "test": "TestOpenAICacheCreationInputTokensAloneIsBillableUsage",
+        "original_file": "relaykit/dto/billing_usage_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relaykit/dto/billing_usage_test.go",
+              "test": "TestOpenAICacheCreationInputTokensAloneIsBillableUsage",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "9fabfacfed131666a0cf50d520ca5b8442ab4b0d528904e6aded8b6851acbddc",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/dto/billing_usage_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "relaykit/relayconvert/internal/oai_chat",
+        "test": "TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions",
+        "original_file": "relaykit/relayconvert/internal/oai_chat/to_oai_responses_req_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "relaykit/relayconvert/internal/oai_chat/to_oai_responses_req_test.go",
+              "test": "TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "25a9df83e10423b3c0a0a933ad6900a6b45523c893dbacd4c234442ecadaa267",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/relaykit/relayconvert/internal/oai_chat/to_oai_responses_req_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "router",
+        "test": "TestNativeRemixRouteOriginLookupFailureIsPrivate500",
+        "original_file": "router/video_remix_route_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "router/video_remix_route_test.go",
+              "test": "TestNativeRemixRouteOriginLookupFailureIsPrivate500",
+              "action": "moved_to_known_upstream_restored",
+              "original_sha256": "75eff1667d20aec0d13427274acfdfd2a4ebe7f56a12a180462829c5ca5aac1a",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/video_remix_route_test.go.txt",
+              "diagnostic_file": "router/native_restored_remix_storage_test.go",
+              "diagnostic_test": "TestRestoredProbeNativeRemixRouteOriginLookupFailureIsPrivate500",
+              "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/data/remix-storage-private/report.json",
+              "reason": "Approved restoration of native origin-task database error response; original four status/code/privacy/no-provider assertions retained, only test name and build-tag location changed."
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure",
+        "original_file": "service/origin_task_route_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "service/origin_task_route_test.go",
+              "tests": [
+                "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/service__origin_task_route_test.go.txt",
+              "original_sha256": "e3226d29980ca3c733831fbf4cf05e8a552f5499162274524185a9fc0c34eb9c",
+              "diagnostics": [
+                "TestRestoredProbeOriginTaskStorageFailuresStayPrivateAndDoNotAcquire",
+                "TestRestoredProbeApplyChannelPinReadsOriginChannelThroughCache",
+                "TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache"
+              ],
+              "reason": "LoadOriginTaskChannel has no remaining production consumer after the approved restoration; archive its correct former assertions, retain AcquireOriginTaskRouteChannel and its active route contract tests."
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
+        "original_file": "service/task_missing_channel_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "service/task_missing_channel_test.go",
+              "test": "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestTaskPollingRefundDatabaseMatrix",
+        "original_file": "service/task_missing_channel_database_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "service/task_missing_channel_database_test.go",
+              "test": "TestTaskPollingRefundDatabaseMatrix",
+              "action": "moved_to_known_upstream_restored",
+              "requires": [
+                "SQLite",
+                "TEST_MYSQL_DSN",
+                "TEST_POSTGRES_DSN"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_database_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails",
+        "original_file": "service/task_missing_channel_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "service/task_missing_channel_test.go",
+              "test": "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeUpdateBatchTasksKeepsTasksWhenChannelReadFails",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
+        "original_file": "service/task_missing_channel_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "service/task_missing_channel_test.go",
+              "test": "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
+        "original_file": "service/task_missing_channel_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "service/task_missing_channel_test.go",
+              "test": "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "service",
+        "test": "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
+        "original_file": "service/task_missing_channel_test.go",
+        "records": [
+          {
+            "scope": "data",
+            "record": {
+              "file": "service/task_missing_channel_test.go",
+              "test": "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
+              "action": "moved_to_known_upstream_restored",
+              "diagnostic": "TestRestoredProbeUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+            }
+          }
+        ]
+      },
+      {
+        "package": "setting/operation_setting",
+        "test": "TestValidateCurrencyOptionIgnoresOtherKeys",
+        "original_file": "setting/operation_setting/currency_option_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "setting/operation_setting/currency_option_test.go",
+              "tests": [
+                "TestValidateCurrencyOptionRequiresFinitePositiveNumbers",
+                "TestValidateCurrencyOptionIgnoresOtherKeys"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/setting__operation_setting__currency_option_test.go.txt",
+              "original_sha256": "0c65675312e1f3b771a209651891fe333e96b9679ff27efd7577dd76db7fe44a",
+              "diagnostics": [
+                "TestRestoredNativeControlCurrencyValidation",
+                "TestUpdateOptionAcceptsPositiveCurrencyOptions"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "package": "setting/operation_setting",
+        "test": "TestValidateCurrencyOptionRequiresFinitePositiveNumbers",
+        "original_file": "setting/operation_setting/currency_option_test.go",
+        "records": [
+          {
+            "scope": "control",
+            "record": {
+              "source": "setting/operation_setting/currency_option_test.go",
+              "tests": [
+                "TestValidateCurrencyOptionRequiresFinitePositiveNumbers",
+                "TestValidateCurrencyOptionIgnoresOtherKeys"
+              ],
+              "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/setting__operation_setting__currency_option_test.go.txt",
+              "original_sha256": "0c65675312e1f3b771a209651891fe333e96b9679ff27efd7577dd76db7fe44a",
+              "diagnostics": [
+                "TestRestoredNativeControlCurrencyValidation",
+                "TestUpdateOptionAcceptsPositiveCurrencyOptions"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "restored_database_diagnostics": [
+    {
+      "scope": "control",
+      "tests": 10,
+      "engines": [
+        "sqlite",
+        "mysql",
+        "postgres"
+      ],
+      "evidence": "scripts/testing/fixtures/known_upstream_restored/control/database-preflight.json",
+      "ordinary_pass": false
+    },
+    {
+      "scope": "task_polling",
+      "test": "TestTaskPollingRefundDatabaseMatrix",
+      "engines": [
+        "sqlite",
+        "mysql",
+        "postgres"
+      ],
+      "status": "独立三库原生差异已按完整金额、节点和消息重验；固定测试调度，非普通通过",
+      "evidence": "preflight/data/missing-matrix-exact/report.json",
+      "verification": "implementation/root/task-database-diagnostic-exact.json",
+      "ordinary_pass": false
+    },
+    {
+      "scope": "channel_update",
+      "test": "TestRestoredNativeControlChannelPostCommitReadFailure",
+      "engines": [
+        "sqlite",
+        "mysql",
+        "postgres"
+      ],
+      "evidence": "preflight/control/channel-update-databases/assessment.json",
+      "ordinary_pass": false
+    }
+  ],
+  "current_contract_matrix": "TestTaskPollingContractDatabaseMatrix 与 TestNativeTopUpFacadeDatabaseMatrix；最终通过范围见本批外部证据。"
+}

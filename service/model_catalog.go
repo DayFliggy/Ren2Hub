@@ -45,10 +45,8 @@ func BuildModelCatalog(ctx context.Context, userID, tokenID int) (ModelCatalog, 
 	if err != nil {
 		return result, err
 	}
-	pricing, vendors, _, err := model.ReadPricing()
-	if err != nil {
-		return result, err
-	}
+	pricing := model.GetPricing()
+	vendors := model.GetVendors()
 	byName := map[string]model.Pricing{}
 	for _, item := range pricing {
 		byName[item.ModelName] = item

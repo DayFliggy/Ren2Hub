@@ -774,6 +774,14 @@ class Candidate:
     def diagnostics(self):
         from diagnostics import run as run_diagnostics
         self.report['diagnostics'] = run_diagnostics(self.source, self.output / 'diagnostics')
+        from native_restored import run as run_restored
+        self.report['known_upstream_restored'] = run_restored(self.source, self.output / 'known_upstream_restored')
+        from native_pricing_race import run as run_pricing_race
+        self.report['known_upstream_race'] = run_pricing_race(self.source, self.output / 'known_upstream_race')
+        from native_logger_race import run as run_logger_race
+        self.report['known_upstream_logger_race'] = run_logger_race(self.source, self.output / 'known_upstream_logger_race')
+        from ordinary_race import run as run_ordinary_race
+        self.report['ordinary_race'] = run_ordinary_race(self.source, self.output / 'ordinary_race')
 
     def manifest(self):
         reports = {}
@@ -793,16 +801,53 @@ class Candidate:
         workspace_clean = workspace_end['candidate_sha'] == self.workspace_sha
         gitlink = execute(['git', '-C', str(self.source.parent), 'ls-tree', 'HEAD', 'Ren2Hub']).stdout.decode().split()
         linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
-        from routing_result import release_exemption
+        from routing_result import release_exemption, diagnostics_complete, routing_complete
         exemption = release_exemption(self.report.get('diagnostics'), self.report['stages'].get('routing'))
-        exempted = exemption is not None and self.report.get('exit_code') == 2
+        exempted = exemption is not None
+        legacy_clean = (self.report.get('diagnostics', {}).get('success') is True
+                        and diagnostics_complete(self.report.get('diagnostics'))
+                        and self.report['stages'].get('routing', {}).get('success') is True
+                        and routing_complete(self.report['stages'].get('routing')))
         # 豁免只替换 routing 与诊断两处的通过要求；其余阶段仍必须逐项 success。
         stages_ok = all(self.report['stages'].get(stage, {}).get('success') is True
                         for stage in self.stages if not (exempted and stage == 'routing'))
         complete = (len(reports) == len(self.stages) and stages_ok
-                    and (self.report.get('diagnostics', {}).get('success') is True or exempted))
+                    and (legacy_clean or exempted))
+        from native_restored import InvalidEvidence, verify_report
+        restored = self.report.get('known_upstream_restored') or {}
+        restored_acceptance = None
+        try:
+            restored_acceptance = verify_report(restored, self.output / 'known_upstream_restored',
+                                                self.source, self.report['source'])
+        except (InvalidEvidence, ValueError, OSError, TypeError, KeyError, IndexError):
+            complete = False
+        from native_pricing_race import verify_report as verify_pricing_race
+        pricing_race = self.report.get('known_upstream_race') or {}
+        pricing_race_acceptance = None
+        try:
+            pricing_race_acceptance = verify_pricing_race(pricing_race, self.output / 'known_upstream_race',
+                                                        self.source, self.report['source'])
+        except (InvalidEvidence, ValueError, OSError, TypeError, KeyError, IndexError):
+            complete = False
+        from native_logger_race import verify_report as verify_logger_race
+        logger_race = self.report.get('known_upstream_logger_race') or {}
+        logger_race_acceptance = None
+        try:
+            logger_race_acceptance = verify_logger_race(logger_race, self.output / 'known_upstream_logger_race',
+                                                      self.source, self.report['source'])
+        except (InvalidEvidence, ValueError, OSError, TypeError, KeyError, IndexError):
+            complete = False
+        from ordinary_race import verify_report as verify_ordinary_race
+        ordinary = self.report.get('ordinary_race') or {}
+        ordinary_acceptance = None
+        try:
+            ordinary_acceptance = verify_ordinary_race(ordinary, self.output / 'ordinary_race',
+                                                       self.source, self.report['source'])
+        except (InvalidEvidence, ValueError, OSError, TypeError, KeyError, IndexError):
+            complete = False
         deployable = bool(not getattr(self, 'routing_only', False) and complete
-                          and (self.report['success'] or exempted)
+                          and self.report.get('exit_code') in (0, 2) and stable
+                          and not self.report.get('error_code') and not self.report.get('cleanup_errors')
                           and self.report.get('image_matches_clean_source') and workspace_clean and linked)
         traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
@@ -815,6 +860,15 @@ class Candidate:
                     'diagnostics': {key:self.report.get('diagnostics', {}).get(key)
                                     for key in ('exit_code','counts','report_path','report_sha256')},
                     'upstream_exemption': exemption if exempted else None,
+                    'known_upstream_restored': {key: restored.get(key) for key in
+                                               ('report_path', 'report_sha256')},
+                    'restored_native_acceptance': restored_acceptance,
+                    'known_upstream_race': {key: pricing_race.get(key) for key in ('report_path', 'report_sha256')},
+                    'pricing_race_acceptance': pricing_race_acceptance,
+                    'known_upstream_logger_race': {key: logger_race.get(key) for key in ('report_path', 'report_sha256')},
+                    'logger_race_acceptance': logger_race_acceptance,
+                    'ordinary_race': {key: ordinary.get(key) for key in ('report_path', 'report_sha256')},
+                    'ordinary_race_acceptance': ordinary_acceptance,
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
@@ -878,7 +932,9 @@ def run(source: Path, output: Path, image: str, traffic_interface: str | None = 
                 candidate.upgrade()
             candidate.stage(stage)
         from routing_result import combined_exit_code
-        code = combined_exit_code([*candidate.report['stages'].values(), candidate.report['diagnostics']])
+        code = combined_exit_code([*candidate.report['stages'].values(), candidate.report['diagnostics'],
+                                   candidate.report['known_upstream_restored'], candidate.report['known_upstream_race'],
+                                   candidate.report['known_upstream_logger_race'], candidate.report['ordinary_race']])
         candidate.report.update(success=code == 0, exit_code=code)
     except Exception as error:
         if candidate is None:

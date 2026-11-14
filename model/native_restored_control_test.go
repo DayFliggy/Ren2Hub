@@ -1,0 +1,195 @@
+//go:build known_upstream_restored
+
+package model
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/setting/console_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	glog "gorm.io/gorm/logger"
+)
+
+func restoredControlDB(t *testing.T, models ...any) *gorm.DB {
+	t.Helper()
+	var dialector gorm.Dialector = sqlite.Open(filepath.Join(t.TempDir(), "probe.db"))
+	kind := common.DatabaseTypeSQLite
+	switch os.Getenv("TEST_CONTROL_DIALECT") {
+	case "", "sqlite":
+	case "mysql":
+		require.NotEmpty(t, os.Getenv("TEST_MYSQL_DSN"))
+		dialector = mysql.Open(os.Getenv("TEST_MYSQL_DSN"))
+		kind = common.DatabaseTypeMySQL
+	case "postgres":
+		require.NotEmpty(t, os.Getenv("TEST_POSTGRES_DSN"))
+		dialector = postgres.Open(os.Getenv("TEST_POSTGRES_DSN"))
+		kind = common.DatabaseTypePostgreSQL
+	default:
+		t.Fatal("unexpected controlled database dialect")
+	}
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: glog.Default.LogMode(glog.Silent)})
+	require.NoError(t, err)
+	if kind != common.DatabaseTypeSQLite {
+		require.NoError(t, db.Migrator().DropTable(models...))
+	}
+	require.NoError(t, db.AutoMigrate(models...))
+	oldDB, oldLog, oldMain, oldLogType, oldMap, oldMemory := DB, LOG_DB, common.MainDatabaseType(), common.LogDatabaseType(), common.OptionMap, common.MemoryCacheEnabled
+	DB, LOG_DB = db, db
+	common.SetDatabaseTypes(kind, kind)
+	common.OptionMap = map[string]string{}
+	common.MemoryCacheEnabled = false
+	t.Cleanup(func() {
+		DB, LOG_DB = oldDB, oldLog
+		common.SetDatabaseTypes(oldMain, oldLogType)
+		common.OptionMap, common.MemoryCacheEnabled = oldMap, oldMemory
+		sqlDB, _ := db.DB()
+		_ = sqlDB.Close()
+	})
+	return db
+}
+func TestRestoredNativeControlOptionWriteFailure(t *testing.T) {
+	db := restoredControlDB(t, &Option{})
+	old := common.SystemName
+	t.Cleanup(func() { common.SystemName = old })
+	common.SystemName = "retained"
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+	err = UpdateOption("SystemName", "not-persisted")
+	if err == nil {
+		t.Error("CONTROL_OPTION_WRITE_FAILURE: storage failure was acknowledged")
+	}
+	if common.SystemName != "retained" {
+		t.Error("CONTROL_OPTION_WRITE_FAILURE: unpersisted option was published")
+	}
+}
+func TestRestoredNativeControlOptionCreatedRowRollback(t *testing.T) {
+	db := restoredControlDB(t, &Option{})
+	old := common.SystemName
+	t.Cleanup(func() { common.SystemName = old })
+	failure := errors.New("fixture option save failure")
+	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("probe:save", func(tx *gorm.DB) { tx.AddError(failure) }))
+	err := UpdateOption("SystemName", "unsaved")
+	if !errors.Is(err, failure) {
+		t.Error("CONTROL_OPTION_ROLLBACK: failed save not returned")
+	}
+	var count int64
+	require.NoError(t, db.Model(&Option{}).Where(&Option{Key: "SystemName"}).Count(&count).Error)
+	if count != 0 {
+		t.Error("CONTROL_OPTION_ROLLBACK: created row persisted after failed save")
+	}
+}
+func TestRestoredNativeControlCurrencyValidation(t *testing.T) {
+	restoredControlDB(t, &Option{})
+	old := operation_setting.USDExchangeRate
+	t.Cleanup(func() { operation_setting.USDExchangeRate = old })
+	for _, v := range []string{"0", "-1", "NaN", "Inf"} {
+		t.Run(v, func(t *testing.T) {
+			if UpdateOption("USDExchangeRate", v) == nil {
+				t.Error("CONTROL_CURRENCY: invalid global rate accepted")
+			}
+		})
+	}
+}
+func TestRestoredNativeControlConsoleNormalization(t *testing.T) {
+	restoredControlDB(t, &Option{})
+	old := *console_setting.GetConsoleSetting()
+	t.Cleanup(func() { *console_setting.GetConsoleSetting() = old })
+	require.NoError(t, UpdateOption("console_setting.api_info", ""))
+	if console_setting.GetConsoleSetting().ApiInfo != "[]" {
+		t.Error("CONTROL_CONSOLE: empty list remains unnormalized")
+	}
+}
+func TestRestoredNativeControlCredentialSQL(t *testing.T) {
+	db := restoredControlDB(t, &Channel{}, &Ability{})
+	ch := Channel{Id: 71, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Key: "fixture-old-credential"}
+	require.NoError(t, db.Create(&ch).Error)
+	var out bytes.Buffer
+	DB = db.Session(&gorm.Session{Logger: glog.New(log.New(&out, "", 0), glog.Config{LogLevel: glog.Info})})
+	_, err := UpdateChannelLocked(71, func(c *Channel) error { c.Key = "fixture-new-credential"; return nil })
+	require.NoError(t, err)
+	if strings.Contains(out.String(), "fixture-new-credential") {
+		t.Error("CONTROL_CREDENTIAL_SQL: credential included in SQL diagnostics")
+	}
+}
+func TestRestoredNativeControlSelfStatIdentity(t *testing.T) {
+	db := restoredControlDB(t, &Log{})
+	require.NoError(t, db.Create(&[]Log{{UserId: 1, Username: "probe%", Type: LogTypeConsume, Quota: 10, CreatedAt: time.Now().Unix()}, {UserId: 2, Username: "probe-other", Type: LogTypeConsume, Quota: 90, CreatedAt: time.Now().Unix()}}).Error)
+	stat, err := restoredControlSelfStat(context.Background())
+	require.NoError(t, err)
+	if stat.Quota != 10 {
+		t.Errorf("CONTROL_SELF_STAT: unrelated user quota included: %d", stat.Quota)
+	}
+}
+func TestRestoredNativeControlAdminLogs(t *testing.T) {
+	db := restoredControlDB(t, &Log{}, &User{})
+	require.NoError(t, db.Create(&[]User{{Id: 1, Username: "root-probe", AffCode: "root-probe", Role: common.RoleRootUser}, {Id: 2, Username: "user-probe", AffCode: "user-probe", Role: common.RoleCommonUser}}).Error)
+	require.NoError(t, db.Create(&[]Log{{UserId: 1, Username: "root-probe", Type: LogTypeConsume, Quota: 90}, {UserId: 2, Username: "user-probe", Type: LogTypeConsume, Quota: 10}}).Error)
+	rows, _, err := restoredControlAdminLogs()
+	require.NoError(t, err)
+	for _, r := range rows {
+		if r.UserId == 1 {
+			t.Error("CONTROL_ADMIN_LOGS: root row visible to administrator")
+		}
+	}
+}
+func TestRestoredNativeControlPricingFailure(t *testing.T) {
+	db := restoredControlDB(t, &Channel{}, &Ability{}, &Model{}, &Vendor{})
+	require.NoError(t, db.Create(&Channel{Id: 73, Type: constant.ChannelTypeAdvancedCustom, Status: common.ChannelStatusEnabled, Key: "fixture-key", OtherSettings: "{broken"}).Error)
+	require.NoError(t, db.Create(&Ability{ChannelId: 73, Enabled: true, Model: "fixture-model"}).Error)
+	InvalidatePricingCache()
+	defer InvalidatePricingCache()
+	if len(GetPricing()) != 0 {
+		t.Error("CONTROL_PRICING: broken settings published partial price table")
+	}
+}
+func TestRestoredNativeControlRootReadFailure(t *testing.T) {
+	db := restoredControlDB(t, &User{})
+	failure := errors.New("fixture root lookup failure")
+	first := true
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("probe:root-read", func(tx *gorm.DB) {
+		if tx.Statement.Table == "users" && first {
+			first = false
+			tx.AddError(failure)
+		}
+	}))
+	_ = createRootAccountIfNeed()
+	var count int64
+	require.NoError(t, db.Model(&User{}).Count(&count).Error)
+	if count != 0 {
+		t.Error("CONTROL_ROOT_LOOKUP: failed initial lookup triggered root creation")
+	}
+}
+func TestRestoredNativeControlAdminQuota(t *testing.T) {
+	db := restoredControlDB(t, &User{}, &QuotaData{})
+	require.NoError(t, db.Create(&[]User{{Id: 1, Username: "root-quota", AffCode: "root-quota", Role: common.RoleRootUser}, {Id: 2, Username: "user-quota", AffCode: "user-quota", Role: common.RoleCommonUser}}).Error)
+	require.NoError(t, db.Create(&[]QuotaData{{UserID: 1, Username: "root-quota", CreatedAt: 1000, Quota: 90}, {UserID: 2, Username: "user-quota", CreatedAt: 1000, Quota: 10}}).Error)
+	rows, err := restoredControlAdminQuota()
+	require.NoError(t, err)
+	for _, r := range rows {
+		if r.Username == "root-quota" {
+			t.Error("CONTROL_ADMIN_QUOTA: root usage visible to administrator")
+		}
+	}
+	require.NoError(t, restoredControlSeedFlowGroup(db))
+	flows, err := GetFlowQuotaData(0, 2000, "root-quota", 0, common.RoleAdminUser)
+	require.NoError(t, err)
+	if len(flows) != 0 {
+		t.Error("CONTROL_ADMIN_FLOW: root flow visible to administrator")
+	}
+}

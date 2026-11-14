@@ -41,7 +41,7 @@ func testAffiliateTopUp(t *testing.T, userID int, trade string, quota int) *TopU
 	return order
 }
 
-func TestAffiliateEveryProviderAndManualShareSuccessfulTransaction(t *testing.T) {
+func TestAffiliateNativeProviderFacadesAndManualShareSuccessfulTransaction(t *testing.T) {
 	providers := []string{PaymentProviderEpay, PaymentProviderStripe, PaymentProviderCreem, PaymentProviderWaffo, PaymentProviderWaffoPancake, PaymentProviderGmpay}
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestAffiliateEveryProviderAndManualShareSuccessfulTransaction(t *testing.T)
 					_, err := RechargeEpay(order.TradeNo, "", "", "1.00")
 					return err
 				case PaymentProviderStripe:
-					return RechargeWithPayment(order.TradeNo, "customer", "", "USD", "1.00")
+					return Recharge(order.TradeNo, "customer", "")
 				case PaymentProviderCreem:
 					return RechargeCreem(order.TradeNo, "", "", "")
 				case PaymentProviderWaffo:
@@ -80,7 +80,12 @@ func TestAffiliateEveryProviderAndManualShareSuccessfulTransaction(t *testing.T)
 			common.QuotaPerUnit = 23
 			t.Cleanup(func() { common.QuotaPerUnit = oldUnit })
 			require.NoError(t, credit())
-			require.NoError(t, credit())
+			replayErr := credit()
+			if provider == PaymentProviderStripe || provider == PaymentProviderCreem {
+				require.EqualError(t, replayErr, "top-up failed")
+			} else {
+				require.NoError(t, replayErr)
+			}
 			require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
 			require.NoError(t, db.First(&invitee, invitee.Id).Error)
 			require.NoError(t, db.First(&inviter, inviter.Id).Error)

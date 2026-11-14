@@ -342,7 +342,7 @@ func DoMidjourneyHttpRequest(c *gin.Context, info *relaycommon.RelayInfo, timeou
 	if err != nil {
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "create_request_failed", http.StatusInternalServerError), nullBytes, err
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	// 使用带有超时的 context 创建新的请求
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
@@ -362,7 +362,6 @@ func DoMidjourneyHttpRequest(c *gin.Context, info *relaycommon.RelayInfo, timeou
 		common.SysLog(common.LogText("do request failed: %s", err.Error()))
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "do_request_failed", http.StatusInternalServerError), nullBytes, err
 	}
-	defer resp.Body.Close()
 	ObserveRouteResponse(c, resp)
 	statusCode := resp.StatusCode
 	//if statusCode != 200  {

@@ -190,6 +190,9 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 // 进程内的 LockOrder 只是优化，正确性由本函数的数据库行锁保证。
 // paidMoney 是回调中已验签的 money（人民币元），必须等于下单时冻结的应付金额。
 func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string, paidMoney string) (alreadyDone bool, err error) {
+	if tradeNo == "" {
+		return false, errors.New("payment order number not provided")
+	}
 	_, quota, err := settleTopUp(topUpSettlement{
 		tradeNo: tradeNo, provider: PaymentProviderEpay, callerIP: callerIp, logMethod: PaymentProviderEpay,
 		receipt: &TopUpReceipt{Currency: "CNY", Amount: paidMoney},
@@ -206,20 +209,27 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string, p
 	return err == nil && quota == 0, err
 }
 
-// RechargeWithPayment 完成 Stripe 订单。currency/payAmount 是回调中已验签的应付币种和
-// 折扣、税费之前的金额，必须等于下单时冻结的值；冻结值不被回调改写。
-func RechargeWithPayment(referenceId string, customerId string, callerIp string, currency string, payAmount string) (err error) {
+func Recharge(referenceId string, customerId string, callerIp string) (err error) {
+	if referenceId == "" {
+		return errors.New("payment order number not provided")
+	}
 	_, _, err = settleTopUp(topUpSettlement{
 		tradeNo: referenceId, provider: PaymentProviderStripe, callerIP: callerIp, logMethod: PaymentMethodStripe,
-		receipt: &TopUpReceipt{Currency: currency, Amount: payAmount},
-		mutate: func(_ *gorm.DB, _ *TopUp) (map[string]any, error) {
+		mutate: func(_ *gorm.DB, order *TopUp) (map[string]any, error) {
+			if order.Status != common.TopUpStatusPending {
+				return nil, errors.New("invalid top-up order status")
+			}
 			return map[string]any{"stripe_customer": customerId}, nil
 		},
 		message: func(order *TopUp, quota int) *common.Message {
 			return common.NewMessage("Online top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}", map[string]any{"quota": logger.FormatQuota(quota), "amount": order.Amount})
 		},
 	})
-	return err
+	if err != nil {
+		common.SysError(common.LogText("topup failed: %s", err.Error()))
+		return errors.New("top-up failed")
+	}
+	return nil
 }
 
 // topUpQueryWindowSeconds 限制充值记录查询的时间窗口（秒）。
@@ -262,9 +272,15 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	return err
 }
 func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string) (err error) {
+	if referenceId == "" {
+		return errors.New("payment order number not provided")
+	}
 	_, _, err = settleTopUp(topUpSettlement{
 		tradeNo: referenceId, provider: PaymentProviderCreem, callerIP: callerIp, logMethod: PaymentMethodCreem,
 		mutate: func(tx *gorm.DB, order *TopUp) (map[string]any, error) {
+			if order.Status != common.TopUpStatusPending {
+				return nil, errors.New("invalid top-up order status")
+			}
 			// 用户邮箱为空时，补记支付时使用的邮箱
 			if customerEmail == "" {
 				return nil, nil
@@ -282,25 +298,43 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return common.NewMessage("{{provider}} top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}", map[string]any{"provider": "Creem", "quota": quota, "amount": fmt.Sprintf("%.2f", order.Money)})
 		},
 	})
-	return err
+	if err != nil {
+		common.SysError(common.LogText("creem topup failed: %s", err.Error()))
+		return errors.New("top-up failed")
+	}
+	return nil
 }
 
 func RechargeWaffo(tradeNo string, callerIp string) (err error) {
+	if tradeNo == "" {
+		return errors.New("payment order number not provided")
+	}
 	_, _, err = settleTopUp(topUpSettlement{
 		tradeNo: tradeNo, provider: PaymentProviderWaffo, callerIP: callerIp, logMethod: PaymentMethodWaffo,
 		message: func(order *TopUp, quota int) *common.Message {
 			return common.NewMessage("{{provider}} top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}", map[string]any{"provider": "Waffo", "quota": logger.FormatQuota(quota), "amount": fmt.Sprintf("%.2f", order.Money)})
 		},
 	})
-	return err
+	if err != nil {
+		common.SysError(common.LogText("waffo topup failed: %s", err.Error()))
+		return errors.New("top-up failed")
+	}
+	return nil
 }
 
 func RechargeWaffoPancake(tradeNo string) (err error) {
+	if tradeNo == "" {
+		return errors.New("payment order number not provided")
+	}
 	_, _, err = settleTopUp(topUpSettlement{
 		tradeNo: tradeNo, provider: PaymentProviderWaffoPancake, logMethod: PaymentMethodWaffoPancake,
 		message: func(order *TopUp, quota int) *common.Message {
 			return common.NewMessage("{{provider}} top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}", map[string]any{"provider": "Waffo Pancake", "quota": logger.FormatQuota(quota), "amount": fmt.Sprintf("%.2f", order.Money)})
 		},
 	})
-	return err
+	if err != nil {
+		common.SysError(common.LogText("waffo pancake topup failed: %s", err.Error()))
+		return errors.New("top-up failed")
+	}
+	return nil
 }

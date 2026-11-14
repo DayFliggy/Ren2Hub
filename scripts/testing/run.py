@@ -22,7 +22,7 @@ MODULES = ('.', 'relaykit', 'tokenkit')
 # Invitation URLs render window.location.origin. A random transport port changes
 # visible content between reference creation and verification. Fail if occupied.
 UI_CONTRACTS_PORT = 41739
-PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'diagnostics', 'candidate', 'routing', 'all')
+PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'diagnostics', 'known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race', 'candidate', 'routing', 'all')
 DEFERRED = {
     'TestVLLMStatusLive': '需要真实外部供应商；本地方案不执行',
     'TestProductionEmbeddedAssetGraph': 'build 阶段验证实际前端产物',
@@ -271,47 +271,14 @@ def ui_contracts(source: Path, output: Path, env: dict[str, str]) -> dict:
             'kind': 'mock-api-ui-behaviour', 'origin': origin, 'pixel_comparison': False}
 
 
+def race_selection(source: Path) -> tuple[dict, list[dict]]:
+    from ordinary_race import load_selection
+    return load_selection(source)
+
+
 def race(source: Path, output: Path, env: dict[str, str]) -> dict:
-    # A pinned container supplies gcc/CGO even on minimal production hosts.
-    probe = subprocess.run(['docker', 'info'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    docker = ['docker'] if probe.returncode == 0 else ['sudo', '-n', 'docker']
-    execute(docker + ['image', 'inspect', 'golang:1.26.10-bookworm'], source, output, 'race-image', env)
-    modcache = execute(['go', 'env', 'GOMODCACHE'], source, output, 'race-modcache', env).strip()
-    cache = Path(execute(['go', 'env', 'GOCACHE'], source, output, 'race-cache', env).strip())
-    cache.mkdir(parents=True, exist_ok=True)
-    results = []
-    credential_tests = (
-        'TestRefreshConcurrentRequestsMakeOnePluginCall',
-        'TestRefreshTwoNodesMakeOnePluginCall',
-        'TestRefreshPluginCallHoldsNoChannelLock',
-        'TestRefreshRotatedTokenIsNeverSentAgain',
-        'TestRefreshMergesItsResult',
-        'TestRefreshRemovedCredential',
-        'TestPluginLoginConcurrentSubmitRunsThePluginOnce',
-        'TestPluginLoginConcurrentLoginsHoldOneAccountOnce',
-        'TestScheduledStaleRemovedAndManualKeys',
-        'TestScheduledCancellationAndTLSKeepStoredState',
-    )
-    # Keep the credential group separate: each invocation retains the same
-    # 60-second test deadline, including the original service contracts.
-    suites = (
-        ('./model', '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess)', ()),
-        ('./service', '^Test(.*(Concurrency|Admission|TopUpDiscount)|ObservationTrafficConcurrentSampleAndRead$)', ()),
-        ('./controller', '^TestResponsesWebSocket(ReusesConnectionAndSettlesEachRequest|DisconnectSettlesDeliveredOutputOnce)$', ()),
-        ('./common', '^TestCountingListenerConcurrentConnections$', ()),
-        ('./service', '^(' + '|'.join(credential_tests) + ')$', credential_tests),
-    )
-    for index, (package, pattern, required) in enumerate(suites):
-        command = docker + ['run', '--rm', '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
-                            '-v', f'{source}:/src:ro', '-v', f'{modcache}:/go/pkg/mod:ro',
-                            '-v', f'{cache}:/cache', '-w', '/src', '-e', 'GOCACHE=/cache',
-                            '-e', 'GOWORK=off', '-e', 'GOTOOLCHAIN=local', '-e', 'GOMAXPROCS=2',
-                            '-e', 'CGO_ENABLED=1', '-e', 'GOPROXY=off', '-e', 'GOSUMDB=off',
-                            'golang:1.26.10-bookworm', 'go', 'test', '-buildvcs=false', '-race', '-json',
-                            '-timeout=60s', '-count=1', '-p=2', '-run', pattern, package]
-        raw = execute(command, source, output, f'race-{index}', env, 600)
-        results.append(go_result(raw, required))
-    return {'success': True, 'suites': results}
+    from ordinary_race import run
+    return run(source, output / 'ordinary-race', env)
 
 
 def main() -> int:
@@ -347,7 +314,7 @@ def main() -> int:
     print(f'证据目录：{output}', flush=True)
     try:
         tools = {}
-        tool_commands = ([(['go', 'version'], 'go')] if args.profile in ('routing','diagnostics')
+        tool_commands = ([(['go', 'version'], 'go')] if args.profile in ('routing','diagnostics','known_upstream_restored','known_upstream_race','known_upstream_logger_race')
                          else [(['go', 'version'], 'go'), (['bun', '--version'], 'bun'), (['node', '--version'], 'node')])
         for command, key in tool_commands:
             tools[key] = execute(command, SOURCE, output, 'version-' + key, env).strip()
@@ -358,10 +325,20 @@ def main() -> int:
         profiles = ('unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate') if args.profile == 'all' else (args.profile,)
         for profile in profiles:
             stage = output / profile
-            stage.mkdir(mode=0o700)
+            if profile not in ('known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race'):
+                stage.mkdir(mode=0o700)
             print(f'执行 {profile}', flush=True)
             if profile == 'diagnostics':
                 from diagnostics import run
+                result = run(SOURCE, stage, env)
+            elif profile == 'known_upstream_restored':
+                from native_restored import run
+                result = run(SOURCE, stage, env)
+            elif profile == 'known_upstream_race':
+                from native_pricing_race import run
+                result = run(SOURCE, stage, env)
+            elif profile == 'known_upstream_logger_race':
+                from native_logger_race import run
                 result = run(SOURCE, stage, env)
             elif profile == 'unit':
                 result = {'go': go_unit(SOURCE, stage, env), 'vue': frontend_unit(SOURCE, stage, env), 'success': True}

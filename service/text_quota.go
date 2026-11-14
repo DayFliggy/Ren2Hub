@@ -81,8 +81,8 @@ func (s *textQuotaSummary) hasBillableUsage() bool {
 }
 
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
-	if summary.CacheCreationTokens5m > 0 || summary.CacheCreationTokens1h > 0 || summary.CacheCreationTokens12h > 0 {
-		splitCacheWriteTokens := summary.CacheCreationTokens5m + summary.CacheCreationTokens1h + summary.CacheCreationTokens12h
+	if summary.CacheCreationTokens5m > 0 || summary.CacheCreationTokens1h > 0 {
+		splitCacheWriteTokens := summary.CacheCreationTokens5m + summary.CacheCreationTokens1h
 		if summary.CacheCreationTokens > splitCacheWriteTokens {
 			return summary.CacheCreationTokens
 		}
@@ -313,7 +313,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		if !dCachedCreationTokens.IsZero() || hasSplitCacheCreationTokens {
 			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
 				baseTokens = baseTokens.Sub(dCachedCreationTokens)
-				// The total includes 12h writes, which have a separate price.
+				// The total includes the 12h writes, which have their own ratio.
 				dCachedCreationTokens12h := decimal.NewFromInt(int64(summary.CacheCreationTokens12h))
 				cachedCreationTokensWithRatio = dCachedCreationTokens.Sub(dCachedCreationTokens12h).Mul(dCacheCreationRatio)
 				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(dCachedCreationTokens12h.Mul(dCacheCreationRatio12h))

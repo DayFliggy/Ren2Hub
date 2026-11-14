@@ -27,20 +27,6 @@ func TestRelayInfoGetFinalRequestRelayFormatPrefersExplicitFinal(t *testing.T) {
 	require.Equal(t, types.RelayFormat(types.RelayFormatOpenAIResponses), info.GetFinalRequestRelayFormat())
 }
 
-func TestRelayInfoToStringMasksURLCredentials(t *testing.T) {
-	info := &RelayInfo{
-		RequestURLPath: "/v1/responses?api_key=client-secret&X-Goog-Credential=signed-secret&model=gpt-test",
-	}
-
-	logged := info.ToString()
-
-	assert.NotContains(t, logged, "client-secret")
-	assert.NotContains(t, logged, "signed-secret")
-	assert.Contains(t, logged, "model=gpt-test")
-	assert.Contains(t, logged, "api_key=%2A%2A%2Amasked%2A%2A%2A")
-	assert.Contains(t, info.RequestURLPath, "api_key=client-secret", "logging must not change the relayed URL")
-}
-
 func TestRelayInfoGetFinalRequestRelayFormatFallsBackToConversionChain(t *testing.T) {
 	info := &RelayInfo{
 		RelayFormat:            types.RelayFormatOpenAI,

@@ -55,7 +55,7 @@ func limitLogTimeRange(startTimestamp int64, endTimestamp int64) (int64, error) 
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	logs, total, err := model.GetAllLogs(logFilterFromQuery(c, true), pageInfo.GetStartIdx(), pageInfo.GetPageSize(), c.GetInt("role"))
+	logs, total, err := model.GetAllLogs(logFilterFromQuery(c, true), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -200,11 +200,19 @@ func GetLogByKey(c *gin.Context) {
 }
 
 func GetLogsStat(c *gin.Context) {
-	stat, err := model.SumAdminUsedQuota(c.Request.Context(), c.GetInt("role"), logFilterFromQuery(c, true))
+	logType, _ := strconv.Atoi(c.Query("type"))
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	tokenName := c.Query("token_name")
+	username := c.Query("username")
+	modelName := c.Query("model_name")
+	channel, _ := strconv.Atoi(c.Query("channel"))
+	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -218,20 +226,26 @@ func GetLogsStat(c *gin.Context) {
 }
 
 func GetLogsSelfStat(c *gin.Context) {
-	filter := logFilterFromQuery(c, false)
+	username := c.GetString("username")
+	logType, _ := strconv.Atoi(c.Query("type"))
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	if c.GetInt("role") < common.RoleAdminUser {
 		var err error
-		if filter.StartTimestamp, err = limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp); err != nil {
+		if startTimestamp, err = limitLogTimeRange(startTimestamp, endTimestamp); err != nil {
 			common.ApiError(c, err)
 			return
 		}
 	}
-	filter.Channel, _ = strconv.Atoi(c.Query("channel"))
-	quotaNum, err := model.SumUserUsedQuota(c.Request.Context(), c.GetInt("id"), filter)
+	tokenName := c.Query("token_name")
+	modelName := c.Query("model_name")
+	channel, _ := strconv.Atoi(c.Query("channel"))
+	quotaNum, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "",
@@ -239,6 +253,7 @@ func GetLogsSelfStat(c *gin.Context) {
 			"quota": quotaNum.Quota,
 			"rpm":   quotaNum.Rpm,
 			"tpm":   quotaNum.Tpm,
+			//"token": tokenNum,
 		},
 	})
 	return

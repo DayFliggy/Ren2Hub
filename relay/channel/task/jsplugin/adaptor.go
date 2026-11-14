@@ -370,7 +370,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, err
 	}
 	if descriptor.BodyType == "multipart" {
-		form, parseErr := common.ParseTaskMultipartFormReusable(c)
+		form, parseErr := common.ParseMultipartFormReusable(c)
 		if parseErr != nil {
 			return nil, parseErr
 		}
@@ -470,7 +470,7 @@ func inlineJSONFilePlaceholders(c *gin.Context, body any) (any, error) {
 	cloned := jsonValue(body)
 	var form *multipart.Form
 	if c != nil && c.Request != nil && strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {
-		parsed, parseErr := common.ParseTaskMultipartFormReusable(c)
+		parsed, parseErr := common.ParseMultipartFormReusable(c)
 		if parseErr != nil {
 			return nil, parseErr
 		}
@@ -1861,7 +1861,7 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 			}
 			requestHeaders = ClientRequestHeaders(c.Request.Header)
 			if strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {
-				if form, err := common.ParseTaskMultipartFormReusable(c); err == nil {
+				if form, err := common.ParseMultipartFormReusable(c); err == nil {
 					defer form.RemoveAll()
 					for field, headers := range form.File {
 						for index, header := range headers {

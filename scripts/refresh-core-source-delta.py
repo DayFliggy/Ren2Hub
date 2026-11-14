@@ -10,6 +10,7 @@ import sys
 
 # 本轮已审计的 NewAPI 核心版本；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
 UPSTREAM_SHA = 'b388140acfd80369ec6243b16869daff1b4051f4'
+TEST_ASSETS = {'router/frontend/embed-dist/probe.txt': 'router/native_restored_web_test.go'}
 
 
 def git(*args, repository=None):
@@ -19,7 +20,7 @@ def git(*args, repository=None):
 def requires_reasons(row):
     # 新增和删除也是本地偏离，不能靠文件分类绕过合同依据检查。
     path = row['path']
-    return (row['status'] in ('adapted', 'extension', 'removed') and not path.endswith('_test.go')
+    return (row['status'] in ('adapted', 'extension', 'removed') and path not in TEST_ASSETS and not path.endswith('_test.go')
             and '/testdata/' not in path and not path.startswith('testdata/'))
 
 
@@ -57,6 +58,8 @@ for path in sorted((previous | source_paths | local_paths) - {''}):
     status = ('extension' if source is None else 'removed' if local is None
               else 'upstream_equal' if source == local else 'adapted')
     row = dict(path=path, status=status, upstream_sha256=source, local_sha256=local)
+    if path in TEST_ASSETS:
+        row['test_fixture_for'] = TEST_ASSETS[path]
     # 回到上游一致的文件不再需要理由，旧理由随之丢弃。
     if status != 'upstream_equal' and path in reasons:
         row['reasons'] = reasons[path]
@@ -65,7 +68,8 @@ for path in sorted((previous | source_paths | local_paths) - {''}):
     rows.append(row)
 missing = [row['path'] for row in rows if requires_reasons(row) and (
     not row.get('reasons') or not row.get('review')
-    or any(reason not in contracts for reason in row.get('reasons', []))
+    or any(reason not in contracts or contracts[reason].get('kind') != 'approved_contract'
+           for reason in row.get('reasons', []))
     or row.get('review', {}).get('target') != upstream
     or not row.get('review', {}).get('basis'))]
 if missing:
@@ -74,7 +78,7 @@ if missing:
         print('  ' + path, file=sys.stderr)
     sys.exit(1)
 data.update(upstream_sha=upstream,
-            implementation_base_sha='f659528cf8380eea05ffed5072754194d4bae9b7',
+            implementation_base_sha='2382fbdd55a6d76d73d8e5b314c7765c98cd8da6',
             history_baseline_sha='9a63062227c31ba54a6346e07ee8b4fd8802f22f',
             reference_newapi_sha=upstream,
             candidate_sha=None, counts=dict(collections.Counter(row['status'] for row in rows)), files=rows)

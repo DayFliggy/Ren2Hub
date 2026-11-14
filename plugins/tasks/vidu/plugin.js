@@ -243,10 +243,6 @@ function requestSettings(req, action, model) {
   const profile = listedProfile(action, model) || WIDEST;
   const duration = req.duration === undefined || req.duration === null || req.duration === "" ? profile.durations[2] : Number(req.duration);
   if (!Number.isInteger(duration) || duration <= 0 || duration > 3600) throw new Error("seconds must be between 1 and 3600");
-  if (listedProfile(action, model) && (duration < profile.durations[0] || duration > profile.durations[1])) {
-    const allowed = profile.durations[0] === profile.durations[1] ? String(profile.durations[0]) : "between " + profile.durations[0] + " and " + profile.durations[1];
-    throw new Error(model + " duration must be " + allowed);
-  }
   const resolutions = profile.longest && duration === profile.durations[1] ? profile.longest : profile.resolutions;
   const metadata = (req && req.metadata) || {};
   return { duration: duration, resolution: mappedResolution(req.resolution || metadata.resolution || req.size, resolutions) || resolutions[0] };

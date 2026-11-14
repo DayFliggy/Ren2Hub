@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
@@ -158,84 +157,78 @@ func RequestStripePay(c *gin.Context) {
 func StripeWebhook(c *gin.Context) {
 	ctx := c.Request.Context()
 	if !isStripeWebhookEnabled() {
-		logger.LogWarn(ctx, common.LogText("Stripe webhook rejected reason=webhook_disabled path=%q client_ip=%s", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP()))
+		logger.LogWarn(ctx, common.LogText("Stripe webhook rejected reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 
 	payload, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		logger.LogError(ctx, common.LogText("Stripe webhook failed to read request body path=%q client_ip=%s error=%q", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(), err.Error()))
+		logger.LogError(ctx, common.LogText("Stripe webhook failed to read request body path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
 		c.AbortWithStatus(http.StatusServiceUnavailable)
 		return
 	}
 
 	signature := c.GetHeader("Stripe-Signature")
-	logger.LogInfo(ctx, common.LogText("Stripe webhook received request path=%q client_ip=%s signature=%q body=%q", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(), signature, string(payload)))
+	logger.LogInfo(ctx, common.LogText("Stripe webhook received request path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(payload)))
 	event, err := webhook.ConstructEventWithOptions(payload, signature, setting.StripeWebhookSecret, webhook.ConstructEventOptions{
 		IgnoreAPIVersionMismatch: true,
 	})
 
 	if err != nil {
-		logger.LogWarn(ctx, common.LogText("Stripe webhook signature verification failed path=%q client_ip=%s error=%q", relaycommon.SanitizeURLForLog(c.Request.RequestURI), c.ClientIP(), err.Error()))
+		logger.LogWarn(ctx, common.LogText("Stripe webhook signature verification failed path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	callerIp := c.ClientIP()
 	if event.GetObjectValue("mode") == "subscription" {
-		// 订阅已退役：确认收到，不让 Stripe 重试一个永远不会成功的回调。
-		model.RecordTopUpCallbackRejection(callerIp, model.PaymentProviderStripe, event.GetObjectValue("client_reference_id"), 0, model.ErrTopUpTypeUnsupported)
 		c.Status(http.StatusOK)
 		return
 	}
-	logger.LogInfo(ctx, common.LogText("Stripe webhook signature verified event_type=%s client_ip=%s path=%q", string(event.Type), callerIp, relaycommon.SanitizeURLForLog(c.Request.RequestURI)))
+	logger.LogInfo(ctx, common.LogText("Stripe webhook signature verified event_type=%s client_ip=%s path=%q", string(event.Type), callerIp, c.Request.RequestURI))
 	switch event.Type {
 	case stripe.EventTypeCheckoutSessionCompleted:
-		err = sessionCompleted(ctx, event, callerIp)
+		sessionCompleted(ctx, event, callerIp)
 	case stripe.EventTypeCheckoutSessionExpired:
 		sessionExpired(ctx, event)
 	case stripe.EventTypeCheckoutSessionAsyncPaymentSucceeded:
-		err = sessionAsyncPaymentSucceeded(ctx, event, callerIp)
+		sessionAsyncPaymentSucceeded(ctx, event, callerIp)
 	case stripe.EventTypeCheckoutSessionAsyncPaymentFailed:
 		sessionAsyncPaymentFailed(ctx, event, callerIp)
 	default:
 		logger.LogInfo(ctx, common.LogText("Stripe webhook ignored event event_type=%s client_ip=%s", string(event.Type), callerIp))
 	}
 
-	if err != nil && model.TopUpCallbackRetryable(err) {
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
 	c.Status(http.StatusOK)
 }
 
-func sessionCompleted(ctx context.Context, event stripe.Event, callerIp string) error {
+func sessionCompleted(ctx context.Context, event stripe.Event, callerIp string) {
 	customerId := event.GetObjectValue("customer")
 	referenceId := event.GetObjectValue("client_reference_id")
 	status := event.GetObjectValue("status")
 	if "complete" != status {
 		logger.LogWarn(ctx, common.LogText("Stripe checkout.completed has unexpected status, ignored trade_no=%s status=%s client_ip=%s", referenceId, status, callerIp))
-		return nil
+		return
 	}
 
 	paymentStatus := event.GetObjectValue("payment_status")
 	if paymentStatus != "paid" {
 		logger.LogInfo(ctx, common.LogText("Stripe Checkout payment not completed, waiting for async result trade_no=%s payment_status=%s client_ip=%s", referenceId, paymentStatus, callerIp))
-		return nil
+		return
 	}
 
-	return fulfillOrder(ctx, event, referenceId, customerId, callerIp)
+	fulfillOrder(ctx, event, referenceId, customerId, callerIp)
 }
 
 // sessionAsyncPaymentSucceeded handles delayed payment methods (bank transfer, SEPA, etc.)
 // that confirm payment after the checkout session completes.
-func sessionAsyncPaymentSucceeded(ctx context.Context, event stripe.Event, callerIp string) error {
+func sessionAsyncPaymentSucceeded(ctx context.Context, event stripe.Event, callerIp string) {
 	customerId := event.GetObjectValue("customer")
 	referenceId := event.GetObjectValue("client_reference_id")
 	logger.LogInfo(ctx, common.LogText("Stripe async payment succeeded trade_no=%s client_ip=%s", referenceId, callerIp))
 
-	return fulfillOrder(ctx, event, referenceId, customerId, callerIp)
+	fulfillOrder(ctx, event, referenceId, customerId, callerIp)
 }
 
 // sessionAsyncPaymentFailed marks orders as failed when delayed payment methods
@@ -277,40 +270,23 @@ func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp
 }
 
 // fulfillOrder is the shared logic for crediting quota after payment is confirmed.
-func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, customerId string, callerIp string) error {
+func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, customerId string, callerIp string) {
 	if len(referenceId) == 0 {
-		// Checkout Session 不是本站创建的，没有可完成的订单。
 		logger.LogWarn(ctx, common.LogText("Stripe order completion missing order number client_ip=%s", callerIp))
-		return nil
+		return
 	}
 
 	LockOrder(referenceId)
 	defer UnlockOrder(referenceId)
-	currency, amount := stripeReceipt(event)
-	err := model.RechargeWithPayment(referenceId, customerId, callerIp, currency, amount)
+	err := model.Recharge(referenceId, customerId, callerIp)
 	if err != nil {
 		logger.LogError(ctx, common.LogText("Stripe top-up processing failed trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
-		return err
+		return
 	}
-	logger.LogInfo(ctx, common.LogText("Stripe top-up succeeded trade_no=%s amount=%s currency=%s event_type=%s client_ip=%s", referenceId, amount, currency, string(event.Type), callerIp))
-	return nil
-}
 
-// stripeReceipt 返回已验签 Checkout Session 中、可与订单冻结值比对的币种和金额。
-// amount_subtotal 不含折扣和税费，促销码只降低实付，不改变到账额度；
-// Adaptive Pricing 把会话换成买家币种时，currency_conversion 保留创建时的原币种金额。
-// 解析失败返回空值，由入账时的金额核对拒绝。
-func stripeReceipt(event stripe.Event) (string, string) {
-	var session stripe.CheckoutSession
-	if err := common.Unmarshal(event.Data.Raw, &session); err != nil {
-		return "", ""
-	}
-	currency, minor := string(session.Currency), session.AmountSubtotal
-	if conversion := session.CurrencyConversion; conversion != nil && conversion.SourceCurrency != "" {
-		currency, minor = string(conversion.SourceCurrency), conversion.AmountSubtotal
-	}
-	currency = strings.ToUpper(currency)
-	return currency, stripePaymentAmount(minor, currency)
+	total, _ := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
+	currency := strings.ToUpper(event.GetObjectValue("currency"))
+	logger.LogInfo(ctx, common.LogText("Stripe top-up succeeded trade_no=%s amount_total=%.2f currency=%s event_type=%s client_ip=%s", referenceId, total/100, currency, string(event.Type), callerIp))
 }
 
 func sessionExpired(ctx context.Context, event stripe.Event) {

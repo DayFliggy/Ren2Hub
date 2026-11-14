@@ -264,3 +264,22 @@ func GetModelRatioOrPrice(model string) (float64, bool, bool) { // price or rati
 	}
 	return 37.5, false, false
 }
+
+type CompletionRatioInfo struct {
+	Ratio  float64 `json:"ratio"`
+	Locked bool    `json:"locked"`
+}
+
+func ResolveCompletionRatio(modelName string, configuredRatio *float64) CompletionRatioInfo {
+	if configuredRatio != nil {
+		return CompletionRatioInfo{Ratio: *configuredRatio}
+	}
+	return CompletionRatioInfo{Ratio: DefaultCompletionRatio}
+}
+func GetCompletionRatioInfo(name string) CompletionRatioInfo {
+	name = FormatMatchingModelName(name)
+	if ratio, ok := completionRatioMap.Get(name); ok {
+		return ResolveCompletionRatio(name, &ratio)
+	}
+	return ResolveCompletionRatio(name, nil)
+}

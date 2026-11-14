@@ -18,6 +18,11 @@ import (
 )
 
 func GmpayPay(c *gin.Context) {
+	// 本扩展依赖有限正数换算；原生全局配置写入不保证该条件。
+	if math.IsNaN(common.QuotaPerUnit) || math.IsInf(common.QuotaPerUnit, 0) || common.QuotaPerUnit <= 0 {
+		paymentError(c, common.NewMessage("Quota per unit must be greater than 0"))
+		return
+	}
 	var request EpayRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		paymentError(c, common.NewMessage("Invalid parameters"))

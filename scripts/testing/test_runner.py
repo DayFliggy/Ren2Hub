@@ -44,39 +44,16 @@ class RunnerContractTests(unittest.TestCase):
             self.assertEqual(settings['SQLITE_PATH'], str(root / 'desktop-light-private/app.db'))
 
     def test_credential_race_group_is_independent_and_requires_all_ten_cases(self):
-        credentials = (
-            'TestRefreshConcurrentRequestsMakeOnePluginCall', 'TestRefreshTwoNodesMakeOnePluginCall',
-            'TestRefreshPluginCallHoldsNoChannelLock', 'TestRefreshRotatedTokenIsNeverSentAgain',
-            'TestRefreshMergesItsResult', 'TestRefreshRemovedCredential',
-            'TestPluginLoginConcurrentSubmitRunsThePluginOnce', 'TestPluginLoginConcurrentLoginsHoldOneAccountOnce',
-            'TestScheduledStaleRemovedAndManualKeys', 'TestScheduledCancellationAndTLSKeepStoredState',
-        )
-        for completed, valid in ((credentials, True), (credentials[:-1], False)):
-            with self.subTest(valid=valid), tempfile.TemporaryDirectory() as directory:
-                root, commands = Path(directory), []
-                def execute(command, *_args, **_kwargs):
-                    if command[:2] == ['go', 'env']:
-                        return str(root / command[-1])
-                    if '-race' not in command:
-                        return ''
-                    commands.append(command)
-                    tests = completed if len(commands) == 5 else ['TestExistingContract']
-                    return '\n'.join(json.dumps({'Action': 'pass', 'Test': name}) for name in tests)
-                with patch('run.subprocess.run', return_value=SimpleNamespace(returncode=0)), \
-                        patch('run.execute', side_effect=execute):
-                    if valid:
-                        self.assertTrue(run.race(root, root, {})['success'])
-                    else:
-                        with self.assertRaises(RuntimeError):
-                            run.race(root, root, {})
-                self.assertEqual([command[-1] for command in commands],
-                                 ['./model', './service', './controller', './common', './service'])
-                for command in commands:
-                    self.assertIn('-timeout=60s', command)
-                    self.assertEqual(command[command.index('--network') + 1], 'none')
-                pattern = commands[-1][commands[-1].index('-run') + 1]
-                self.assertTrue(all(re.fullmatch(pattern, name) for name in credentials))
-                self.assertIsNone(re.fullmatch(pattern, credentials[0] + 'Unrelated'))
+        # The standalone module owns both orchestration and release verification;
+        # this profile must not maintain a second test-selection implementation.
+        source, output, env = Path('/source'), Path('/output'), {'fixture': 'true'}
+        result = {'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 129}}
+        with patch('ordinary_race.run', return_value=result) as execute:
+            self.assertIs(run.race(source, output, env), result)
+        execute.assert_called_once_with(source, output / 'ordinary-race', env)
+        with patch('ordinary_race.load_selection', return_value=({}, [])) as selection:
+            self.assertEqual(run.race_selection(source), ({}, []))
+        selection.assert_called_once_with(source)
 
     def test_network_evidence_reports_real_counters_and_rejects_resets(self):
         runner = candidate.Candidate.__new__(candidate.Candidate)
@@ -156,6 +133,10 @@ class RunnerContractTests(unittest.TestCase):
                     stack.enter_context(patch('candidate.Candidate', side_effect=create_candidate,
                                                diagnostics=candidate.Candidate.diagnostics))
                     probe = stack.enter_context(patch('diagnostics.run', return_value=diagnostic))
+                    for module in ('native_restored', 'native_pricing_race', 'native_logger_race'):
+                        stack.enter_context(patch(module + '.run', return_value={
+                            'success': False, 'contracts_success': True, 'exit_code': 2}))
+                    stack.enter_context(patch('ordinary_race.run', return_value={'success': True, 'exit_code': 0}))
                     stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
                     stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
                     code = run.main()
@@ -723,7 +704,12 @@ class UpgradeCandidateTests(unittest.TestCase):
                                      stages=(*candidate.UPGRADE_STAGES, *candidate.STAGES),
                                      report={'success': False, 'stages': {}}, revision='old')
             runner.prepare = lambda: None
-            runner.diagnostics = lambda: runner.report.update(diagnostics={'success':True,'exit_code':0})
+            runner.diagnostics = lambda: runner.report.update(
+                diagnostics={'success':True,'exit_code':0},
+                known_upstream_restored={'success':True,'exit_code':0},
+                known_upstream_race={'success':True,'exit_code':0},
+                known_upstream_logger_race={'success':True,'exit_code':0},
+                ordinary_race={'success':True,'exit_code':0})
             runner.cleanup = lambda: None
             runner.manifest = lambda: None
 
@@ -748,7 +734,7 @@ class UpgradeCandidateTests(unittest.TestCase):
 class ReleaseExemptionManifestTests(unittest.TestCase):
     """完整候选只有在未通过项恰好是登记的上游缺陷时才可发布。"""
 
-    def manifest_for(self, diagnostics, routing, *, exit_code=2, billing_success=True):
+    def manifest_for(self, diagnostics, routing, *, exit_code=2, billing_success=True, evidence_error=None, logger_error=None, ordinary_error=None):
         from test_routing_result import ReleaseExemptionTests
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -769,7 +755,11 @@ class ReleaseExemptionManifestTests(unittest.TestCase):
                 runner.report['stages'][stage] = report
             with patch('candidate.execute', return_value=SimpleNamespace(
                     stdout=('160000 commit ' + 'a' * 40 + '\tRen2Hub\n').encode())), \
-                    patch('candidate.source_identity', return_value=identity):
+                    patch('candidate.source_identity', return_value=identity), \
+                    patch('native_restored.verify_report', return_value={'verified': True}, side_effect=evidence_error), \
+                    patch('native_pricing_race.verify_report', return_value={'verified': True}), \
+                    patch('native_logger_race.verify_report', return_value={'verified': True}, side_effect=logger_error), \
+                    patch('ordinary_race.verify_report', return_value={'verified': True}, side_effect=ordinary_error):
                 runner.manifest()
             return json.loads((root / 'candidate-manifest.json').read_text())
 
@@ -783,10 +773,28 @@ class ReleaseExemptionManifestTests(unittest.TestCase):
         self.assertIsNotNone(approved['upstream_exemption'])
         failed_billing = self.manifest_for(diagnostics, routing, billing_success=False)
         self.assertFalse(failed_billing['deployment_eligible'])
-        clean = self.manifest_for({'success': True, 'exit_code': 0, 'cases': []},
-                                  {'success': True, 'exit_code': 0, 'cases': []}, exit_code=0)
+        from diagnostics import PROBES, summarize
+        from routing_result import REQUIRED_CASES, evaluate
+        cases = [{'name': probe.name, 'status': 'pass'} for probe in PROBES]
+        clean_diagnostics = {'preflight': diagnostics['preflight'], 'cases': cases,
+                             **summarize(cases, diagnostics['preflight'])}
+        clean_cases = [{'name': name, 'status': 'pass'} for name in REQUIRED_CASES]
+        clean_routing = {'cases': clean_cases, 'cleanup_errors': [], **evaluate(clean_cases, REQUIRED_CASES)}
+        # 旧诊断全绿而新独立诊断仍有精确已知差异，因此总exit仍为2。
+        clean = self.manifest_for(clean_diagnostics, clean_routing, exit_code=2)
         self.assertTrue(clean['deployment_eligible'])
+        self.assertFalse(clean['candidate_success'])
         self.assertIsNone(clean['upstream_exemption'])
+        incomplete = self.manifest_for({'success': True, 'exit_code': 0, 'cases': []},
+                                       {'success': True, 'exit_code': 0, 'cases': []})
+        self.assertFalse(incomplete['deployment_eligible'])
+        for error in (ValueError('unknown evidence'), IndexError('malformed evidence')):
+            invalid = self.manifest_for(clean_diagnostics, clean_routing, evidence_error=error)
+            self.assertFalse(invalid['deployment_eligible'])
+            invalid_logger = self.manifest_for(clean_diagnostics, clean_routing, logger_error=error)
+            self.assertFalse(invalid_logger['deployment_eligible'])
+            invalid_ordinary = self.manifest_for(clean_diagnostics, clean_routing, ordinary_error=error)
+            self.assertFalse(invalid_ordinary['deployment_eligible'])
 
 
 if __name__ == '__main__':

@@ -97,14 +97,10 @@ func reportFailedTasks(tasks []*model.Task, reason string) {
 // 每次最多处理 100 条，剩余的下个周期继续处理。
 // 使用 per-task CAS (UpdateWithStatus) 防止覆盖被正常轮询已推进的任务。
 func sweepTimedOutTasks(ctx context.Context) {
-	sweepTimedOutTasksAt(ctx, time.Now())
-}
-
-func sweepTimedOutTasksAt(ctx context.Context, now time.Time) {
 	if constant.TaskTimeoutMinutes <= 0 {
 		return
 	}
-	cutoff := now.Unix() - int64(constant.TaskTimeoutMinutes)*60
+	cutoff := time.Now().Unix() - int64(constant.TaskTimeoutMinutes)*60
 	tasks := model.GetTimedOutUnfinishedTasks(cutoff, 100)
 	if len(tasks) == 0 {
 		return
@@ -112,7 +108,7 @@ func sweepTimedOutTasksAt(ctx context.Context, now time.Time) {
 
 	reason := "Task timed out"
 	legacyReason := "Task timed out (a task left by the old system is not refunded; contact the administrator)"
-	nowUnix := now.Unix()
+	now := time.Now().Unix()
 	timedOutCount := 0
 
 	for _, task := range tasks {
@@ -121,7 +117,7 @@ func sweepTimedOutTasksAt(ctx context.Context, now time.Time) {
 		oldStatus := task.Status
 		task.Status = model.TaskStatusFailure
 		task.Progress = "100%"
-		task.FinishTime = nowUnix
+		task.FinishTime = now
 		if isLegacy {
 			task.FailReason = legacyReason
 			// 旧系统任务明确不退款，随终态 CAS 一并清掉 quota，
@@ -209,13 +205,6 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 				nullTasks = append(nullTasks, task)
 				continue
 			}
-			// taskM is keyed by upstream ID across the platform's channels; a
-			// second task with the same ID would receive the first one's result
-			// or refund. Tasks come in id order, so the oldest is polled first
-			// and the others wait for a later round or the timeout sweep.
-			if _, claimed := taskM[upstreamID]; claimed {
-				continue
-			}
 			taskM[upstreamID] = task
 			taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
 		}
@@ -290,7 +279,24 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 	ch, err := model.CacheGetChannel(channelId)
 	if err != nil {
 		common.SysLog(common.LogText("CacheGetChannel: %v", err))
-		return failTasksWithoutChannel(ctx, channelId, taskIds, taskM)
+		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
+		var failedIDs []int64
+		for _, upstreamID := range taskIds {
+			if t, ok := taskM[upstreamID]; ok {
+				failedIDs = append(failedIDs, t.ID)
+			}
+		}
+		err = model.TaskBulkUpdateByID(failedIDs, map[string]any{
+			"fail_reason": "Failed to get the channel information. Please contact the administrator",
+			"status":      "FAILURE",
+			"progress":    "100%",
+		})
+		if err != nil {
+			common.SysLog(common.LogText("UpdateSunoTask error: %v", err))
+		} else {
+			reportFailedTasks(bulkFailedTasks(taskIds, taskM), "Failed to get the channel information. Please contact the administrator")
+		}
+		return err
 	}
 	proxy := ch.GetSetting().Proxy
 	baseURL := ch.GetBaseURL()
@@ -343,19 +349,9 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 // returns for them.
 func pollTaskBatch(ctx context.Context, adaptor BatchTaskPollingAdaptor, ch *model.Channel, baseURL, proxy string, tasks []*model.Task) error {
 	channelId := ch.Id
-	taskIds := make([]string, 0, len(tasks))
-	taskM := make(map[string]*model.Task, len(tasks))
-	for _, task := range tasks {
-		id := task.GetUpstreamTaskID()
-		taskIds = append(taskIds, id)
-		taskM[id] = task
-	}
 	resp, skip, err := doPollRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchBatchTasks(ctx, baseURL, ch.Key, tasks, proxy) })
 	if skip {
 		return err
-	}
-	if errors.Is(err, errPollChannelDeleted) {
-		return failTasksWithoutChannel(ctx, channelId, taskIds, taskM)
 	}
 	if err != nil {
 		common.SysLog(common.LogText("Get Task Do req error: %v", err))
@@ -506,8 +502,22 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	}
 	cacheGetChannel, err := model.CacheGetChannel(channelId)
 	if err != nil {
-		if errFail := failTasksWithoutChannel(ctx, channelId, taskIds, taskM); errFail != nil {
-			return errFail
+		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
+		var failedIDs []int64
+		for _, upstreamID := range taskIds {
+			if t, ok := taskM[upstreamID]; ok {
+				failedIDs = append(failedIDs, t.ID)
+			}
+		}
+		errUpdate := model.TaskBulkUpdateByID(failedIDs, map[string]any{
+			"fail_reason": "Failed to get the channel information. Please contact the administrator",
+			"status":      "FAILURE",
+			"progress":    "100%",
+		})
+		if errUpdate != nil {
+			common.SysLog(common.LogText("UpdateVideoTask error: %v", errUpdate))
+		} else {
+			reportFailedTasks(bulkFailedTasks(taskIds, taskM), "Failed to get the channel information. Please contact the administrator")
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
 	}
@@ -572,9 +582,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	resp, skip, err := doPollRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchTask(ctx, baseURL, key, task, proxy) })
 	if skip {
 		return err
-	}
-	if errors.Is(err, errPollChannelDeleted) {
-		return failTasksWithoutChannel(ctx, ch.Id, []string{taskId}, taskM)
 	}
 	if err != nil {
 		return recordPollFailure(ctx, adaptor, task, snap.Status, pollClassTransport, 0, err.Error())

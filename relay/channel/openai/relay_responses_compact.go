@@ -36,12 +36,9 @@ func OaiResponsesCompactionHandler(c *gin.Context, resp *http.Response) (*dto.Us
 		usage.CompletionTokens = compactResp.Usage.OutputTokens
 		usage.TotalTokens = compactResp.Usage.TotalTokens
 		if compactResp.Usage.InputTokensDetails != nil {
-			details := compactResp.Usage.InputTokensDetails.Clone()
-			usage.PromptTokensDetails.CachedTokens = details.CachedTokens
-			usage.PromptTokensDetails.CachedCreationTokens = details.CachedCreationTokens
-			usage.PromptTokensDetails.CacheWriteTokens = details.CacheWriteTokens
-			usage.PromptTokensDetails.CacheCreationInputTokens = details.CacheCreationInputTokens
-			usage.PromptTokensDetails.CacheWriteTokensDetails = details.CacheWriteTokensDetails
+			usage.PromptTokensDetails.CachedTokens = compactResp.Usage.InputTokensDetails.CachedTokens
+			usage.PromptTokensDetails.CacheWriteTokens = compactResp.Usage.InputTokensDetails.CacheWriteTokens
+			usage.PromptTokensDetails.CacheWriteTokensDetails = compactResp.Usage.InputTokensDetails.CacheWriteTokensDetails
 		}
 	}
 

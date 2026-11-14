@@ -408,13 +408,9 @@ function rewriteDraftTaskContent(content, originTasks) {
 function normalizeResolution(value) {
   const raw = trimmed(value).toLowerCase();
   if (["480p", "720p", "1080p", "4k"].includes(raw)) return raw;
-  const match = /^(\d+)\s*[x*]\s*(\d+)$/i.exec(raw);
-  if (!match) throw new Error("resolution must be one of 480p, 720p, 1080p, 4k, or WIDTHxHEIGHT");
-  const width = Number(match[1]);
-  const height = Number(match[2]);
-  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0)
-    throw new Error("resolution dimensions must be positive integers");
-  const max = Math.max(width, height);
+  const parts = raw.replace("*", "x").split("x");
+  if (parts.length !== 2) return "720p";
+  const max = Math.max(Number(parts[0]), Number(parts[1]));
   if (max >= 3840) return "4k";
   if (max >= 1920) return "1080p";
   if (max >= 1280) return "720p";
@@ -443,67 +439,12 @@ function videoResolution(ctx) {
   const metadata = req.vendorBody || req.metadata || {};
   const profile = videoProfile(ctx);
   const raw = trimmed(metadata.resolution || req.size).toLowerCase();
-  if (!raw) return profile.resolutions.includes("1080p") ? "1080p" : profile.resolutions[profile.resolutions.length - 1];
+  const recognized = SEEDANCE_RESOLUTIONS.includes(raw) || raw.replace("*", "x").split("x").length === 2;
+  if (!recognized) return profile.resolutions.includes("1080p") ? "1080p" : profile.resolutions[profile.resolutions.length - 1];
   const resolution = normalizeResolution(raw);
   if (!profile.resolutions.includes(resolution))
     throw new Error(trimmed(ctx.upstreamModel || ctx.model) + " resolution must be one of " + profile.resolutions.join(", "));
   return resolution;
-}
-
-function requestedVideoDuration(req, metadata) {
-  const selected = req.seconds || req.duration || metadata.duration;
-  if (selected !== undefined) return selected;
-  // || skips falsy keys such as null or false while looking for a fallback.
-  // Without one, the stated key stays distinct from omission (frames-only).
-  return [req.seconds, req.duration].find(hasNonScalarVideoDuration);
-}
-
-function hasNonScalarVideoDuration(value) {
-  // An absent duration still permits frames-only estimation.
-  return value !== undefined && typeof value !== "number" && typeof value !== "string";
-}
-
-function videoDuration(ctx) {
-  const req = ctx.requestBody || {};
-  const metadata = req.vendorBody || req.metadata || {};
-  const profile = videoProfile(ctx);
-  // Native bodies stay intact. Unknown vendor values reserve the maximum;
-  // host-protocol fields below are validated before they are rewritten.
-  if (req.vendorBody) {
-    const stated = req.seconds || req.duration || metadata.duration;
-    let seconds = typeof stated === "number" || typeof stated === "string" ? Number(stated) : 0;
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      const frames = Number(metadata.frames);
-      seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : profile.maxDuration;
-    }
-    if (seconds <= 0) seconds = 5;
-    return Math.min(seconds, 3600);
-  }
-  const raw = requestedVideoDuration(req, metadata);
-  if (hasNonScalarVideoDuration(raw)) return profile.maxDuration;
-  if (raw !== undefined && raw !== null && raw !== "") {
-    const seconds = Number(raw);
-    if (seconds === -1) {
-      if (metadata.frames !== undefined && metadata.frames !== null) throw new Error("frames cannot be combined with automatic duration");
-      return profile.maxDuration;
-    }
-    if (!Number.isInteger(seconds) || seconds <= 0 || seconds > profile.maxDuration)
-      throw new Error("duration must be a positive integer no greater than " + profile.maxDuration + " or -1");
-    if (metadata.frames !== undefined && metadata.frames !== null) {
-      const frames = Number(metadata.frames);
-      if (!Number.isInteger(frames) || frames <= 0 || frames > profile.maxDuration * 24 || Math.floor(frames / 24) !== seconds)
-        throw new Error("frames and duration must describe the same supported output length");
-    }
-    return seconds;
-  }
-  if (metadata.frames !== undefined && metadata.frames !== null) {
-    const frames = Number(metadata.frames);
-    const seconds = Math.floor(frames / 24);
-    if (!Number.isInteger(frames) || frames <= 0 || seconds <= 0 || seconds > profile.maxDuration)
-      throw new Error("frames must describe a positive duration no greater than " + profile.maxDuration + " seconds");
-    return seconds;
-  }
-  return profile.maxDuration;
 }
 
 // Max-pixel 16:9 dimensions per resolution tier. Used when ratio is absent or
@@ -905,8 +846,7 @@ export function buildSubmitRequest(ctx) {
   }
   const req = ctx.requestBody;
   // Reject output tiers the model does not offer before any quota is reserved.
-  const seconds = videoDuration(ctx);
-  const resolution = videoResolution(ctx);
+  videoResolution(ctx);
   if (req.vendorBody) {
     const sent = Object.assign({}, req.vendorBody, { model: ctx.upstreamModel || req.vendorBody.model });
     sent.content = rewriteDraftTaskContent(sent.content, ctx.originTasks);
@@ -922,10 +862,6 @@ export function buildSubmitRequest(ctx) {
   // The host protocols map the prompt, images and seconds onto Ark's fields.
   const metadata = req.metadata || {};
   const body = Object.assign({ model: req.model || "", content: [] }, metadata);
-  if (metadata.resolution !== undefined || req.size !== undefined) body.resolution = resolution;
-  const profile = videoProfile(ctx);
-  if (profile.audio && metadata.generate_audio !== undefined && typeof metadata.generate_audio !== "boolean")
-    throw new Error("generate_audio must be a boolean");
   const imageContent = [];
   const images = Array.isArray(req.images) ? req.images : [];
   for (const url of images) imageContent.push({ type: "image_url", image_url: { url: url } });
@@ -935,9 +871,8 @@ export function buildSubmitRequest(ctx) {
   if (trimmed(req.prompt) || !hasReference) body.content.push({ type: "text", text: req.prompt || "" });
   if (Array.isArray(body.content)) body.content = rewriteDraftTaskContent(body.content, ctx.originTasks);
   // -1 lets the model pick the length; extractUsage reserves the longest one.
-  const rawDuration = requestedVideoDuration(req, metadata);
-  if (hasNonScalarVideoDuration(rawDuration)) delete body.duration;
-  else if (rawDuration !== undefined && rawDuration !== "") body.duration = Number(rawDuration);
+  const seconds = Number.parseInt(req.seconds || "", 10);
+  if (seconds > 0 || seconds === -1) body.duration = seconds;
   body.model = ctx.upstreamModel || body.model;
   return {
     url: apiRoot(ctx) + "/api/v3/contents/generations/tasks",
@@ -1022,7 +957,14 @@ export function extractUsage(ctx) {
   const profile = videoProfile(ctx);
   // A missing duration or -1 (the model picks the length; Seedance 2.5
   // defaults to it) reserves the longest duration the model can produce.
-  const seconds = videoDuration(ctx);
+  const stated = req.seconds || req.duration || metadata.duration;
+  let seconds = typeof stated === "number" || typeof stated === "string" ? Number(stated) : 0;
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    const frames = Number(metadata.frames);
+    seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : profile.maxDuration;
+  }
+  if (seconds <= 0) seconds = 5;
+  seconds = Math.min(seconds, 3600);
   const resolution = videoResolution(ctx);
   const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
   // Every model reports video_input, including those whose profile omits it:

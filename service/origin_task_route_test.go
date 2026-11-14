@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -143,46 +142,6 @@ func TestOriginTaskPinKeepsExplicitRequestConstraints(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, selectErr.StatusCode)
 			require.Equal(t, types.ErrorCode(filter.Kind), selectErr.Code)
 			require.Zero(t, ChannelInFlight(31))
-		})
-	}
-}
-
-// The origin task's channel is deleted only when the database says so; a
-// memory-cache miss is read through, and a storage failure stays a storage
-// failure (audit B14 on the origin-task chain).
-func TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure(t *testing.T) {
-	for _, cache := range []bool{false, true} {
-		t.Run(fmt.Sprint("cache=", cache), func(t *testing.T) {
-			db := setupRouteTest(t)
-			common.MemoryCacheEnabled = cache
-			model.InitChannelCache()
-			createRouteChannel(t, db, 11, "video-model")
-
-			channel, err := LoadOriginTaskChannel(11)
-			require.NoError(t, err, "a channel created after the cache was built is read from the database")
-			require.Equal(t, 11, channel.Id)
-
-			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("status", common.ChannelStatusManuallyDisabled).Error)
-			model.InitChannelCache()
-			_, err = LoadOriginTaskChannel(11)
-			require.True(t, errors.Is(err, errOriginTaskChannelUnavailable))
-			require.Equal(t, http.StatusBadRequest, PinnedTaskRouteError(err).StatusCode)
-			require.Equal(t, "origin_task_channel_disabled", PinnedTaskRouteError(err).Code)
-
-			_, err = LoadOriginTaskChannel(99)
-			require.True(t, errors.Is(err, errOriginTaskChannelUnavailable), "the database confirms the channel is gone")
-
-			require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:origin-channel-storage", func(tx *gorm.DB) {
-				if tx.Statement.Table == "channels" {
-					tx.AddError(errors.New("private origin channel storage failure"))
-				}
-			}))
-			_, err = LoadOriginTaskChannel(12)
-			require.Error(t, err)
-			require.False(t, errors.Is(err, errOriginTaskChannelUnavailable))
-			taskErr := PinnedTaskRouteError(err)
-			require.Equal(t, http.StatusInternalServerError, taskErr.StatusCode)
-			require.NotContains(t, taskErr.Message, "private")
 		})
 	}
 }

@@ -1,0 +1,16 @@
+//go:build known_upstream_restored
+
+package model
+
+import (
+	"context"
+	"gorm.io/gorm"
+)
+
+func restoredControlSelfStat(_ context.Context) (Stat, error) {
+	return SumUsedQuota(LogTypeConsume, 0, 0, "", "probe%", "", 0)
+}
+func restoredControlAdminLogs() ([]*Log, int64, error) { return GetAllLogs(LogFilter{}, 0, 100) }
+func restoredControlAdminQuota() ([]*QuotaData, error) { return GetQuotaDataGroupByUser(0, 2000) }
+
+func restoredControlSeedFlowGroup(db *gorm.DB) error { return nil }

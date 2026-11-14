@@ -369,10 +369,7 @@ func FetchUpstreamModels(c *gin.Context) {
 		return
 	}
 
-	ids, err := fetchChannelUpstreamModelIDs(c.Request.Context(), channel)
-	if rejectBusyChannelManagement(c, err) {
-		return
-	}
+	ids, err := fetchChannelUpstreamModelIDs(channel)
 	if err != nil {
 		common.ApiErrorT(c, "Failed to fetch models: {{error}}", map[string]any{"error": err.Error()})
 		return
@@ -1739,10 +1736,7 @@ func FetchModels(c *gin.Context) {
 		}
 	}
 
-	models, err := fetchChannelUpstreamModelIDs(c.Request.Context(), channel)
-	if rejectBusyChannelManagement(c, err) {
-		return
-	}
+	models, err := fetchChannelUpstreamModelIDs(channel)
 	if err != nil {
 		common.ApiErrorT(c, "Failed to fetch models: {{error}}", map[string]any{"error": err.Error()})
 		return
@@ -2406,18 +2400,13 @@ func OllamaPullModel(c *gin.Context) {
 		return
 	}
 
-	permit, ok := acquireChannelManagement(c, channel)
-	if !ok {
-		return
-	}
-	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
 
 	key := strings.Split(channel.Key, "\n")[0]
-	err = ollama.PullOllamaModel(c.Request.Context(), baseURL, key, req.ModelName)
+	err = ollama.PullOllamaModel(baseURL, key, req.ModelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -2474,11 +2463,6 @@ func OllamaPullModelStream(c *gin.Context) {
 		return
 	}
 
-	permit, ok := acquireChannelManagement(c, channel)
-	if !ok {
-		return
-	}
-	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
@@ -2500,7 +2484,7 @@ func OllamaPullModelStream(c *gin.Context) {
 	}
 
 	// 执行拉取
-	err = ollama.PullOllamaModelStream(c.Request.Context(), baseURL, key, req.ModelName, progressCallback)
+	err = ollama.PullOllamaModelStream(baseURL, key, req.ModelName, progressCallback)
 
 	if err != nil {
 		errorData, _ := json.Marshal(gin.H{
@@ -2561,18 +2545,13 @@ func OllamaDeleteModel(c *gin.Context) {
 		return
 	}
 
-	permit, ok := acquireChannelManagement(c, channel)
-	if !ok {
-		return
-	}
-	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
 
 	key := strings.Split(channel.Key, "\n")[0]
-	err = ollama.DeleteOllamaModel(c.Request.Context(), baseURL, key, req.ModelName)
+	err = ollama.DeleteOllamaModel(baseURL, key, req.ModelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -2615,18 +2594,13 @@ func OllamaVersion(c *gin.Context) {
 		return
 	}
 
-	permit, ok := acquireChannelManagement(c, channel)
-	if !ok {
-		return
-	}
-	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
 
 	key := strings.Split(channel.Key, "\n")[0]
-	version, err := ollama.FetchOllamaVersion(c.Request.Context(), baseURL, key)
+	version, err := ollama.FetchOllamaVersion(baseURL, key)
 	if err != nil {
 		common.ApiErrorT(c, "Failed to fetch Ollama version: {{error}}", map[string]any{"error": err.Error()})
 		return

@@ -1,7 +1,6 @@
 package common
 
 import (
-	stderrors "errors"
 	"fmt"
 	"io"
 	"maps"
@@ -68,8 +67,11 @@ func GetRequestBody(c *gin.Context) (io.Seeker, error) {
 		return nil, readErr.(error)
 	}
 
-	maxBytes := GetRequestBodyLimitBytes()
-	maxMB := int(maxBytes >> 20)
+	maxMB := constant.MaxRequestBodyMB
+	if maxMB <= 0 {
+		maxMB = 128 // 默认 128MB
+	}
+	maxBytes := int64(maxMB) << 20
 
 	contentLength := c.Request.ContentLength
 
@@ -89,16 +91,6 @@ func GetRequestBody(c *gin.Context) (io.Seeker, error) {
 	c.Set(KeyBodyStorage, storage)
 
 	return storage, nil
-}
-
-// GetRequestBodyLimitBytes returns the configured request body limit, using
-// the same default as GetRequestBody when the setting is unset or invalid.
-func GetRequestBodyLimitBytes() int64 {
-	maxMB := constant.MaxRequestBodyMB
-	if maxMB <= 0 {
-		maxMB = 128
-	}
-	return int64(maxMB) << 20
 }
 
 // GetBodyStorage 获取请求体存储对象（用于需要多次读取的场景）
@@ -373,16 +365,6 @@ func init() {
 }
 
 func ParseMultipartFormReusable(c *gin.Context) (*multipart.Form, error) {
-	return parseMultipartFormReusable(c, false)
-}
-
-// ParseTaskMultipartFormReusable allows task text fields up to the request body
-// limit without increasing the memory budget for uploaded files.
-func ParseTaskMultipartFormReusable(c *gin.Context) (*multipart.Form, error) {
-	return parseMultipartFormReusable(c, true)
-}
-
-func parseMultipartFormReusable(c *gin.Context, taskFields bool) (*multipart.Form, error) {
 	storage, err := GetBodyStorage(c)
 	if err != nil {
 		return nil, err
@@ -407,19 +389,15 @@ func parseMultipartFormReusable(c *gin.Context, taskFields bool) (*multipart.For
 	}
 	defer body.Close()
 	reader := multipart.NewReader(body, boundary)
-	var form *multipart.Form
-	if taskFields {
-		form, err = readTaskMultipartForm(reader, GetRequestBodyLimitBytes(), multipartMemoryLimit())
-	} else {
-		form, err = reader.ReadForm(multipartMemoryLimit())
-	}
+	form, err := reader.ReadForm(multipartMemoryLimit())
 	if err != nil {
 		return nil, err
 	}
 
 	// Reset request body
 	if _, seekErr := storage.Seek(0, io.SeekStart); seekErr != nil {
-		return nil, stderrors.Join(seekErr, form.RemoveAll())
+		_ = form.RemoveAll()
+		return nil, seekErr
 	}
 	c.Request.Body = io.NopCloser(storage)
 	return form, nil

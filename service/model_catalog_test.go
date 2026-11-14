@@ -9,7 +9,7 @@ import (
 )
 
 func TestModelCatalogSharesRoutingConstraintsAndPublicPrices(t *testing.T) {
-	db := setupRouteTest(t)
+	db := setupCatalogRouteTest(t)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Model{}, &model.Vendor{}, &model.Option{}))
 	require.NoError(t, db.Create(&model.User{Id: 17, Username: "catalog-owner"}).Error)
 	createRouteChannel(t, db, 1, "gpt-4o,hidden-model")
@@ -54,7 +54,7 @@ func TestModelCatalogSharesRoutingConstraintsAndPublicPrices(t *testing.T) {
 }
 
 func TestModelCatalogSpecializedPricesKeepBillingIdentityAndScaleOnce(t *testing.T) {
-	db := setupRouteTest(t)
+	db := setupCatalogRouteTest(t)
 	previousUnit := common.QuotaPerUnit
 	common.QuotaPerUnit = 500000
 	t.Cleanup(func() { common.QuotaPerUnit = previousUnit })

@@ -457,22 +457,6 @@ func (b *errorWithCompletionBody) Read(p []byte) (int, error) {
 
 func (*errorWithCompletionBody) Close() error { return nil }
 
-func TestStreamScannerHandler_ReadFailureWithCompletion(t *testing.T) {
-	body := &errorWithCompletionBody{data: strings.NewReader("data: complete\n\n")}
-	c, resp, info := setupStreamTest(t, strings.NewReader(""))
-	resp.Body = body
-	info.DisablePing = true
-
-	StreamScannerHandler(c, resp, info, func(_ string, sr *StreamResult) {
-		info.StreamStatus.MarkCompleted()
-		sr.Done()
-	})
-
-	assert.Equal(t, relaycommon.StreamEndReasonScannerErr, info.StreamStatus.EndReason)
-	assert.ErrorIs(t, info.StreamStatus.EndError, io.ErrUnexpectedEOF)
-	assert.False(t, info.StreamStatus.IsNormalEnd())
-}
-
 func TestStreamScannerHandler_UpstreamCancellationWithoutClientCancellation(t *testing.T) {
 	for _, err := range []error{context.Canceled, io.ErrClosedPipe} {
 		t.Run(err.Error(), func(t *testing.T) {

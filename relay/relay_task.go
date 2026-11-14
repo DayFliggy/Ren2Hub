@@ -29,7 +29,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type TaskSubmitResult struct {
@@ -71,9 +70,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 查找原始任务
 	originTask, exist, err := model.GetByTaskId(info.UserId, info.OriginTaskID)
 	if err != nil {
-		taskErr := service.PinnedTaskRouteError(err)
-		taskErr.Code = "get_origin_task_failed"
-		return taskErr
+		return service.TaskErrorWrapper(err, "get_origin_task_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 	}
 	if !exist {
 		return service.TaskErrorWrapperLocal(errors.New("task_origin_not_exist"), "task_not_exist", http.StatusBadRequest)
@@ -97,10 +94,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 锁定到原始任务的渠道（重试时复用同一渠道，轮换 key）
 	ch, err := model.GetChannelById(originTask.ChannelId, true)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task was not found"), "channel_not_found", http.StatusBadRequest)
-		}
-		return service.PinnedTaskRouteError(err)
+		return service.TaskErrorWrapperLocal(err, "channel_not_found", http.StatusBadRequest)
 	}
 	if ch.Status != common.ChannelStatusEnabled {
 		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
@@ -185,9 +179,12 @@ func ApplyChannelPin(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError
 	if !found || pin.RetryMode != dto.PinRetrySameChannel {
 		return nil
 	}
-	ch, err := service.LoadOriginTaskChannel(pin.ChannelId)
+	ch, err := model.CacheGetChannel(pin.ChannelId)
 	if err != nil {
-		return service.PinnedTaskRouteError(err)
+		return service.TaskErrorWrapperLocal(err, "origin_task_channel_disabled", http.StatusBadRequest)
+	}
+	if ch.Status != common.ChannelStatusEnabled {
+		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "origin_task_channel_disabled", http.StatusBadRequest)
 	}
 	info.LockedChannel = ch
 	return nil

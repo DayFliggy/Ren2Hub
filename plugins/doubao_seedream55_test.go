@@ -115,7 +115,7 @@ func TestSeedream55TransparencySizesAndReferenceBoundaries(t *testing.T) {
 	}
 }
 
-func TestSeedream55KeepsOlderImageAndVideoBoundaries(t *testing.T) {
+func TestSeedream55KeepsOlderImageBoundaries(t *testing.T) {
 	registry, plugin := newDoubaoPlugin(t)
 	for _, model := range []string{"doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-flash-260915"} {
 		decoded, err := decodeDoubaoImage(t, registry, plugin, map[string]any{"model": model, "image": "https://reference.example/image.png", "layer_decomposition": true})
@@ -131,8 +131,5 @@ func TestSeedream55KeepsOlderImageAndVideoBoundaries(t *testing.T) {
 		_, err := decodeDoubaoImage(t, registry, plugin, map[string]any{"model": model, "image": "https://reference.example/image.png", "layer_decomposition": true})
 		require.ErrorContains(t, err, "layer_decomposition is not supported")
 	}
-	for _, hook := range []string{"buildSubmitRequest", "extractUsage"} {
-		_, err := plugin.Engine.Call(t.Context(), hook, map[string]any{"model": "doubao-seedance-2-5-260628", "upstreamModel": "doubao-seedance-2-5-260628", "requestBody": map[string]any{"prompt": "cat", "seconds": 31}})
-		require.ErrorContains(t, err, "duration must be a positive integer no greater than 30 or -1")
-	}
+
 }

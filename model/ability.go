@@ -229,3 +229,9 @@ func FixAbility() (int, int, error) {
 	BumpSyncTopic(SyncTopicChannels)
 	return successCount, failCount, nil
 }
+
+func GetAllEnableAbilities() []Ability {
+	var abilities []Ability
+	DB.Find(&abilities, "enabled = ?", true)
+	return abilities
+}

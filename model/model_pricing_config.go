@@ -97,7 +97,7 @@ func defaultPricingMaps() map[string]map[string]any {
 
 func readModelPricingMaps(db *gorm.DB) (map[string]map[string]any, map[string]bool, []string, error) {
 	var rows []Option
-	if err := db.Where(map[string]any{"key": modelPricingOptionKeys}).Find(&rows).Error; err != nil {
+	if err := db.Where(commonKeyCol+" IN ?", modelPricingOptionKeys).Find(&rows).Error; err != nil {
 		return nil, nil, nil, err
 	}
 	values := defaultPricingMaps()
@@ -188,8 +188,12 @@ func effectiveModelPricing(values map[string]map[string]any, name string) Pricin
 	if _, exists := result["ModelRatio"]; !exists && operation_setting.SelfUseModeEnabled {
 		result["ModelRatio"] = float64(37.5)
 	}
+	var configuredCompletion *float64
+	if ratio, exists := result["CompletionRatio"].(float64); exists {
+		configuredCompletion = &ratio
+	}
+	result["CompletionRatio"] = ratio_setting.ResolveCompletionRatio(name, configuredCompletion).Ratio
 	for key, fallback := range map[string]float64{
-		"CompletionRatio":  ratio_setting.DefaultCompletionRatio,
 		"CacheRatio":       ratio_setting.DefaultCacheRatio,
 		"CreateCacheRatio": ratio_setting.DefaultCreateCacheRatio,
 		"ImageRatio":       ratio_setting.DefaultImageRatio,

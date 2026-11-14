@@ -22,48 +22,19 @@ import (
 var negativeIndexRegexp = regexp.MustCompile(`\.(-\d+)`)
 
 // Param override rules are re-parsed for every request, so compiled patterns are
-// shared by pattern text. The FIFO bound prevents administrator-supplied patterns
-// from growing process memory without limit.
-const paramOverrideRegexCacheLimit = 256
-const paramOverrideRegexCacheMaxBytes = 256 * 1024
-const paramOverrideRegexCacheMaxPatternBytes = 4096
-
-var paramOverrideRegexCache = struct {
-	sync.RWMutex
-	values map[string]*regexp.Regexp
-	order  []string
-	bytes  int
-}{values: make(map[string]*regexp.Regexp)}
+// shared by pattern text instead of being stored on the parsed operations.
+var paramOverrideRegexCache sync.Map // map[string]*regexp.Regexp
 
 func getParamOverrideRegex(pattern string) (*regexp.Regexp, error) {
-	if len(pattern) > paramOverrideRegexCacheMaxPatternBytes {
-		return regexp.Compile(pattern)
+	if cached, ok := paramOverrideRegexCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp), nil
 	}
-	paramOverrideRegexCache.RLock()
-	if cached, ok := paramOverrideRegexCache.values[pattern]; ok {
-		paramOverrideRegexCache.RUnlock()
-		return cached, nil
-	}
-	paramOverrideRegexCache.RUnlock()
 	compiled, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, err
 	}
-	paramOverrideRegexCache.Lock()
-	defer paramOverrideRegexCache.Unlock()
-	if cached, ok := paramOverrideRegexCache.values[pattern]; ok {
-		return cached, nil
-	}
-	for len(paramOverrideRegexCache.order) >= paramOverrideRegexCacheLimit || paramOverrideRegexCache.bytes+len(pattern) > paramOverrideRegexCacheMaxBytes {
-		oldest := paramOverrideRegexCache.order[0]
-		delete(paramOverrideRegexCache.values, oldest)
-		paramOverrideRegexCache.bytes -= len(oldest)
-		paramOverrideRegexCache.order = paramOverrideRegexCache.order[1:]
-	}
-	paramOverrideRegexCache.values[pattern] = compiled
-	paramOverrideRegexCache.order = append(paramOverrideRegexCache.order, pattern)
-	paramOverrideRegexCache.bytes += len(pattern)
-	return compiled, nil
+	actual, _ := paramOverrideRegexCache.LoadOrStore(pattern, compiled)
+	return actual.(*regexp.Regexp), nil
 }
 
 const (

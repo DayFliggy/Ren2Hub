@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "classification": "restored_diagnostics",
+  "success": false,
+  "comparison_success": true,
+  "ordinary_unit_pass": false,
+  "scope": "10个恢复原生行为诊断分别运行 SQLite/MySQL/PostgreSQL；不计为普通PASS或普通race通过",
+  "baseline": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "raw_report": {
+    "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/report.json",
+    "sha256": "f0c58b47a4f14ad77d63dd993723de715eda8f94a4b471ab4dd868347b856175"
+  },
+  "summary": {
+    "baseline_passed": 30,
+    "native_restored_differences": 30,
+    "current_matching_differences": 30,
+    "unknown_differences": 0,
+    "cleanup_errors": 0,
+    "source_unchanged": true
+  },
+  "cases": [
+    {
+      "dialect": "sqlite",
+      "baseline_passed": 10,
+      "native_restored_differences": 10,
+      "current_matching_differences": 10,
+      "unknown_differences": 0,
+      "logs": {
+        "control-baseline-probes": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-baseline-probes-sqlite.jsonl",
+          "sha256": "43629fae74e0adf34679a92ec8cdc298d49e11987d113c703ffd6344a3bbe6b2"
+        },
+        "control-native-probes": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-native-probes-sqlite.jsonl",
+          "sha256": "5fb83ad3c0453a2086b88712db9cfa8a46d3e502462bd503a19d06e5c10bd765"
+        },
+        "app": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/app-sqlite.jsonl",
+          "sha256": "17ea404c19f8e53cd8d153cf05c718792418ba5eedfdca76925ec9886d0cc3da"
+        }
+      }
+    },
+    {
+      "dialect": "mysql",
+      "baseline_passed": 10,
+      "native_restored_differences": 10,
+      "current_matching_differences": 10,
+      "unknown_differences": 0,
+      "logs": {
+        "control-baseline-probes": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-baseline-probes-mysql.jsonl",
+          "sha256": "aee12f4a08beb14ee016c815237661e8a5135a8aaedbde11101db292dffb3510"
+        },
+        "control-native-probes": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-native-probes-mysql.jsonl",
+          "sha256": "8ea79b622255c8e66c60e47e60edfbb56abf5e9db51b27931b134c757fa7b177"
+        },
+        "app": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/app-mysql.jsonl",
+          "sha256": "47c04dc26f7248122021c90af64813da21892ebae23ff4272c056101c47eec74"
+        }
+      }
+    },
+    {
+      "dialect": "postgres",
+      "baseline_passed": 10,
+      "native_restored_differences": 10,
+      "current_matching_differences": 10,
+      "unknown_differences": 0,
+      "logs": {
+        "control-baseline-probes": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-baseline-probes-postgres.jsonl",
+          "sha256": "4ef418a7a9f703adaaea1bf4a6ee88b7583593e6a40b67fa0b508c09ddae8ccd"
+        },
+        "control-native-probes": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-native-probes-postgres.jsonl",
+          "sha256": "d5daf0fa6e838dfaf830b672f2ee3c77699e6cd442fd307fb33af2f06c4b5a3a"
+        },
+        "app": {
+          "path": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/app-postgres.jsonl",
+          "sha256": "1eadd3a6b39b8b90a16b158972513a118bc95ffee92c7d49a6a8d54756f88f21"
+        }
+      }
+    }
+  ],
+  "tests": [
+    "TestRestoredNativeControlOptionWriteFailure",
+    "TestRestoredNativeControlOptionCreatedRowRollback",
+    "TestRestoredNativeControlCurrencyValidation",
+    "TestRestoredNativeControlConsoleNormalization",
+    "TestRestoredNativeControlCredentialSQL",
+    "TestRestoredNativeControlSelfStatIdentity",
+    "TestRestoredNativeControlAdminLogs",
+    "TestRestoredNativeControlPricingFailure",
+    "TestRestoredNativeControlRootReadFailure",
+    "TestRestoredNativeControlAdminQuota"
+  ],
+  "current_fixtures": {
+    "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
+    "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1"
+  }
+}

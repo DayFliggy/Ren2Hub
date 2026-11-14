@@ -1,0 +1,5 @@
+package model
+import ("context"; "github.com/QuantumNous/new-api/common")
+func restoredControlSelfStat(ctx context.Context)(Stat,error){return SumUserUsedQuota(ctx,1,LogFilter{})}
+func restoredControlAdminLogs()([]*Log,int64,error){return GetAllLogs(LogFilter{},0,100,common.RoleAdminUser)}
+func restoredControlAdminQuota()([]*QuotaData,error){return GetQuotaDataGroupByUser(0,2000,common.RoleAdminUser)}

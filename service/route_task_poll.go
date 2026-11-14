@@ -23,14 +23,7 @@ var pollSkipLog struct {
 	suppressed int
 }
 
-// errPollChannelDeleted 表示准入时数据库已没有这个渠道，请求没有发出。调用方用自己持有的
-// 任务走渠道缺失流程（failTasksWithoutChannel），不计入上游轮询失败。
-var errPollChannelDeleted = errors.New("task poll channel deleted before send")
-
-// doPollRequest 在渠道并发许可下发送一次轮询请求。skip 为 true 时调用方应立即返回 err：
-// 满载或上限读不到时跳过，err 为 nil；轮询被取消时 err 为 ctx.Err()。准入时渠道已删除返回
-// errPollChannelDeleted。其余情况 resp 和 err 是上游请求的结果。准入阶段的错误只来自
-// AcquireChannelConcurrency，发送阶段不会产生这些哨兵错误。
+// doPollRequest 在实际请求期间持有渠道许可；准入失败仅跳过本轮，取消仍返回 ctx.Err()。
 func doPollRequest(ctx context.Context, ch *model.Channel, fetch func() (*http.Response, error)) (resp *http.Response, skip bool, err error) {
 	resp, err = DoChannelRequest(ctx, ch, fetch)
 	if errors.Is(err, ErrConcurrencyFull) {
@@ -42,7 +35,8 @@ func doPollRequest(ctx context.Context, ch *model.Channel, fetch func() (*http.R
 		return nil, true, nil
 	}
 	if errors.Is(err, errConcurrencyResourceDeleted) {
-		return nil, false, errPollChannelDeleted
+		logPollSkip(ctx, ch.Id, "was deleted before admission")
+		return nil, true, nil
 	}
 	if ctx.Err() != nil {
 		if resp != nil && resp.Body != nil {

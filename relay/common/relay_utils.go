@@ -44,15 +44,15 @@ func SanitizeURLForLog(rawURL string) string {
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return "***invalid-url***"
+		return rawURL
 	}
 
-	query, queryErr := url.ParseQuery(parsedURL.RawQuery)
-	// ParseQuery drops malformed pairs. Never return the original query after
-	// that loss: the dropped bytes may contain a credential we could not decode.
-	changed := queryErr != nil || parsedURL.User != nil || parsedURL.Fragment != ""
-	parsedURL.User = nil
-	parsedURL.Fragment, parsedURL.RawFragment = "", ""
+	query := parsedURL.Query()
+	if len(query) == 0 {
+		return rawURL
+	}
+
+	changed := false
 	for key := range query {
 		if isSensitiveURLQueryKey(key) {
 			query.Set(key, "***masked***")
@@ -86,9 +86,7 @@ func isSensitiveURLQueryKey(key string) bool {
 		"password",
 		"passwd",
 		"signature",
-		"sign",
 		"sig",
-		"x-goog-credential",
 		"awsaccesskeyid",
 		"x-amz-credential",
 		"x-amz-security-token",

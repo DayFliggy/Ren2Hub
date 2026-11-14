@@ -14,8 +14,6 @@ import (
 var (
 	// ErrTopUpReceiptMismatch 表示已验签回调的币种或金额与订单冻结的应付值不一致。
 	ErrTopUpReceiptMismatch = errors.New("payment receipt does not match the order")
-	// ErrTopUpTypeUnsupported 表示回调属于本地已退役的订单类型（如订阅）。
-	ErrTopUpTypeUnsupported = errors.New("payment order type is not supported")
 )
 
 // TopUpReceipt 是回调中已验签的应付币种和金额，Currency 为大写 ISO 代码。
@@ -38,40 +36,13 @@ func matchTopUpReceipt(order *TopUp, receipt *TopUpReceipt) error {
 	return nil
 }
 
-// TopUpCallbackRetryable 是支付回调“错误→是否可重试”的唯一映射。永久错误重试也不会成功：
-// 订单不存在、渠道或类型不符、回执不符、订单状态不允许、用户已删除；订单保持未完成，由管理员核实。
-// 其余错误（数据库不可用、钱包暂时放不下等）让支付平台稍后重试。
-func TopUpCallbackRetryable(err error) bool {
-	for _, permanent := range []error{
-		ErrTopUpNotFound, ErrPaymentMethodMismatch, ErrTopUpStatusInvalid, ErrTopUpReceiptMismatch,
-		ErrTopUpTypeUnsupported, ErrInvalidTopUpQuota, ErrGmpayPaymentMismatch, ErrGmpaySnapshotMissing,
-		gorm.ErrRecordNotFound,
-	} {
-		if errors.Is(err, permanent) {
-			return false
-		}
-	}
-	return true
-}
-
-// RecordTopUpCallbackRejection 记录一次已验签但被永久拒绝、没有入账的回调。
-// 调用方是支付平台而不是站内用户，ActorRole 留空，记录只对 Root 可见。
-func RecordTopUpCallbackRejection(callerIP, provider, tradeNo string, userID int, reason error) {
-	params := map[string]any{"provider": provider, "trade_no": tradeNo, "reason": reason.Error()}
-	RecordAuditLog(nil, AuditLog{
-		UserId: userID, Category: AuditCategorySecurity, Action: "payment.callback_rejected", Ip: callerIP,
-		Content: "Payment callback rejected without crediting", Status: 200,
-		Other: AuditOther{Op: &AuditOperation{Action: "payment.callback_rejected", Params: params}},
-	})
-}
-
 // topUpSettlement 描述一次入账尝试。渠道只提供自己的差异：mutate 在订单行锁内、
 // provider 校验之后运行，可以改写订单字段或拒绝回执，并返回需要随额度一起写入用户表的列。
 type topUpSettlement struct {
 	tradeNo string
 	// provider 为空表示管理员补单，接受任意渠道的订单；人工补单由审计中间件记录。
 	provider string
-	// receipt 为 nil 表示该渠道的实付金额语义尚未核实，不做金额核对。
+	// receipt 仅用于有冻结金额合同的渠道；nil 沿用该原生渠道的结算规则。
 	receipt   *TopUpReceipt
 	callerIP  string
 	logMethod string
@@ -90,7 +61,7 @@ func settleTopUp(s topUpSettlement) (*TopUp, int, error) {
 	quota := 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where("trade_no = ?", s.tradeNo).First(order).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
+			if errors.Is(err, gorm.ErrRecordNotFound) || s.provider == PaymentProviderEpay {
 				return ErrTopUpNotFound
 			}
 			return err
@@ -126,9 +97,6 @@ func settleTopUp(s topUpSettlement) (*TopUp, int, error) {
 		return err
 	})
 	if err != nil {
-		if s.provider != "" && !TopUpCallbackRetryable(err) {
-			RecordTopUpCallbackRejection(s.callerIP, s.provider, s.tradeNo, order.UserId, err)
-		}
 		return nil, 0, err
 	}
 	if quota > 0 {

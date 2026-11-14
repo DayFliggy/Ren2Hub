@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -516,21 +515,8 @@ func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
 	return tx, nil
 }
 
-// adminLogQuery scopes raw logs before filtering, counting or exporting. The
-// identity lookup runs on DB because LOG_DB may be a separate database.
-func adminLogQuery(ctx context.Context, viewerRole int) (*gorm.DB, error) {
-	if LOG_DB == nil {
-		return nil, errors.New("log database is unavailable")
-	}
-	return scopeAdminUsageQuery(LOG_DB.WithContext(ctx), viewerRole)
-}
-
-func GetAllLogs(filter LogFilter, startIdx int, num int, viewerRole int) (logs []*Log, total int64, err error) {
-	tx, err := adminLogQuery(context.Background(), viewerRole)
-	if err != nil {
-		return nil, 0, err
-	}
-	tx, err = filter.apply(tx)
+func GetAllLogs(filter LogFilter, startIdx int, num int) (logs []*Log, total int64, err error) {
+	tx, err := filter.apply(LOG_DB)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -623,11 +609,7 @@ func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*L
 // administrator with role sees it. Rows are read one at a time, so an export
 // never holds the whole result in memory.
 func StreamAllLogs(ctx context.Context, filter LogFilter, role int, fn func(*Log) error) error {
-	tx, err := adminLogQuery(ctx, role)
-	if err != nil {
-		return err
-	}
-	tx, err = filter.apply(tx)
+	tx, err := filter.apply(LOG_DB.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -696,45 +678,44 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func SumAdminUsedQuota(ctx context.Context, viewerRole int, filter LogFilter) (Stat, error) {
-	query, err := adminLogQuery(ctx, viewerRole)
-	if err != nil {
-		return Stat{}, err
-	}
-	return sumUsedQuota(query, filter)
-}
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int) (stat Stat, err error) {
+	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota")
 
-func SumUserUsedQuota(ctx context.Context, userID int, filter LogFilter) (Stat, error) {
-	if userID <= 0 {
-		return Stat{}, errors.New("invalid log user")
-	}
-	if LOG_DB == nil {
-		return Stat{}, errors.New("log database is unavailable")
-	}
-	// A username can contain LIKE wildcards or change after logs are written.
-	// Neither the current username nor a supplied filter defines ownership.
-	filter.Username = ""
-	return sumUsedQuota(LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userID), filter)
-}
+	// 为rpm和tpm创建单独的查询
+	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
 
-func sumUsedQuota(query *gorm.DB, filter LogFilter) (stat Stat, err error) {
-	filter.Type = LogTypeConsume
-	query = query.Table("logs").Session(&gorm.Session{})
-	tx, err := filter.apply(query)
-	if err != nil {
+	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
 		return stat, err
 	}
-	tx = tx.Select("COALESCE(sum(quota), 0) quota")
-
-	// RPM and TPM remain a rolling 60-second measurement, independent of the
-	// selected quota window, but share the same identity and search filters.
-	filter.StartTimestamp = time.Now().Add(-60 * time.Second).Unix()
-	filter.EndTimestamp = 0
-	rpmTpmQuery, err := filter.apply(query)
-	if err != nil {
+	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "username", username); err != nil {
 		return stat, err
 	}
-	rpmTpmQuery = rpmTpmQuery.Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
+	}
+	if startTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
+		return stat, err
+	}
+	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
+		return stat, err
+	}
+	if channel != 0 {
+		tx = tx.Where("channel_id = ?", channel)
+		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)
+	}
+
+	tx = tx.Where("type = ?", LogTypeConsume)
+	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
+
+	// 只统计最近60秒的rpm和tpm
+	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
 
 	// 执行查询
 	if err := tx.Scan(&stat).Error; err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/logger"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 )
 
@@ -117,4 +118,39 @@ func CacheUpdateChannelStatus(id int, status int) {
 	if channel, ok := channelsIDM[id]; ok {
 		channel.Status = status
 	}
+}
+
+func CacheUpdateChannel(channel *Channel) {
+	if !common.MemoryCacheEnabled {
+		return
+	}
+	channelSyncLock.Lock()
+	if channel == nil {
+		channelSyncLock.Unlock()
+		return
+	}
+
+	if channelsIDM == nil {
+		channelsIDM = make(map[int]*Channel)
+	}
+	if oldChannel, ok := channelsIDM[channel.Id]; ok {
+		logger.LogDebug(nil, "CacheUpdateChannel before: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, oldChannel.ChannelInfo.MultiKeyPollingIndex)
+	}
+	channelsIDM[channel.Id] = channel
+	if channel2advancedCustomConfig == nil {
+		channel2advancedCustomConfig = make(map[int]*kitdto.AdvancedCustomConfig)
+	}
+	delete(channel2advancedCustomConfig, channel.Id)
+	if channel.Type == constant.ChannelTypeAdvancedCustom {
+		if config := channel.GetOtherSettings().AdvancedCustom; config != nil {
+			channel2advancedCustomConfig[channel.Id] = config
+		}
+	}
+	logger.LogDebug(nil, "CacheUpdateChannel after: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, channel.ChannelInfo.MultiKeyPollingIndex)
+	// Lock ordering: do NOT hold channelSyncLock while calling
+	// InvalidatePricingCache. GetPricing acquires updatePricingLock first and then
+	// channelSyncLock.RLock (via loadPricingAdvancedCustomConfigs); acquiring
+	// updatePricingLock while holding channelSyncLock would be an AB-BA deadlock.
+	channelSyncLock.Unlock()
+	InvalidatePricingCache()
 }

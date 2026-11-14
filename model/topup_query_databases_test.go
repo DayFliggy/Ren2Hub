@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-// 排行的 SUM/GROUP BY/ORDER BY SUM、封顶计数的派生表和 ESCAPE '!' 都是方言敏感的
+// 排行的 SUM/GROUP BY/ORDER BY SUM、原生 COUNT 和 ESCAPE '!' 都是方言敏感的
 // SQL：PostgreSQL 的 SUM(bigint) 返回 numeric，MySQL 返回 DECIMAL，都要能扫描进 int64。
 func TestTopUpQueryDatabases(t *testing.T) {
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {

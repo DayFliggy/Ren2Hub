@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "total_selected_top_level_executions": 148,
+  "groups": [
+    {
+      "id": "original-model",
+      "package": "model",
+      "pattern": "^(TestRedeemConcurrentSingleSuccess|TestPollingFreshRouteCandidatesAndCacheSync|TestPollingSkipsDisabledKeysAndHandlesShortenedKeyList|TestPollingConcurrentRequestsAndCacheRebuild|TestPollingDoesNotLoseConcurrentMultiKeyStatus|TestPollingCursorPersistenceFailureStillSelectsKey|TestAffiliateConcurrentAdminAndTransferOperations)$",
+      "names": [
+        "TestRedeemConcurrentSingleSuccess",
+        "TestPollingFreshRouteCandidatesAndCacheSync",
+        "TestPollingSkipsDisabledKeysAndHandlesShortenedKeyList",
+        "TestPollingConcurrentRequestsAndCacheRebuild",
+        "TestPollingDoesNotLoseConcurrentMultiKeyStatus",
+        "TestPollingCursorPersistenceFailureStillSelectsKey",
+        "TestAffiliateConcurrentAdminAndTransferOperations"
+      ]
+    },
+    {
+      "id": "original-service",
+      "package": "service",
+      "pattern": "^(TestConcurrencyUnlimitedHotUpdateAndOnceRelease|TestConcurrencySlowPublicationDoesNotBlockUnrelatedAdmission|TestConcurrencyPendingPublicationCannotAdmitWithStaleLimit|TestConcurrencyParallelNeverExceedsLimit|TestConcurrencyRefreshUsesCommittedValueAndKeepsBorrowers|TestConcurrencyCommittedPublicationSurvivesCallerCancellation|TestConcurrencyFailedPublicationRepairsBeforeAdmission|TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure|TestDeletedChannelRejectsStaleAdmission|TestReleaseDeletedUserForgetsConcurrency|TestConcurrencyAdmissionErrorClassifiesRealFailures|TestEvaluateTopUpDiscountFormula|TestResolveTopUpDiscountFromHourlyWindows|TestResolveTopUpDiscountFailureRules|TestTopUpDiscountDayIsStableAndRollsOver|TestTopUpDiscountSiteTotalFollowsConfigVersion|TestResolveTopUpDiscountConcurrentAcrossMidnight|TestTopUpDiscountConcurrentFirstReadsShareOneQuery|TestTopUpDiscountSelfViewHidesSiteTotalAndShadow|TestEstimateTopUpDiscountReplaysTopUps|TestEstimateTopUpDiscountBucketsOrdersByLocalMidnights|TestObservationTrafficConcurrentSampleAndRead|TestChannelLimitReadFailureIsConcurrencyUnavailable|TestTaskPollAdmissionFailuresAreNotUpstreamFailures|TestTaskPollAdmissionDeletionSkipsWithoutSideEffects)$",
+      "names": [
+        "TestConcurrencyUnlimitedHotUpdateAndOnceRelease",
+        "TestConcurrencySlowPublicationDoesNotBlockUnrelatedAdmission",
+        "TestConcurrencyPendingPublicationCannotAdmitWithStaleLimit",
+        "TestConcurrencyParallelNeverExceedsLimit",
+        "TestConcurrencyRefreshUsesCommittedValueAndKeepsBorrowers",
+        "TestConcurrencyCommittedPublicationSurvivesCallerCancellation",
+        "TestConcurrencyFailedPublicationRepairsBeforeAdmission",
+        "TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure",
+        "TestDeletedChannelRejectsStaleAdmission",
+        "TestReleaseDeletedUserForgetsConcurrency",
+        "TestConcurrencyAdmissionErrorClassifiesRealFailures",
+        "TestEvaluateTopUpDiscountFormula",
+        "TestResolveTopUpDiscountFromHourlyWindows",
+        "TestResolveTopUpDiscountFailureRules",
+        "TestTopUpDiscountDayIsStableAndRollsOver",
+        "TestTopUpDiscountSiteTotalFollowsConfigVersion",
+        "TestResolveTopUpDiscountConcurrentAcrossMidnight",
+        "TestTopUpDiscountConcurrentFirstReadsShareOneQuery",
+        "TestTopUpDiscountSelfViewHidesSiteTotalAndShadow",
+        "TestEstimateTopUpDiscountReplaysTopUps",
+        "TestEstimateTopUpDiscountBucketsOrdersByLocalMidnights",
+        "TestObservationTrafficConcurrentSampleAndRead",
+        "TestChannelLimitReadFailureIsConcurrencyUnavailable",
+        "TestTaskPollAdmissionFailuresAreNotUpstreamFailures",
+        "TestTaskPollAdmissionDeletionSkipsWithoutSideEffects"
+      ]
+    },
+    {
+      "id": "original-websocket",
+      "package": "controller",
+      "pattern": "^(TestResponsesWebSocketReusesConnectionAndSettlesEachRequest|TestResponsesWebSocketDisconnectSettlesDeliveredOutputOnce)$",
+      "names": [
+        "TestResponsesWebSocketReusesConnectionAndSettlesEachRequest",
+        "TestResponsesWebSocketDisconnectSettlesDeliveredOutputOnce"
+      ]
+    },
+    {
+      "id": "original-listener",
+      "package": "common",
+      "pattern": "^(TestCountingListenerConcurrentConnections)$",
+      "names": [
+        "TestCountingListenerConcurrentConnections"
+      ]
+    },
+    {
+      "id": "original-credentials",
+      "package": "service",
+      "names": [
+        "TestRefreshConcurrentRequestsMakeOnePluginCall",
+        "TestRefreshTwoNodesMakeOnePluginCall",
+        "TestRefreshPluginCallHoldsNoChannelLock",
+        "TestRefreshRotatedTokenIsNeverSentAgain",
+        "TestRefreshMergesItsResult",
+        "TestRefreshRemovedCredential",
+        "TestPluginLoginConcurrentSubmitRunsThePluginOnce",
+        "TestPluginLoginConcurrentLoginsHoldOneAccountOnce",
+        "TestScheduledStaleRemovedAndManualKeys",
+        "TestScheduledCancellationAndTLSKeepStoredState"
+      ],
+      "pattern": "^(TestRefreshConcurrentRequestsMakeOnePluginCall|TestRefreshTwoNodesMakeOnePluginCall|TestRefreshPluginCallHoldsNoChannelLock|TestRefreshRotatedTokenIsNeverSentAgain|TestRefreshMergesItsResult|TestRefreshRemovedCredential|TestPluginLoginConcurrentSubmitRunsThePluginOnce|TestPluginLoginConcurrentLoginsHoldOneAccountOnce|TestScheduledStaleRemovedAndManualKeys|TestScheduledCancellationAndTLSKeepStoredState)$"
+    },
+    {
+      "id": "stream-lifecycle",
+      "package": "relay/helper",
+      "names": [
+        "TestStreamScannerHandler_RequestKeepAliveHandoff",
+        "TestStreamScannerHandler_NilInputs",
+        "TestNewStreamScanner_AllowsLargeStreamLine",
+        "TestStreamScannerHandler_EmptyBody",
+        "TestStreamScannerHandler_1000Chunks",
+        "TestStreamScannerHandler_OrderPreserved",
+        "TestStreamScannerHandler_DoneStopsScanner",
+        "TestStreamScannerHandler_StopStopsStream",
+        "TestStreamScannerHandler_SkipsNonDataLines",
+        "TestStreamScannerHandler_DataWithExtraSpaces",
+        "TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns",
+        "TestStreamScannerHandler_ClientCancelDuringUpstreamRead",
+        "TestStreamScannerHandler_ClientCancelDuringCallback",
+        "TestStreamScannerHandler_UpstreamCancellationWithoutClientCancellation",
+        "TestStreamScannerHandler_CompletionClosesHTTPBodyWithoutFailure",
+        "TestStreamScannerHandler_PingSentDuringSlowUpstream",
+        "TestStreamScannerHandler_PingDisabledByRelayInfo",
+        "TestStreamScannerHandler_StreamStatus_DoneReason",
+        "TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+        "TestStreamScannerHandler_StreamStatus_HandlerStop",
+        "TestStreamScannerHandler_StreamStatus_HandlerDone",
+        "TestStreamScannerHandler_StreamStatus_Timeout",
+        "TestStreamScannerHandler_StreamStatus_SoftErrors",
+        "TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+        "TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+        "TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+        "TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized",
+        "TestNewStreamScannerCallerLimit",
+        "TestStreamWriteBudget",
+        "TestSetEventStreamHeadersBoundsStreamWritesByBudget",
+        "TestFlushWriterPreservesUnderlyingFlushErrorThroughGin",
+        "TestSSEHelpersMeasureEffectiveOutputInsteadOfControlFrames"
+      ],
+      "pattern": "^(TestStreamScannerHandler_RequestKeepAliveHandoff|TestStreamScannerHandler_NilInputs|TestNewStreamScanner_AllowsLargeStreamLine|TestStreamScannerHandler_EmptyBody|TestStreamScannerHandler_1000Chunks|TestStreamScannerHandler_OrderPreserved|TestStreamScannerHandler_DoneStopsScanner|TestStreamScannerHandler_StopStopsStream|TestStreamScannerHandler_SkipsNonDataLines|TestStreamScannerHandler_DataWithExtraSpaces|TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns|TestStreamScannerHandler_ClientCancelDuringUpstreamRead|TestStreamScannerHandler_ClientCancelDuringCallback|TestStreamScannerHandler_UpstreamCancellationWithoutClientCancellation|TestStreamScannerHandler_CompletionClosesHTTPBodyWithoutFailure|TestStreamScannerHandler_PingSentDuringSlowUpstream|TestStreamScannerHandler_PingDisabledByRelayInfo|TestStreamScannerHandler_StreamStatus_DoneReason|TestStreamScannerHandler_StreamStatus_EOFWithoutDone|TestStreamScannerHandler_StreamStatus_HandlerStop|TestStreamScannerHandler_StreamStatus_HandlerDone|TestStreamScannerHandler_StreamStatus_Timeout|TestStreamScannerHandler_StreamStatus_SoftErrors|TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk|TestStreamScannerHandler_StreamStatus_ErrorThenStop|TestStreamScannerHandler_StreamStatus_InitializedIfNil|TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized|TestNewStreamScannerCallerLimit|TestStreamWriteBudget|TestSetEventStreamHeadersBoundsStreamWritesByBudget|TestFlushWriterPreservesUnderlyingFlushErrorThroughGin|TestSSEHelpersMeasureEffectiveOutputInsteadOfControlFrames)$"
+    },
+    {
+      "id": "channel-credential-cache",
+      "package": "model",
+      "names": [
+        "TestUpdateAuthFlowPayloadSwapsOnlyTheExpectedPayload",
+        "TestUpdateChannelLocked",
+        "TestProviderChannelSelectionFollowsRelayRoutes",
+        "TestPricingProviderChannelUsesRelayRoutes",
+        "TestPricingConversionOfProviderChannelModels",
+        "TestScheduledChannelLockedStatus",
+        "TestScheduledChannelLockedMultiKey",
+        "TestScheduledChannelLockedCancellation",
+        "TestLockedCredentialWritesPublishCommittedChanges"
+      ],
+      "pattern": "^(TestUpdateAuthFlowPayloadSwapsOnlyTheExpectedPayload|TestUpdateChannelLocked|TestProviderChannelSelectionFollowsRelayRoutes|TestPricingProviderChannelUsesRelayRoutes|TestPricingConversionOfProviderChannelModels|TestScheduledChannelLockedStatus|TestScheduledChannelLockedMultiKey|TestScheduledChannelLockedCancellation|TestLockedCredentialWritesPublishCommittedChanges)$"
+    },
+    {
+      "id": "channel-pricing-cache",
+      "package": "model",
+      "names": [
+        "TestPricingAdvancedCustomUsesConfiguredEndpointTypes",
+        "TestPricingModelMetadataEndpointsMergeWithAdvancedCustomInference",
+        "TestPricingModelMetadataEndpointsCanProvideEndpointWithoutChannelInference",
+        "TestPricingAdvancedCustomMissingConfigFallsBackToChannelType",
+        "TestPricingNativeChannelEndpointTypesUnchanged",
+        "TestInitChannelCacheInvalidatesPricingCache",
+        "TestInitChannelCacheInvalidatesStartupPricingBuiltBeforeChannelCache",
+        "TestInitChannelCacheSyncsAdvancedCustomConfig",
+        "TestCacheUpdateChannelSyncsAdvancedCustomConfig",
+        "TestPricingInvalidationRebuildsOnNextRead"
+      ],
+      "pattern": "^(TestPricingAdvancedCustomUsesConfiguredEndpointTypes|TestPricingModelMetadataEndpointsMergeWithAdvancedCustomInference|TestPricingModelMetadataEndpointsCanProvideEndpointWithoutChannelInference|TestPricingAdvancedCustomMissingConfigFallsBackToChannelType|TestPricingNativeChannelEndpointTypesUnchanged|TestInitChannelCacheInvalidatesPricingCache|TestInitChannelCacheInvalidatesStartupPricingBuiltBeforeChannelCache|TestInitChannelCacheSyncsAdvancedCustomConfig|TestCacheUpdateChannelSyncsAdvancedCustomConfig|TestPricingInvalidationRebuildsOnNextRead)$"
+    },
+    {
+      "id": "task-poll-and-cancel",
+      "package": "service",
+      "names": [
+        "TestRedactVideoResponseBodyPreservesPollingPayloadShape",
+        "TestRedactVideoResponseBodyDropsInteractionInlineVideo",
+        "TestRedactVideoResponseBodyKeepsUntouchedBytes",
+        "TestUpdateVideoTasksDefaultSleepWaitsBetweenTasks",
+        "TestPollingPassesExecutingChannelTypeToAdaptor",
+        "TestDispatchPlatformUpdateUsesFetchMode",
+        "TestUpdateBatchTasksSettlesTieredUsageForTerminalStates",
+        "TestUpdateBatchTasksRefundsFailedTieredTask",
+        "TestUpdateBatchTasksRefundsFailedTaskWithoutUsageSettlement",
+        "TestUpdateVideoTasksCanSkipPollingSleepPerChannel",
+        "TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels",
+        "TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels",
+        "TestUpdateVideoTasksMixedChannelSleepSettings",
+        "TestUpdateSunoTasksStalePollsRefundExactlyOnce",
+        "TestRunTaskPollingOnceDoesNotRefundHistoricalFailedTask",
+        "TestSweepTimedOutTasksHonorsRefundRolloutBoundary",
+        "TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce",
+        "TestSweepTimedOutTasksDisabledAtZero",
+        "TestUpdateVideoSingleTaskPollClassification",
+        "TestUpdateBatchTasksPollClassification",
+        "TestTaskReportsOnceAtTheFinalState",
+        "TestTaskPollAdmissionFailuresAreNotUpstreamFailures",
+        "TestTaskPollAdmissionDeletionSkipsWithoutSideEffects",
+        "TestTaskPollAtChannelLimitSkipsWithoutFailureAndLogsOnce",
+        "TestChannelRequestBusyNeverSendsAndCloseReleasesOnce",
+        "TestChannelRequestCancellationReleasesAndDoesNotSendWhenAlreadyCancelled",
+        "TestTaskPollingBusyIsNotAnUpstreamFailure",
+        "TestOriginTaskPinKeepsOriginalChannelDespiteKeyRoute",
+        "TestOriginTaskPinHonorsKeyPriceLimit",
+        "TestOriginTaskPricePolicyFailureIsNotAnExemption",
+        "TestOriginTaskPinKeepsExplicitRequestConstraints",
+        "TestAcquireOriginTaskRouteChannelErrorTable",
+        "TestRouteAttemptOnlyCountsSentProviderOutcomesOnce",
+        "TestRouteAttemptCountsNonStreamResponseAfterConnectionClose",
+        "TestRouteAttemptUsesMappedModelAndOnlySuccessfulValidLatency",
+        "TestRouteAttemptConfigurationChangeCannotRepopulateObservations"
+      ],
+      "pattern": "^(TestRedactVideoResponseBodyPreservesPollingPayloadShape|TestRedactVideoResponseBodyDropsInteractionInlineVideo|TestRedactVideoResponseBodyKeepsUntouchedBytes|TestUpdateVideoTasksDefaultSleepWaitsBetweenTasks|TestPollingPassesExecutingChannelTypeToAdaptor|TestDispatchPlatformUpdateUsesFetchMode|TestUpdateBatchTasksSettlesTieredUsageForTerminalStates|TestUpdateBatchTasksRefundsFailedTieredTask|TestUpdateBatchTasksRefundsFailedTaskWithoutUsageSettlement|TestUpdateVideoTasksCanSkipPollingSleepPerChannel|TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels|TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels|TestUpdateVideoTasksMixedChannelSleepSettings|TestUpdateSunoTasksStalePollsRefundExactlyOnce|TestRunTaskPollingOnceDoesNotRefundHistoricalFailedTask|TestSweepTimedOutTasksHonorsRefundRolloutBoundary|TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce|TestSweepTimedOutTasksDisabledAtZero|TestUpdateVideoSingleTaskPollClassification|TestUpdateBatchTasksPollClassification|TestTaskReportsOnceAtTheFinalState|TestTaskPollAdmissionFailuresAreNotUpstreamFailures|TestTaskPollAdmissionDeletionSkipsWithoutSideEffects|TestTaskPollAtChannelLimitSkipsWithoutFailureAndLogsOnce|TestChannelRequestBusyNeverSendsAndCloseReleasesOnce|TestChannelRequestCancellationReleasesAndDoesNotSendWhenAlreadyCancelled|TestTaskPollingBusyIsNotAnUpstreamFailure|TestOriginTaskPinKeepsOriginalChannelDespiteKeyRoute|TestOriginTaskPinHonorsKeyPriceLimit|TestOriginTaskPricePolicyFailureIsNotAnExemption|TestOriginTaskPinKeepsExplicitRequestConstraints|TestAcquireOriginTaskRouteChannelErrorTable|TestRouteAttemptOnlyCountsSentProviderOutcomesOnce|TestRouteAttemptCountsNonStreamResponseAfterConnectionClose|TestRouteAttemptUsesMappedModelAndOnlySuccessfulValidLatency|TestRouteAttemptConfigurationChangeCannotRepopulateObservations)$"
+    },
+    {
+      "id": "auth-cache-integrity-sqlite",
+      "package": "model",
+      "names": [
+        "TestAuthCacheIntegrityDatabaseMatrix"
+      ],
+      "subtests": "sqlite",
+      "pattern": "^(TestAuthCacheIntegrityDatabaseMatrix)$/^sqlite$"
+    },
+    {
+      "id": "task-submit-billing-origin",
+      "package": "relay",
+      "names": [
+        "TestOriginTaskContinuationStillRequiresOriginalOwner",
+        "TestRealtimeFetchAppliesChannelHeaderOverrides",
+        "TestRealtimeFetchRefundsTaskItFindsFailed",
+        "TestApplyChannelPinPreservesOriginTasksAndRetryMode",
+        "TestTaskModel2DtoNormalizesLegacyAction",
+        "TestRelayTaskSubmitMapsBeforeValidateWhenOriginSet",
+        "TestRelayTaskSubmitDeclaredNameWithoutMappingIsUnchanged",
+        "TestRelayTaskSubmitDoesNotApplyMappingTwice",
+        "TestRelayTaskSubmitEmptyOriginKeepsLateMapping",
+        "TestRelayTaskSubmitAliasBillingIdentityAndExprFallback",
+        "TestSharedTaskBillingExpressionSelectionAndFrozenSettlement",
+        "TestSharedEndpointBillingKeepsOrdinaryAndPluginPricesSeparate",
+        "TestRelayTaskSubmitPricesModelsAPluginAlsoRelays",
+        "TestRelayTaskSubmitAcceptsAnySuccessfulUpstreamStatus",
+        "TestRelayTaskSubmitRetryRepricesAndReservesBeforeUpstream"
+      ],
+      "pattern": "^(TestOriginTaskContinuationStillRequiresOriginalOwner|TestRealtimeFetchAppliesChannelHeaderOverrides|TestRealtimeFetchRefundsTaskItFindsFailed|TestApplyChannelPinPreservesOriginTasksAndRetryMode|TestTaskModel2DtoNormalizesLegacyAction|TestRelayTaskSubmitMapsBeforeValidateWhenOriginSet|TestRelayTaskSubmitDeclaredNameWithoutMappingIsUnchanged|TestRelayTaskSubmitDoesNotApplyMappingTwice|TestRelayTaskSubmitEmptyOriginKeepsLateMapping|TestRelayTaskSubmitAliasBillingIdentityAndExprFallback|TestSharedTaskBillingExpressionSelectionAndFrozenSettlement|TestSharedEndpointBillingKeepsOrdinaryAndPluginPricesSeparate|TestRelayTaskSubmitPricesModelsAPluginAlsoRelays|TestRelayTaskSubmitAcceptsAnySuccessfulUpstreamStatus|TestRelayTaskSubmitRetryRepricesAndReservesBeforeUpstream)$"
+    }
+  ],
+  "delegated_stage": "known_upstream_logger_race",
+  "delegated": {
+    "relay/helper": [
+      "TestStreamScannerHandler_EmptyBody",
+      "TestStreamScannerHandler_1000Chunks",
+      "TestStreamScannerHandler_OrderPreserved",
+      "TestStreamScannerHandler_DoneStopsScanner",
+      "TestStreamScannerHandler_StopStopsStream",
+      "TestStreamScannerHandler_SkipsNonDataLines",
+      "TestStreamScannerHandler_DataWithExtraSpaces",
+      "TestStreamScannerHandler_StreamStatus_DoneReason",
+      "TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+      "TestStreamScannerHandler_StreamStatus_HandlerStop",
+      "TestStreamScannerHandler_StreamStatus_HandlerDone",
+      "TestStreamScannerHandler_StreamStatus_SoftErrors",
+      "TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+      "TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+      "TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+      "TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized"
+    ],
+    "service": [
+      "TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels",
+      "TestUpdateVideoTasksSlowChannelDoesNotBlockOtherChannels",
+      "TestUpdateVideoTasksMixedChannelSleepSettings"
+    ]
+  },
+  "ordinary_top_level_executions": 129,
+  "separately_verified_funds": [
+    {
+      "path": "/home/work/ren2hub-native-b388-20261114/implementation/funds/race-model-docker.jsonl",
+      "sha256": "58f7d68ec5c3ce45e1b464fff7d23471426bde98fe6b7f7a22c9dfc380ef7af1",
+      "names": [
+        "TestAffiliateCallbackAdminCompletionConcurrentExactlyOnce",
+        "TestAffiliateFailureRollsBackWalletAndOrder",
+        "TestAffiliateInviterQueryFailureStillRollsBackCredit",
+        "TestAffiliateNativeProviderFacadesAndManualShareSuccessfulTransaction",
+        "TestAffiliateUnavailableDecisionWriteFailureRollsBackCredit",
+        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit",
+        "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade",
+        "TestManualCompleteGmpayUsesFrozenQuotaAndAcceptsLaterReceipt",
+        "TestRechargeGmpayRejectsMismatchedReceiptBeforeAndAfterSuccess"
+      ],
+      "scope": "Separately verified in this restoration; not part of the 148 executions or silently included in race profile."
+    },
+    {
+      "path": "/home/work/ren2hub-native-b388-20261114/implementation/funds/race-controller-docker-retry.jsonl",
+      "sha256": "417230d2390cb9ad6a4586338f48de33cf886936a2988ba34ff2af710f8910ee",
+      "names": [
+        "TestCommittedConcurrencyPersistsAcrossNativeAuthCacheFailure",
+        "TestCommittedUpdateKeepsNativeSecurityErrorOrder",
+        "TestGmpayRejectsInvalidQuotaScaleBeforePricing",
+        "TestOAuthAffiliateErrorsArePublicAndRegistrationIsAtomic"
+      ],
+      "scope": "Separately verified in this restoration; not part of the 148 executions or silently included in race profile."
+    }
+  ],
+  "note": "Original five groups plus affected paths. The nineteen named tests are executed unchanged by the independent logger stage. Pricing race is not part of ordinary race. Two admission tests appear in two groups; counts are executions, not unique names."
+}

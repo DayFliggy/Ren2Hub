@@ -650,8 +650,6 @@ export function buildSubmitRequest(ctx) {
     validateHailuoCombo(model, duration, undefined, hasHailuoImage({ metadata: vendorBody }, false));
     body = Object.assign({}, vendorBody, { model: model });
   } else {
-    const duration = req.duration === undefined ? undefined : Number(req.duration);
-    validateHailuoCombo(model, duration, outboundResolution(req, model), hasHailuoImage(req, false));
     body = Object.assign(
       {
         model: model,

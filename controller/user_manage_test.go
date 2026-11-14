@@ -3,6 +3,19 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,21 +25,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
-	"github.com/QuantumNous/new-api/middleware"
-	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/service/authz"
-	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v8"
-
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func setupManageUserTestDB(t *testing.T) *gorm.DB {
@@ -263,7 +261,7 @@ func TestManageUserQuotaRecordsTopupAndAudit(t *testing.T) {
 			require.NoError(t, db.First(&user, user.Id).Error)
 			assert.Equal(t, tc.wantQuota, user.Quota)
 
-			logs, total, err := model.GetAllLogs(model.LogFilter{Type: model.LogTypeTopup}, 0, 20, common.RoleRootUser)
+			logs, total, err := model.GetAllLogs(model.LogFilter{Type: model.LogTypeTopup}, 0, 20)
 			require.NoError(t, err)
 			assert.EqualValues(t, 1, total)
 			require.Len(t, logs, 1)
