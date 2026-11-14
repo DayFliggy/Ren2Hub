@@ -1,11 +1,11 @@
 {
-  "upstream_sha": "b20e0566b235716383da42450c6c536689de9b43",
-  "implementation_base_sha": "ded6fb6beab069f8e80b6e62ad75cbdec4926daa",
+  "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "implementation_base_sha": "f659528cf8380eea05ffed5072754194d4bae9b7",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
     "upstream_equal": 848,
     "adapted": 310,
-    "extension": 295,
+    "extension": 297,
     "removed": 45
   },
   "files": [
@@ -78,7 +78,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增提供商类型分发保留；type 57 在原生分发前继续拒绝。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -122,7 +122,7 @@
         "branding"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Ren2Hub / DayFliggy 品牌，以及独有返利系统替代上游邀请赠送常量。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -136,7 +136,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "返回容器内存字节和限制供现有运维观测消费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -222,7 +222,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Vue SPA 路径回退；打开目录时关闭句柄后读取 index.html。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -242,7 +242,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "旧 Codex/type 57 专用账号接入 / Codex 已退役，删除终端映射。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -268,7 +268,7 @@
         "native-plugin-multipart"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "使用上游独立 NewReader；保留任务 multipart 文本/文件分离预算和失败清理错误。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -300,7 +300,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "HOST 配置照收；节点运行仍固定单节点。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -476,7 +476,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅资金已退役，删除 billing preference 归一化。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -496,7 +496,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留 CPU/内存/磁盘/网络指标的来源、可用性、字节及新鲜度。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -528,7 +528,7 @@
         "native-plugin-multipart"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "任务 multipart 文本/文件独立预算、临时文件失败清理及缓存请求体重放；目标实现替换对照失败。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -554,7 +554,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "文件仅包含已退役的充值业务分组倍率表和访问器。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -574,7 +574,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "真实连接字节计数和宿主接口统计；明确指标来源，不用虚构值回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -588,7 +588,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "真实连接字节计数和宿主接口统计；明确指标来源，不用虚构值回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -680,7 +680,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -694,7 +694,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -714,7 +714,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留插件上下文键，删除业务分组上下文键。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -806,7 +806,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "返利读取、转入钱包、邀请人政策与明细 API；使用当前用户 ID 或管理员目标用户，接现有 model 返利事务。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -832,7 +832,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仅删已退役的套餐/分组审计说明，保留原生安全和管理审计。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -892,7 +892,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "提供商模型/余额测试复用原生凭据；保留本地路由、倍率和即时并发入口。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -911,7 +911,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件配置、凭据与登录校验接原生事务；删除返回锁内实际渠道快照，保留本地路由发布与渠道倍率。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -925,7 +925,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "亲和缓存查询删除已不存在的业务分组维度，保留原生 rule/key_fp 查询。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -942,7 +942,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增插件管理权限沿用原生ChannelRead/SensitiveWrite；保留渠道倍率和并发字段授权。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -980,7 +980,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "集中复用 AcquireChannelConcurrency 并返回 429；附加实时 in_flight；优先级提交后发布路由失效。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1012,7 +1012,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "以已批准模型目录的供应商/lab 分类过滤与计数；此 lab 不是已退役业务路由 group。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1050,7 +1050,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "只在优先级重排事务成功后调用路由失效发布，避免 Token 路由使用旧排序。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1064,7 +1064,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "集中拒绝 type 57 写入及上游模型抓取，避免管理员凭据通过另一入口流向退役服务。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1102,7 +1102,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "读取、手动刷新和更新刷新配置的管理 API；显式渠道 ID 校验与归属判定，结果是展示数据而非计费价格来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1118,7 +1118,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "提供商检查与凭据摘要对齐原生；保留本地模型目录失效和并发/路由发布。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -1144,7 +1144,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留与服务器本地日期一致的 today 字段；删除只调用一次的 checkinToday 包装文件。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1164,7 +1164,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "旧 Codex 专用接入继续退役；通用提供商登录已在 provider_plugin.go 开放。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -1184,7 +1184,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "个人、全站仪表盘摘要及路由性能响应；根据会话用户、角色和用户视区生成统一摘要查询。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1204,7 +1204,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "受 Root 权限及频率限制的单节点系统状态；复用 service 系统状态采样。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1218,7 +1218,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "io.net 部署控制器已明确退役，继续删除，不能因上游变更恢复。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1251,7 +1251,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "GMPay 下单、验签回调、只读订单、管理配置和连通探测；服务层下单/结算并绑定原生钱包，配置错误不伪装成功。；GMPay 下单经 QuoteTopUp 报价并核对确认金额。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1283,7 +1283,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "业务分组控制器与模型已退役，继续删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1297,7 +1297,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "公共首页时间窗口请求指标通过 service 读取；不另建余额或请求计费口径。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1318,7 +1318,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "日志列表、导出及汇总使用统一筛选；非 Root 管理员不能取得 Root 明细，用户查询绑定当前用户；移除 group 过滤。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -1359,7 +1359,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Midjourney 后台轮询复用 DoChannelRequest；并发满时跳过本轮，不把临时准入失败判为任务失败。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1374,7 +1374,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "status 返回 Vue 功能能力与登录/注册/Passkey 可用状态；删除分组配置暴露。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1403,7 +1403,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "OpenAI 模型列表复用 BuildModelCatalog，端点与权限跟实际私有路由一致；移除 group 和 type 57；仍按原生计费配置过滤未定价模型。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1417,7 +1417,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "模型目录绑定当前身份及 Token ID，复用 BuildModelCatalog 形成一份私有路由能力投影。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1449,7 +1449,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "模型元数据同步修订吸收；业务分组的查询输入保持删除。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -1487,7 +1487,7 @@
         "native-count"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Claude 原生计数和 Gemini action 复用 Relay 入口，避免新增绕过鉴权/路由的独立计数请求通道。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1501,7 +1501,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "OAuth 新建用户在既有事务内校验邀请政策并初始化返利字段，统一返回邀请错误。 rc.49 #8247 补写 InviterId 的一行不吸收：本地 InsertWithTx 在同一事务调用 InitializeAffiliateUserTx 写入邀请人并计数，成功路径回归见 oauth_affiliate_test.go。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1524,7 +1524,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "通用option入口拒绝写插件实例，必须走专用权限与校验；保留退役键、返利、折扣和合规锁校验。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -1580,7 +1580,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "性能指标查询删除业务分组维度，保留模型和时间窗。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1594,7 +1594,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "在现有性能响应附加观察窗口、进程/池/系统指标；参数错误直接返回错误。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1608,7 +1608,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "系统资源和数据库池状态只读投影，从统一 performance observation 构建响应。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1628,7 +1628,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "受权限保护的渠道质量/路由性能观察，复用统一采样数据，不参与调度或结算。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1648,7 +1648,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Playground 已明确退役，继续删除其控制器及相关路由。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1716,7 +1716,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "固定参考项目价格只作为用户显式导入草稿；拒绝混用 source_ids 与渠道源，非固定源恢复请求体交回原生 ratio_sync。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1739,7 +1739,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "公开价格使用统一 ReadPricing 一致快照，去 group 和内置价格展示；读取失败不能返回部分成功快照。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -1780,7 +1780,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "唯一新增调用是固定价格草稿接入；其余原生渠道/OpenRouter/models.dev 源继续走原生处理。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1800,7 +1800,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "兑换码列表/搜索接收白名单排序，沿原生查询返回分页；非法排序返回 400。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -1832,7 +1832,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "沿原生插件 ingress/reply/report 顺序接入；预扣仍在选路后，失败统一退款、渠道槽释放与本地原任务准入保持。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -1906,7 +1906,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求插件实例/试运行接口及scope保持，仅去掉业务分组输入。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -1974,7 +1974,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "密码/OAuth/供应商注册使用同一邀请错误 code 映射，保持既有认证与验证响应，不另设鉴权体系。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2000,7 +2000,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "首次 Root 创建在原生初始化事务内初始化返利身份；普通已安装升级不走新建用户。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2020,7 +2020,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅套餐及资金已明确退役，继续删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2034,7 +2034,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值的 Creem 处理保留。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2048,7 +2048,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值的 Epay 处理保留。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2062,7 +2062,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值的 Stripe 处理保留。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2076,7 +2076,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值通道保留。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2090,7 +2090,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "不恢复多节点管理入口；本地系统任务仍处理缓存修订。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2110,7 +2110,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "吸收历史清理处理器，保留工单清理与渠道倍率后台任务。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2190,7 +2190,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "工单创建、消息、状态与附件下载绑定当前用户并校验引用对象归属，沿既有身份体系。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2204,7 +2204,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "工单管理员队列、派单、消息及附件保持角色边界和目标用户，复用同一 ticket 模型。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2218,7 +2218,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "上传分段校验数量/大小/内容和随机存储键，提交失败清除暂存文件；下载按工单归属后输出。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2232,7 +2232,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "清理失去数据库引用的托管附件，核对文件是否被并发修改，不删除在用或在途上传附件。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2252,7 +2252,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Linux 上传与清理使用相同文件锁，避免清理尚未完成的上传；这是本地附件生命周期合同。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2266,7 +2266,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "非 Linux 构建提供相同附件锁接口边界，保持可构建；平台行为应按现有测试和部署平台评价。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2293,7 +2293,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "更新Token前读取真实路由模式，读取失败不修改令牌。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2313,7 +2313,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "复用 authz 检查管理会话及 PAT 权限，避免路由 API 另建权限规则。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2333,7 +2333,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Token 所有权、自动/手动配置、渠道候选和预览统一入口；列表返回实际路由模式。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2363,7 +2363,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "RSA原生client构造接现有单次QuoteTopUp；不恢复AmountDiscount或站内订阅结算。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2385,7 +2385,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "冻结商品金额/币种并交统一原生充值事务；退役订阅永久拒绝记审计后 ACK，只有瞬时失败要求重试；日志 URI 需沿集中脱敏。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -2403,7 +2403,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "配置读取、版本化保存、状态、估算与本人视图 API，严格 JSON，用户视图绑定当前用户。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2417,7 +2417,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "四个报价渠道共用的报价、确认与订单冻结入口，确认在建单和网关调用前执行。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2445,7 +2445,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "用户/管理订单列表、明细和统计统一解析筛选；绑定当前用户或管理员权限，保持原生 TopUp 唯一订单事实。；管理员订单详情附带冻结的折扣决策。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2475,7 +2475,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "从已验签 Checkout Session 提取原币种 amount_subtotal（含 Adaptive Pricing）与订单冻结值比较；瞬时失败返回 500，永久拒绝 ACK；删除 group/订阅。；Stripe 报价删除上游 AmountDiscount，实扣仍为远端 Price，不接入充值折扣。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -2497,7 +2497,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "创建时冻结金额币种，回调通过统一原生充值事务校验；删除 group/订阅，失败状态持久化错误可见，重试只对瞬时错误。；Waffo 原价去掉上游 AmountDiscount，经 QuoteTopUp 报价，实付字符串由 RoundTopUpPay 生成。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -2519,7 +2519,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "钱包充值冻结金额币种并校验回调；移除套餐下单，订阅前缀明确永久拒绝；瞬时失败保留供应商重试。；Pancake 原价去掉上游 AmountDiscount，经 QuoteTopUp 报价，实付字符串由 RoundTopUpPay 生成。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -2555,7 +2555,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "向配额数据查询传递调用者角色，去 group 汇总，防止管理员绕过角色边界读取 Root 历史。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -2585,7 +2585,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "用户权限变化记录sync revision；已有事务后发布helper负责缓存、会话与并发同步。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2611,7 +2611,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "每用户即时并发扩展的提交后发布接点，共用原生审计、权限刷新、会话撤销和认证缓存发布；逐项执行并区分持久化已提交与发布失败。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2625,7 +2625,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "管理员额度修改使用原生 AdjustUserQuotaWithOperation，并将返利回退纳入同一事务；响应/audit 区分已提交与后续日志失败。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2675,7 +2675,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "微信注册沿统一用户创建事务传递邀请身份，不另行发放旧固定邀请奖励。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2689,7 +2689,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2727,7 +2727,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2747,14 +2747,14 @@
     {
       "path": "go.mod",
       "status": "upstream_equal",
-      "upstream_sha256": "f86d950cf220f6e6529703e09325dd46d72e5a5862c125937151a1b61a306022",
-      "local_sha256": "f86d950cf220f6e6529703e09325dd46d72e5a5862c125937151a1b61a306022"
+      "upstream_sha256": "840e4588d54669df8d73ccf2950d12a1000826300dfd5a2e02697369e2d791a9",
+      "local_sha256": "840e4588d54669df8d73ccf2950d12a1000826300dfd5a2e02697369e2d791a9"
     },
     {
       "path": "go.sum",
       "status": "upstream_equal",
-      "upstream_sha256": "0755957a6ac782d3640529fb60aea3e6f6ff8c53072b667edb9964a1545a7097",
-      "local_sha256": "0755957a6ac782d3640529fb60aea3e6f6ff8c53072b667edb9964a1545a7097"
+      "upstream_sha256": "8e065e6f9c262aed7032a6ccfbb9f4ad2af365a8c8856922095e5d7b70c72131",
+      "local_sha256": "8e065e6f9c262aed7032a6ccfbb9f4ad2af365a8c8856922095e5d7b70c72131"
     },
     {
       "path": "i18n/i18n.go",
@@ -2784,7 +2784,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "吸收插件后台通知与Root合规提示；保留工单翻译，删除业务分组文案。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2799,7 +2799,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "吸收插件后台通知与Root合规提示；保留工单翻译，删除业务分组文案。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2814,7 +2814,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "吸收插件后台通知与Root合规提示；保留工单翻译，删除业务分组文案。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2828,7 +2828,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2855,7 +2855,7 @@
         "initialization-errors"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增插件凭据刷新、系统任务清理与本地缓存主题；敏感词迁移失败阻止启动，保持单节点/Vue/无订阅/空模型默认价。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2888,7 +2888,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "扩展路由显式标识 session-only，复用原生 AccessTokenRouteRule 登记，避免 PAT 无意继承工单/钱包敏感会话权限。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2911,7 +2911,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新接口使用上游PAT scopes，不重新暴露退役系统实例和Codex路由；本地扩展scope保持。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -2926,7 +2926,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仅删内置价格重置和订阅等已退役操作审计路径，保留原生审计中间件。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2940,7 +2940,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "删除业务 group 解析和 Token group 设置；身份、PAT 与会话原生认证链保持，用户缓存继续写并发 context。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -2990,7 +2990,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Root 高频状态轮询独立 30 次/60 秒准入，沿已有全局速率限制器，不影响 Relay 请求额度。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3016,7 +3016,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "字段扫描用独立请求体reader并拒绝重复model；仅删除group字段解析，保留stream metadata和本地选路/并发。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3112,7 +3112,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "MJ原任务已找到时建立原渠道pin，存储与缺失错误优先级不扩展。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3127,7 +3127,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "实际 Redis/内存限流与 self request_limits 读取同一 CurrentModelRequestLimits；删除分组覆盖，保持原生成功计数。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3183,7 +3183,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "集中拒绝遗留 group 输入而非静默忽略，避免调用方以为旧组隔离仍生效；只扫描相关业务请求字段。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3237,7 +3237,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求处理错误语义与重放接本地共享端点；实际RequestPath传入提供商筛选，倍率上限和原任务约束保持。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3306,7 +3306,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "sync修订接无分组渠道能力表，保留Token路由查询。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3321,7 +3321,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "工单/订单管理员展示软删除用户，硬删除保留存储 user_id；数据库错误不能冒充账号不存在。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3341,7 +3341,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "邀请绑定、返利冻结/解冻、转钱包及管理员撤销在原生用户/TopUp 事务内锁定参与者；返利记录是功能明细而非另一个钱包。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3379,7 +3379,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "返利政策与邀请明细使用统一字段和可见性，校验邀请代码/倍率，邀请人姓名脱敏。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3460,7 +3460,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "模型目录投影已配置价格与表达式，并按明确渠道倍率展示；不填充内置默认模型价。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3484,7 +3484,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "通用凭据类型与更新原生化；保留渠道倍率/即时容量及路由缓存发布。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3505,7 +3505,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增插件relay配置查询；缓存仍为单节点无分组渠道视图。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3521,7 +3521,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "提供商relay按真实path/model判断；保留原有WS、退役类型及Token过滤规则。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3541,7 +3541,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "同一事务锁定并删除禁用渠道及其能力行，返回真实 ID 供准入/观察清理，避免另读 ID 与实际删除集合漂移。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -3564,7 +3564,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "模型/渠道供应商识别按元数据与 mapping 链批量投影，保持 vendor 与 lab 展示一致，不创建业务分组。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3584,7 +3584,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "共享保存与六入口写方按完整ID集升序分块锁定；谓词复核、同事务能力更新和提交后实际ID发布。避免本地新增SHARE与无序多行写成环。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3611,7 +3611,7 @@
         "auth-cache-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "沿原生短事务/CAS锁；提交后发布本地路由状态，SQL日志不泄漏凭据；人工禁用与账户身份保护保持。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -3631,7 +3631,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "路由候选是数据库快照，轮询游标必须推进缓存/数据库权威 owner，避免每请求从新快照反复首 Key；游标持久化失败仅影响公平性。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -3666,7 +3666,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "渠道倍率及并发字段验证；批量写在提交后按实际修改ID发布，不按新tag重新选行。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3687,7 +3687,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原有业务分组路由满足性函数退役，由 ChannelSatisfiesFilters 与共享 Token 候选覆盖，继续删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3707,7 +3707,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留原生状态更新事务/锁行为，仅增加 Changed 与 PublicationPending 分离，以及提交后路由失效发布；不能重复新建状态实现。 rc.49 ada15c050：请求失败不得把人工禁用改成自动禁用，缓存与 DB 行各检查一次；上游写在 model/channel.go 的 UpdateChannelStatus。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3727,7 +3727,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "缓存外部倍率观测及来源身份，检测绑定变化/孤儿记录和刷新到期；只读展示而非新资金价格来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3771,7 +3771,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "统一用户/全站摘要 scope 与时间窗校验，分别读取用量、延迟和结果，供现有仪表盘。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3834,7 +3834,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "商户版本与订单快照冻结，验签回执匹配和 pending→success 原子结算，并使用原生额度写入；重入不能重复到账。；CreateGmpayOrder 事务内写充值折扣审计记录。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3848,7 +3848,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "商户配置以不可变版本保存并原子切换，老订单仍能用创建时版本验证回调。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3886,7 +3886,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "按窗口查询公共请求汇总且支持取消，只返回聚合指标。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3912,7 +3912,7 @@
         "install-guard"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仅拒绝无法解释的旧独立账本和旧 group schema；当前无 group 的已部署库允许普通迁移，不能据此要求重建现行数据。旧空库发布说明已过时。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -3957,7 +3957,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件步骤与记录吸收；无业务分组，维持用户明细隔离。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4003,7 +4003,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生 AutoMigrate 注册本地功能表、删除退役表；首次 Root 创建仅 ErrRecordNotFound 时执行且事务初始化返利；沿迁移前旧账本检查，不重置已部署数据。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4044,7 +4044,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "删除 group 查询，原生 GetModelQuotaTypes 的读锁原已存在；modelEnableGroupsLock 改名 modelQuotaTypeLock 是删除 group 后命名适配，不是新增必要修复。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4058,7 +4058,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "元数据修订吸收；去除业务分组投影。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4085,7 +4085,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件relay/task价格schema吸收；模型默认价格/内置表达式保持排除。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4100,7 +4100,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "转换支持插件计费字段；不恢复默认模型价格。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4118,7 +4118,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生LoadOptionsFromDatabase返回错误、RSA和retention校验吸收；保留配置事务、共享锁、折扣和退役键拒绝。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4180,7 +4180,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "性能聚合表/查询移除 group 维度，保留模型与时间 bucket 的原生统计。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4214,7 +4214,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "提供商端点来自plugin relay配置，缓存与DB两路径一致；无分组/内置模型价，维持批量读取失败与原子快照。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4228,7 +4228,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仅追加 supplementVendorID，使目录 vendor 默认识别与渠道 lab 一致；没有恢复模型默认价格。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4249,7 +4249,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "刷新失败显式使快照失效并记录错误，下次读取重建，不能维持部分更新结果。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4290,7 +4290,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "统一列表与搜索排序入口，兑换交易保持原生；错误改为 Message 以支持现行 Vue 中英文回传。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4310,7 +4310,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "为 Vue 管理兑换码表提供字段/方向白名单及稳定 ID 次序，拒绝任意 SQL 排序输入。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4342,7 +4342,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "自动预览的模型声明事实包含禁用能力行，防止无关渠道出现在模型预览。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4362,7 +4362,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "采用原生事务迁移五个旧键与过滤实例；实例不含已删除groups字段。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4388,7 +4388,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "站内订阅及其后台处理不恢复，钱包是唯一资金源。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4414,7 +4414,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "多实例心跳与系统实例模型不属于单节点产品，继续删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4428,7 +4428,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留本地主题修订与任务记录，不依赖已退役system_instances表。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4442,7 +4442,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "默认30天历史清理及在途保护吸收；保留本地工单任务类型。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4464,7 +4464,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "账户归属与请求插件报告快照吸收；无分组/订阅ID，沿用渠道倍率快照。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -4514,7 +4514,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "工单、消息与附件存储统一用户/管理员 scope；更新、派单与消息写入在同一工单事务约束内。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4542,7 +4542,7 @@
         "auth-cache-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已合并#8200全量逻辑对照；保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4563,7 +4563,7 @@
         "auth-cache-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "吸收#8200签名及计数保留；本地差异仅删除退役分组字段并逐项重排Lua ARGV，此文件无MaxConcurrency字段。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4589,7 +4589,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "路由保存先锁Token再按ID共享锁渠道，用户硬删按ID锁含软删Token；渠道多行修改锁序另有诊断，不宣称全部安全。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4630,7 +4630,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仍以原生 TopUp 和 User.Quota 为唯一钱包，增加订单冻结额度/金额/币种和统一回执结算，返利随到账事务；不依据回调时间配置重新计算额度。；Insert 在同一事务写订单与充值折扣审计记录。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4647,7 +4647,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "追加式版本化配置，统一校验阶梯、时区与排除名单，所有读取共享快照。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4673,7 +4673,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "订单同事务写入的折扣审计记录与估算用的成功订单查询，回调不读取。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4687,7 +4687,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "按原生已发生用量记小时聚合，供用量阶梯定档；不反向扣费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4702,7 +4702,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "统一 TopUp 查询/统计并关联支付方法与账号展示，分页过滤受 user/role scope 约束，无平行资金账本。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4730,7 +4730,7 @@
         "payment-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "冻结订单额度、金额、币种；先匹配已验签回执，再通过 pending 状态锁定原生订单并一次更新 User.Quota 与返利；统一永久/瞬时错误分类。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4766,7 +4766,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生用量聚合删 group 维度，缓存键与数据库条件一致；管理查询统一排除不可见 Root 用户历史。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4784,7 +4784,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "用户/管理员/Root 用量流分别投影允许字段，管理员查询复用 Root 隔离规则；移除 group 分组。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4820,7 +4820,7 @@
         "auth-cache-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增返利与并发字段，创建同事务初始化返利，删除清理 Token 路由；用量更新记录小时统计；管理员分页/汇总按角色隔离；部分 self 更新的空 status 保护在冻结目标已有等价实现，不属于本地待保留修复。 已合并#8200全量逻辑对照：用户缓存整体发布与签名，保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -4845,7 +4845,7 @@
         "auth-cache-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已合并#8200全量逻辑对照；保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4867,7 +4867,7 @@
         "auth-cache-integrity"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已合并#8200全量逻辑对照；保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4899,7 +4899,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "扩展原生管理员钱包调整，以 operation_id 幂等保存并与返利冻结/撤销同事务；只按已提交 delta 更新缓存，不另写钱包。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -4973,7 +4973,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5059,7 +5059,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "静态解析已配置表达式展示参考价格，不参与执行或写入定价。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5091,7 +5091,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5123,7 +5123,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5155,7 +5155,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5175,7 +5175,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5189,7 +5189,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5203,7 +5203,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5217,7 +5217,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5231,7 +5231,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5245,7 +5245,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5398,7 +5398,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留原生插件路由索引与保留命名空间，额外保护实际Vue的activity/home/invite/ops/orders/settings/ticket-management/tickets入口；插件不能抢占页面。",
         "method": "Vue route contract registration regression; upstream window review"
       }
@@ -5424,7 +5424,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留全部原生hook上下文，仅删除ctx.group输入与投影。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -5444,7 +5444,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5458,7 +5458,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5478,7 +5478,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5492,7 +5492,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5512,7 +5512,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5538,7 +5538,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5552,7 +5552,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5566,7 +5566,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5580,7 +5580,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5600,7 +5600,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -5674,8 +5674,14 @@
     {
       "path": "plugins/doubao_responses_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "e173e59eaed0ad79a72481fc86d665c93ee0a029310054ff0addf083ef390db7",
-      "local_sha256": "e173e59eaed0ad79a72481fc86d665c93ee0a029310054ff0addf083ef390db7"
+      "upstream_sha256": "526052035d20215ecdf08626b98812adaa4dbf0600cfef4b0b807db2afe94ba8",
+      "local_sha256": "526052035d20215ecdf08626b98812adaa4dbf0600cfef4b0b807db2afe94ba8"
+    },
+    {
+      "path": "plugins/doubao_seedream55_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3debb168f18aaf509cf1f23da12a1922cc2dce52720eed2bd304b03d6eac82a1"
     },
     {
       "path": "plugins/embed.go",
@@ -5770,15 +5776,15 @@
     {
       "path": "plugins/tasks/doubao/plugin.js",
       "status": "adapted",
-      "upstream_sha256": "58da524648f3b43e6944c34cc14de59b7162123fe046b033037680a0fa4d182b",
-      "local_sha256": "0f088f8a2f9093f56b35769651d86f4af73efd1652948cebc6dde87062194ed6",
+      "upstream_sha256": "8b3c9de6b03dc4ca4aff2e2848f60563aa9f07d020449211903de056c85dbfa6",
+      "local_sha256": "2c78759c9081e8b27e0cebb6b8de7e97046015da46e792039218071f4dfd2035",
       "reasons": [
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
-        "basis": "host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。 本轮共享 requestedVideoDuration 使用上游 || 取值，避免 null/空字符串截断 metadata.duration 的校验；前置数值 0 回退，-1 保留自动时长及最大预扣。 交叉审计 P3 对齐上游 extractUsage 的 number/string 判别；host 非标量时长不发送 duration 并始终预扣模型最大值（包括带 frames；无回退值的顶层 null/false 等非标量键也保留该语义），与仅 frames 的既有估算区分；不照搬上游 parseInt 对数组的提交/预扣不一致，vendorBody 和 decoder 保持原样。",
-        "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "Seedream 5.5 和图层数量原样吸收；保留已验证的本地视频参数校验。 原有保留依据：host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。 本轮共享 requestedVideoDuration 使用上游 || 取值，避免 null/空字符串截断 metadata.duration 的校验；前置数值 0 回退，-1 保留自动时长及最大预扣。 交叉审计 P3 对齐上游 extractUsage 的 number/string 判别；host 非标量时长不发送 duration 并始终预扣模型最大值（包括带 frames；无回退值的顶层 null/false 等非标量键也保留该语义），与仅 frames 的既有估算区分；不照搬上游 parseInt 对数组的提交/预扣不一致，vendorBody 和 decoder 保持原样。",
+        "method": "fixed-window three-way review",
         "counterfactual_evidence": [
           "plugins/exception-proof.json#doubao",
           "/home/work/ren2hub-audit-fixes-20261104/plugins/doubao-before.log"
@@ -5794,7 +5800,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "最终 metadata.durationSeconds 与 usage 共用参数；目标上游 metadata=4 实际发送 4 秒却按 8 秒计费，反事实已复现。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -5811,7 +5817,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "host 分支复用上游 validateHailuoCombo 校验模型时长/分辨率组合；native 分支完全沿用上游。目标会接受 host duration=7 并默改模型档位。已删除被模型时长枚举覆盖的重复有限正数检查。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -5840,7 +5846,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "复用上游 req_key/frames 定义，只补显式 duration 与 121/241 frames 一致性及有限档位校验，不允许静默重写冲突时长。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -5899,7 +5905,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "将 host duration 归一为 vendor seconds 字符串枚举，build/usage 共享时长尺寸；目标仅发送 duration 而 usage 按其计费造成出站字段与账单不一致。remix 保留上游原样。 JSON/multipart decode 保留 duration，冲突检查实际有效；Responses decoder 与冻结上游一致，仅保留 seconds，不额外修复该既有边界。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -5922,7 +5928,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "吸收1.3.1渠道Other区域读取；已批准插件出站/计费参数一致性保留。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -5936,7 +5942,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已删除旧宽泛 validateViduCombo 并采用目标 endpoint-specific profiles；仅对已列明型号超出 profile 时长边界拒绝，未知型号维持上游兼容行为。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -5995,7 +6001,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "请求插件钩子吸收；退役专用接入限制保持。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -6021,7 +6027,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "轮询适配器显式接收请求 context，与现有无等待渠道 permit 生命周期共用，不另建调度。 rc.49 ResponsesRequestFinalizer 接口照目标合入。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6119,7 +6125,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "上游独立游标/透传重试/提前关闭全量吸收；仅保留发起与响应的本地路由观测。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -6175,7 +6181,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6261,7 +6267,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6323,7 +6329,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "旧 Codex/type 57 专用账号接入与 type 57 已批准退役，源码及专属测试一并删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6343,7 +6349,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "旧 Codex/type 57 专用账号接入与 type 57 已批准退役，源码及专属测试一并删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6357,7 +6363,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "旧 Codex/type 57 专用账号接入与 type 57 已批准退役，源码及专属测试一并删除。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6389,7 +6395,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6427,7 +6433,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6489,7 +6495,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6539,7 +6545,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6739,7 +6745,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6777,7 +6783,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6803,7 +6809,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -6841,7 +6847,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "WS请求回复插件接入，保留本地槽位生命周期和流量观测。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -6867,7 +6873,7 @@
         "cache-ttl-billing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Responses compact 必须将缓存创建 token 细分克隆到 billing usage，防止丢失计量。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -6944,7 +6950,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7024,7 +7030,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "最终num_outputs计数吸收；保留请求上下文取消。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7106,7 +7112,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生账号归属、签名与刷新吸收；FetchTask/Batch/解析沿本地ctx取消并保留multipart预算。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7295,7 +7301,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7375,7 +7381,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7407,7 +7413,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7511,7 +7517,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7538,7 +7544,7 @@
         "override-limits"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "使用MoeForge正则与JSON封装；不恢复using_group条件，保留有界缓存。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7563,7 +7569,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件步骤/报告/头部字段吸收；本地渠道倍率和路由指标保留，无分组和订阅字段。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7589,7 +7595,7 @@
         "query-credential-redaction"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留 parse 失败不返回原文、异常 query 去掉不可解析值、userinfo/fragment 清除以及 sign/x-goog-credential 掩码；目标异常 URL 实际泄漏测试凭据。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -7666,7 +7672,7 @@
         "native-count"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的原生 token 计数，继续经过现有 Token 鉴权与路由。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7686,7 +7692,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7714,6 +7720,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "bb6c3db9e82300cb4fd9e1beb7dd3afd018f4584f359123645e5a431ccb13918",
       "local_sha256": "bb6c3db9e82300cb4fd9e1beb7dd3afd018f4584f359123645e5a431ccb13918"
+    },
+    {
+      "path": "relay/doubao_seedream55_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a795a22b3c5e0dc5745ed932f383e6c556a54ee0540481cc86722e166ae4f240"
     },
     {
       "path": "relay/embedding_handler.go",
@@ -7749,7 +7761,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件首响应检测吸收；保留有效输出驱动本地路由观测。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7769,7 +7781,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7797,7 +7809,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生插件价格适配，渠道倍率替代group multiplier，无内置模型价格。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7835,7 +7847,7 @@
         "streaming-lifecycle"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "callback 因实际客户端取消调用 Stop 时交给 scanner 统一归类 client_gone，防止 HandlerStop 先占终态造成失败/观测分类错误。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -7852,7 +7864,7 @@
         "streaming-lifecycle"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "上游扫描上下文更新；原有取消/读写失败传播不降级。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7888,7 +7900,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "定制MJ原渠道准入，复用Distribute准备结果和Key；原协议查询、错误封装保留。将原任务ID推导抽为一处供Distribute和handler共用，避免双份规则；Opus逐模式确认语义等价。冻结上游该文件近6个月9次变更，被抽取420-484段0次，改写后的同步成本较低。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7902,7 +7914,7 @@
         "native-count"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的原生 token 计数，继续经过现有 Token 鉴权与路由。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -7941,7 +7953,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "增加provider adaptor；退役type 57继续拒绝，任务接口保留ctx。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -7965,7 +7977,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件通用任务钩子与计价来源吸收；渠道倍率、原渠道准入、取消和钱包结算沿本地合同。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8039,7 +8051,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8065,7 +8077,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8085,7 +8097,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8099,7 +8111,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8113,7 +8125,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8133,7 +8145,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8153,7 +8165,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8200,7 +8212,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生WS ingress/reply/report吸收；保留本地选路后计费、渠道倍率和并发释放。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -8268,7 +8280,7 @@
         "cache-ttl-billing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仅有 cache_creation_input_tokens 的上游 usage 仍是有效可计费用量。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -8471,7 +8483,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "不恢复站内订阅资金偏好字段。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -8491,22 +8503,22 @@
     {
       "path": "relaykit/go.mod",
       "status": "adapted",
-      "upstream_sha256": "8dffb0a4e631986df51a49c2dd485958e5bb1dd5bc71321488201afc40faa4b0",
-      "local_sha256": "5295b83bbd4a82e03c9c43e625201cd26ca778c95b3d13af57330c50d7769180",
+      "upstream_sha256": "470435391e3907f590f5a38b344e3f541827a55967a4fddadcaa4904d2be708a",
+      "local_sha256": "d82676dfe92e781430d051c90a5acd04d02a2e4a2964d5efe44c661d041d9bbf",
       "reasons": [
         "toolchain-security"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
-        "basis": "MoeForge moego更新；独立模块保持Go1.26.10，不反向依赖根模块。",
-        "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "moego alpha.3；保留 Go 1.26.10。 原有保留依据：MoeForge moego更新；独立模块保持Go1.26.10，不反向依赖根模块。",
+        "method": "fixed-window three-way review"
       }
     },
     {
       "path": "relaykit/go.sum",
       "status": "upstream_equal",
-      "upstream_sha256": "968958f13c189ae63bda51e03ce66a64165f898e25c0e8d034b36ba65c0feba9",
-      "local_sha256": "968958f13c189ae63bda51e03ce66a64165f898e25c0e8d034b36ba65c0feba9"
+      "upstream_sha256": "ed54f187e94424365fd25348da82c3a8f3bd22a2af7eb99c7edbccf7b2dda35a",
+      "local_sha256": "ed54f187e94424365fd25348da82c3a8f3bd22a2af7eb99c7edbccf7b2dda35a"
     },
     {
       "path": "relaykit/reasonmap/reasonmap.go",
@@ -8715,7 +8727,7 @@
         "protocol-adaptation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Chat → Responses 转换保留 prompt_cache_options。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -8792,7 +8804,7 @@
         "protocol-adaptation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Responses → Chat 转换保留 prompt_cache_options。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -9277,7 +9289,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "删除 RequestMeta 中业务分组字段。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9308,7 +9320,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增请求插件路由与原生权限；仅不注册多节点/订阅/旧专用接口。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -9329,7 +9341,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件login/continue/credentials及余额任务状态吸收，保留倍率扩展，不注册Codex。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -9368,7 +9380,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "工单、GMPay 与统计扩展使用既有认证/权限/强校验；session-only 路由同步进入 PAT 规则表。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9443,7 +9455,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生计数路由接入既有 TokenAuth/分发/限流入口，删除 Playground，插件路径以目标注册方式收敛。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9471,7 +9483,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生插件协议与标准视频共享用户请求限流链，确保多入口不能绕过 Token 策略或放大请求额度。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9509,7 +9521,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "Token 路由 CRUD/候选/预览复用原生 authz Resource/Action 权限，绑定 Token 所有权。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9523,7 +9535,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "ModelRequestRateLimit 放在视频入口共同链，覆盖原生和插件候选，保持一次计数/准入。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9556,7 +9568,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "提供 Vue SPA 静态回退，并对已退役前端路径明确拒绝，避免旧 React/Playground 路由假成功。 rc.49 #8241 删除插件 host_namespace 跳过后，retiredFrontendPath 同时拒绝已退役 API 前缀（站内订阅含 Pancake 订阅产品、部署、system-info、业务分组、rest_model_ratio、旧 Codex/type 57 专用账号接入 /api/codex 与 /api/channel/:id/codex），在插件分发前返回 404；对照 rc.49 注册路由无遗漏。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9573,7 +9585,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。；明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。；独有工单、附件、通知及清理，接现有权限和用户归属。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9636,7 +9648,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9698,7 +9710,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9724,7 +9736,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9739,7 +9751,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9759,7 +9771,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生 BillingSession 唯一入口；移除订阅资金分支，保留重试补预扣。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9773,7 +9785,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9800,7 +9812,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留原生预扣/结算/退款状态机；仅删除退役资金和信任免预扣，所有渠道发送前强制余额覆盖。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9826,7 +9838,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "正则封装更新；亲和性无业务分组维度。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -9852,7 +9864,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9875,7 +9887,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件relay筛选吸收；沿本地有序手动/自动路由、倍率上限和无等待并发。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -9901,7 +9913,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9915,7 +9927,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9929,7 +9941,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9943,7 +9955,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9957,7 +9969,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9977,7 +9989,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -9991,7 +10003,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "旧专用后台刷新退役；新的provider_plugin刷新任务开放。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -10005,7 +10017,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10019,7 +10031,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10033,7 +10045,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10047,7 +10059,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10061,7 +10073,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "本地准入错误稳定映射503，避免泄漏底层读取错误。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10093,7 +10105,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有个人/全站仪表盘，按当前角色切换；全站聚合不暴露用户明细。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10113,7 +10125,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10127,7 +10139,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10141,7 +10153,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10203,7 +10215,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "WalletFunding 与上游相同；删除退役 SubscriptionFunding 及其专用重试。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10217,7 +10229,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10231,7 +10243,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10245,7 +10257,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10265,7 +10277,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10285,7 +10297,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10341,7 +10353,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10363,7 +10375,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件步骤和报告记录吸收；无分组与订阅金额，渠道倍率保持。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -10386,7 +10398,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10400,7 +10412,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "共享MJ原任务ID推导及准备标记，仅供定制原渠道接点。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10414,7 +10426,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10434,7 +10446,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "只对本进程已注册主题应用revision并完成任务；不恢复节点注册、实例列表或跨节点完成判定。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -10508,7 +10520,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10522,7 +10534,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10536,7 +10548,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10550,7 +10562,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10570,7 +10582,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10584,7 +10596,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10661,7 +10673,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生插件usage处理吸收；渠道倍率、无默认价、钱包唯一资金源。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -10682,7 +10694,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "从目录共用定价快照读取，价格错误向上返回，防止两次读取拼出不一致元数据。 此处是共享快照 API 的最小调用接点，反事实验证对象是共同定价快照不变量。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -10699,7 +10711,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "复用原生RecordRelayErrorLog与插件报告，日志签名不含业务分组。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -10725,7 +10737,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10770,7 +10782,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "严格亲和遇上限存储失败保持绑定并返回503。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10791,7 +10803,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "统一记录渠道尝试、有效首输出和取消结果，结束时释放同一渠道槽位。 只读发送标记供任务重试错误优先级判断，在Finish清除前读取；不增加第二份尝试状态。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10812,7 +10824,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10834,7 +10846,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原渠道仅豁免手动列表，复用routePolicyReason检查Key倍率上限；保留路径插件过滤和即时容量。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10854,7 +10866,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "本地已用渠道排除造成重试选路耗尽；用类型安全泛型指针保留既有供应商错误，HTTP/WS行为保持，任务不做有损转换。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10875,7 +10887,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10901,7 +10913,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "本地预览与实际选路共用插件代际、模型规范化和身份/端点过滤器；transport、受支持静态路径及canonical回退，不运行JS、不占槽。 canonical回退单独追加共用宿主身份过滤。四段原生逻辑迁移与6个月变更频率见SYNC_LEDGER，同步时必须移植委托源函数的新变化。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10922,7 +10934,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有自动路由的首输出观测，仅识别协议有效 payload，不能以控制帧计算成功/延迟。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10943,7 +10955,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "轮询本地容量或上限读取失败只跳本轮，不记录供应商失败。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -10987,7 +10999,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11001,7 +11013,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "多节点实例后台报告继续退役。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -11059,7 +11071,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "原生任务报告钩子吸收；只结算一次，使用渠道倍率且无订阅资金。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -11079,7 +11091,7 @@
         "task-refund-cas"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "新增 helper 仅复用既有 Task.UpdateWithStatus/RefundTaskQuota，确认真实删除、区分缓存 miss/读失败、遵守旧任务不退款界线；目标 bulk update 会少退 5000 并误终止仍有效任务。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -11134,7 +11146,7 @@
         "task-refund-cas"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "按CredentialAccount分批轮询与最终报告吸收；保留取消、即时准入、确证渠道删除CAS退款和重复上游ID隔离。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -11156,7 +11168,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11182,7 +11194,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11203,7 +11215,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "仅替换渠道倍率并移除已退役分组刷新；缓存切分恢复直接调用上游 relayconvert 实现。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11229,7 +11241,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11249,7 +11261,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "预览按静态运行时资格过滤，区分HTTP流和WS，保留原模型优先与canonical回退，回传解析后的模型及transport。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11275,7 +11287,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "窗口缓存与公式，on 来源读失败拒绝报价，shadow 失败只记录。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11289,7 +11301,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "按草稿回放近期成功充值，只输出额度等值近似。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11309,7 +11321,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "唯一的充值报价、舍入与确认比较。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11347,7 +11359,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "工单文本在 HTML 邮件中转义，原生通知模板和其他通知通道保持原合同。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11367,7 +11379,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11389,7 +11401,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11403,7 +11415,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11429,7 +11441,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11449,7 +11461,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11473,7 +11485,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "插件定价能力吸收；内置模型计费表达式继续排除。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -11511,7 +11523,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11579,7 +11591,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11599,7 +11611,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11619,7 +11631,7 @@
         "currency-validation"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "必要修复：汇率和 quota 单位必须是有限正数，非法值不得持久化或污染运行配置。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained",
         "counterfactual_evidence": [
@@ -11672,7 +11684,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "MD5/RSA选择和密钥校验吸收；不恢复AmountDiscount，充值折扣共用一次报价。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -11692,7 +11704,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11748,7 +11760,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11768,7 +11780,7 @@
         "retired"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11801,7 +11813,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；已批准的请求限制摘要；与实际用户/模型限制共享配置和鉴权。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11821,7 +11833,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11847,7 +11859,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11867,7 +11879,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -11893,7 +11905,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "实例全局/渠道/模型范围保留；非空groups配置显式拒绝，避免静默扩大作用域。",
         "method": "fixed-window three-way source review; behavioral evidence tracked separately in SYNC_LEDGER"
       }
@@ -11908,7 +11920,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用账号接入、type 57、io.net、Playground、旧前端和 api/next。；payment_setting.amount_discount 随字段删除退役。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -12018,7 +12030,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -12081,7 +12093,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b20e0566b235716383da42450c6c536689de9b43",
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "unchanged upstream source verified for the fixed window; existing contract basis retained"
       }
@@ -12107,7 +12119,7 @@
   ],
   "candidate_sha": null,
   "history_baseline_sha": "9a63062227c31ba54a6346e07ee8b4fd8802f22f",
-  "reference_newapi_sha": "b20e0566b235716383da42450c6c536689de9b43",
+  "reference_newapi_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
   "contracts": {
     "affiliate": {
       "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。",
@@ -12311,14 +12323,14 @@
     }
   },
   "review_scope": {
-    "old_upstream": "ba5f7367797566175a6cd97a748d430af3602a01",
-    "local_start": "3a05fdc5c",
-    "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
-    "target_rule": "上游文件 SHA256 在 old_upstream 与 target 之间未变的行沿用原审阅，只推进 target；窗口内上游变化的文件逐行复核并在 basis 记录 rc.49 处置。",
+    "old_upstream": "b20e0566b235716383da42450c6c536689de9b43",
+    "local_start": "f659528cf8380eea05ffed5072754194d4bae9b7",
+    "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+    "target_rule": "本批10个上游差异文件逐项复核；窗口外上游及本地生产文件未变时沿用先前依据，推进review target。新增测试单独验证，所有非测试偏离继续要求合同依据。",
     "previous_counts": {
-      "upstream_equal": 797,
-      "adapted": 280,
-      "extension": 276,
+      "upstream_equal": 848,
+      "adapted": 310,
+      "extension": 295,
       "removed": 45
     },
     "production_reason_required": [
@@ -12328,7 +12340,9 @@
     ]
   },
   "verification_evidence": {
-    "status": "旧外部临时证据已清理，不作为本轮可读验证。当前来源处置与真实请求入口见同步账本和本地测试文档；candidate_sha=null。",
-    "history": "git show ee2600f2885ac879e9be9c7c40495545c5370a40:docs/upstream/CORE_SOURCE_DELTA.json"
+    "status": "来源清单不宣称测试或候选通过；本批原始报告与最终身份见外部证据目录。",
+    "directory": "/home/work/ren2hub-upstream-b388-20261114",
+    "final_identity": "final-delivery.json",
+    "previous_directory": "/home/work/ren2hub-upstream-b20-20261113"
   }
 }

@@ -121,7 +121,7 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | frontend | development | npm | `vitest` | `4.1.11` | MIT | [80](#license-80) |
 | frontend | development | npm | `vue-tsc` | `3.3.8` | MIT | [81](#license-81) |
 | backend | production | Go | `github.com/HugoSmits86/nativewebp` | `v1.3.0` | MIT | [82](#license-82) |
-| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.2` | MIT | [7](#license-7) |
+| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.3` | MIT | [7](#license-7) |
 | backend | production | Go | `github.com/ledongthuc/pdf` | `v0.0.0-20261020125853-5e46805f718e` | BSD-3-Clause | [83](#license-83) |
 
 ## Supplied license texts
@@ -635,7 +635,7 @@ SOFTWARE.
 ### License 7
 
 - `github.com/Calcium-Ion/go-epay v0.0.6 — LICENSE`
-- `github.com/MoeForge/moego v0.1.0-alpha.2 — LICENSE`
+- `github.com/MoeForge/moego v0.1.0-alpha.3 — LICENSE`
 
 ```text
 MIT License

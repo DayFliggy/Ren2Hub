@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 # 本轮已审计的 NewAPI 核心版本；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
-UPSTREAM_SHA = 'b20e0566b235716383da42450c6c536689de9b43'
+UPSTREAM_SHA = 'b388140acfd80369ec6243b16869daff1b4051f4'
 
 
 def git(*args, repository=None):
@@ -74,7 +74,7 @@ if missing:
         print('  ' + path, file=sys.stderr)
     sys.exit(1)
 data.update(upstream_sha=upstream,
-            implementation_base_sha='ded6fb6beab069f8e80b6e62ad75cbdec4926daa',
+            implementation_base_sha='f659528cf8380eea05ffed5072754194d4bae9b7',
             history_baseline_sha='9a63062227c31ba54a6346e07ee8b4fd8802f22f',
             reference_newapi_sha=upstream,
             candidate_sha=None, counts=dict(collections.Counter(row['status'] for row in rows)), files=rows)

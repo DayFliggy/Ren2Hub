@@ -219,7 +219,7 @@ Vue 保留现有视觉、移动布局、权限导航和能力开关。插件任�
 
 ## 集成浏览器验收入口
 
-自动用例已落实到 `tests/local/plugin-processing.spec.ts`，复用 local projects 的桌面/手机 × 明/暗矩阵。登录及用户权限使用隔离真实后端；provider、请求实例与 OAuth 流程使用明确的同源接口契约桩，断言不会访问外部网络。父任务须用集成后的二进制运行并保存截图/日志；这里不把组件测试视为真实浏览器验证。
+自动用例位于 `tests/local/plugin-processing.spec.ts`，复用 local projects 的桌面/手机 × 明/暗矩阵。登录及用户权限使用隔离真实后端；provider、请求实例与 OAuth 流程使用明确的同源接口契约桩，断言不会访问外部网络。通过 `scripts/testing/run.py browser` 对集成后的二进制运行验收，保存该次源码身份、截图和日志；组件测试结果不能替代真实浏览器验证。
 
 - 桌面 1440×900、手机 390×844，分别亮/暗主题，简中和英文：`/task-plugins` 的三种插件标签、站点切换、安装码、说明、源代码和版本差异；检查弹窗键盘焦点、横向溢出、加载/失败/重试。
 - Root：`/request-processing` 新建两个实例、交换顺序、全局/模型范围、修改复杂 JSON、失败阻止保存、取消离开；保存后重新加载顺序一致。试运行 OpenAI/Responses/Claude/Gemini 和回复检查，单草稿不写持久设置。

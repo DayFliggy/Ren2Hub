@@ -1099,7 +1099,7 @@ async function submit() {
           <fieldset
             v-if="form.type === 61 && boundTaskPlugin"
             :disabled="!canBindPlugin || saving"
-            class="sibling-space-y-2"
+            class="min-w-0 sibling-space-y-2"
           >
             <legend class="text-sm font-medium">
               {{ t('pluginExtensions.channelConfig') }}

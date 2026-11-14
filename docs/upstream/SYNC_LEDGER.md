@@ -1,8 +1,31 @@
 # 上游同步账本
 
-NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
+NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。实施 checkout 的 `origin` 指向内部 bare；NewAPI 使用独立官方参考检出，不要求每个 checkout 配置 `upstream` remote；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
 上一批源码冻结目标为 `48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0`（NewAPI `v1.0.0-rc.49`），于 2026-11-10 完成窗口核对；再前一冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`。rc.49 之后的 `8faf1d45e`（React 文案）与 `bd6bb5301`（HOST 监听地址）当时未纳入 rc.49 批次，现已纳入下述固定 main 批次。这不表示冻结 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
+
+## 2026-11-14 固定 main 增量吸收
+
+本批起点为 Ren2Hub `f659528cf8380eea05ffed5072754194d4bae9b7`、根仓库 `b742b05080a2e303d166817f82cc6a18b28589a0`，上游窗口为 `b20e0566b235716383da42450c6c536689de9b43` → `b388140acfd80369ec6243b16869daff1b4051f4`。固定 4 个提交、10 个差异文件，后续上游提交留待下一批。逐文件处置见 `WINDOW_B388.json`；`CORE_SOURCE_DELTA.json` 更新现行指纹，历史 `WINDOW_B20.json` 保留原批次身份。
+
+| 提交 | 处置 |
+| --- | --- |
+| `1122e0f78371ed6b98752ea0ed92cf80eaf75d23` | Vue 渠道插件配置 fieldset 允许缩小，长配置、权限及保存由浏览器验证；不恢复 React |
+| `c9c6da2786b6a0912215127e78e28fbc6650c85f` | 根模块和 RelayKit 的 moego 升至 alpha.3，校验和与许可证版本同步；保留 Go 1.26.10 |
+| `e00ec88194a83c0efa85185cb86242fa69fafd17` | Doubao 1.5.0、Seedream 5.5、原生透明背景及图层数量吸收；保留已验证的视频时长/分辨率校验 |
+| `b388140acfd80369ec6243b16869daff1b4051f4` | 插件摘要 80 显示列为写作建议，运行时仍只限制 512 rune |
+
+Seedream 5.5 图层预估默认 30、配置范围 2–100，旧模型约束不变；全局图片上限保持 128。传统按张价格和自定义表达式仍使用原生钱包、渠道倍率及一次结算，不导入默认价格或内置表达式。管理员激活版本和历史任务的提交版本身份继续遵循原生机制：在途请求固定当次插件，持久任务保存 key/version/generation；恢复按当前注册版本执行，产物钩子接收 producerVersion，不宣称持久化或永久执行旧源码。
+
+验证和审计原始记录保存到 `/home/work/ren2hub-upstream-b388-20261114`。源码处置文件的 `candidate_sha=null` 不代表候选结果；真实发布提交、不可变镜像、完整候选和 Claude Code `claude-opus-5-5` 最终审计统一绑定外部 `final-delivery.json`。本批不执行正式切换，正式运行身份仍以服务器档案及现场只读检查为准。旧镜像回退不会自动恢复五个已删除的敏感词配置键。
+
+本批定向回归新增 6 个顶层用例：图片参数/协议 61 项、真实钱包与版本归属 15 项通过。首次 relay 夹具日志存在后台缓存 panic，原因是测试提前恢复 Redis 开关；修复为在恢复共享配置前有界等待异步队列耗尽，保留原始失败日志。修复后定向及完整 Go 三模块 2,954 个顶层用例通过、无跳过和后台 panic，三模块 vet 及独立模块构建通过。三库固定快照 385 套通过，5 组 race 共 44 个顶层用例通过；快照含本批 moego 和插件变更，与最终受测生产输入逐文件核对，后加的两个 SQLite 回归文件由单测另行覆盖。
+
+Vue 297 文件、2,219 项单测、类型/lint/format、构建和嵌入检查通过；真实本地后端的四配置浏览器 8 项通过，完整 UI 行为合同 685 项通过，零缺项/跳过/重试。新增长配置用例初轮因非法 JSON 提示改变字段可访问名称而出现 8 项定位器失败，修正定位器并保留阻止保存等断言后，16 项定向和完整合同通过；原失败报告保留。前端 1,081 文件指纹在最终 UI 执行前后稳定，1,871 项构建输入与最终源码一致；不把 API 桩行为检查称为外部供应商联调或像素比较。
+
+无 AVX 的 CPU 对照使用经 Debian 包校验的私有 QEMU：AES=true、AVX/AVX2=false，同一长 JSON 在 alpha.2 触发 SIGILL，在 alpha.3 完成 64 次往返；正常和非法输入另作对照。原生 b388 的 12 项既有诊断及 30 项阻断原因运行复现，原生生产文件未改；不新增豁免或将诊断失败计作通过。
+
+历史报告勘误：上一批 `audit/final-conclusion.md` 关于“前端 1080 文件修复前后指纹相同”的表述，仅能证明验证期间输入稳定；回调修复实际有 9 个文件变化。原始 Opus 结论保留，本条不修改历史报告或其哈希。
 
 ## 2026-11-13 固定 main 同步与候选准备
 
