@@ -19,6 +19,10 @@
     {
       "path": "implementation/control/test-migration.json",
       "sha256": "7366171d3196fdc3553a003a5fe24035ddf4fb48b8a3992bbcb82fac978167fa"
+    },
+    {
+      "path": "audit-router-fix/test-migrations.json",
+      "sha256": "87e427773a2c01abedf61dfec6c8bcbd74362382f4675f23af0d9850489e40fc"
     }
   ],
   "records": [
@@ -932,6 +936,31 @@
       "evidence": "plugin-upgrade/sora-fixture-repair/",
       "prior_failure_preserved": true,
       "normal_candidate_rerun_required": true
+    },
+    {
+      "scope": "data/audit-p2",
+      "original": "router/task_plugin_protocol_router_test.go:TestVideoCreateRateLimitPrecedesSharedChannelSelection",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/task_plugin_protocol_router_test.go.txt",
+      "diagnostic": "router/native_restored_video_rate_test.go:TestRestoredProbeVideoCreateRateLimitPrecedesSharedChannelSelection",
+      "assertions_changed": false,
+      "coverage": "保留NoError、两个handler索引存在和限流先于选择的全部4个原断言；直接调用生产taskPluginProtocolHandlers。"
+    },
+    {
+      "scope": "data/audit-p2",
+      "original": "router/video_router_test.go:TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/video_router_test.go.txt",
+      "diagnostic": "router/native_restored_video_rate_test.go:TestRestoredProbeLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+      "assertions_changed": false,
+      "api_adapter": "删除的videoGenerationHandlers改由SetVideoRouter实际注册链的c.HandlerNames读取；完整保留两个索引存在和限流先于Pin的3个原断言。"
+    },
+    {
+      "scope": "data/audit-p2",
+      "original": "router/video_router_test.go:TestLegacyVideoGenerationRateLimitRejectsSecondRequest",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/video_router_test.go.txt",
+      "diagnostic": "router/native_restored_video_rate_test.go:TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest",
+      "assertions_changed": true,
+      "fixture_correction": "原首次204来自测试自设终点，不是生产API合同；原函数和204断言原文完整归档。改用实际SetVideoRouter+SetTaskPluginProtocolRouter、真实TokenAuth与无渠道DB后首次到达原生503。第二次429业务期望原样保留并扩展两个真实入口；未认领、钱包/Token额度与用量、无新任务均逐项检查。",
+      "not_a_behavior_reversal": "native/current第二次503仍判诊断FAIL，没有将其反写成历史正常通过。"
     }
   ],
   "archive_files": {
@@ -984,7 +1013,9 @@
     "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_export_test.go.txt": "3ddfd86675f87e78b9533b88e90384e2c98be0c14df4afa52e37218d912be17f",
     "scripts/testing/fixtures/known_upstream_restored/control/archive/service__origin_task_route_test.go.txt": "e3226d29980ca3c733831fbf4cf05e8a552f5499162274524185a9fc0c34eb9c",
     "scripts/testing/fixtures/known_upstream_restored/control/archive/concurrency_test.go.txt": "0f98539e6bee71ff275506ad2e3c4faae372d2c5f1f32d3fa103bd145ba5acfa",
-    "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df"
+    "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df",
+    "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/task_plugin_protocol_router_test.go.txt": "0350c7b770f1bfda5d79fe77257efca1ad6cdadf45a320138d776b2f4e51499e",
+    "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/video_router_test.go.txt": "65139f110555e2954a700f7ca53c6a24ae9f8c267cd4cefccef856edfb9f2650"
   },
   "removed_or_renamed_audit": {
     "method": "原始/当前顶层测试符号差集逐项映射；不以归档存在推断断言覆盖，另见各领域 assertion/coverage review。",
@@ -1207,7 +1238,19 @@
       ],
       [
         "router",
+        "TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes"
+      ],
+      [
+        "router",
+        "TestLegacyVideoGenerationRateLimitRejectsSecondRequest"
+      ],
+      [
+        "router",
         "TestNativeRemixRouteOriginLookupFailureIsPrivate500"
+      ],
+      [
+        "router",
+        "TestVideoCreateRateLimitPrecedesSharedChannelSelection"
       ],
       [
         "service",
@@ -1465,7 +1508,19 @@
       ],
       [
         "router",
+        "TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes"
+      ],
+      [
+        "router",
+        "TestLegacyVideoGenerationRateLimitRejectsSecondRequest"
+      ],
+      [
+        "router",
         "TestNativeRemixRouteOriginLookupFailureIsPrivate500"
+      ],
+      [
+        "router",
+        "TestVideoCreateRateLimitPrecedesSharedChannelSelection"
       ],
       [
         "service",
@@ -1507,7 +1562,7 @@
     "unmapped": [],
     "original_tests": 3133,
     "current_tests": 3086,
-    "diagnostic_tests": 72,
+    "diagnostic_tests": 75,
     "bindings": [
       {
         "package": "common",
@@ -2668,6 +2723,43 @@
       },
       {
         "package": "router",
+        "test": "TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+        "original_file": "router/video_router_test.go",
+        "records": [
+          {
+            "scope": "data/audit-p2",
+            "record": {
+              "scope": "data/audit-p2",
+              "original": "router/video_router_test.go:TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/video_router_test.go.txt",
+              "diagnostic": "router/native_restored_video_rate_test.go:TestRestoredProbeLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+              "assertions_changed": false,
+              "api_adapter": "删除的videoGenerationHandlers改由SetVideoRouter实际注册链的c.HandlerNames读取；完整保留两个索引存在和限流先于Pin的3个原断言。"
+            }
+          }
+        ]
+      },
+      {
+        "package": "router",
+        "test": "TestLegacyVideoGenerationRateLimitRejectsSecondRequest",
+        "original_file": "router/video_router_test.go",
+        "records": [
+          {
+            "scope": "data/audit-p2",
+            "record": {
+              "scope": "data/audit-p2",
+              "original": "router/video_router_test.go:TestLegacyVideoGenerationRateLimitRejectsSecondRequest",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/video_router_test.go.txt",
+              "diagnostic": "router/native_restored_video_rate_test.go:TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest",
+              "assertions_changed": true,
+              "fixture_correction": "原首次204来自测试自设终点，不是生产API合同；原函数和204断言原文完整归档。改用实际SetVideoRouter+SetTaskPluginProtocolRouter、真实TokenAuth与无渠道DB后首次到达原生503。第二次429业务期望原样保留并扩展两个真实入口；未认领、钱包/Token额度与用量、无新任务均逐项检查。",
+              "not_a_behavior_reversal": "native/current第二次503仍判诊断FAIL，没有将其反写成历史正常通过。"
+            }
+          }
+        ]
+      },
+      {
+        "package": "router",
         "test": "TestNativeRemixRouteOriginLookupFailureIsPrivate500",
         "original_file": "router/video_remix_route_test.go",
         "records": [
@@ -2683,6 +2775,24 @@
               "diagnostic_test": "TestRestoredProbeNativeRemixRouteOriginLookupFailureIsPrivate500",
               "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/data/remix-storage-private/report.json",
               "reason": "Approved restoration of native origin-task database error response; original four status/code/privacy/no-provider assertions retained, only test name and build-tag location changed."
+            }
+          }
+        ]
+      },
+      {
+        "package": "router",
+        "test": "TestVideoCreateRateLimitPrecedesSharedChannelSelection",
+        "original_file": "router/task_plugin_protocol_router_test.go",
+        "records": [
+          {
+            "scope": "data/audit-p2",
+            "record": {
+              "scope": "data/audit-p2",
+              "original": "router/task_plugin_protocol_router_test.go:TestVideoCreateRateLimitPrecedesSharedChannelSelection",
+              "archive": "scripts/testing/fixtures/known_upstream_restored/archive/router/audit_p2/task_plugin_protocol_router_test.go.txt",
+              "diagnostic": "router/native_restored_video_rate_test.go:TestRestoredProbeVideoCreateRateLimitPrecedesSharedChannelSelection",
+              "assertions_changed": false,
+              "coverage": "保留NoError、两个handler索引存在和限流先于选择的全部4个原断言；直接调用生产taskPluginProtocolHandlers。"
             }
           }
         ]

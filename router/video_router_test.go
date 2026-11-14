@@ -3,65 +3,17 @@ package router
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	appI18n "github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/plugins"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes(t *testing.T) {
-	handlers := videoGenerationHandlers()
-	index := func(fragment string) int {
-		for i, handler := range handlers {
-			name := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
-			if strings.Contains(name, fragment) {
-				return i
-			}
-		}
-		return -1
-	}
-	rateLimit := index(".ModelRequestRateLimit.func")
-	pin := index(".PinTaskPluginEndpoint.func")
-	assert.GreaterOrEqual(t, rateLimit, 0)
-	assert.GreaterOrEqual(t, pin, 0)
-	assert.Less(t, rateLimit, pin, "legacy video requests must be limited before ordinary/plugin route selection")
-}
-
-func TestLegacyVideoGenerationRateLimitRejectsSecondRequest(t *testing.T) {
-	require.NoError(t, appI18n.Init())
-	oldEnabled, oldTotal, oldSuccess, oldRedis := setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, common.RedisEnabled
-	setting.ModelRequestRateLimitEnabled = true
-	setting.ModelRequestRateLimitCount = 1
-	setting.ModelRequestRateLimitSuccessCount = 0
-	common.RedisEnabled = false
-	t.Cleanup(func() {
-		setting.ModelRequestRateLimitEnabled = oldEnabled
-		setting.ModelRequestRateLimitCount = oldTotal
-		setting.ModelRequestRateLimitSuccessCount = oldSuccess
-		common.RedisEnabled = oldRedis
-	})
-
-	router := gin.New()
-	router.POST("/v1/video/generations", func(c *gin.Context) { c.Set("id", 8700000) }, videoGenerationHandlers()[0], func(c *gin.Context) { c.Status(http.StatusNoContent) })
-	request := func() *httptest.ResponseRecorder {
-		recorder := httptest.NewRecorder()
-		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil))
-		return recorder
-	}
-	assert.Equal(t, http.StatusNoContent, request().Code)
-	assert.Equal(t, http.StatusTooManyRequests, request().Code)
-}
 
 func TestGetOpenAIVideoRouteRendersJimengTask(t *testing.T) {
 	gin.SetMode(gin.TestMode)

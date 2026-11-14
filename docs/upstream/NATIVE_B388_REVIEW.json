@@ -4,7 +4,7 @@
   "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
   "candidate_sha": null,
   "scope": "原始逐段处置完整；每段保留理由、恢复内容和验证接点保留原审查文本，裁定通过显式overlay覆盖。此文件只绑定代码，不声明测试通过。",
-  "merged_review_sha256": "4f664ab92c57606982278c5e64786d2387f547076875dda803fc796b8201c7b9",
+  "merged_review_sha256": "c11cc4dc31ef6521e29a0b96f84fa1f8fef163823eff82e33916a9ad24181cdf",
   "inputs": {
     "root-review.json": "aa04d8bd9f0191b2073da4079173de48bc58e20eea3ac06727a7d93147bbe873",
     "data-review.json": "eba52d18d26402c2601620b2b147120dfd1731c3fd0d7a1d8e02ddfe4d1943c5",
@@ -12,11 +12,12 @@
     "control-review.json": "64794482d2019b202ea0b8ececfdb753ed6ee7591bdb1261bc5800a6bbb3c178",
     "control-routing-review.json": "fcc75d3828d71d8843d47a02d48ad1880f11430e65629fe0387d8d6ec7608d00",
     "control-service-setting-review.json": "9fd72e1b34c5cca89b6bc10c4d3b1ef5cd268bc3f131007245a17b83ed4f13c5",
-    "adjudications.json": "b67c92cc80efcd72a0d60ae94fc24853428f6dafba152a045ad2e0f36a4395f1"
+    "adjudications.json": "b67c92cc80efcd72a0d60ae94fc24853428f6dafba152a045ad2e0f36a4395f1",
+    "final-audit-adjudications.json": "00b7539dbebf65a149e9ed44f2b40402af06d91bf09f83d807cf00406da92fae"
   },
   "counts": {
-    "retain_contract": 898,
-    "restore_native": 160,
+    "retain_contract": 889,
+    "restore_native": 169,
     "split": 51
   },
   "errors": [],
@@ -1633,7 +1634,7 @@
     },
     {
       "path": "model/redemption.go",
-      "local_sha256": "3cb77e8c9787b4818dec7d99ff08ddbbf99684c82c3fb3993ffdc44a37bcd993",
+      "local_sha256": "a358d73c0c90b106bb0f14b36ff91036d7c57384e3476d3b00e943e0a6b3ec80",
       "upstream_sha256": "89f37144add9046366b5a1aaac08b3ed060ca72eadc421c4a9c909342a738b4b",
       "upstream_equal": false,
       "original_hunks": [
@@ -2874,9 +2875,9 @@
     },
     {
       "path": "router/task-plugin-protocol-router.go",
-      "local_sha256": "85dbb7c628d4ae423a4bffe64f81d6b9d43d9289a229741dc020607e30d298fb",
+      "local_sha256": "8472323db88783ff78eb338a6a4e489edc77bf138b492738999cc956c8bfcbf2",
       "upstream_sha256": "8472323db88783ff78eb338a6a4e489edc77bf138b492738999cc956c8bfcbf2",
-      "upstream_equal": false,
+      "upstream_equal": true,
       "original_hunks": [
         "router/task-plugin-protocol-router.go#1"
       ]
@@ -2892,9 +2893,9 @@
     },
     {
       "path": "router/video-router.go",
-      "local_sha256": "51d519fa4f2c8b04a91dd439272e1766be9abfc105f67cc523c0168c833fc49f",
+      "local_sha256": "92c0c484f32767d9e0078bbd5e296dd5f75578e5aaced27e66688a30d01db92d",
       "upstream_sha256": "92c0c484f32767d9e0078bbd5e296dd5f75578e5aaced27e66688a30d01db92d",
-      "upstream_equal": false,
+      "upstream_equal": true,
       "original_hunks": [
         "router/video-router.go#1",
         "router/video-router.go#2"
@@ -3905,27 +3906,31 @@
       "path": "bin/migration_v0.2-v0.3.sql",
       "local_sha256": "ea42e47ac52ad1c198c93cdd49c4aed1b2388befcf78c203fa2e64886380e892",
       "upstream_sha256": "ea42e47ac52ad1c198c93cdd49c4aed1b2388befcf78c203fa2e64886380e892",
-      "test": false
+      "test": false,
+      "fingerprint_scope": "最终实际源码；旧null记录见外部audit/final-record-errata.json，原审计输入未改。"
     },
     {
       "path": "bin/migration_v0.3-v0.4.sql",
       "local_sha256": "b3ce06e3cbee79f03e24ac0be599db7cccb9eccb5bb13a1d3b60f0b7ae50c98f",
       "upstream_sha256": "b3ce06e3cbee79f03e24ac0be599db7cccb9eccb5bb13a1d3b60f0b7ae50c98f",
-      "test": false
+      "test": false,
+      "fingerprint_scope": "最终实际源码；旧null记录见外部audit/final-record-errata.json，原审计输入未改。"
     },
     {
       "path": "e2e/doc_parse_test.go",
-      "local_sha256": null,
+      "local_sha256": "cbad8f2fb37ba5e1fb69e20c10f047e0d5be9794c01def96503010dabe2ea4b7",
       "upstream_sha256": "d2d6d0e038b826e5856f35dab250a767d9aa32bf47b0fa35ef756920ce93e5ee",
-      "test": true
+      "test": true,
+      "fingerprint_scope": "最终实际源码；旧null记录见外部audit/final-record-errata.json，原审计输入未改。"
     },
     {
       "path": "bin/time_test.sh",
-      "local_sha256": null,
+      "local_sha256": "a2752d2e6a1670675b5add8f3ab1456ca2d5bfe831489adde3381e7d3cec5079",
       "upstream_sha256": "a2752d2e6a1670675b5add8f3ab1456ca2d5bfe831489adde3381e7d3cec5079",
       "test": true,
       "decision": "restore_native",
-      "verification": "bash -n；不调用真实外部供应商，不执行收费请求"
+      "verification": "bash -n；不调用真实外部供应商，不执行收费请求",
+      "fingerprint_scope": "最终实际源码；旧null记录见外部audit/final-record-errata.json，原审计输入未改。"
     }
   ],
   "hunks": [
@@ -17072,7 +17077,7 @@
     {
       "id": "model/redemption.go#1",
       "hunk_sha256": "84ef93936e00e59eeedc6590d3a5e10504d440adc0b1a8c8f15d8f30d171d7cb",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "funds-review.json",
       "detail": {
         "id": "model/redemption.go#1",
@@ -17095,6 +17100,24 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#1",
+        "hunk_sha256": "84ef93936e00e59eeedc6590d3a5e10504d440adc0b1a8c8f15d8f30d171d7cb",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "恢复 errors import，供9处原生 errors.New 使用。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
@@ -17154,7 +17177,7 @@
     {
       "id": "model/redemption.go#4",
       "hunk_sha256": "8fe4c360c4daa5fe9f5d240cb7bf31479d72e800ba25fae560df31efcb287c91",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "funds-review.json",
       "detail": {
         "id": "model/redemption.go#4",
@@ -17177,12 +17200,30 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#4",
+        "hunk_sha256": "8fe4c360c4daa5fe9f5d240cb7bf31479d72e800ba25fae560df31efcb287c91",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "Redeem 的两个入口错误仅经 TopUp 通用 ApiErrorT 返回，不直接传入 ApiError。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
       "id": "model/redemption.go#5",
       "hunk_sha256": "adbcc10ca7d938be4f9fda47b43ccf1e7c4fe18219543cfd5d9a6907cebf1039",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "funds-review.json",
       "detail": {
         "id": "model/redemption.go#5",
@@ -17205,12 +17246,30 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#5",
+        "hunk_sha256": "adbcc10ca7d938be4f9fda47b43ccf1e7c4fe18219543cfd5d9a6907cebf1039",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "三个事务内错误先被转换为 ErrRedeemFailed，TopUp 再转换为通用消息；类型只影响未被读取的元数据。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
       "id": "model/redemption.go#6",
       "hunk_sha256": "3dbda884ac6132a5078b8781a1a958c2d9d8f1ba6bbf35e6629e1482038e8a14",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "funds-review.json",
       "detail": {
         "id": "model/redemption.go#6",
@@ -17233,12 +17292,30 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#6",
+        "hunk_sha256": "3dbda884ac6132a5078b8781a1a958c2d9d8f1ba6bbf35e6629e1482038e8a14",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "CAS失败的错误同样经过 ErrRedeemFailed 与 TopUp 通用消息两层归一化。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
       "id": "model/redemption.go#7",
       "hunk_sha256": "2427bfde8af82223232e44515320c7618ff647b83128c779f1202a26a29f4e7f",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "funds-review.json",
       "detail": {
         "id": "model/redemption.go#7",
@@ -17261,6 +17338,24 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#7",
+        "hunk_sha256": "2427bfde8af82223232e44515320c7618ff647b83128c779f1202a26a29f4e7f",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "Insert额度校验被 AddRedemption 预校验，插入错误还被统一替换为创建失败消息。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
@@ -17289,12 +17384,30 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#8",
+        "hunk_sha256": "e6cb68570a7f9bd630621431912a7cb9f59af6ca0261fac4f65bc1c159bcd236",
+        "old_disposition": "retain_contract",
+        "new_disposition": "retain_contract",
+        "basis": "Update在status_only路径读取旧记录，零额度未被输入配额校验拦截；其错误直接由ApiError透传，现有Vue状态操作需要message_key显示中文。只保留这1处类型包装。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
       "id": "model/redemption.go#9",
       "hunk_sha256": "f2d5ccc2d370a8d1da10475c246992486ee362f68cca5d48f17daa2ee3808175",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "funds-review.json",
       "detail": {
         "id": "model/redemption.go#9",
@@ -17317,6 +17430,24 @@
           "native_comparison_required": false,
           "diagnostic_ids": []
         }
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "model/redemption.go#9",
+        "hunk_sha256": "f2d5ccc2d370a8d1da10475c246992486ee362f68cca5d48f17daa2ee3808175",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "BatchDelete两个输入条件均已由控制器binding required/min/max/dive/gt校验；错误类型不影响现有HTTP入口。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-redemption-review/review.json",
+            "sha256": "d51a3b9efce867320621c8e4696e5d648f66a452d13ebc46e36413c1948a82df"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
@@ -26589,7 +26720,7 @@
     {
       "id": "router/task-plugin-protocol-router.go#1",
       "hunk_sha256": "786daee11f5fe321de1b7f22d22f04c3366f33d546e559b8be977f6579deb22f",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "control-routing-review.json",
       "detail": {
         "id": "router/task-plugin-protocol-router.go#1",
@@ -26608,6 +26739,20 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "router/task-plugin-protocol-router.go#1",
+        "hunk_sha256": "786daee11f5fe321de1b7f22d22f04c3366f33d546e559b8be977f6579deb22f",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "最终Opus round2 P2：即时并发和限额摘要合同不授权模型限流覆盖未认领视频；恢复b388认领后TaskPluginEndpointOnly(ModelRequestRateLimit())及原生链，无条件提前限流及纯抽取helper删除。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
@@ -26639,7 +26784,7 @@
     {
       "id": "router/video-router.go#1",
       "hunk_sha256": "2a17bef5e7e094674b5343b9b56a150901d8db83101880e77b314352a822b1c9",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "control-routing-review.json",
       "detail": {
         "id": "router/video-router.go#1",
@@ -26659,12 +26804,26 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "router/video-router.go#1",
+        "hunk_sha256": "2a17bef5e7e094674b5343b9b56a150901d8db83101880e77b314352a822b1c9",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "最终Opus round2 P2：即时并发和限额摘要合同不授权模型限流覆盖未认领视频；恢复b388认领后TaskPluginEndpointOnly(ModelRequestRateLimit())及原生链，无条件提前限流及纯抽取helper删除。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
       "id": "router/video-router.go#2",
       "hunk_sha256": "10375a615a39df8fbb7aa674416f0331b64c5cd0a49f56cfa36af6b298b7b0b7",
-      "disposition": "retain_contract",
+      "disposition": "restore_native",
       "review_file": "control-routing-review.json",
       "detail": {
         "id": "router/video-router.go#2",
@@ -26684,6 +26843,20 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "final_audit_previous_disposition": "retain_contract",
+      "final_audit_adjudication": {
+        "id": "router/video-router.go#2",
+        "hunk_sha256": "10375a615a39df8fbb7aa674416f0331b64c5cd0a49f56cfa36af6b298b7b0b7",
+        "old_disposition": "retain_contract",
+        "new_disposition": "restore_native",
+        "basis": "最终Opus round2 P2：即时并发和限额摘要合同不授权模型限流覆盖未认领视频；恢复b388认领后TaskPluginEndpointOnly(ModelRequestRateLimit())及原生链，无条件提前限流及纯抽取helper删除。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/final-round-2-conclusion.md",
+            "sha256": "73ed086a17d82ae5f86829a52553ae1e2554781c9e6bde93ae80f4a443559f91"
+          }
+        ]
       }
     },
     {
@@ -32694,5 +32867,10 @@
         "verification": "相关既有合同测试；原生恢复差异进入独立诊断，非运行通过声明"
       }
     }
-  ]
+  ],
+  "final_audit_adjudication_count": 10,
+  "previous_merged_review": {
+    "path": "merged-review.json",
+    "sha256": "4f664ab92c57606982278c5e64786d2387f547076875dda803fc796b8201c7b9"
+  }
 }

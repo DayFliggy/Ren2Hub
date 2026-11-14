@@ -3126,6 +3126,111 @@
         "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/frozen-manifest.json",
         "declaration_sha256": "348f0d7d997fb55418ec1e897f2cf19a68d210322bda03916ee8123f247d8968"
       }
+    },
+    {
+      "id": "router/TestRestoredProbeVideoCreateRateLimitPrecedesSharedChannelSelection",
+      "module": ".",
+      "package": "router",
+      "test": "TestRestoredProbeVideoCreateRateLimitPrecedesSharedChannelSelection",
+      "fixtures": {
+        "router/native_restored_video_rate_test.go": "f55e48fd2729e3d45339ba4df5a451536c2fd715911838d9d287915d4ab9cbc6",
+        "router/video_rate_pipeline_test.go": "a8ee464a45582a919d3fba124a30acb47a631529c518bb8148b3f6833b84e3fa"
+      },
+      "expected": {
+        "nodes": {
+          "TestRestoredProbeVideoCreateRateLimitPrecedesSharedChannelSelection": "fail"
+        },
+        "assertions": {
+          "TestRestoredProbeVideoCreateRateLimitPrecedesSharedChannelSelection": [
+            "\"-1\" is not greater than or equal to \"0\""
+          ]
+        },
+        "messages": {}
+      },
+      "preflight": {
+        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "baseline_log": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/preflight/baseline2382-round2/00.jsonl",
+        "upstream_log": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/preflight/native-round3/00.jsonl",
+        "baseline_log_sha256": "684d996d96553f892ead10c5b084c96668f38e208ec15e1812dc36291da44596",
+        "upstream_log_sha256": "19b083cdbaa861f5f6afb85722181dd15a9d6f75f7aa15322209b892217fb408",
+        "declaration": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/frozen-before-current.json",
+        "declaration_sha256": "70c0c197aca4928d5b56ca10cf0b2aab9b0027578d450263b3e4b3ab18dd5c97"
+      }
+    },
+    {
+      "id": "router/TestRestoredProbeLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+      "module": ".",
+      "package": "router",
+      "test": "TestRestoredProbeLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes",
+      "fixtures": {
+        "router/native_restored_video_rate_test.go": "f55e48fd2729e3d45339ba4df5a451536c2fd715911838d9d287915d4ab9cbc6",
+        "router/video_rate_pipeline_test.go": "a8ee464a45582a919d3fba124a30acb47a631529c518bb8148b3f6833b84e3fa"
+      },
+      "expected": {
+        "nodes": {
+          "TestRestoredProbeLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes": "fail"
+        },
+        "assertions": {
+          "TestRestoredProbeLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes": [
+            "\"-1\" is not greater than or equal to \"0\""
+          ]
+        },
+        "messages": {}
+      },
+      "preflight": {
+        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "baseline_log": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/preflight/baseline2382-round2/01.jsonl",
+        "upstream_log": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/preflight/native-round3/01.jsonl",
+        "baseline_log_sha256": "e8da9f906a4dd9bb54f1d0fb5f2c34d2fd9807ac3d4a13f5b44bd93d75339a26",
+        "upstream_log_sha256": "866e33d766b7c7a9503bb1b653aacc4a927f4f766b0472f717c228d5d1a5e3df",
+        "declaration": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/frozen-before-current.json",
+        "declaration_sha256": "70c0c197aca4928d5b56ca10cf0b2aab9b0027578d450263b3e4b3ab18dd5c97"
+      }
+    },
+    {
+      "id": "router/TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest",
+      "module": ".",
+      "package": "router",
+      "test": "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest",
+      "fixtures": {
+        "router/native_restored_video_rate_test.go": "f55e48fd2729e3d45339ba4df5a451536c2fd715911838d9d287915d4ab9cbc6",
+        "router/video_rate_pipeline_test.go": "a8ee464a45582a919d3fba124a30acb47a631529c518bb8148b3f6833b84e3fa"
+      },
+      "expected": {
+        "nodes": {
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest": "fail",
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest//v1/video/generations": "fail",
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest//v1/videos": "fail"
+        },
+        "assertions": {
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest//v1/video/generations": [
+            "Not equal: expected: 429 actual : 503"
+          ],
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest//v1/videos": [
+            "Not equal: expected: 429 actual : 503"
+          ]
+        },
+        "messages": {
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest//v1/video/generations": [
+            "testify: unclaimed video requests historically consumed the shared request limit"
+          ],
+          "TestRestoredProbeLegacyVideoGenerationRateLimitRejectsSecondRequest//v1/videos": [
+            "testify: unclaimed video requests historically consumed the shared request limit"
+          ]
+        }
+      },
+      "preflight": {
+        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "baseline_log": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/preflight/baseline2382-round2/02.jsonl",
+        "upstream_log": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/preflight/native-round3/02.jsonl",
+        "baseline_log_sha256": "c404c406de303909e8bf6ae35ccfb076da4ca5af7a5fdf4ad1489834dbe17ce0",
+        "upstream_log_sha256": "e28442462c73d6ae01eb8e54920ae869ca10679bde87480184e1522b535e5497",
+        "declaration": "/home/work/ren2hub-native-b388-20261114/audit-router-fix/frozen-before-current.json",
+        "declaration_sha256": "70c0c197aca4928d5b56ca10cf0b2aab9b0027578d450263b3e4b3ab18dd5c97"
+      }
     }
   ]
 }
