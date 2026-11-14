@@ -906,6 +906,32 @@
       "added_after_full_verification_failure": true,
       "migration_record": "implementation/control/console-test-migration.json",
       "preflight": "/home/work/ren2hub-native-b388-20261114/preflight/control/console-normalization/comparison.json"
+    },
+    {
+      "scope": "candidate",
+      "file": "scripts/testing/contracts/routing_tasks.py",
+      "case": "sora_task_lifecycle",
+      "status": "native_protocol_fixture_correction",
+      "original_revision": "2bbe357fd925cb2d844b1a056ad482604fa06692",
+      "original_file_sha256": "1c64de2993eb913a3c0c0f34acaaeaaf46cc4a4de5e0917fff0719c137f693c3",
+      "assertions_changed": false,
+      "adaptation": "仅将 Sora /v1/videos 正向请求的 seconds 数字 4 改为原生协议字符串 \"4\"。旧插件验证顺带转换类型，b388 保持原值；不恢复本地转换，不更改模拟器、金额、生命周期或精确诊断条件。",
+      "evidence": "plugin-upgrade/sora-fixture-repair/",
+      "prior_failure_preserved": true,
+      "normal_candidate_rerun_required": true
+    },
+    {
+      "scope": "candidate",
+      "file": "scripts/testing/contracts/routing.py",
+      "case": "upstream_native_remix_probe preparation",
+      "status": "native_protocol_fixture_correction",
+      "original_revision": "2bbe357fd925cb2d844b1a056ad482604fa06692",
+      "original_file_sha256": "87381d132c950ed7331c51bee19c158bca531d4ef00b09c1181a03b9c04d06c4",
+      "assertions_changed": false,
+      "adaptation": "仅将 Sora /v1/videos 正向请求的 seconds 数字 4 改为原生协议字符串 \"4\"。旧插件验证顺带转换类型，b388 保持原值；不恢复本地转换，不更改模拟器、金额、生命周期或精确诊断条件。",
+      "evidence": "plugin-upgrade/sora-fixture-repair/",
+      "prior_failure_preserved": true,
+      "normal_candidate_rerun_required": true
     }
   ],
   "archive_files": {

@@ -502,7 +502,7 @@ class Routing(Experiment):
         from .routing_tasks import submit
         from candidate import execute
         self.route(['sora'])
-        task_id = submit(self,'/v1/tasks/sora',{'model':'sora-2','prompt':'origin','seconds':4,'size':'1280x720'},4000,'sora')
+        task_id = submit(self,'/v1/tasks/sora',{'model':'sora-2','prompt':'origin','seconds':'4','size':'1280x720'},4000,'sora')
         cursor, before = self.sim.cursor(), self.balances()
         since = datetime.now(timezone.utc).isoformat()
         status, raw = self.request('/v1/videos/'+task_id+'/remix',{'prompt':'continue'},expected_charge=0)

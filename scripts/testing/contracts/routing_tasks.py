@@ -178,6 +178,6 @@ def midjourney(e):
     return {'origin_task':origin,'operations':[name for name,_ in operations],'price_cap_enforced':True}
 
 
-CASES=[('sora_task_lifecycle',lambda e:lifecycle(e,'sora','sora-2',{'seconds':4,'size':'1280x720'},4000)),
+CASES=[('sora_task_lifecycle',lambda e:lifecycle(e,'sora','sora-2',{'seconds':'4','size':'1280x720'},4000)),
        ('hailuo_task_lifecycle',lambda e:lifecycle(e,'hailuo','MiniMax-Hailuo-02',{'duration':6,'resolution':'768P'},6000)),
        ('plugin_origin_pin_price_and_capacity',plugin_origin),('mj_continuation_pin_price',midjourney)]
