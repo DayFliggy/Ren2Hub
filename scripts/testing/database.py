@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -396,7 +397,9 @@ class Runner:
         self.ports: dict[str, int] = {}
         self.proxies: list[LoopbackProxy] = []
         self.sequence = 0
-        self.report = {"success": False, "run_id": self.run_id, "suites": [], "cleanup_errors": [],
+        self.binaries: dict[str, Path] = {}
+        self.known_databases: dict[str, set[str]] | None = None
+        self.report = {"success": False, "run_id": self.run_id, "suites": [], "binaries": {}, "cleanup_errors": [],
                        "scope": "全新 SQLite/MySQL/PostgreSQL；不含 ClickHouse、外部供应商或生产验证"}
 
     def redact(self, text: str) -> str:
@@ -411,9 +414,9 @@ class Runner:
             os.fchmod(handle.fileno(), 0o600)
             handle.write(self.redact(content))
 
-    def command(self, args: list[str], *, env: dict[str, str] | None = None,
-                timeout: int = 30, check: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess:
-        process = subprocess.Popen(args, cwd=self.source, env=env or self.env, text=True,
+    def command(self, args: list[str], *, env: dict[str, str] | None = None, timeout: int = 30,
+                check: bool = True, input_text: str | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
+        process = subprocess.Popen(args, cwd=cwd or self.source, env=env or self.env, text=True,
                                    stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
         try:
@@ -547,10 +550,11 @@ class Runner:
         self.sequence += 1
         env = dict(self.env)
         for kind in IMAGES:
+            clause = " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" if kind == "mysql" else ""
+            # 一次客户端会话创建两个库；任一语句失败即非零退出并中止本轮。
+            self.sql(kind, "\n".join(f"CREATE DATABASE rtest_{self.sequence}_{suffix}{clause};" for suffix in ("main", "log")))
             for suffix in ("main", "log"):
                 name = f"rtest_{self.sequence}_{suffix}"
-                clause = " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" if kind == "mysql" else ""
-                self.sql(kind, "CREATE DATABASE " + name + clause + ";")
                 if kind == "mysql":
                     dsn = f"root:{self.password}@tcp(127.0.0.1:{self.ports[kind]})/{name}?charset=utf8mb4&parseTime=True&loc=UTC"
                 else:
@@ -574,16 +578,40 @@ class Runner:
             data = json.loads(self.docker_call("container", "inspect", container).stdout)[0]
             if data.get("Id") != container or data.get("Config", {}).get("Labels", {}).get(LABEL) != self.run_id:
                 raise Failure("容器身份变化，拒绝清理测试库")
-            for name in self.database_names(kind) - original:
+            created = sorted(self.database_names(kind) - original)
+            for name in created:
                 if not re.fullmatch(r"(?:rtest_[0-9]+_(?:main|log)|newapi_audit_[0-9]+)", name):
                     raise Failure("拒绝清理非本地测试命名的数据库: " + name)
-                suffix = " WITH (FORCE)" if kind == "postgres" else ""
-                self.sql(kind, "DROP DATABASE " + name + suffix + ";")
+            suffix = " WITH (FORCE)" if kind == "postgres" else ""
+            if created:
+                self.sql(kind, "\n".join("DROP DATABASE " + name + suffix + ";" for name in created))
+        # 容器只属于本轮；差集全部删除成功（任一失败即中止）后，库名集合回到套件开始前，
+        # 下一套件直接复用，省去开始前的重复查询。
+        self.known_databases = {kind: set(names) for kind, names in before.items()}
+
+    def binary(self, package: str) -> Path:
+        """每个包只编译一次；各合同仍以独立新库和独立进程运行同一二进制。"""
+        if package in self.binaries:
+            return self.binaries[package]
+        directory = self.output / "bin"
+        directory.mkdir(mode=0o700, exist_ok=True)
+        path = directory / (package.replace("/", "_") + ".test")
+        started = time.monotonic()
+        result = self.command(["go", "test", "-c", "-buildvcs=false", "-p", "2", "-o", str(path), "./" + package],
+                              timeout=600, check=False)
+        self.write("compile-" + package.replace("/", "_") + ".log", result.stdout)
+        if result.returncode or not path.is_file():
+            raise Failure(self.redact(f"测试编译失败（exit={result.returncode}）: {package}\n{result.stdout[-4000:]}"))
+        self.report["binaries"][package] = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                            "compile_seconds": round(time.monotonic() - started, 3)}
+        self.binaries[package] = path
+        return path
 
     def suite(self, package: str, test: str, dialects: tuple[str, ...] = DIALECTS,
               *, nested: bool = True, manage: bool = False, security: bool = False,
               channel: bool = False, task: bool = False) -> None:
-        before = {kind: self.database_names(kind) for kind in IMAGES}
+        binary = self.binary(package)
+        before = self.known_databases or {kind: self.database_names(kind) for kind in IMAGES}
         env = self.database_environment()
         if manage:
             env["TEST_MANAGE_USER_DIALECT"] = dialects[0]
@@ -596,20 +624,23 @@ class Runner:
         pattern = "^" + test + "$"
         if nested:
             pattern += "/^(" + "|".join(dialects) + ")$"
-        args = ["go", "test", "-json", "-buildvcs=false", "-p", "2", "-count=1", "-timeout=60s", "./" + package, "-run", pattern]
+        args = ["go", "tool", "test2json", "-t", "-p", package, str(binary),
+                "-test.v=test2json", "-test.timeout=60s", "-test.count=1", "-test.run=" + pattern]
         name = f"{self.sequence:02d}-{test}" + ("-" + dialects[0] if manage or security or channel or task else "")
         started = time.monotonic()
-        entry = {"package": package, "test": test, "dialects": list(dialects), "log": name + ".jsonl", "success": False}
+        entry = {"package": package, "test": test, "dialects": list(dialects), "log": name + ".jsonl", "success": False,
+                 "binary_sha256": self.report["binaries"][package]["sha256"]}
         self.report["suites"].append(entry)
         try:
-            result = self.command(args, env=env, timeout=60, check=False)
+            # 留 5 秒让 Go 自身的 60 秒超时先输出 panic 栈；单测上限仍是 60 秒。
+            result = self.command(args, env=env, timeout=65, check=False, cwd=self.source / package)
             self.write(name + ".jsonl", result.stdout)
             entry.update(verify_events(result.stdout, test, dialects, nested))
             entry["exit_code"] = result.returncode
             entry["success"] = entry["success"] and result.returncode == 0
         except subprocess.TimeoutExpired as error:
             self.write(name + ".jsonl", error.output or "")
-            entry["error"] = "Go 测试超过 60 秒，已终止进程组"
+            entry["error"] = "Go 测试进程超过 65 秒，已终止进程组"
         finally:
             try:
                 self.drop_suite_databases(before)
@@ -675,6 +706,8 @@ class Runner:
                     self.track(*resource)
             except (Failure, OSError, subprocess.TimeoutExpired, ValueError, IndexError, KeyError) as error:
                 self.report["cleanup_errors"].append(self.redact(str(error)))
+        for path in self.binaries.values():
+            path.unlink(missing_ok=True)
         for proxy in self.proxies:
             proxy.close()
             if proxy.errors:

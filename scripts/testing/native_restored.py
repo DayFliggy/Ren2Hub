@@ -155,10 +155,43 @@ def package_name(root, case):
     return module[1] + ('' if case['package'] == '.' else '/' + case['package'])
 
 
-def invocation(case):
-    return ['go', 'test', '-buildvcs=false', '-json', '-count=1', '-timeout=60s', '-p=2',
-            '-tags=' + STAGE, '-run', '^' + case['test'] + '$',
+def binary_key(case):
+    return case['module'] + ':' + case['package']
+
+
+def binary_path(output, case):
+    name = binary_key(case).replace('/', '_').replace(':', '__').replace('.', 'root')
+    return Path(output).resolve() / 'bin' / (name + '.test')
+
+
+def compile_command(case, output):
+    return ['go', 'test', '-c', '-buildvcs=false', '-p=2', '-tags=' + STAGE, '-o', str(binary_path(output, case)),
             '.' if case['package'] == '.' else './' + case['package']]
+
+
+def invocation(case, output, package):
+    """同包探针共用一次编译；每个探针仍是独立进程、独立日志和 60 秒上限。"""
+    return ['go', 'tool', 'test2json', '-t', '-p', package, str(binary_path(output, case)),
+            '-test.v=test2json', '-test.timeout=60s', '-test.count=1', '-test.run=^' + case['test'] + '$']
+
+
+def compile_binaries(manifest, root, output, env, command):
+    binaries = {}
+    for case in manifest['cases']:
+        key = binary_key(case)
+        if key in binaries:
+            continue
+        path = binary_path(output, case)
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+        log = output / ('compile-' + path.stem + '.log')
+        argv = compile_command(case, output)
+        result = command(argv, root / case['module'], log, env, 600)
+        entry = {'command': argv, 'log': log.name, 'log_sha256': digest(log), 'returncode': result.returncode,
+                 'timed_out': result.timed_out, 'error': result.error, 'sha256': None}
+        if result.returncode == 0 and not result.timed_out and result.error is None and path.is_file():
+            entry['sha256'] = digest(path)
+        binaries[key] = entry
+    return binaries
 
 
 def verify_report(report, output, root, expected_source=None):
@@ -180,7 +213,13 @@ def verify_report(report, output, root, expected_source=None):
         row = by_id[case['id']]
         require(row.get('status') == STAGE and row.get('timed_out') is False
                 and row.get('error') is None, 'diagnostic_execution_failed')
-        require(row.get('command') == invocation(case), 'diagnostic_command_mismatch')
+        require(row.get('command') == invocation(case, output, package_name(root, case)), 'diagnostic_command_mismatch')
+        built = (report.get('binaries') or {}).get(binary_key(case)) or {}
+        require(built.get('command') == compile_command(case, output) and built.get('returncode') == 0
+                and built.get('timed_out') is False and built.get('error') is None
+                and digest(regular_path(output, built.get('log'))) == built.get('log_sha256')
+                and re.fullmatch(r'[a-f0-9]{64}', built.get('sha256') or '')
+                and row.get('binary_sha256') == built['sha256'], 'diagnostic_binary_mismatch')
         log = regular_path(output, row.get('log'))
         require(digest(log) == row.get('log_sha256'), 'diagnostic_log_hash_mismatch')
         actual = execution(log, package_name(root, case), case['test'], row.get('returncode'))
@@ -200,13 +239,20 @@ def run(root, output, supplied_env=None):
     source = source_identity(root)
     env = environment(output, supplied_env)
     started, rows = time.time(), []
+    binaries = compile_binaries(manifest, root, output, env, command)
     for index, case in enumerate(manifest['cases']):
+        built = binaries[binary_key(case)]
+        row = {'id': case['id'], 'status': 'fail', 'binary_sha256': built['sha256']}
+        rows.append(row)
+        if built['sha256'] is None:
+            row['error'] = 'compile_failed'
+            continue
         log = output / f'{index:03d}.jsonl'
-        argv = invocation(case)
-        result = command(argv, root / case['module'], log, env, 600)
-        row = {'id': case['id'], 'command': argv, 'log': log.name, 'log_sha256': digest(log),
-               'returncode': result.returncode, 'timed_out': result.timed_out, 'error': result.error,
-               'status': 'fail'}
+        argv = invocation(case, output, package_name(root, case))
+        directory = root / case['module'] / ('' if case['package'] == '.' else case['package'])
+        result = command(argv, directory, log, env, 90)
+        row.update({'command': argv, 'log': log.name, 'log_sha256': digest(log),
+                    'returncode': result.returncode, 'timed_out': result.timed_out, 'error': result.error})
         try:
             require(not result.timed_out and result.error is None, 'command_failed')
             row['observed'] = execution(log, package_name(root, case), case['test'], result.returncode)
@@ -214,13 +260,15 @@ def run(root, output, supplied_env=None):
             row['status'] = STAGE
         except (InvalidEvidence, ValueError, TypeError, KeyError) as error:
             row['error'] = str(error) if isinstance(error, InvalidEvidence) else 'invalid_test_output'
-        rows.append(row)
+    for key, built in binaries.items():
+        if built['sha256'] is not None:
+            binary_path(output, next(c for c in manifest['cases'] if binary_key(c) == key)).unlink()
     end = source_identity(root)
     accepted = source == end and all(row['status'] == STAGE for row in rows)
     report = {'schema_version': 1, 'stage': STAGE, 'success': False, 'contracts_success': accepted,
               'race_instrumented': False,
               'exit_code': 2 if accepted else 1, 'manifest_sha256': checksum,
-              'source_before': source, 'source_after': end, 'cases': rows,
+              'source_before': source, 'source_after': end, 'binaries': binaries, 'cases': rows,
               'counts': dict(Counter(row['status'] for row in rows)), 'started_at': started, 'finished_at': time.time()}
     if accepted:
         verify_report(report, output, root, source)

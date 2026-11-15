@@ -171,11 +171,54 @@ class DatabaseRunnerTests(unittest.TestCase):
             detail = [{"Id": identity, "Config": {"Labels": {database.LABEL: runner.run_id}}}]
             with patch.object(runner, "docker_call", return_value=subprocess.CompletedProcess([], 0, json.dumps(detail))), patch.object(runner, "database_names", return_value={"postgres", "rtest_1_main", "newapi_audit_123"}), patch.object(runner, "sql") as sql:
                 runner.drop_suite_databases({"postgres": {"postgres"}})
-            self.assertEqual({call.args[1] for call in sql.call_args_list}, {"DROP DATABASE rtest_1_main WITH (FORCE);", "DROP DATABASE newapi_audit_123 WITH (FORCE);"})
+            statements = {line for call in sql.call_args_list for line in call.args[1].splitlines()}
+            self.assertEqual(statements, {"DROP DATABASE rtest_1_main WITH (FORCE);", "DROP DATABASE newapi_audit_123 WITH (FORCE);"})
+            self.assertEqual(runner.known_databases, {"postgres": {"postgres"}})
             with patch.object(runner, "docker_call", return_value=subprocess.CompletedProcess([], 0, json.dumps(detail))), patch.object(runner, "database_names", return_value={"postgres", "foreign_database"}), patch.object(runner, "sql") as sql:
                 with self.assertRaises(database.Failure):
                     runner.drop_suite_databases({"postgres": {"postgres"}})
                 sql.assert_not_called()
+
+    def test_suites_reuse_one_binary_but_keep_fresh_databases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = database.Runner(Path(directory), Path(directory), {})
+            calls = []
+            def command(args, **kwargs):
+                calls.append((args, kwargs))
+                if args[:3] == ["go", "test", "-c"]:
+                    Path(args[args.index("-o") + 1]).write_bytes(b"binary")
+                    return subprocess.CompletedProcess(args, 0, "")
+                test = args[-1].removeprefix("-test.run=^").split("$")[0]
+                return subprocess.CompletedProcess(args, 0, events(test, [("", "run"), ("", "pass")]))
+            def fresh():
+                runner.sequence += 1
+                return {"TEST_MYSQL_DSN": f"rtest_{runner.sequence}_main"}
+            with patch.object(runner, "command", side_effect=command), patch.object(runner, "database_names", return_value=set()), \
+                    patch.object(runner, "database_environment", side_effect=fresh), patch.object(runner, "drop_suite_databases") as drop:
+                runner.suite("controller", "TestA", ("mysql",), nested=False)
+                runner.suite("controller", "TestB", ("mysql",), nested=False)
+            compiles = [args for args, _ in calls if args[:3] == ["go", "test", "-c"]]
+            runs = [(args, kwargs) for args, kwargs in calls if args[:3] == ["go", "tool", "test2json"]]
+            self.assertEqual(len(compiles), 1)
+            self.assertEqual([kwargs["env"]["TEST_MYSQL_DSN"] for _, kwargs in runs], ["rtest_1_main", "rtest_2_main"])
+            for args, kwargs in runs:
+                self.assertIn("-test.timeout=60s", args)
+                self.assertIn("-test.count=1", args)
+                self.assertEqual(kwargs["cwd"], Path(directory) / "controller")
+            self.assertEqual(drop.call_count, 2)
+            self.assertTrue(all(entry["success"] for entry in runner.report["suites"]))
+            self.assertEqual({entry["binary_sha256"] for entry in runner.report["suites"]},
+                             {runner.report["binaries"]["controller"]["sha256"]})
+
+    def test_compile_failure_stops_before_creating_databases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = database.Runner(Path(directory), Path(directory), {})
+            failed = subprocess.CompletedProcess([], 1, "undefined: x")
+            with patch.object(runner, "command", return_value=failed), patch.object(runner, "database_environment") as fresh:
+                with self.assertRaises(database.Failure):
+                    runner.suite("controller", "TestA")
+            fresh.assert_not_called()
+            self.assertFalse(runner.report["suites"])
 
     def test_timeout_preserves_error_when_child_already_exited(self):
         with tempfile.TemporaryDirectory() as directory:
