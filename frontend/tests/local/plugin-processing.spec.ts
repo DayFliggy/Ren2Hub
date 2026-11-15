@@ -183,6 +183,10 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
     const page = await context.newPage()
     await login(page, 'root')
     let instances: RequestPluginInstance[] = []
+    const putBodies: RequestPluginInstance[][] = []
+    let nextInstanceId = 0
+    const channelInstanceId = () =>
+      instances.find((item) => item.name === 'First')!.id
     let saved: Record<string, unknown> | undefined
     let dryRun: Record<string, unknown> | undefined
     let callbackSubmissions = 0
@@ -219,6 +223,7 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
         task: false,
         provider: false,
         transform: true,
+        transform_hooks: ['request', 'reply'],
         models: [],
         configSchema: {
           type: 'object',
@@ -248,8 +253,17 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       route.fulfill({ json: { success: true, data: options } })
     )
     await context.route('**/api/request_plugin/instances', async (route) => {
-      if (route.request().method() === 'PUT')
-        instances = route.request().postDataJSON().instances
+      if (route.request().method() === 'PUT') {
+        const sent: RequestPluginInstance[] = route
+          .request()
+          .postDataJSON().instances
+        putBodies.push(sent)
+        // Like the gateway, new instances get an id when they are saved.
+        instances = sent.map((item) => ({
+          ...item,
+          id: item.id || `rp-${++nextInstanceId}`,
+        }))
+      }
       await route.fulfill({ json: { success: true, data: { instances } } })
     })
     await context.route('**/api/request_plugin/dry_run', async (route) => {
@@ -265,69 +279,103 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
                 name: 'Local Transform',
                 plugin: 'local-transform',
                 stage: 'reply',
-                action: 'allow',
+                action: 'continue',
                 effects: 0,
                 duration_ms: 1,
               },
             ],
             record: [],
-            reply: dryRun?.reply,
+            // The gateway masks the reply and returns it as an object.
+            reply:
+              typeof dryRun?.reply === 'string'
+                ? { text: 'masked-reply', stopped: null }
+                : null,
           },
         },
       })
     })
-    await test.step('请求处理的顺序保存和回复试运行', async () => {
+    await test.step('请求处理：选插件添加、立即保存顺序和两种试运行', async () => {
       await page.goto('/request-processing')
-      await page.getByRole('button', { name: '添加实例', exact: true }).click()
+      await expect(
+        page.getByText('暂无请求处理', { exact: true })
+      ).toBeVisible()
+      const editor = page.locator('[data-instance-editor]')
+      async function addInstance(name: string, note: string, channels = false) {
+        await page.getByRole('button', { name: '添加', exact: true }).click()
+        await page.locator('[data-plugin-card="local-transform"]').click()
+        // New instances run for all requests, like upstream; only
+        // channel-scoped ones can be added in the channel settings.
+        if (channels)
+          await editor.getByRole('radio', { name: /只在渠道添加/ }).check()
+        await editor
+          .getByRole('textbox', { name: '备注', exact: true })
+          .fill(note)
+        await page.getByRole('button', { name: '重命名', exact: true }).click()
+        await page
+          .getByRole('textbox', { name: '名称', exact: true })
+          .fill(name)
+        await page.keyboard.press('Enter')
+        await page.getByRole('button', { name: '保存', exact: true }).click()
+        await expect(editor).toHaveCount(0)
+      }
+
+      await addInstance('First', 'first-config', true)
+      expect(putBodies.at(-1)?.at(-1)?.id).toBe('')
+      await addInstance('Second', 'second-config')
+      await expect
+        .poll(() => instances.map((item) => item.name))
+        .toEqual(['First', 'Second'])
+      expect(instances[0]?.config).toEqual({ note: 'first-config' })
+      expect(instances.map((item) => item.global)).toEqual([false, true])
+      expect(instances.every((item) => !('groups' in item))).toBe(true)
+
+      // Moving saves the whole list at once; there is no save-all step.
       await page
-        .getByRole('textbox', { name: '名称', exact: true })
-        .fill('First')
-      await page
-        .getByRole('textbox', { name: '备注', exact: true })
-        .fill('first-config')
-      await page.getByRole('button', { name: '添加实例', exact: true }).click()
-      await page
-        .getByRole('textbox', { name: '名称', exact: true })
-        .nth(1)
-        .fill('Second')
-      await page
-        .getByRole('button', { name: '上移', exact: true })
-        .nth(1)
-        .click()
-      await page
-        .getByRole('button', { name: '保存全部实例', exact: true })
+        .getByRole('button', { name: '上移 Second', exact: true })
         .click()
       await expect
         .poll(() => instances.map((item) => item.name))
         .toEqual(['Second', 'First'])
-      expect(instances[1]?.config).toEqual({ note: 'first-config' })
-      expect(instances.every((item) => !('groups' in item))).toBe(true)
       await page.reload()
       await expect(
-        page.getByRole('textbox', { name: '名称', exact: true }).first()
-      ).toHaveValue('Second')
+        page.locator('[data-request-plugin-row]').first()
+      ).toContainText('Second')
+
+      // The editor's try panel runs the unsaved draft, reply included.
       await page
-        .getByRole('textbox', { name: '请求模型', exact: true })
-        .fill('fixture-model')
-      await page
-        .getByRole('textbox', { name: '示例回复（可选）', exact: true })
-        .fill('Local answer')
-      await page
-        .getByRole('button', { name: '运行已保存实例', exact: true })
+        .getByRole('button', { name: '编辑 First', exact: true })
         .click()
-      await expect.poll(() => dryRun?.reply).toBe('Local answer')
-      expect(dryRun).not.toHaveProperty('instance')
-      await expect(page.getByText('试运行结果', { exact: true })).toBeVisible()
-      await page
-        .getByRole('button', { name: '仅运行此草稿', exact: true })
-        .first()
+      await editor
+        .locator('[data-try-panel]')
+        .getByRole('button', { name: '运行', exact: true })
         .click()
       await expect.poll(() => Boolean(dryRun?.instance)).toBe(true)
+      expect(typeof dryRun?.reply).toBe('string')
+      const tryPanel = editor.locator('[data-try-panel]')
+      await expect(
+        tryPanel.getByText('发给客户端', { exact: true })
+      ).toBeVisible()
+      await expect(
+        tryPanel.getByText('masked-reply', { exact: true })
+      ).toBeVisible()
+      await page.getByRole('button', { name: '取消', exact: true }).click()
+      await expect(editor).toHaveCount(0)
+
+      // The page dry run uses the saved instances only.
+      dryRun = undefined
+      await page.getByRole('button', { name: '试运行', exact: true }).click()
+      const dialog = page.locator('[data-dry-run-dialog]')
+      await dialog.getByRole('button', { name: '运行', exact: true }).click()
+      await expect.poll(() => dryRun?.path).toBe('/v1/chat/completions')
+      expect(dryRun).not.toHaveProperty('instance')
+      expect(dryRun).not.toHaveProperty('group')
+      await expect(dialog.getByText('结果', { exact: true })).toBeVisible()
       await noOverflow(page)
       await page.screenshot({
         path: info.outputPath('request-processing.png'),
         fullPage: true,
       })
+      await page.keyboard.press('Escape')
     })
     await context.route(/\/api\/channel\/(?:\?.*)?$/, async (route) => {
       if (route.request().method() === 'PUT') {
@@ -430,7 +478,7 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       await dialog.getByRole('button', { name: /^高级设置/ }).click()
       await dialog
         .getByRole('combobox', { name: '渠道请求处理实例（按执行顺序）' })
-        .selectOption(instances[0]!.id)
+        .selectOption(channelInstanceId())
       await dialog
         .getByRole('button', { name: '添加实例', exact: true })
         .click()
@@ -450,7 +498,7 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
         region: 'local-region',
       })
       expect(JSON.parse(String(saved?.setting)).request_plugins).toEqual([
-        instances[0]!.id,
+        channelInstanceId(),
       ])
       await expect(dialog).toHaveCount(0)
     })

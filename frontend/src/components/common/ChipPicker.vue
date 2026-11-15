@@ -12,8 +12,11 @@ const props = withDefaults(
     options: string[]
     placeholder?: string
     max?: number
+    /** Enter adds the typed text as a chip of its own. */
+    creatable?: boolean
+    disabled?: boolean
   }>(),
-  { placeholder: '', max: 0 }
+  { placeholder: '', max: 0, creatable: false, disabled: false }
 )
 
 const model = defineModel<string[]>({ default: () => [] })
@@ -36,12 +39,14 @@ const filtered = computed(() => {
 })
 
 function add(option: string) {
+  if (props.disabled) return
   if (props.max > 0 && model.value.length >= props.max) return
   model.value = [...model.value, option]
   keyword.value = ''
 }
 
 function remove(option: string) {
+  if (props.disabled) return
   model.value = model.value.filter((o) => o !== option)
 }
 
@@ -55,7 +60,9 @@ function close() {
 // close the panel directly; blur still covers keyboard Tab navigation.
 onClickOutside(root, close, { ignore: [panel] })
 
-const showPanel = computed(() => open.value && filtered.value.length > 0)
+const showPanel = computed(
+  () => open.value && !props.disabled && filtered.value.length > 0
+)
 const { style: panelStyle, scope: panelScope } = useFloatingPanel(
   field,
   panel,
@@ -80,6 +87,14 @@ function optionButtons(): HTMLButtonElement[] {
 
 /** The options sit at the end of <body>, so the input hands focus over. */
 function onInputKeydown(event: KeyboardEvent) {
+  if (props.creatable && event.key === 'Enter' && !event.isComposing) {
+    const typed = keyword.value.trim()
+    if (!typed) return
+    event.preventDefault()
+    if (model.value.includes(typed)) keyword.value = ''
+    else add(typed)
+    return
+  }
   const enters =
     event.key === 'ArrowDown' || (event.key === 'Tab' && !event.shiftKey)
   if (!enters || !showPanel.value || event.isComposing) return
@@ -136,6 +151,7 @@ onBeforeUnmount(() => {
         name="chip-picker-search"
         :aria-label="placeholder"
         :placeholder="placeholder"
+        :disabled="disabled"
         class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
         @focus="onFocus"
         @click="onFocus"
@@ -182,6 +198,7 @@ onBeforeUnmount(() => {
           class="absolute -right-1.5 -top-1.5 flex items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--surface-solid)]"
           style="height: 18px; width: 18px"
           :aria-label="t('common.removeItem', { item: option })"
+          :disabled="disabled"
           @click="remove(option)"
         >
           <svg

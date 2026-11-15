@@ -139,6 +139,8 @@ export type TaskPluginOption = TaskPluginParts & {
   relayPaths?: string[]
   responsesWebsocket?: boolean
   checkKey?: boolean
+  /** A request processing plugin whose failure is skipped instead of refusing. */
+  optional?: boolean
 
   configSchema?: RequestPluginConfigSchema
   name_i18n?: LocalizedTextValue

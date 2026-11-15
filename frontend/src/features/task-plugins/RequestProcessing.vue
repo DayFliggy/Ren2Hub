@@ -1,366 +1,407 @@
 <script setup lang="ts">
+// Upstream features/request-processing/index.tsx: the instances in the order
+// they run. Every change saves the whole list at once. Ren2Hub has no
+// business group, so an instance runs for all requests or for its channels.
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { ArrowDown, ArrowUp, Pencil, Play, Plus, Trash2 } from 'lucide-vue-next'
+
+import { api } from '@/api/client'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
-import FormField from '@/components/common/FormField.vue'
-import TextInput from '@/components/common/TextInput.vue'
+import IconButton from '@/components/common/IconButton.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
-import { localizedText } from '@/utils/localizedText'
-import {
-  requestPluginSampleBody,
-  requestPluginSamplesFor,
-} from './lib/request-plugin-samples'
 import { useToast } from '@/composables/useToast'
+import { localizedText } from '@/utils/localizedText'
 import {
   getTaskPluginOptions,
   listRequestPluginInstances,
   saveRequestPluginInstances,
-  dryRunRequestPlugins,
 } from './api'
-import type {
-  RequestPluginInstance,
-  RequestPluginDryRunResult,
-  TaskPluginOption,
-  RequestPluginSample,
-} from './types'
-import PluginConfigEditor from './components/PluginConfigEditor.vue'
+import PluginIcon from './components/PluginIcon.vue'
+import RequestPluginDryRunDialog from './components/RequestPluginDryRunDialog.vue'
+import RequestPluginInstanceEditor from './components/RequestPluginInstanceEditor.vue'
+import type { RequestPluginInstance, TaskPluginOption } from './types'
+
 const { t, locale } = useI18n()
 const toast = useToast()
-const instances = ref<RequestPluginInstance[]>([])
-const options = ref<TaskPluginOption[]>([])
-const configValidity = ref<Record<string, boolean>>({})
-const baseline = ref('[]')
-const error = ref('')
-const loading = ref(true)
-const saving = ref(false)
-const running = ref(false)
-const result = ref<RequestPluginDryRunResult | null>(null)
-const format = ref('openai')
-const path = ref('/v1/chat/completions')
-const model = ref('')
-const channel = ref('')
-const body = ref('{\n  "messages": [{"role":"user","content":"Hello"}]\n}')
-const reply = ref('')
 const request = new AbortController()
-const dirty = computed(() => JSON.stringify(instances.value) !== baseline.value)
+
+const instances = ref<RequestPluginInstance[]>([])
+const plugins = ref<TaskPluginOption[]>([])
+const models = ref<string[]>([])
+const loading = ref(true)
+const loadError = ref('')
+const listSaving = ref(false)
+const editorSaving = ref(false)
+const editorError = ref('')
+const editing = ref<RequestPluginInstance | 'new' | null>(null)
+const deleteTarget = ref<RequestPluginInstance | null>(null)
+const dryRunOpen = ref(false)
+
+const busy = computed(() => listSaving.value || editorSaving.value)
+const ready = computed(() => !loading.value && !loadError.value)
+const instanceCounts = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const instance of instances.value)
+    counts[instance.plugin] = (counts[instance.plugin] ?? 0) + 1
+  return counts
+})
+
 const textError = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause)
-const pluginOptions = computed(() =>
-  options.value.filter((item) => item.transform)
-)
+
+function findPlugin(key: string) {
+  return plugins.value.find((item) => item.key === key)
+}
+
+function pluginName(key: string) {
+  const plugin = findPlugin(key)
+  if (!plugin) return key
+  return localizedText(plugin.name_i18n, locale.value) || plugin.name || key
+}
+
+function instanceName(id: string) {
+  return instances.value.find((item) => item.id === id)?.name || id
+}
+
+function scopeText(instance: RequestPluginInstance) {
+  return instance.global
+    ? t('pluginExtensions.rp.allRequests')
+    : t('pluginExtensions.rp.channelsOnly')
+}
+
 async function load() {
-  error.value = ''
+  loadError.value = ''
   loading.value = true
   try {
-    const [rows, plugins] = await Promise.all([
+    const [rows, options] = await Promise.all([
       listRequestPluginInstances(request.signal),
       getTaskPluginOptions(request.signal),
     ])
     if (request.signal.aborted) return
     instances.value = rows
-    options.value = plugins
-    baseline.value = JSON.stringify(rows)
+    plugins.value = options.filter((item) => item.transform)
   } catch (cause) {
-    if (!request.signal.aborted) error.value = textError(cause)
+    if (!request.signal.aborted) loadError.value = textError(cause)
   } finally {
     if (!request.signal.aborted) loading.value = false
   }
 }
-function add() {
-  instances.value.push({
-    id: crypto.randomUUID(),
-    name: '',
-    plugin: pluginOptions.value[0]?.key ?? '',
-    enabled: true,
-    global: false,
-    models: [],
-    config: {},
-  })
-}
-function move(index: number, delta: number) {
-  const item = instances.value.splice(index, 1)[0]
-  if (item) instances.value.splice(index + delta, 0, item)
-}
-async function save() {
-  if (
-    instances.value.some(
-      (instance) => configValidity.value[instance.id] === false
-    )
-  ) {
-    error.value = t('pluginExtensions.invalidConfig')
-    return
-  }
-  saving.value = true
-  error.value = ''
+
+// The model list only feeds suggestions in the editor; typed names still work.
+async function loadModels() {
   try {
-    const rows = await saveRequestPluginInstances(
-      instances.value,
-      request.signal
+    const names = await api.get<string[]>(
+      '/api/channel/models_enabled',
+      undefined,
+      { signal: request.signal }
     )
+    if (!request.signal.aborted) models.value = names ?? []
+  } catch (cause) {
+    if (!request.signal.aborted) toast.error(textError(cause))
+  }
+}
+
+async function saveList(next: RequestPluginInstance[]) {
+  listSaving.value = true
+  try {
+    const rows = await saveRequestPluginInstances(next, request.signal)
     if (request.signal.aborted) return
     instances.value = rows
-    baseline.value = JSON.stringify(rows)
+    deleteTarget.value = null
     toast.success(t('pluginExtensions.saved'))
   } catch (cause) {
-    if (!request.signal.aborted) error.value = textError(cause)
+    if (!request.signal.aborted) toast.error(textError(cause))
   } finally {
-    saving.value = false
+    if (!request.signal.aborted) listSaving.value = false
   }
 }
-async function run(instance?: RequestPluginInstance) {
-  if (
-    running.value ||
-    (instance && configValidity.value[instance.id] === false)
+
+function move(index: number, offset: -1 | 1) {
+  const next = [...instances.value]
+  const [item] = next.splice(index, 1)
+  if (!item) return
+  next.splice(index + offset, 0, item)
+  void saveList(next)
+}
+
+function setEnabled(index: number, enabled: boolean) {
+  void saveList(
+    instances.value.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, enabled } : item
+    )
   )
-    return
-  running.value = true
-  error.value = ''
-  result.value = null
+}
+
+function confirmDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+  void saveList(instances.value.filter((item) => item.id !== target.id))
+}
+
+function cancelDelete() {
+  if (!listSaving.value) deleteTarget.value = null
+}
+
+function openEditor(instance: RequestPluginInstance | 'new') {
+  editorError.value = ''
+  editing.value = instance
+}
+
+function closeEditor() {
+  if (!editorSaving.value) editing.value = null
+}
+
+async function saveInstance(instance: RequestPluginInstance) {
+  const current = editing.value
+  const index =
+    current && current !== 'new'
+      ? instances.value.findIndex((item) => item.id === current.id)
+      : -1
+  const next =
+    index < 0
+      ? [...instances.value, instance]
+      : instances.value.map((item, itemIndex) =>
+          itemIndex === index ? instance : item
+        )
+  editorError.value = ''
+  editorSaving.value = true
   try {
-    const parsed: unknown = JSON.parse(body.value)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
-      throw new Error(t('pluginExtensions.invalidConfig'))
-    const channelId = channel.value.trim() ? Number(channel.value) : undefined
-    if (
-      channelId !== undefined &&
-      (!Number.isSafeInteger(channelId) || channelId <= 0)
-    )
-      throw new Error(t('pluginExtensions.channel'))
-    const response = await dryRunRequestPlugins(
-      {
-        format: format.value,
-        path: path.value,
-        model: model.value,
-        body: parsed,
-        channel_id: channelId,
-        ...(reply.value ? { reply: reply.value } : {}),
-        ...(instance ? { instance } : {}),
-      },
-      request.signal
-    )
-    if (!request.signal.aborted) result.value = response
+    const rows = await saveRequestPluginInstances(next, request.signal)
+    if (request.signal.aborted) return
+    instances.value = rows
+    editing.value = null
+    toast.success(t('pluginExtensions.saved'))
   } catch (cause) {
-    if (!request.signal.aborted) error.value = textError(cause)
+    if (!request.signal.aborted) editorError.value = textError(cause)
   } finally {
-    running.value = false
+    if (!request.signal.aborted) editorSaving.value = false
   }
 }
-function loadSample(sample: RequestPluginSample) {
-  format.value = sample.format
-  path.value =
-    sample.format === 'openai_responses'
-      ? '/v1/responses'
-      : sample.format === 'claude'
-        ? '/v1/messages'
-        : sample.format === 'gemini'
-          ? `/v1beta/models/${model.value || 'gemini-2.5-flash'}:generateContent`
-          : '/v1/chat/completions'
-  // A local PNG keeps image examples deterministic and never sends a remote image URL.
-  const image =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
-  body.value = JSON.stringify(
-    requestPluginSampleBody(sample.body, sample.format, image),
-    null,
-    2
-  )
-  const sampleModel = sample.body.model
-  if (typeof sampleModel === 'string') model.value = sampleModel
-  reply.value = sample.reply ?? ''
-}
-function modelsChanged(instance: RequestPluginInstance, event: Event) {
-  instance.models = (event.target as HTMLTextAreaElement).value
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-onBeforeRouteLeave(() =>
-  saving.value
-    ? false
-    : !dirty.value || window.confirm(t('pluginExtensions.unsaved'))
-)
+
 onBeforeUnmount(() => request.abort())
 void load()
+void loadModels()
 </script>
+
 <template>
-  <div class="min-w-0 sibling-space-y-4">
+  <div class="min-w-0" data-request-processing>
     <PageBreadcrumb
-      :crumbs="[t('nav.groupAdmin'), t('pluginExtensions.title')]"
-    />
-    <p class="text-sm text-[var(--text-secondary)]">
-      {{ t('pluginExtensions.intro') }}
-    </p>
-    <ErrorBanner v-if="error" :message="error" />
-    <div class="flex flex-wrap gap-2">
-      <ConsoleButton
-        :disabled="loading || saving || !pluginOptions.length"
-        @click="add"
-        >{{ t('pluginExtensions.add') }}</ConsoleButton
-      ><ConsoleButton :disabled="loading || saving || !dirty" @click="save">{{
-        t('pluginExtensions.save')
-      }}</ConsoleButton>
-    </div>
-    <p v-if="!loading && !instances.length" class="text-sm">
-      {{ t('pluginExtensions.empty') }}
-    </p>
-    <section
-      v-for="(instance, index) in instances"
-      :key="instance.id"
-      class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 sibling-space-y-3"
+      :crumbs="[t('nav.groupAdmin'), t('pluginExtensions.rp.title')]"
     >
-      <fieldset :disabled="saving" class="grid gap-3 md:grid-cols-2">
-        <FormField :label="t('pluginExtensions.name')"
-          ><TextInput v-model="instance.name"
-        /></FormField>
-        <FormField :label="t('pluginExtensions.plugin')"
-          ><select
-            v-model="instance.plugin"
-            class="plugin-control"
-            @change="instance.config = {}"
+      <template #action>
+        <div class="flex flex-wrap items-center gap-2">
+          <ConsoleButton
+            variant="secondary"
+            :disabled="!ready"
+            @click="dryRunOpen = true"
           >
-            <option
-              v-if="!pluginOptions.some((p) => p.key === instance.plugin)"
-              :value="instance.plugin"
-            >
-              {{ instance.plugin }} · {{ t('pluginExtensions.unavailable') }}
-            </option>
-            <option
-              v-for="plugin in pluginOptions"
-              :key="plugin.key"
-              :value="plugin.key"
-            >
-              {{ localizedText(plugin.name_i18n, locale) || plugin.name }}
-            </option>
-          </select></FormField
-        >
-        <div class="flex items-center gap-2">
-          <ConsoleToggle
-            v-model="instance.enabled"
-            :label="t('pluginExtensions.enabled')"
-          />{{ t('pluginExtensions.enabled') }}
+            <Play :size="16" aria-hidden="true" />
+            {{ t('pluginExtensions.rp.dryRun') }}
+          </ConsoleButton>
+          <ConsoleButton :disabled="!ready || busy" @click="openEditor('new')">
+            <Plus :size="16" aria-hidden="true" />
+            {{ t('pluginExtensions.rp.add') }}
+          </ConsoleButton>
         </div>
-        <div class="flex items-center gap-2">
-          <ConsoleToggle
-            v-model="instance.global"
-            :label="t('pluginExtensions.global')"
-          />{{ t('pluginExtensions.global') }}
-        </div>
-        <FormField :label="t('pluginExtensions.models')" class="md:col-span-2">
-          <textarea
-            :value="instance.models.join('\n')"
-            class="plugin-control"
-            rows="2"
-            @change="modelsChanged(instance, $event)"
-          />
-        </FormField>
-        <PluginConfigEditor
-          :key="instance.plugin"
-          v-model="instance.config"
-          :schema="
-            pluginOptions.find((p) => p.key === instance.plugin)?.configSchema
-          "
-          class="md:col-span-2"
-          @validity="configValidity[instance.id] = $event"
+      </template>
+    </PageBreadcrumb>
+    <div class="sibling-space-y-4">
+      <p class="text-sm text-[var(--text-secondary)]">
+        {{ t('pluginExtensions.rp.orderNote') }}
+      </p>
+      <div
+        v-if="loading"
+        class="sibling-space-y-2"
+        :aria-label="t('pluginExtensions.rp.title')"
+        aria-busy="true"
+      >
+        <SkeletonBlock v-for="n in 3" :key="n" class="h-14" rounded="xl" />
+      </div>
+      <ErrorBanner v-else-if="loadError" :message="loadError" @retry="load" />
+      <div
+        v-else-if="!instances.length"
+        class="rounded-xl border border-dashed border-[var(--border-strong)]"
+      >
+        <EmptyState
+          :title="t('pluginExtensions.rp.empty')"
+          :hint="t('pluginExtensions.rp.emptyHint')"
         />
-      </fieldset>
-      <div class="flex flex-wrap gap-2">
-        <ConsoleButton
-          v-for="(sample, sampleIndex) in requestPluginSamplesFor(
-            pluginOptions.find((p) => p.key === instance.plugin)?.samples ?? [],
-            locale
-          )"
-          :key="sampleIndex"
-          size="sm"
-          variant="secondary"
-          @click="loadSample(sample)"
-          >{{ t('pluginExtensions.sample') }} ·
-          {{ localizedText(sample.name, locale) }}</ConsoleButton
-        >
       </div>
-      <div class="flex flex-wrap gap-2">
-        <ConsoleButton
-          size="sm"
-          variant="secondary"
-          :disabled="saving || index === 0"
-          @click="move(index, -1)"
-          >{{ t('pluginExtensions.up') }}</ConsoleButton
-        ><ConsoleButton
-          size="sm"
-          variant="secondary"
-          :disabled="saving || index === instances.length - 1"
-          @click="move(index, 1)"
-          >{{ t('pluginExtensions.down') }}</ConsoleButton
-        ><ConsoleButton
-          size="sm"
-          variant="secondary"
-          :disabled="saving"
-          @click="instances.splice(index, 1)"
-          >{{ t('pluginExtensions.remove') }}</ConsoleButton
-        ><ConsoleButton
-          size="sm"
-          :disabled="running || !model"
-          @click="run(instance)"
-          >{{ t('pluginExtensions.runOne') }}</ConsoleButton
+      <div
+        v-else
+        class="subtle-scroll overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+      >
+        <table
+          class="w-full min-w-[44rem] text-left text-sm"
+          :aria-label="t('pluginExtensions.rp.title')"
         >
-      </div>
-    </section>
-    <section
-      class="rounded-xl border border-[var(--border-subtle)] p-4 sibling-space-y-3"
-    >
-      <h2 class="font-medium">{{ t('pluginExtensions.try') }}</h2>
-      <div class="grid gap-3 md:grid-cols-2">
-        <FormField :label="t('pluginExtensions.format')"
-          ><select v-model="format" class="plugin-control">
-            <option
-              v-for="value in [
-                'openai',
-                'openai_responses',
-                'claude',
-                'gemini',
-              ]"
-              :key="value"
+          <thead
+            class="border-b border-[var(--border-subtle)] text-xs text-[var(--text-tertiary)]"
+          >
+            <tr>
+              <th class="w-28 px-3 py-2.5 font-medium">
+                {{ t('pluginExtensions.rp.order') }}
+              </th>
+              <th class="px-3 py-2.5 font-medium">
+                {{ t('pluginExtensions.rp.name') }}
+              </th>
+              <th class="px-3 py-2.5 font-medium">
+                {{ t('pluginExtensions.rp.plugin') }}
+              </th>
+              <th class="px-3 py-2.5 font-medium">
+                {{ t('pluginExtensions.rp.appliesTo') }}
+              </th>
+              <th class="px-3 py-2.5 font-medium">
+                {{ t('pluginExtensions.rp.enabled') }}
+              </th>
+              <th class="px-3 py-2.5 text-right font-medium">
+                {{ t('pluginExtensions.rp.actions') }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(instance, index) in instances"
+              :key="instance.id || index"
+              class="border-t border-[var(--border-subtle)] first:border-t-0"
+              data-request-plugin-row
             >
-              {{ value }}
-            </option>
-          </select></FormField
-        >
-        <FormField :label="t('pluginExtensions.path')"
-          ><TextInput v-model="path"
-        /></FormField>
-        <FormField :label="t('pluginExtensions.model')"
-          ><TextInput v-model="model"
-        /></FormField>
-        <FormField :label="t('pluginExtensions.channel')"
-          ><TextInput v-model="channel" inputmode="numeric"
-        /></FormField>
-        <FormField :label="t('pluginExtensions.body')" class="md:col-span-2">
-          <textarea v-model="body" class="plugin-control font-mono" rows="7" />
-        </FormField>
-        <FormField :label="t('pluginExtensions.reply')" class="md:col-span-2">
-          <textarea v-model="reply" class="plugin-control" rows="3" />
-        </FormField>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-1">
+                  <span
+                    class="w-5 text-xs tabular-nums text-[var(--text-tertiary)]"
+                    >{{ index + 1 }}</span
+                  >
+                  <IconButton
+                    :label="
+                      t('pluginExtensions.rp.moveUp', { name: instance.name })
+                    "
+                    :disabled="busy || index === 0"
+                    @click="move(index, -1)"
+                  >
+                    <ArrowUp :size="16" aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
+                    :label="
+                      t('pluginExtensions.rp.moveDown', { name: instance.name })
+                    "
+                    :disabled="busy || index === instances.length - 1"
+                    @click="move(index, 1)"
+                  >
+                    <ArrowDown :size="16" aria-hidden="true" />
+                  </IconButton>
+                </div>
+              </td>
+              <td
+                class="max-w-48 break-words px-3 py-2 font-medium text-[var(--text-primary)]"
+              >
+                {{ instance.name }}
+              </td>
+              <td class="px-3 py-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <PluginIcon
+                    :plugin="
+                      findPlugin(instance.plugin) ?? { key: instance.plugin }
+                    "
+                    :size="18"
+                  />
+                  <span class="min-w-0 truncate">{{
+                    pluginName(instance.plugin)
+                  }}</span>
+                  <span
+                    v-if="!findPlugin(instance.plugin)"
+                    class="shrink-0 rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]"
+                    >{{ t('pluginExtensions.rp.pluginDisabled') }}</span
+                  >
+                </div>
+              </td>
+              <td class="max-w-56 break-words px-3 py-2">
+                {{ scopeText(instance) }}
+                <span
+                  v-if="instance.models.length"
+                  class="block text-xs text-[var(--text-tertiary)]"
+                  >{{
+                    t('pluginExtensions.rp.modelsList', {
+                      models: instance.models.join(', '),
+                    })
+                  }}</span
+                >
+              </td>
+              <td class="px-3 py-2">
+                <ConsoleToggle
+                  :model-value="instance.enabled"
+                  :disabled="busy"
+                  :label="
+                    t('pluginExtensions.rp.enableName', { name: instance.name })
+                  "
+                  @update:model-value="setEnabled(index, $event)"
+                />
+              </td>
+              <td class="px-3 py-2">
+                <div class="flex justify-end gap-1">
+                  <IconButton
+                    :label="
+                      t('pluginExtensions.rp.editName', { name: instance.name })
+                    "
+                    :disabled="busy"
+                    @click="openEditor(instance)"
+                  >
+                    <Pencil :size="16" aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
+                    tone="danger"
+                    :label="
+                      t('pluginExtensions.rp.deleteName', {
+                        name: instance.name,
+                      })
+                    "
+                    :disabled="busy"
+                    @click="deleteTarget = instance"
+                  >
+                    <Trash2 :size="16" aria-hidden="true" />
+                  </IconButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <ConsoleButton :disabled="running || !model" @click="run()">{{
-        t('pluginExtensions.run')
-      }}</ConsoleButton>
-      <div v-if="result">
-        <h3 class="font-medium">{{ t('pluginExtensions.result') }}</h3>
-        <pre
-          class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--surface-muted)] p-3 text-xs"
-          >{{ JSON.stringify(result, null, 2) }}</pre>
-      </div>
-    </section>
+    </div>
+    <RequestPluginInstanceEditor
+      :open="editing !== null"
+      :instance="editing === 'new' ? null : editing"
+      :plugins="plugins"
+      :instance-counts="instanceCounts"
+      :models="models"
+      :saving="editorSaving"
+      :error="editorError"
+      @close="closeEditor"
+      @save="saveInstance"
+    />
+    <RequestPluginDryRunDialog
+      :open="dryRunOpen"
+      :instance-name="instanceName"
+      :plugin-name="pluginName"
+      @close="dryRunOpen = false"
+    />
+    <ConfirmDialog
+      :open="deleteTarget !== null"
+      :title="t('pluginExtensions.rp.deleteTitle')"
+      :message="
+        t('pluginExtensions.rp.deleteMessage', {
+          name: deleteTarget?.name ?? '',
+        })
+      "
+      :confirm-text="t('pluginExtensions.rp.delete')"
+      :loading="listSaving"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
-<style scoped>
-.plugin-control {
-  width: 100%;
-  padding: 0.6rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  background: var(--surface-muted);
-  color: var(--text-primary);
-}
-</style>

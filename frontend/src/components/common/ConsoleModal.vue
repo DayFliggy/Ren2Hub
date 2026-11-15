@@ -18,7 +18,7 @@ const props = withDefaults(
     ariaLabel?: string
     /** Describes the dialog when its text is in the default slot. */
     ariaDescribedby?: string
-    size?: 'sm' | 'md' | 'lg' | 'xl' | 'nav'
+    size?: 'sm' | 'md' | 'lg' | 'xl' | 'wide' | 'nav'
     closeDisabled?: boolean
     presentation?: 'modal' | 'drawer'
     drawerSide?: 'left' | 'right'
@@ -47,6 +47,7 @@ const widths = {
   md: 'max-w-md',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
+  wide: 'max-w-5xl',
   nav: 'max-w-[min(22rem,calc(100vw-24px))]',
 }
 
