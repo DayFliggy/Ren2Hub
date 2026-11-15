@@ -4,136 +4,140 @@ import {
   assertNoHorizontalOverflow,
   configureStablePage,
   waitForStablePage,
+  captureEvidence,
 } from './fixtures'
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const width of [320, 390, 768, 1024, 1440]) {
-    test(`model market A/B/C and details ${theme} ${width}`, async ({
-      page,
-    }, testInfo) => {
-      const errors: string[] = []
-      const requests: string[] = []
-      page.on('pageerror', (error) => errors.push(error.message))
-      page.on('request', (request) =>
-        requests.push(new URL(request.url()).pathname)
-      )
-      await page.setViewportSize({ width, height: 900 })
-      await configureStablePage(page, { theme })
-      await page.goto('/models')
-      await waitForStablePage(page)
+// The layout assertions depend on width, not theme; themes alternate.
+for (const [width, theme] of [
+  [320, 'light'],
+  [390, 'dark'],
+  [768, 'light'],
+  [1024, 'dark'],
+  [1440, 'light'],
+] as const) {
+  test(`model market A/B/C and details ${theme} ${width}`, async ({
+    page,
+  }, testInfo) => {
+    const errors: string[] = []
+    const requests: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    page.on('request', (request) =>
+      requests.push(new URL(request.url()).pathname)
+    )
+    await page.setViewportSize({ width, height: 900 })
+    await configureStablePage(page, { theme })
+    await page.goto('/models')
+    await waitForStablePage(page)
 
-      const card = page.locator('[data-model-card][data-model-name="gpt-4.1"]')
-      await expect(card).toBeVisible()
-      await expect(card.locator('[data-market-baseline]')).toContainText(
+    const card = page.locator('[data-model-card][data-model-name="gpt-4.1"]')
+    await expect(card).toBeVisible()
+    await expect(card.locator('[data-market-baseline]')).toContainText('$2.500')
+    await expect(card.locator('[data-channel-quote]')).toContainText('$0.500')
+    await expect(
+      card.locator('[data-market-baseline] [data-market-telemetry]')
+    ).toHaveCount(0)
+    await expect(card).not.toContainText(/优惠|最优/)
+    // Compact cards do not invent metrics when the native sample is empty.
+    await expect(card.locator('[data-market-telemetry]')).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath('models.png'),
+      fullPage: true,
+    })
+
+    await page.getByRole('radio', { name: '渠道货架', exact: true }).click()
+    await expect(page.locator('.market-model-card')).toHaveCount(0)
+    await expect(page.locator('[data-market-shelves]')).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /^雾桥中转/ }).first()
+    ).toBeVisible()
+    await expect(page.locator('[data-market-telemetry]')).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath('channels.png'),
+      fullPage: true,
+    })
+
+    await page.getByRole('radio', { name: '比价矩阵', exact: true }).click()
+    const comparison = page.locator('.market-comparison')
+    await expect(comparison.locator('[data-market-telemetry]')).toHaveCount(0)
+    await expect(comparison).not.toContainText(
+      /TPS|耗时|延迟|可用率|最优|省 \d+%/
+    )
+    const matrix = page.locator('[data-market-matrix]')
+    if (await matrix.isVisible()) {
+      await expect(matrix.locator('thead .benchmark-column')).toContainText(
+        '平台基准价'
+      )
+      await expect(
+        matrix.locator('tbody tr').first().locator('td').last()
+      ).toHaveClass(/benchmark-column/)
+      await matrix.locator('th[data-channel-id="11"]').hover()
+      await expect(
+        matrix.locator('[data-channel-id="11"].col-hover')
+      ).toHaveCount(createModelMarketFixture().models.length + 1)
+      await expect(
+        matrix.locator('.benchmark-column.col-hover,.model-column.col-hover')
+      ).toHaveCount(0)
+    } else {
+      const mobile = page.locator('[data-market-matrix-mobile]')
+      await expect(mobile).toBeVisible()
+      const group = mobile.locator('[data-model-name="gpt-4.1"]')
+      await expect(group.locator('[data-market-baseline]')).toContainText(
         '$2.500'
       )
-      await expect(card.locator('[data-channel-quote]')).toContainText('$0.500')
       await expect(
-        card.locator('[data-market-baseline] [data-market-telemetry]')
-      ).toHaveCount(0)
-      await expect(card).not.toContainText(/优惠|最优/)
-      // Compact cards do not invent metrics when the native sample is empty.
-      await expect(card.locator('[data-market-telemetry]')).toHaveCount(0)
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('models.png'),
-        fullPage: true,
-      })
-
-      await page.getByRole('radio', { name: '渠道货架', exact: true }).click()
-      await expect(page.locator('.market-model-card')).toHaveCount(0)
-      await expect(page.locator('[data-market-shelves]')).toBeVisible()
-      await expect(
-        page.getByRole('heading', { name: /^雾桥中转/ }).first()
-      ).toBeVisible()
-      await expect(page.locator('[data-market-telemetry]')).toHaveCount(0)
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('channels.png'),
-        fullPage: true,
-      })
-
-      await page.getByRole('radio', { name: '比价矩阵', exact: true }).click()
-      const comparison = page.locator('.market-comparison')
-      await expect(comparison.locator('[data-market-telemetry]')).toHaveCount(0)
-      await expect(comparison).not.toContainText(
-        /TPS|耗时|延迟|可用率|最优|省 \d+%/
-      )
-      const matrix = page.locator('[data-market-matrix]')
-      if (await matrix.isVisible()) {
-        await expect(matrix.locator('thead .benchmark-column')).toContainText(
-          '平台基准价'
-        )
-        await expect(
-          matrix.locator('tbody tr').first().locator('td').last()
-        ).toHaveClass(/benchmark-column/)
-        await matrix.locator('th[data-channel-id="11"]').hover()
-        await expect(
-          matrix.locator('[data-channel-id="11"].col-hover')
-        ).toHaveCount(createModelMarketFixture().models.length + 1)
-        await expect(
-          matrix.locator('.benchmark-column.col-hover,.model-column.col-hover')
-        ).toHaveCount(0)
-      } else {
-        const mobile = page.locator('[data-market-matrix-mobile]')
-        await expect(mobile).toBeVisible()
-        const group = mobile.locator('[data-model-name="gpt-4.1"]')
-        await expect(group.locator('[data-market-baseline]')).toContainText(
-          '$2.500'
-        )
-        await expect(
-          group.locator('[data-price-dimension="output"]').first()
-        ).toContainText('$10.000')
-      }
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('comparison.png'),
-        fullPage: true,
-      })
-
-      await page.getByRole('radio', { name: '模型聚合', exact: true }).click()
-      const trigger = card.getByRole('button', {
-        name: '查看 gpt-4.1 的模型详情与渠道报价',
-        exact: true,
-      })
-      await trigger.click()
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toBeVisible()
-      await expect(
-        dialog.locator('[data-market-baseline] [data-market-telemetry]')
-      ).toHaveCount(0)
-      await expect(
-        dialog.locator('[data-market-telemetry]').first()
-      ).toContainText('统计')
-      await expect(
-        dialog.locator('[data-price-dimension="input"]').last()
-      ).toContainText('$0.500')
-      await expect(
-        dialog.locator('[data-price-dimension="output"]').last()
-      ).toContainText('$2.000')
-      await expect(dialog).toContainText('/v1/chat/completions')
-      await page.screenshot({ path: testInfo.outputPath('details.png') })
-      for (let tab = 0; tab < 14; tab++) {
-        await page.keyboard.press('Tab')
-        expect(
-          await dialog.evaluate((element) =>
-            element.contains(document.activeElement)
-          )
-        ).toBe(true)
-      }
-      await assertNoHorizontalOverflow(page)
-      await page.keyboard.press('Escape')
-      await expect(dialog).toHaveCount(0)
-      await expect(trigger).toBeFocused()
-      expect(
-        requests.filter((path) => path === '/api/user/model-catalog')
-      ).toHaveLength(1)
-      expect(
-        requests.filter((path) => path === '/api/perf-metrics/summary')
-      ).toHaveLength(1)
-      expect(errors).toEqual([])
+        group.locator('[data-price-dimension="output"]').first()
+      ).toContainText('$10.000')
+    }
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath('comparison.png'),
+      fullPage: true,
     })
-  }
+
+    await page.getByRole('radio', { name: '模型聚合', exact: true }).click()
+    const trigger = card.getByRole('button', {
+      name: '查看 gpt-4.1 的模型详情与渠道报价',
+      exact: true,
+    })
+    await trigger.click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.locator('[data-market-baseline] [data-market-telemetry]')
+    ).toHaveCount(0)
+    await expect(
+      dialog.locator('[data-market-telemetry]').first()
+    ).toContainText('统计')
+    await expect(
+      dialog.locator('[data-price-dimension="input"]').last()
+    ).toContainText('$0.500')
+    await expect(
+      dialog.locator('[data-price-dimension="output"]').last()
+    ).toContainText('$2.000')
+    await expect(dialog).toContainText('/v1/chat/completions')
+    await captureEvidence(page, { path: testInfo.outputPath('details.png') })
+    for (let tab = 0; tab < 14; tab++) {
+      await page.keyboard.press('Tab')
+      expect(
+        await dialog.evaluate((element) =>
+          element.contains(document.activeElement)
+        )
+      ).toBe(true)
+    }
+    await assertNoHorizontalOverflow(page)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    expect(
+      requests.filter((path) => path === '/api/user/model-catalog')
+    ).toHaveLength(1)
+    expect(
+      requests.filter((path) => path === '/api/perf-metrics/summary')
+    ).toHaveLength(1)
+    expect(errors).toEqual([])
+  })
 }
 
 test('market filters persist across views and translated long names remain usable', async ({
@@ -267,41 +271,44 @@ test('failed catalog loads stay visible as errors and recover through retry', as
   expect(calls).toBe(2)
 })
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const width of [320, 390, 768, 1024, 1440]) {
-    test(`English market layout ${theme} ${width}`, async ({
-      page,
-    }, testInfo) => {
-      await configureStablePage(page, { theme })
-      await page.setViewportSize({ width, height: 900 })
-      await page.addInitScript(() =>
-        localStorage.setItem('ren2hub_locale', 'en')
-      )
-      await page.goto('/models')
-      await waitForStablePage(page)
-      for (const name of ['Channel shelves', 'Price comparison', 'Models']) {
-        await page.getByRole('radio', { name, exact: true }).click()
-        await assertNoHorizontalOverflow(page)
-        await page.screenshot({
-          path: testInfo.outputPath(`${name}.png`),
-          fullPage: true,
-        })
-      }
-      await page
-        .getByRole('button', {
-          name: 'View details and channel prices for gpt-4.1',
-          exact: true,
-        })
-        .click()
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toContainText('Platform base price')
-      await expect(dialog).toContainText('No per-channel statistics')
+// English copy keeps every width; each width uses the theme A/B/C does not.
+for (const [width, theme] of [
+  [320, 'dark'],
+  [390, 'light'],
+  [768, 'dark'],
+  [1024, 'light'],
+  [1440, 'dark'],
+] as const) {
+  test(`English market layout ${theme} ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await configureStablePage(page, { theme })
+    await page.setViewportSize({ width, height: 900 })
+    await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+    await page.goto('/models')
+    await waitForStablePage(page)
+    for (const name of ['Channel shelves', 'Price comparison', 'Models']) {
+      await page.getByRole('radio', { name, exact: true }).click()
       await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('english-details.png'),
+      await captureEvidence(page, {
+        path: testInfo.outputPath(`${name}.png`),
+        fullPage: true,
       })
-      await page.keyboard.press('Escape')
-      await expect(dialog).toHaveCount(0)
+    }
+    await page
+      .getByRole('button', {
+        name: 'View details and channel prices for gpt-4.1',
+        exact: true,
+      })
+      .click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toContainText('Platform base price')
+    await expect(dialog).toContainText('No per-channel statistics')
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath('english-details.png'),
     })
-  }
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+  })
 }

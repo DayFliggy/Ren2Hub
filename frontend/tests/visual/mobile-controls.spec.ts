@@ -4,6 +4,7 @@ import {
   assertNoHorizontalOverflow,
   configureStablePage,
   waitForStablePage,
+  captureEvidence,
 } from './fixtures'
 
 async function expectReadableControls(page: Page, controls: Locator) {
@@ -48,7 +49,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(trigger).toHaveAttribute('aria-expanded', 'true')
       await link.scrollIntoViewIfNeeded()
       if (width === 390 || width === 1440) {
-        await page.screenshot({
+        await captureEvidence(page, {
           path: testInfo.outputPath(`contact-${theme}-${width}.png`),
         })
       }
@@ -94,7 +95,9 @@ for (const theme of ['light', 'dark'] as const) {
       await assertNoHorizontalOverflow(page)
     }
     await page.setViewportSize({ width: 390, height: 900 })
-    await page.screenshot({ path: testInfo.outputPath(`inputs-${theme}.png`) })
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`inputs-${theme}.png`),
+    })
     await page.evaluate(() => {
       document.documentElement.style.fontSize = '20px'
     })
@@ -142,7 +145,7 @@ for (const theme of ['light', 'dark'] as const) {
     }
     await page.setViewportSize({ width: 390, height: 900 })
     await fixedRate.scrollIntoViewIfNeeded()
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath(`discount-${theme}.png`),
     })
     await page.evaluate(() => {

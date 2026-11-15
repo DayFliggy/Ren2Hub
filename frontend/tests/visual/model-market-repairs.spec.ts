@@ -4,6 +4,7 @@ import {
   configureStablePage,
   waitForStablePage,
   assertNoHorizontalOverflow,
+  captureEvidence,
 } from './fixtures'
 
 for (const locale of ['zh-CN', 'en']) {
@@ -46,7 +47,7 @@ for (const locale of ['zh-CN', 'en']) {
         }
         await assertNoHorizontalOverflow(page)
       }
-      await page.screenshot({
+      await captureEvidence(page, {
         path: testInfo.outputPath(`toolbar-${width}.png`),
       })
     }
@@ -106,7 +107,7 @@ for (const width of [1024, 1440]) {
     await buttons.first().focus()
     expect(await matrix.evaluate((element) => element.scrollLeft)).toBe(before)
     await matrix.locator('tbody [data-channel-id="12"] button').first().focus()
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath(`matrix-focus-${width}.png`),
     })
     await page.getByRole('radio', { name: '比价矩阵', exact: true }).focus()
@@ -114,7 +115,11 @@ for (const width of [1024, 1440]) {
   })
 }
 
-for (const theme of ['light', 'dark'] as const) {
+// Header geometry depends on the phone height, not the theme.
+for (const [theme, viewport] of [
+  ['light', { width: 320, height: 568 }],
+  ['dark', { width: 390, height: 500 }],
+] as const)
   test(`long model titles leave space for details and preserve the full ID ${theme}`, async ({
     page,
   }, testInfo) => {
@@ -137,49 +142,43 @@ for (const theme of ['light', 'dark'] as const) {
         },
       })
     })
-    for (const viewport of [
-      { width: 320, height: 568 },
-      { width: 390, height: 500 },
-    ]) {
-      await page.setViewportSize(viewport)
-      await page.goto('/models')
-      await waitForStablePage(page)
-      const trigger = page
-        .locator('[data-model-card]')
-        .first()
-        .locator('.market-card-hit')
-      await trigger.click()
-      const dialog = page.getByRole('dialog')
-      await expect(dialog.locator('.market-full-id')).toBeVisible()
-      const header = await dialog
-        .locator('.market-detail-header')
-        .evaluate(
-          (element) => element.parentElement!.getBoundingClientRect().height
-        )
-      expect(header / viewport.height).toBeLessThan(0.35)
-      await dialog.locator('.market-full-id summary').click()
-      await expect(dialog.locator('.market-full-id code')).toHaveText(longId)
-      await dialog.getByRole('button', { name: /^复制模型 ID ·/ }).click()
-      expect(
-        await page.evaluate(
-          () => (window as unknown as { copied: string }).copied
-        )
-      ).toBe(longId)
-      await expect(
-        page.getByText('已复制模型 ID', { exact: true })
-      ).toBeVisible()
-      await dialog
-        .getByRole('button', { name: '关闭模型详情', exact: true })
-        .hover()
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath(`long-id-${viewport.width}.png`),
-      })
-      await page.keyboard.press('Escape')
-      await expect(trigger).toBeFocused()
-    }
+    await page.setViewportSize(viewport)
+    await page.goto('/models')
+    await waitForStablePage(page)
+    const trigger = page
+      .locator('[data-model-card]')
+      .first()
+      .locator('.market-card-hit')
+    await trigger.click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.locator('.market-full-id')).toBeVisible()
+    const header = await dialog
+      .locator('.market-detail-header')
+      .evaluate(
+        (element) => element.parentElement!.getBoundingClientRect().height
+      )
+    expect(header / viewport.height).toBeLessThan(0.35)
+    await dialog.locator('.market-full-id summary').click()
+    await expect(dialog.locator('.market-full-id code')).toHaveText(longId)
+    await dialog.getByRole('button', { name: /^复制模型 ID ·/ }).click()
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { copied: string }).copied
+      )
+    ).toBe(longId)
+    await expect(page.getByText('已复制模型 ID', { exact: true })).toBeVisible()
+    await dialog
+      .getByRole('button', { name: '关闭模型详情', exact: true })
+      .hover()
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`long-id-${viewport.width}.png`),
+    })
+    await page.keyboard.press('Escape')
+    await expect(trigger).toBeFocused()
   })
 
+for (const theme of ['light', 'dark'] as const) {
   test(`detail selection feedback and stable price rows ${theme}`, async ({
     page,
   }, testInfo) => {
@@ -279,7 +278,7 @@ for (const theme of ['light', 'dark'] as const) {
       })
       expect(contrasts.selected).toBeGreaterThanOrEqual(3)
       expect(contrasts.focus).toBeGreaterThanOrEqual(3)
-      await page.screenshot({
+      await captureEvidence(page, {
         path: testInfo.outputPath(`details-selected-${width}.png`),
       })
       await dialog
@@ -333,7 +332,7 @@ test('comparison aligns a missing channel quote with its native platform row', a
       .y,
     0
   )
-  await page.screenshot({
+  await captureEvidence(page, {
     path: testInfo.outputPath('native-quote-alignment.png'),
   })
 })

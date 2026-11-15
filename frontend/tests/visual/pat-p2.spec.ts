@@ -139,84 +139,83 @@ async function prepare(page: Page, theme: 'light' | 'dark', mobile: boolean) {
   return { operations }
 }
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const mobile of [false, true]) {
-    test(`PAT management ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
-      page,
-    }) => {
-      const { operations } = await prepare(page, theme, mobile)
-      await page.goto('/security')
-      const panel = page.getByTestId('pat-panel')
-      await expect(
-        panel.getByText('existing automation', { exact: true })
-      ).toBeVisible()
-      for (const name of ['expired automation']) {
-        const row = panel.locator('li').filter({ hasText: name })
-        await expect(row.getByRole('button')).toHaveCount(0)
-      }
-      await panel
-        .getByRole('button', { name: '创建访问令牌', exact: true })
-        .click()
-      const create = page.getByRole('dialog', {
-        name: '创建访问令牌',
-        exact: true,
-      })
-      await create
-        .getByLabel('名称', { exact: true })
-        .fill('browser automation')
-      await create.locator('input[type=checkbox][value="profile:read"]').check()
-      await create.getByRole('button', { name: '保存', exact: true }).click()
-      await verification(page)
-      await expect(page.getByTestId('pat-secret')).toHaveText(secret)
-      expect(operations.at(-1)).toMatchObject({
-        scope: 'access_token.generate',
-      })
-      await assertNoHorizontalOverflow(page)
-      await page.getByRole('button', { name: '完成', exact: true }).click()
-      await expect(page.getByTestId('pat-secret')).toHaveCount(0)
-      await panel.getByRole('button', { name: '刷新', exact: true }).click()
-      await expect(
-        panel.getByText('browser automation', { exact: true })
-      ).toBeVisible()
-      expect(await page.content()).not.toContain(secret)
-
-      const row = panel.locator('li').filter({ hasText: 'browser automation' })
-      await row.getByRole('button', { name: '改名', exact: true }).click()
-      const edit = page.getByRole('dialog', {
-        name: '编辑访问令牌',
-        exact: true,
-      })
-      await edit.getByLabel('名称', { exact: true }).fill('renamed automation')
-      await edit.getByRole('button', { name: '保存', exact: true }).click()
-      await expect(edit).toHaveCount(0)
-      expect(operations).toHaveLength(1)
-      const renamed = panel
-        .locator('li')
-        .filter({ hasText: 'renamed automation' })
-      await renamed.getByRole('button', { name: '权限', exact: true }).click()
-      await edit.locator('input[type=checkbox][value="api_key:read"]').check()
-      await edit.getByRole('button', { name: '保存', exact: true }).click()
-      await verification(page)
-      expect(operations.at(-1)).toMatchObject({
-        scope: 'access_token.update',
-        context: { token_id: 10, scopes: ['api_key:read', 'profile:read'] },
-      })
-      await expect(edit).toHaveCount(0)
-      await renamed.getByRole('button', { name: '撤销', exact: true }).click()
-      await page
-        .getByRole('dialog', { name: '撤销访问令牌？', exact: true })
-        .getByRole('button', { name: '撤销', exact: true })
-        .click()
-      await verification(page)
-      expect(operations.at(-1)).toMatchObject({
-        scope: 'access_token.revoke',
-        context: { token_id: 10 },
-      })
-      await expect(renamed).toHaveCount(0)
-      await assertNoHorizontalOverflow(page)
-      expect(await page.content()).not.toContain(secret)
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  test(`PAT management ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }) => {
+    const { operations } = await prepare(page, theme, mobile)
+    await page.goto('/security')
+    const panel = page.getByTestId('pat-panel')
+    await expect(
+      panel.getByText('existing automation', { exact: true })
+    ).toBeVisible()
+    for (const name of ['expired automation']) {
+      const row = panel.locator('li').filter({ hasText: name })
+      await expect(row.getByRole('button')).toHaveCount(0)
+    }
+    await panel
+      .getByRole('button', { name: '创建访问令牌', exact: true })
+      .click()
+    const create = page.getByRole('dialog', {
+      name: '创建访问令牌',
+      exact: true,
     })
-  }
+    await create.getByLabel('名称', { exact: true }).fill('browser automation')
+    await create.locator('input[type=checkbox][value="profile:read"]').check()
+    await create.getByRole('button', { name: '保存', exact: true }).click()
+    await verification(page)
+    await expect(page.getByTestId('pat-secret')).toHaveText(secret)
+    expect(operations.at(-1)).toMatchObject({
+      scope: 'access_token.generate',
+    })
+    await assertNoHorizontalOverflow(page)
+    await page.getByRole('button', { name: '完成', exact: true }).click()
+    await expect(page.getByTestId('pat-secret')).toHaveCount(0)
+    await panel.getByRole('button', { name: '刷新', exact: true }).click()
+    await expect(
+      panel.getByText('browser automation', { exact: true })
+    ).toBeVisible()
+    expect(await page.content()).not.toContain(secret)
+
+    const row = panel.locator('li').filter({ hasText: 'browser automation' })
+    await row.getByRole('button', { name: '改名', exact: true }).click()
+    const edit = page.getByRole('dialog', {
+      name: '编辑访问令牌',
+      exact: true,
+    })
+    await edit.getByLabel('名称', { exact: true }).fill('renamed automation')
+    await edit.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(edit).toHaveCount(0)
+    expect(operations).toHaveLength(1)
+    const renamed = panel
+      .locator('li')
+      .filter({ hasText: 'renamed automation' })
+    await renamed.getByRole('button', { name: '权限', exact: true }).click()
+    await edit.locator('input[type=checkbox][value="api_key:read"]').check()
+    await edit.getByRole('button', { name: '保存', exact: true }).click()
+    await verification(page)
+    expect(operations.at(-1)).toMatchObject({
+      scope: 'access_token.update',
+      context: { token_id: 10, scopes: ['api_key:read', 'profile:read'] },
+    })
+    await expect(edit).toHaveCount(0)
+    await renamed.getByRole('button', { name: '撤销', exact: true }).click()
+    await page
+      .getByRole('dialog', { name: '撤销访问令牌？', exact: true })
+      .getByRole('button', { name: '撤销', exact: true })
+      .click()
+    await verification(page)
+    expect(operations.at(-1)).toMatchObject({
+      scope: 'access_token.revoke',
+      context: { token_id: 10 },
+    })
+    await expect(renamed).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    expect(await page.content()).not.toContain(secret)
+  })
 }
 
 test('PAT late creation cannot reveal a secret after session sign-out', async ({

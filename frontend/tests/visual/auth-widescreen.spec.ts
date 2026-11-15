@@ -4,6 +4,7 @@ import {
   assertNoHorizontalOverflow,
   configureStablePage,
   waitForStablePage,
+  captureEvidence,
 } from './fixtures'
 
 const sizes = [
@@ -93,7 +94,7 @@ for (const theme of ['light', 'dark'] as const) {
           (size.width === 2560 && size.height === 1264) ||
           size.width === 3840
         ) {
-          await page.screenshot({
+          await captureEvidence(page, {
             path: testInfo.outputPath(
               `auth-${size.width}-${locale}-${theme}.png`
             ),

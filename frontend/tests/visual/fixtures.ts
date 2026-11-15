@@ -3,6 +3,8 @@ import {
   type Page,
   type ConsoleMessage,
   type Locator,
+  type LocatorScreenshotOptions,
+  type PageScreenshotOptions,
 } from '@playwright/test'
 import {
   nativeCoreFixture,
@@ -232,6 +234,17 @@ export async function waitForStablePage(page: Page): Promise<void> {
     .toBe(true)
   await expect(page.locator('[data-error-retry]')).toHaveCount(0)
   assertHealthy(page)
+}
+
+const captureScreenshots = process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true'
+
+/** Writes review evidence only when screenshot capture is requested. */
+export async function captureEvidence(
+  target: Page | Locator,
+  options: PageScreenshotOptions & LocatorScreenshotOptions
+): Promise<void> {
+  if (!captureScreenshots) return
+  await target.screenshot(options)
 }
 
 export async function assertNoHorizontalOverflow(page: Page): Promise<void> {

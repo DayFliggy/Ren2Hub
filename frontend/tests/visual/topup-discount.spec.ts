@@ -4,6 +4,7 @@ import {
   configureStablePage,
   waitForStablePage,
   type VisualTheme,
+  captureEvidence,
 } from './fixtures'
 import { nativeFixture } from '../contracts/native-core-fixture'
 
@@ -74,92 +75,91 @@ const copy = {
   },
 } as const
 
-for (const [screen, width] of [
-  ['desktop', 1440],
-  ['mobile', 390],
-  ['narrow', 320],
+// Geometry depends on width and copy length, so every width keeps both
+// locales; the theme only alternates across widths.
+for (const [screen, width, theme] of [
+  ['desktop', 1440, 'light'],
+  ['mobile', 390, 'dark'],
+  ['narrow', 320, 'light'],
 ] as const)
-  for (const theme of ['light', 'dark'] as const)
-    for (const locale of ['zh-CN', 'en'] as const)
-      test(`top-up discount page renders ${screen} ${theme} ${locale}`, async ({
-        page,
-      }, testInfo) => {
-        await openPage(page, { theme, locale, width })
-        const statusReads: string[] = []
-        page.on('request', (request) => {
-          if (
-            new URL(request.url()).pathname ===
-            '/api/option/topup_discount/status'
-          )
-            statusReads.push(request.url())
-        })
-        const text = copy[locale]
-        await page.goto('/system-settings/billing/topup-discount')
-        await waitForStablePage(page)
-
-        await expect(page.locator('html')).toHaveClass(
-          new RegExp(`\\b${theme}\\b`)
+  for (const locale of ['zh-CN', 'en'] as const)
+    test(`top-up discount page renders ${screen} ${theme} ${locale}`, async ({
+      page,
+    }, testInfo) => {
+      await openPage(page, { theme, locale, width })
+      const statusReads: string[] = []
+      page.on('request', (request) => {
+        if (
+          new URL(request.url()).pathname ===
+          '/api/option/topup_discount/status'
         )
-        await expect(page.locator('[data-discount-status]')).toHaveCount(0)
-        await expect(
-          page.getByRole('heading', { name: text.title, exact: true })
-        ).toBeVisible()
-        await page.screenshot({
-          path: testInfo.outputPath(
-            `settings-top-${screen}-${theme}-${locale}.png`
-          ),
-        })
-        const editor = page.locator('[data-discount-editor]')
-        await expect(
-          editor.getByRole('heading', { name: text.amount, exact: true })
-        ).toBeVisible()
-        await expect(
-          editor.getByRole('heading', { name: text.site, exact: true })
-        ).toBeVisible()
-        await editor
-          .getByRole('tab', { name: new RegExp(text.monthTab) })
-          .click()
-        const month = editor.locator('[data-discount-table="month"]')
-        await expect(
-          month.getByRole('textbox', { name: text.threshold, exact: true })
-        ).toHaveValue('25')
-        await expect(month.locator('[data-discount-tier]')).toHaveCount(5)
-        await month.scrollIntoViewIfNeeded()
-        await expect(page.locator('[data-discount-estimate]')).toContainText(
-          text.note
-        )
-
-        await expectNoZoneOverflow(page)
-        // Every tier row stays inside the editor card at phone width.
-        const card = (await editor.boundingBox())!
-        for (const row of await editor
-          .locator('[data-discount-tier]:visible')
-          .all()) {
-          const box = (await row.boundingBox())!
-          expect(box.x).toBeGreaterThanOrEqual(card.x)
-          expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width + 1)
-        }
-        await assertInteractiveCentersVisible(page)
-        expect(statusReads).toEqual([])
-        await page.screenshot({
-          path: testInfo.outputPath(
-            `topup-discount-${screen}-${theme}-${locale}.png`
-          ),
-        })
-        await editor
-          .getByRole('button', {
-            name: locale === 'zh-CN' ? '保存配置' : 'Save configuration',
-            exact: true,
-          })
-          .scrollIntoViewIfNeeded()
-        await assertInteractiveCentersVisible(page)
-        await page.screenshot({
-          path: testInfo.outputPath(
-            `settings-bottom-${screen}-${theme}-${locale}.png`
-          ),
-        })
-        await waitForStablePage(page)
+          statusReads.push(request.url())
       })
+      const text = copy[locale]
+      await page.goto('/system-settings/billing/topup-discount')
+      await waitForStablePage(page)
+
+      await expect(page.locator('html')).toHaveClass(
+        new RegExp(`\\b${theme}\\b`)
+      )
+      await expect(page.locator('[data-discount-status]')).toHaveCount(0)
+      await expect(
+        page.getByRole('heading', { name: text.title, exact: true })
+      ).toBeVisible()
+      await captureEvidence(page, {
+        path: testInfo.outputPath(
+          `settings-top-${screen}-${theme}-${locale}.png`
+        ),
+      })
+      const editor = page.locator('[data-discount-editor]')
+      await expect(
+        editor.getByRole('heading', { name: text.amount, exact: true })
+      ).toBeVisible()
+      await expect(
+        editor.getByRole('heading', { name: text.site, exact: true })
+      ).toBeVisible()
+      await editor.getByRole('tab', { name: new RegExp(text.monthTab) }).click()
+      const month = editor.locator('[data-discount-table="month"]')
+      await expect(
+        month.getByRole('textbox', { name: text.threshold, exact: true })
+      ).toHaveValue('25')
+      await expect(month.locator('[data-discount-tier]')).toHaveCount(5)
+      await month.scrollIntoViewIfNeeded()
+      await expect(page.locator('[data-discount-estimate]')).toContainText(
+        text.note
+      )
+
+      await expectNoZoneOverflow(page)
+      // Every tier row stays inside the editor card at phone width.
+      const card = (await editor.boundingBox())!
+      for (const row of await editor
+        .locator('[data-discount-tier]:visible')
+        .all()) {
+        const box = (await row.boundingBox())!
+        expect(box.x).toBeGreaterThanOrEqual(card.x)
+        expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width + 1)
+      }
+      await assertInteractiveCentersVisible(page)
+      expect(statusReads).toEqual([])
+      await captureEvidence(page, {
+        path: testInfo.outputPath(
+          `topup-discount-${screen}-${theme}-${locale}.png`
+        ),
+      })
+      await editor
+        .getByRole('button', {
+          name: locale === 'zh-CN' ? '保存配置' : 'Save configuration',
+          exact: true,
+        })
+        .scrollIntoViewIfNeeded()
+      await assertInteractiveCentersVisible(page)
+      await captureEvidence(page, {
+        path: testInfo.outputPath(
+          `settings-bottom-${screen}-${theme}-${locale}.png`
+        ),
+      })
+      await waitForStablePage(page)
+    })
 
 test('edits, estimates and saves the generated PATCH body', async ({
   page,
@@ -239,7 +239,7 @@ test('edits, estimates and saves the generated PATCH body', async ({
   await expect(page.locator('[data-estimate-stale]')).toBeVisible()
   await editor.getByLabel('折扣上限', { exact: true }).fill('5')
   await expect(page.locator('[data-estimate-stale]')).toHaveCount(0)
-  await page.screenshot({ path: testInfo.outputPath('edited.png') })
+  await captureEvidence(page, { path: testInfo.outputPath('edited.png') })
 
   await save.click()
   await expect(page.getByText('已保存为版本 1', { exact: true })).toBeVisible()
@@ -293,7 +293,7 @@ test('a version conflict keeps the draft until the server version is loaded', as
   await expect(fixed).toHaveValue('1')
   await expect(save).toBeDisabled()
   await expectNoZoneOverflow(page)
-  await page.screenshot({ path: testInfo.outputPath('conflict.png') })
+  await captureEvidence(page, { path: testInfo.outputPath('conflict.png') })
 
   await conflict.getByRole('button', { name: 'Load server version' }).click()
   await page

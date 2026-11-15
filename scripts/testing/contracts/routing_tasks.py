@@ -45,27 +45,40 @@ def public_id(raw):
     return identifier
 
 
-def wait_task(e, identifier, mj=False):
+def task_path(identifier, mj):
+    return '/mj/task/'+identifier+'/fetch' if mj else '/v1/tasks/'+identifier
+
+
+def wait_tasks(e, identifiers, mj=False):
+    """Poll every pending task together so one native poll pass can finish them all."""
     deadline=time.monotonic()+90
-    path='/mj/task/'+identifier+'/fetch' if mj else '/v1/tasks/'+identifier
-    while True:
-        status,raw=e.user.request('GET',path,bearer=e.key)
-        require(status==200,'task_poll_status_'+str(status))
-        value=json.loads(raw)
-        task=value.get('data',value)
-        if task.get('status') in ('SUCCESS','success','completed'):
-            return task
-        require(task.get('status') not in ('FAILURE','failed'),'task_lifecycle_failed')
+    pending=list(identifiers)
+    while pending:
+        for identifier in list(pending):
+            status,raw=e.user.request('GET',task_path(identifier,mj),bearer=e.key)
+            require(status==200,'task_poll_status_'+str(status))
+            value=json.loads(raw)
+            task=value.get('data',value)
+            if task.get('status') in ('SUCCESS','success','completed'):
+                pending.remove(identifier)
+                continue
+            require(task.get('status') not in ('FAILURE','failed'),'task_lifecycle_failed')
+        if not pending:
+            return
         require(time.monotonic()<deadline,'task_lifecycle_timeout')
         time.sleep(.2)
 
 
-def submit(e,path,body,amount,channel,*,mj=False):
+def wait_task(e, identifier, mj=False):
+    wait_tasks(e,[identifier],mj)
+
+
+def submit_pending(e,path,body,amount,channel):
+    """Submit one task and check its charge and single supplier POST without waiting for completion."""
     before,cursor=e.balances(),e.sim.cursor()
     status,raw=e.request(path,body,expected_charge=amount)
     require(status==200,'task_submit_status_'+str(status))
     identifier=public_id(raw)
-    wait_task(e,identifier,mj)
     after=e.settled(before,amount)
     e.zero()
     posts=[row for row in e.sim.records(cursor) if row['method']=='POST' and '/submit/' in row['path'] or
@@ -73,6 +86,20 @@ def submit(e,path,body,amount,channel,*,mj=False):
     require(len(posts)==1 and posts[0]['channel']==channel and posts[0]['auth_valid'], 'task_wrong_submission_count_or_channel')
     e.exchanges[-1].update(expected_charge=amount,actual_charge=before['wallet']-after['wallet'],
                            supplier_sequences=[row['sequence'] for row in posts],task_id=identifier)
+    return identifier
+
+
+def finish_tasks(e,before,identifiers,amount,mj=False):
+    """Completion must not move the wallet away from the sum charged at submit."""
+    wait_tasks(e,identifiers,mj)
+    e.settled(before,amount)
+    e.zero()
+
+
+def submit(e,path,body,amount,channel,*,mj=False):
+    before=e.balances()
+    identifier=submit_pending(e,path,body,amount,channel)
+    finish_tasks(e,before,[identifier],amount,mj)
     return identifier
 
 
@@ -104,14 +131,18 @@ def plugin_origin(e):
     with secondary_token(e):
         e.route(['b'])
         submit(e,e.origin_path,{'model':FIXTURE_MODEL,'origin':original},1000,'origin')
+    # Same-token continuations only depend on the finished origin and billing is
+    # persisted at submit, so they finish together before the channel is disabled.
+    batch_before,pending=e.balances(),[]
     e.route(['b'])
-    submit(e,e.origin_path,{'model':FIXTURE_MODEL,'origin':original},1000,'origin')
+    pending.append(submit_pending(e,e.origin_path,{'model':FIXTURE_MODEL,'origin':original},1000,'origin'))
     e.configure('origin',channel_ratio='2')
     e.route(['b'],cap='1')
     raw,_=e.check([],status=400,amount=0,path=e.origin_path,body={'model':FIXTURE_MODEL,'origin':original})
     require(json.loads(raw).get('code')=='channel_ratio_exceeded','origin_price_error_code_changed')
     e.route(['b'],cap='2')
-    submit(e,e.origin_path,{'model':FIXTURE_MODEL,'origin':original},2000,'origin')
+    pending.append(submit_pending(e,e.origin_path,{'model':FIXTURE_MODEL,'origin':original},2000,'origin'))
+    finish_tasks(e,batch_before,pending,3000)
     e.route(['b'])
     e.status('origin',2)
     e.check([],status=400,amount=0,path=e.origin_path,body={'model':FIXTURE_MODEL,'origin':original})
@@ -142,11 +173,12 @@ def midjourney(e):
     with secondary_token(e):
         e.route(['b'])
         submit(e,'/mj/submit/change',{'taskId':origin,'action':'UPSCALE','index':1},1000,'mj',mj=True)
+    batch_before,pending=e.balances(),[]
     e.route(['b'])
     operations=[('change',{'action':'UPSCALE','index':1}),('modal',{'prompt':'add a moon'}),
                 ('video',{'prompt':'pan left'}),('action',{'customId':'MJ::JOB::upsample::1::fixture'})]
     for operation,body in operations:
-        submit(e,'/mj/submit/'+operation,{'taskId':origin,**body},1000,'mj',mj=True)
+        pending.append(submit_pending(e,'/mj/submit/'+operation,{'taskId':origin,**body},1000,'mj'))
     e.configure('mj',channel_ratio='2')
     e.route(['b'],cap='1')
     raw,_=e.check([],status=400,amount=0,path='/mj/submit/change',body={'taskId':origin,'action':'UPSCALE','index':1})
@@ -154,8 +186,9 @@ def midjourney(e):
     raw,_=e.check([],status=400,amount=0,path='/mj/task/'+origin+'/image-seed',method='GET')
     require(json.loads(raw).get('code')==4,'mj_seed_error_wrapper_changed')
     e.route(['b'],cap='2')
-    submit(e,'/mj/submit/change',{'taskId':origin,'action':'UPSCALE','index':1},2000,'mj',mj=True)
+    pending.append(submit_pending(e,'/mj/submit/change',{'taskId':origin,'action':'UPSCALE','index':1},2000,'mj'))
     e.check(['mj'],amount=0,path='/mj/task/'+origin+'/image-seed',method='GET')
+    finish_tasks(e,batch_before,pending,6000,mj=True)
     e.status('mj',2)
     e.check([],status=400,amount=0,path='/mj/submit/change',body={'taskId':origin,'action':'UPSCALE','index':1})
     e.status('mj',1)

@@ -180,6 +180,9 @@ REQUIRED_TESTS = tuple(name for tests in MATRIX_TESTS.values() for name in tests
     name for _, name, _ in SINGLE_DIALECT_TESTS
 ) + MANAGE_TESTS + SECURITY_TESTS + CHANNEL_TESTS + TASK_TESTS + tuple(name for _, name in (*PAIRED_TESTS, *PROVIDER_TESTS, *PROVIDER_ROW_LOCK_TESTS))
 
+# affected 档位据此判断改动是否需要启动三库矩阵。
+PACKAGES = frozenset(MATRIX_TESTS) | {"controller"} | {package for package, _, _ in SINGLE_DIALECT_TESTS} | {
+    package for package, _ in (*PAIRED_TESTS, *PROVIDER_TESTS, *PROVIDER_ROW_LOCK_TESTS)}
 
 # 这些 helper 的现有单测默认使用临时 SQLite；逐项报告其外部引擎变体未覆盖。
 DEFERRED_DATABASE_HELPERS = {
@@ -385,8 +388,10 @@ class ProxyConnection(socketserver.BaseRequestHandler):
 
 
 class Runner:
-    def __init__(self, source: Path, output: Path, env: dict[str, str]):
+    def __init__(self, source: Path, output: Path, env: dict[str, str], packages: set[str] | None = None):
         self.source, self.output, self.env = source, output, env
+        # None 表示完整矩阵；开发期 affected 只传入受影响的包目录。
+        self.packages = packages
         self.run_id = secrets.token_hex(8)
         self.prefix = "ren2hub-local-test-" + self.run_id
         self.password = secrets.token_hex(24)
@@ -610,6 +615,8 @@ class Runner:
     def suite(self, package: str, test: str, dialects: tuple[str, ...] = DIALECTS,
               *, nested: bool = True, manage: bool = False, security: bool = False,
               channel: bool = False, task: bool = False) -> None:
+        if self.packages is not None and package not in self.packages:
+            return
         binary = self.binary(package)
         before = self.known_databases or {kind: self.database_names(kind) for kind in IMAGES}
         env = self.database_environment()
@@ -736,9 +743,11 @@ def interrupt_run(signum, frame) -> None:
     raise KeyboardInterrupt
 
 
-def run(source: Path, output: Path) -> dict:
+def run(source: Path, output: Path, packages: set[str] | None = None) -> dict:
     output = private_directory(output)
-    runner = Runner(source.resolve(), output, {})
+    runner = Runner(source.resolve(), output, {}, packages)
+    if packages is not None:
+        runner.report["selected_packages"] = sorted(packages)
     started = time.monotonic()
     previous_sigterm = None
     if threading.current_thread() is threading.main_thread():

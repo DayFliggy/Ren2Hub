@@ -6,6 +6,7 @@ import {
   configureStablePage,
   waitForStablePage,
   type VisualTheme,
+  captureEvidence,
 } from './fixtures'
 
 async function prepareTickets(page: Page, theme: VisualTheme) {
@@ -151,7 +152,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
-      await page.screenshot({
+      await captureEvidence(page, {
         path: testInfo.outputPath('ticket-management-selected.png'),
       })
 

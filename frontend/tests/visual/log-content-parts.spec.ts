@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test'
 
-import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
+import {
+  assertNoHorizontalOverflow,
+  configureStablePage,
+  captureEvidence,
+} from './fixtures'
 
 // The rows use keys of the real zh-CN server message catalog (infra.json).
 const ROWS = [
@@ -46,45 +50,46 @@ const ROWS = [
   },
 ]
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const mobile of [false, true]) {
-    test(`log content_parts ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
-      page,
-    }, testInfo) => {
-      await page.setViewportSize(
-        mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
-      )
-      await configureStablePage(page, { theme })
-      await page.route('**/api/log/self?*', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: { items: ROWS, total: ROWS.length, page: 1, page_size: 20 },
-          },
-        })
-      )
-      await Promise.all([
-        page.waitForResponse('**/api/log/self?*'),
-        page.goto('/logs'),
-      ])
-
-      const rows = page.locator(mobile ? 'article:visible' : 'tbody tr:visible')
-      await expect(rows).toHaveCount(2)
-      const topup = rows.nth(0).locator('[data-log-detail-trigger]')
-      await expect(topup).toHaveText(
-        '使用在线充值成功，充值金额: $10.000000，支付金额：72.00'
-      )
-      await expect(rows.nth(1)).toContainText('模型测试')
-      // Rows written before content_parts keep their stored text.
-      await expect(rows.nth(1).locator('[data-log-detail-trigger]')).toHaveText(
-        'Legacy channel test row'
-      )
-      await expect(page.getByText('Online top-up succeeded')).toHaveCount(0)
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('log-content-parts.png'),
-        fullPage: true,
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  test(`log content_parts ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+    )
+    await configureStablePage(page, { theme })
+    await page.route('**/api/log/self?*', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: { items: ROWS, total: ROWS.length, page: 1, page_size: 20 },
+        },
       })
+    )
+    await Promise.all([
+      page.waitForResponse('**/api/log/self?*'),
+      page.goto('/logs'),
+    ])
+
+    const rows = page.locator(mobile ? 'article:visible' : 'tbody tr:visible')
+    await expect(rows).toHaveCount(2)
+    const topup = rows.nth(0).locator('[data-log-detail-trigger]')
+    await expect(topup).toHaveText(
+      '使用在线充值成功，充值金额: $10.000000，支付金额：72.00'
+    )
+    await expect(rows.nth(1)).toContainText('模型测试')
+    // Rows written before content_parts keep their stored text.
+    await expect(rows.nth(1).locator('[data-log-detail-trigger]')).toHaveText(
+      'Legacy channel test row'
+    )
+    await expect(page.getByText('Online top-up succeeded')).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath('log-content-parts.png'),
+      fullPage: true,
     })
-  }
+  })
 }

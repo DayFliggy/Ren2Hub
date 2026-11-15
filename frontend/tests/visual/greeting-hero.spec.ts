@@ -5,6 +5,7 @@ import {
   waitForStablePage,
   assertNoHorizontalOverflow,
   type VisualTheme,
+  captureEvidence,
 } from './fixtures'
 
 const THEMES: VisualTheme[] = ['light', 'dark']
@@ -30,7 +31,7 @@ for (const theme of THEMES) {
     // Punctuation must sit outside the painted mark.
     await expect(accent).not.toContainText('。')
 
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath(`greeting-hero-${theme}-desktop.png`),
       clip: { x: 0, y: 0, width: 1440, height: 420 },
     })
@@ -38,7 +39,7 @@ for (const theme of THEMES) {
     await page.setViewportSize({ width: 390, height: 844 })
     await waitForStablePage(page)
     await assertNoHorizontalOverflow(page)
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath(`greeting-hero-${theme}-mobile.png`),
       clip: { x: 0, y: 0, width: 390, height: 400 },
     })
@@ -62,7 +63,7 @@ test('a long display name keeps the underline on each wrapped line', async ({
   await page.setViewportSize({ width: 390, height: 844 })
   await waitForStablePage(page)
   await assertNoHorizontalOverflow(page)
-  await page.screenshot({
+  await captureEvidence(page, {
     path: testInfo.outputPath('greeting-hero-longname-mobile.png'),
     clip: { x: 0, y: 0, width: 390, height: 460 },
   })

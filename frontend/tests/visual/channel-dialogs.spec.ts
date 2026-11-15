@@ -164,140 +164,138 @@ async function expectInsideStatusChip(
   expect(rects.child.bottom).toBeLessThanOrEqual(rects.parent.bottom)
 }
 
-for (const theme of [
-  'light',
-  'dark',
-] as const satisfies readonly VisualTheme[]) {
-  for (const viewport of ['desktop', 'mobile'] as const) {
-    test(`${theme} ${viewport} channel test dialogs remain contained`, async ({
-      page,
-    }) => {
-      await page.setViewportSize(
-        viewport === 'desktop'
-          ? { width: 1440, height: 900 }
-          : { width: 390, height: 844 }
-      )
-      await configureStablePage(page, { theme, authenticated: true })
-      const releaseTests = await configureChannels(page)
-      await page.goto('/channels', { waitUntil: 'domcontentloaded' })
-      await waitForStablePage(page)
+for (const [theme, viewport] of [
+  ['light', 'desktop'],
+  ['dark', 'mobile'],
+] as const satisfies readonly (readonly [VisualTheme, string])[]) {
+  test(`${theme} ${viewport} channel test dialogs remain contained`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(
+      viewport === 'desktop'
+        ? { width: 1440, height: 900 }
+        : { width: 390, height: 844 }
+    )
+    await configureStablePage(page, { theme, authenticated: true })
+    const releaseTests = await configureChannels(page)
+    await page.goto('/channels', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
 
-      const menuTrigger = page.locator(
-        '[aria-controls="console-mobile-navigation"]'
-      )
-      if (viewport === 'mobile') await menuTrigger.click()
-      const navigation =
-        viewport === 'desktop'
-          ? page.locator('[data-handdrawn="navigation"]')
-          : page.locator('[data-console-mobile-navigation]')
-      await expect(navigation).toBeVisible()
-      await expect(navigation).toHaveCSS('user-select', 'none')
-      await expect(
-        navigation.locator('[data-console-nav-item="subscription"]')
-      ).toHaveCount(0)
-      await expect(
-        navigation.locator('[data-console-nav-item="plan-management"]')
-      ).toHaveCount(0)
-      if (viewport === 'mobile') {
-        await page.keyboard.press('Escape')
-        await expect(navigation).toHaveCount(0)
-        await expect(menuTrigger).toBeFocused()
-      }
+    const menuTrigger = page.locator(
+      '[aria-controls="console-mobile-navigation"]'
+    )
+    if (viewport === 'mobile') await menuTrigger.click()
+    const navigation =
+      viewport === 'desktop'
+        ? page.locator('[data-handdrawn="navigation"]')
+        : page.locator('[data-console-mobile-navigation]')
+    await expect(navigation).toBeVisible()
+    await expect(navigation).toHaveCSS('user-select', 'none')
+    await expect(
+      navigation.locator('[data-console-nav-item="subscription"]')
+    ).toHaveCount(0)
+    await expect(
+      navigation.locator('[data-console-nav-item="plan-management"]')
+    ).toHaveCount(0)
+    if (viewport === 'mobile') {
+      await page.keyboard.press('Escape')
+      await expect(navigation).toHaveCount(0)
+      await expect(menuTrigger).toBeFocused()
+    }
 
-      await page
-        .locator('[aria-label="测试 Anthropic 渠道的响应"]:visible')
-        .click()
-      const groupDialog = page.getByRole('dialog', {
-        name: '批量测试渠道响应',
-      })
-      await expect(groupDialog).toBeVisible()
-      await groupDialog
-        .getByRole('combobox', { name: '测试模型', exact: true })
-        .click()
-      await page.getByRole('option', { name: 'model-01', exact: true }).click()
-      await groupDialog
-        .getByRole('combobox', { name: '测试并发（1–32）', exact: true })
-        .click()
-      await page.getByRole('option', { name: '2', exact: true }).click()
-      const groupStart = groupDialog.locator('[data-channel-test-start]')
-      await groupStart.click()
-      await expect(
-        groupDialog.locator('[data-channel-test-spinner]')
-      ).toBeVisible()
-      await expect(groupStart).toContainText('0/2')
-      await expect(
-        groupDialog.locator('[data-channel-test-picker]')
-      ).toHaveAttribute('inert', '')
-      await expect(
-        page.locator('[data-channel-response-spinner]:visible')
-      ).toHaveCount(2)
-      await expectInsideViewport(page, '[data-channel-test-spinner]')
-      await expectInsideStatusChip(
-        page,
-        '[data-channel-response-spinner]:visible'
-      )
-      releaseTests()
-      await expect(
-        groupDialog.locator('[data-channel-test-spinner]')
-      ).toHaveCount(0)
-      await groupDialog.getByRole('button', { name: '取消' }).click()
-      await expect(groupDialog).toHaveCount(0)
-
-      await page.locator('[aria-label="测试响应"]:visible').first().click()
-      const channelDialog = page.getByRole('dialog', {
-        name: '测试渠道连接：Anthropic Primary',
-      })
-      await expect(channelDialog).toBeVisible()
-      await expect(channelDialog.locator('tbody tr')).toHaveCount(5)
-      await expect(channelDialog).not.toContainText('共 12 项')
-      await expectInsideViewport(page, '[role="dialog"][aria-modal="true"]')
-
-      const footer = channelDialog.locator(
-        '[data-pagination-variant="modal-footer"]'
-      )
-      const footerOrder = await footer.evaluate((element) => {
-        const pageSize = element.querySelector('[data-pagination-page-size]')
-        const controls = element.querySelector('[data-pagination-controls]')
-        const actions = element.querySelector('[data-pagination-actions]')
-        if (!pageSize || !controls || !actions) return []
-        return [pageSize, controls, actions].map((item) =>
-          Array.from(element.querySelectorAll('*')).indexOf(item)
-        )
-      })
-      expect(footerOrder[0]).toBeLessThan(footerOrder[1]!)
-      expect(footerOrder[1]).toBeLessThan(footerOrder[2]!)
-
-      await footer.getByRole('combobox').click()
-      await expect(page.getByRole('option')).toHaveText([
-        '显示 5',
-        '显示 10',
-        '显示 30',
-        '显示 50',
-      ])
-      await page.getByRole('option', { name: '显示 5', exact: true }).click()
-      await footer.getByRole('button', { name: '下一页' }).click()
-      await expect(channelDialog.locator('tbody tr')).toHaveCount(5)
-      await expect(channelDialog.locator('tbody')).toContainText('model-06')
-      await expect(channelDialog.locator('tbody')).not.toContainText('model-01')
-
-      await channelDialog
-        .getByRole('button', { name: '测试模型 model-06' })
-        .click()
-      await expect(
-        channelDialog.locator('[data-channel-model-row-spinner]')
-      ).toBeVisible()
-      await expectInsideViewport(page, '[data-channel-model-row-spinner]')
-      releaseTests()
-      await expect(
-        channelDialog.locator('[data-channel-model-row-spinner]')
-      ).toHaveCount(0)
-
-      await assertNoHorizontalOverflow(page)
-      await footer.getByRole('button', { name: '关闭' }).click()
-      await expect(channelDialog).toHaveCount(0)
-      // Check the resting page after transient test-result notifications leave.
-      await expect(page.locator('[data-handdrawn="toast"]')).toHaveCount(0)
-      await assertInteractiveCentersVisible(page)
+    await page
+      .locator('[aria-label="测试 Anthropic 渠道的响应"]:visible')
+      .click()
+    const groupDialog = page.getByRole('dialog', {
+      name: '批量测试渠道响应',
     })
-  }
+    await expect(groupDialog).toBeVisible()
+    await groupDialog
+      .getByRole('combobox', { name: '测试模型', exact: true })
+      .click()
+    await page.getByRole('option', { name: 'model-01', exact: true }).click()
+    await groupDialog
+      .getByRole('combobox', { name: '测试并发（1–32）', exact: true })
+      .click()
+    await page.getByRole('option', { name: '2', exact: true }).click()
+    const groupStart = groupDialog.locator('[data-channel-test-start]')
+    await groupStart.click()
+    await expect(
+      groupDialog.locator('[data-channel-test-spinner]')
+    ).toBeVisible()
+    await expect(groupStart).toContainText('0/2')
+    await expect(
+      groupDialog.locator('[data-channel-test-picker]')
+    ).toHaveAttribute('inert', '')
+    await expect(
+      page.locator('[data-channel-response-spinner]:visible')
+    ).toHaveCount(2)
+    await expectInsideViewport(page, '[data-channel-test-spinner]')
+    await expectInsideStatusChip(
+      page,
+      '[data-channel-response-spinner]:visible'
+    )
+    releaseTests()
+    await expect(
+      groupDialog.locator('[data-channel-test-spinner]')
+    ).toHaveCount(0)
+    await groupDialog.getByRole('button', { name: '取消' }).click()
+    await expect(groupDialog).toHaveCount(0)
+
+    await page.locator('[aria-label="测试响应"]:visible').first().click()
+    const channelDialog = page.getByRole('dialog', {
+      name: '测试渠道连接：Anthropic Primary',
+    })
+    await expect(channelDialog).toBeVisible()
+    await expect(channelDialog.locator('tbody tr')).toHaveCount(5)
+    await expect(channelDialog).not.toContainText('共 12 项')
+    await expectInsideViewport(page, '[role="dialog"][aria-modal="true"]')
+
+    const footer = channelDialog.locator(
+      '[data-pagination-variant="modal-footer"]'
+    )
+    const footerOrder = await footer.evaluate((element) => {
+      const pageSize = element.querySelector('[data-pagination-page-size]')
+      const controls = element.querySelector('[data-pagination-controls]')
+      const actions = element.querySelector('[data-pagination-actions]')
+      if (!pageSize || !controls || !actions) return []
+      return [pageSize, controls, actions].map((item) =>
+        Array.from(element.querySelectorAll('*')).indexOf(item)
+      )
+    })
+    expect(footerOrder[0]).toBeLessThan(footerOrder[1]!)
+    expect(footerOrder[1]).toBeLessThan(footerOrder[2]!)
+
+    await footer.getByRole('combobox').click()
+    await expect(page.getByRole('option')).toHaveText([
+      '显示 5',
+      '显示 10',
+      '显示 30',
+      '显示 50',
+    ])
+    await page.getByRole('option', { name: '显示 5', exact: true }).click()
+    await footer.getByRole('button', { name: '下一页' }).click()
+    await expect(channelDialog.locator('tbody tr')).toHaveCount(5)
+    await expect(channelDialog.locator('tbody')).toContainText('model-06')
+    await expect(channelDialog.locator('tbody')).not.toContainText('model-01')
+
+    await channelDialog
+      .getByRole('button', { name: '测试模型 model-06' })
+      .click()
+    await expect(
+      channelDialog.locator('[data-channel-model-row-spinner]')
+    ).toBeVisible()
+    await expectInsideViewport(page, '[data-channel-model-row-spinner]')
+    releaseTests()
+    await expect(
+      channelDialog.locator('[data-channel-model-row-spinner]')
+    ).toHaveCount(0)
+
+    await assertNoHorizontalOverflow(page)
+    await footer.getByRole('button', { name: '关闭' }).click()
+    await expect(channelDialog).toHaveCount(0)
+    // Check the resting page after transient test-result notifications leave.
+    await expect(page.locator('[data-handdrawn="toast"]')).toHaveCount(0)
+    await assertInteractiveCentersVisible(page)
+  })
 }

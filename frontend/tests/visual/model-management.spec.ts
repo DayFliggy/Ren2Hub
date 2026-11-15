@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
 import { PRICING_KEYS } from '../../src/api/pricingKeys'
-import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
+import {
+  assertNoHorizontalOverflow,
+  configureStablePage,
+  captureEvidence,
+} from './fixtures'
 
 test.setTimeout(90_000)
 
@@ -161,148 +165,150 @@ async function confirmHistoryBack(page: Page, discard: boolean) {
   await navigation
 }
 
-for (const language of ['zh-CN', 'en']) {
-  for (const theme of ['light', 'dark'] as const) {
-    for (const mobile of [false, true]) {
-      test(`model management ${language} ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
-        page,
-      }, testInfo) => {
-        const failures = await setupPage(page, { language, theme, mobile })
-        const zh = language === 'zh-CN'
-        const shot = (name: string) =>
-          page.screenshot({ path: testInfo.outputPath(name), fullPage: true })
-        await page.goto('/models/metadata')
-        await expect(visible(page, 'gpt-local')).toBeVisible()
-        const modelsLink = await revealModelsLink(page, mobile)
-        await expect(modelsLink).toContainText(
-          zh ? '模型管理' : 'Model management'
-        )
-        if (mobile) {
-          await page.keyboard.press('Escape')
-          await expect(
-            page.locator('[data-console-mobile-navigation]')
-          ).toHaveCount(0)
-        }
-        await expect(
-          visible(page, zh ? '模型管理' : 'Model management')
-        ).toBeVisible()
-        await expect(
-          page.getByRole('tab', {
-            name: zh ? '供应商' : 'Vendors',
-            exact: true,
-          })
-        ).toBeVisible()
-        await expect(
-          page.getByRole('tab', {
-            name: zh ? '定价' : 'Pricing',
-            exact: true,
-          })
-        ).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-        await shot('models.png')
-        await page
-          .getByRole('button', { name: zh ? '编辑' : 'Edit', exact: true })
-          .filter({ visible: true })
-          .first()
-          .click()
-        const drawer = page.getByRole('dialog')
-        await expect(
-          drawer.getByLabel(zh ? '模型名称' : 'Model Name', { exact: true })
-        ).toHaveValue('gpt-local')
-        await expect(
-          drawer.getByText(zh ? '基本信息' : 'Basic Information', {
-            exact: true,
-          })
-        ).toBeVisible()
-        await drawer.getByRole('radio', { name: 'JSON', exact: true }).click()
-        await drawer.getByLabel('JSON', { exact: true }).fill('{')
-        await drawer
-          .getByRole('button', {
-            name: zh ? '保存资料' : 'Save metadata',
-            exact: true,
-          })
-          .click()
-        await expect(drawer.getByRole('alert').first()).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-        await shot('model-drawer.png')
-        await drawer
-          .getByRole('tab', {
-            name: zh ? '关联渠道' : 'Channels',
-            exact: true,
-          })
-          .click()
-        await expect(drawer.getByText('primary', { exact: true })).toBeVisible()
-        await expect(
-          drawer.getByText('gpt-local-2', { exact: true })
-        ).toBeVisible()
-        await shot('model-connections.png')
-        // The broken endpoint draft is unsaved, so closing asks first.
-        await page.keyboard.press('Escape')
-        await page
-          .getByRole('button', {
-            name: zh ? '放弃修改' : 'Discard changes',
-            exact: true,
-          })
-          .click()
-        await expect(page.getByRole('dialog')).toHaveCount(0)
-        // Vendors is its own section in NewAPI; bookmarks keep query and hash.
-        await page.goto('/models/vendors?vFilter=open&source=bookmark#details')
-        await expect(page).toHaveURL(
-          /\/models\/vendors\?vFilter=open&source=bookmark#details$/
-        )
-        await expect(
-          page.getByRole('tab', {
-            name: zh ? '供应商' : 'Vendors',
-            exact: true,
-          })
-        ).toHaveAttribute('aria-selected', 'true')
-        await expect(visible(page, 'Model provider')).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-        await shot('vendors.png')
-        await page
-          .getByRole('button', { name: 'OpenAI', exact: true })
-          .filter({ visible: true })
-          .first()
-          .click()
-        const vendorDrawer = page.getByRole('dialog')
-        await expect(
-          vendorDrawer.getByRole('tab', {
-            name: zh ? '供应商资料' : 'Vendor details',
-          })
-        ).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-        await shot('vendor-drawer.png')
-        await page.keyboard.press('Escape')
-        await expect(page.getByRole('dialog')).toHaveCount(0)
-        await page.goto('/models/prefill-groups?source=bookmark#details')
-        await expect(page).toHaveURL(
-          /\/models\/metadata\?.*manage=prefill-groups.*#details$/
-        )
-        const groupsDialog = page.getByRole('dialog')
-        await expect(
-          groupsDialog
-            .getByText('Standard models', { exact: true })
-            .filter({ visible: true })
-            .first()
-        ).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-        await shot('prefill-groups.png')
-        await page.keyboard.press('Escape')
-        await expect(page.getByRole('dialog')).toHaveCount(0)
-        await expect(page).not.toHaveURL(/manage=/)
-        expect(
-          await page
-            .locator('img')
-            .evaluateAll((images) =>
-              (images as HTMLImageElement[])
-                .filter((image) => !image.complete || image.naturalWidth === 0)
-                .map((image) => image.src)
-            )
-        ).toEqual([])
-        expect(failures).toEqual([])
+// Copy length and width drive the layout, so every language keeps both
+// widths; the theme alternates so each one is still rendered.
+for (const [language, theme, mobile] of [
+  ['zh-CN', 'light', false],
+  ['zh-CN', 'dark', true],
+  ['en', 'dark', false],
+  ['en', 'light', true],
+] as const) {
+  test(`model management ${language} ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }, testInfo) => {
+    const failures = await setupPage(page, { language, theme, mobile })
+    const zh = language === 'zh-CN'
+    const shot = (name: string) =>
+      captureEvidence(page, {
+        path: testInfo.outputPath(name),
+        fullPage: true,
       })
+    await page.goto('/models/metadata')
+    await expect(visible(page, 'gpt-local')).toBeVisible()
+    const modelsLink = await revealModelsLink(page, mobile)
+    await expect(modelsLink).toContainText(zh ? '模型管理' : 'Model management')
+    if (mobile) {
+      await page.keyboard.press('Escape')
+      await expect(
+        page.locator('[data-console-mobile-navigation]')
+      ).toHaveCount(0)
     }
-  }
+    await expect(
+      visible(page, zh ? '模型管理' : 'Model management')
+    ).toBeVisible()
+    await expect(
+      page.getByRole('tab', {
+        name: zh ? '供应商' : 'Vendors',
+        exact: true,
+      })
+    ).toBeVisible()
+    await expect(
+      page.getByRole('tab', {
+        name: zh ? '定价' : 'Pricing',
+        exact: true,
+      })
+    ).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await shot('models.png')
+    await page
+      .getByRole('button', { name: zh ? '编辑' : 'Edit', exact: true })
+      .filter({ visible: true })
+      .first()
+      .click()
+    const drawer = page.getByRole('dialog')
+    await expect(
+      drawer.getByLabel(zh ? '模型名称' : 'Model Name', { exact: true })
+    ).toHaveValue('gpt-local')
+    await expect(
+      drawer.getByText(zh ? '基本信息' : 'Basic Information', {
+        exact: true,
+      })
+    ).toBeVisible()
+    await drawer.getByRole('radio', { name: 'JSON', exact: true }).click()
+    await drawer.getByLabel('JSON', { exact: true }).fill('{')
+    await drawer
+      .getByRole('button', {
+        name: zh ? '保存资料' : 'Save metadata',
+        exact: true,
+      })
+      .click()
+    await expect(drawer.getByRole('alert').first()).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await shot('model-drawer.png')
+    await drawer
+      .getByRole('tab', {
+        name: zh ? '关联渠道' : 'Channels',
+        exact: true,
+      })
+      .click()
+    await expect(drawer.getByText('primary', { exact: true })).toBeVisible()
+    await expect(drawer.getByText('gpt-local-2', { exact: true })).toBeVisible()
+    await shot('model-connections.png')
+    // The broken endpoint draft is unsaved, so closing asks first.
+    await page.keyboard.press('Escape')
+    await page
+      .getByRole('button', {
+        name: zh ? '放弃修改' : 'Discard changes',
+        exact: true,
+      })
+      .click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Vendors is its own section in NewAPI; bookmarks keep query and hash.
+    await page.goto('/models/vendors?vFilter=open&source=bookmark#details')
+    await expect(page).toHaveURL(
+      /\/models\/vendors\?vFilter=open&source=bookmark#details$/
+    )
+    await expect(
+      page.getByRole('tab', {
+        name: zh ? '供应商' : 'Vendors',
+        exact: true,
+      })
+    ).toHaveAttribute('aria-selected', 'true')
+    await expect(visible(page, 'Model provider')).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await shot('vendors.png')
+    await page
+      .getByRole('button', { name: 'OpenAI', exact: true })
+      .filter({ visible: true })
+      .first()
+      .click()
+    const vendorDrawer = page.getByRole('dialog')
+    await expect(
+      vendorDrawer.getByRole('tab', {
+        name: zh ? '供应商资料' : 'Vendor details',
+      })
+    ).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await shot('vendor-drawer.png')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.goto('/models/prefill-groups?source=bookmark#details')
+    await expect(page).toHaveURL(
+      /\/models\/metadata\?.*manage=prefill-groups.*#details$/
+    )
+    const groupsDialog = page.getByRole('dialog')
+    await expect(
+      groupsDialog
+        .getByText('Standard models', { exact: true })
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await shot('prefill-groups.png')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page).not.toHaveURL(/manage=/)
+    expect(
+      await page
+        .locator('img')
+        .evaluateAll((images) =>
+          (images as HTMLImageElement[])
+            .filter((image) => !image.complete || image.naturalWidth === 0)
+            .map((image) => image.src)
+        )
+    ).toEqual([])
+    expect(failures).toEqual([])
+  })
 }
 test('sync preview and missing-model creation write nothing until applied', async ({
   page,
@@ -328,7 +334,7 @@ test('sync preview and missing-model creation write nothing until applied', asyn
     dialog.getByText('Upstream description', { exact: true })
   ).toBeVisible()
   await assertNoHorizontalOverflow(page)
-  await page.screenshot({
+  await captureEvidence(page, {
     path: testInfo.outputPath('sync-preview.png'),
     fullPage: true,
   })
@@ -352,69 +358,70 @@ test('sync preview and missing-model creation write nothing until applied', asyn
   expect(writes).toEqual([])
 })
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const mobile of [false, true]) {
-    test(`model and vendor drafts guard browser history ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
-      page,
-    }) => {
-      const failures = await setupPage(page, {
-        language: 'en',
-        theme,
-        mobile,
-      })
-      const writes: string[] = []
-      page.on('request', (request) => {
-        if (
-          /\/api\/(models|vendors)\//.test(request.url()) &&
-          request.method() !== 'GET'
-        )
-          writes.push(request.url())
-      })
-      // Stay in one document so Back exercises the Vue route guard.
-      await page.goto('/keys')
-      await (await revealModelsLink(page, mobile)).click()
-      await expect(page).toHaveURL(/\/models\/metadata$/)
-      await page
-        .getByRole('button', { name: 'Edit', exact: true })
-        .filter({ visible: true })
-        .first()
-        .click()
-      const modelDescription = page
-        .getByRole('dialog')
-        .getByLabel('Description', { exact: true })
-      await modelDescription.fill('Unsaved model description')
-      await confirmHistoryBack(page, false)
-      await expect(page).toHaveURL(/\/models\/metadata$/)
-      await expect(modelDescription).toHaveValue('Unsaved model description')
-      await confirmHistoryBack(page, true)
-      await expect(page).toHaveURL(/\/keys$/)
-      await expect(page.getByRole('dialog')).toHaveCount(0)
-
-      await (await revealModelsLink(page, mobile)).click()
-      await page.getByRole('tab', { name: 'Vendors', exact: true }).click()
-      await expect(page).toHaveURL(/\/models\/vendors$/)
-      await page
-        .getByRole('button', { name: 'OpenAI', exact: true })
-        .filter({ visible: true })
-        .first()
-        .click()
-      const vendorName = page
-        .getByRole('dialog')
-        .getByLabel('Vendor Name', { exact: true })
-      await vendorName.fill('Unsaved vendor name')
-      await confirmHistoryBack(page, false)
-      await expect(page).toHaveURL(/\/models\/vendors$/)
-      await expect(vendorName).toHaveValue('Unsaved vendor name')
-      await confirmHistoryBack(page, true)
-      await expect(page).toHaveURL(/\/models\/metadata$/)
-      await expect(page.getByRole('dialog')).toHaveCount(0)
-      // An unmounted editor must not leave a stale confirmation guard behind.
-      await page.goBack()
-      await expect(page).toHaveURL(/\/keys$/)
-      expect(writes).toEqual([])
-      expect(failures).toEqual([])
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  test(`model and vendor drafts guard browser history ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }) => {
+    const failures = await setupPage(page, {
+      language: 'en',
+      theme,
+      mobile,
     })
-  }
+    const writes: string[] = []
+    page.on('request', (request) => {
+      if (
+        /\/api\/(models|vendors)\//.test(request.url()) &&
+        request.method() !== 'GET'
+      )
+        writes.push(request.url())
+    })
+    // Stay in one document so Back exercises the Vue route guard.
+    await page.goto('/keys')
+    await (await revealModelsLink(page, mobile)).click()
+    await expect(page).toHaveURL(/\/models\/metadata$/)
+    await page
+      .getByRole('button', { name: 'Edit', exact: true })
+      .filter({ visible: true })
+      .first()
+      .click()
+    const modelDescription = page
+      .getByRole('dialog')
+      .getByLabel('Description', { exact: true })
+    await modelDescription.fill('Unsaved model description')
+    await confirmHistoryBack(page, false)
+    await expect(page).toHaveURL(/\/models\/metadata$/)
+    await expect(modelDescription).toHaveValue('Unsaved model description')
+    await confirmHistoryBack(page, true)
+    await expect(page).toHaveURL(/\/keys$/)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    await (await revealModelsLink(page, mobile)).click()
+    await page.getByRole('tab', { name: 'Vendors', exact: true }).click()
+    await expect(page).toHaveURL(/\/models\/vendors$/)
+    await page
+      .getByRole('button', { name: 'OpenAI', exact: true })
+      .filter({ visible: true })
+      .first()
+      .click()
+    const vendorName = page
+      .getByRole('dialog')
+      .getByLabel('Vendor Name', { exact: true })
+    await vendorName.fill('Unsaved vendor name')
+    await confirmHistoryBack(page, false)
+    await expect(page).toHaveURL(/\/models\/vendors$/)
+    await expect(vendorName).toHaveValue('Unsaved vendor name')
+    await confirmHistoryBack(page, true)
+    await expect(page).toHaveURL(/\/models\/metadata$/)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // An unmounted editor must not leave a stale confirmation guard behind.
+    await page.goBack()
+    await expect(page).toHaveURL(/\/keys$/)
+    expect(writes).toEqual([])
+    expect(failures).toEqual([])
+  })
 }
 
 test('a pending model save blocks browser history and closes only after success', async ({

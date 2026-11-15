@@ -547,42 +547,41 @@ test('home runtime workbench remains self-contained', async ({ page }) => {
   await expect(page.getByText('每一枚令牌，都有自己的路由表')).toHaveCount(0)
 })
 
-for (const theme of ['light', 'dark'] as VisualTheme[]) {
-  for (const viewport of [
-    { width: 1440, height: 900 },
-    { width: 390, height: 844 },
-  ]) {
-    test(`${theme} ${viewport.width} availability is omitted without uptime data`, async ({
-      page,
-    }) => {
-      await page.setViewportSize(viewport)
-      await configureStablePage(page, { theme, authenticated: true })
-      await page.route('**/api/uptime/status', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, message: '', data: [] }),
-        })
-      )
-      await page.goto('/', { waitUntil: 'domcontentloaded' })
-      await waitForStablePage(page)
+// The metric row split does not depend on the theme.
+for (const [theme, viewport] of [
+  ['light', { width: 1440, height: 900 }],
+  ['dark', { width: 390, height: 844 }],
+] as const) {
+  test(`${theme} ${viewport.width} availability is omitted without uptime data`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    await configureStablePage(page, { theme, authenticated: true })
+    await page.route('**/api/uptime/status', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, message: '', data: [] }),
+      })
+    )
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
 
-      const metrics = page.locator('.hero-metrics > div')
-      await expect(metrics).toHaveCount(2)
-      await expect(page.locator('.hero-metrics')).not.toContainText('可用率')
-      const widths = await metrics.evaluateAll((items) =>
-        items.map((item) => item.getBoundingClientRect().width)
-      )
-      if (viewport.width < 1024) {
-        // The remaining items split the mobile row evenly.
-        expect(Math.abs(widths[0]! - widths[1]!)).toBeLessThanOrEqual(1)
-      }
+    const metrics = page.locator('.hero-metrics > div')
+    await expect(metrics).toHaveCount(2)
+    await expect(page.locator('.hero-metrics')).not.toContainText('可用率')
+    const widths = await metrics.evaluateAll((items) =>
+      items.map((item) => item.getBoundingClientRect().width)
+    )
+    if (viewport.width < 1024) {
+      // The remaining items split the mobile row evenly.
+      expect(Math.abs(widths[0]! - widths[1]!)).toBeLessThanOrEqual(1)
+    }
 
-      await page.locator('#home-runtime').scrollIntoViewIfNeeded()
-      await expect(page.locator('.runtime-clock-group')).toHaveCount(4)
-      await expect(page.locator('.runtime-availability')).toHaveCount(0)
-    })
-  }
+    await page.locator('#home-runtime').scrollIntoViewIfNeeded()
+    await expect(page.locator('.runtime-clock-group')).toHaveCount(4)
+    await expect(page.locator('.runtime-availability')).toHaveCount(0)
+  })
 }
 
 test('zero request trend uses a floating wave placeholder', async ({

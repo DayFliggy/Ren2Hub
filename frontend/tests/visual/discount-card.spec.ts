@@ -4,6 +4,7 @@ import {
   configureStablePage,
   minTextContrast,
   waitForStablePage,
+  captureEvidence,
 } from './fixtures'
 
 const response = nativeFixture<{ data: Record<string, unknown> }>(
@@ -193,7 +194,7 @@ for (const width of [320, 390, 768, 1280, 1440, 1920])
           expect(settingsBox!.width).toBeGreaterThanOrEqual(44)
           expect(settingsBox!.height).toBeGreaterThanOrEqual(44)
         }
-        await card.screenshot({
+        await captureEvidence(card, {
           path: testInfo.outputPath('discount-card.png'),
         })
         if (width === 390 && locale === 'zh-CN') {
@@ -204,7 +205,7 @@ for (const width of [320, 390, 768, 1280, 1440, 1920])
           })
         }
         if (width === 1440 && locale === 'zh-CN') {
-          await page.screenshot({
+          await captureEvidence(page, {
             fullPage: true,
             path: testInfo.outputPath('dashboard-context.png'),
           })
@@ -463,7 +464,9 @@ for (const theme of ['light', 'dark'] as const)
           ).toContainText('5 USD')
         }
       }
-      await card.screenshot({ path: testInfo.outputPath('discount-state.png') })
+      await captureEvidence(card, {
+        path: testInfo.outputPath('discount-state.png'),
+      })
       await waitForStablePage(page)
     })
 
@@ -495,7 +498,9 @@ for (const theme of ['light', 'dark'] as const)
         .locator('[data-console-scroll-zone]')
         .evaluate((el) => el.scrollWidth - el.clientWidth)
     ).toBeLessThanOrEqual(1)
-    await card.screenshot({ path: testInfo.outputPath('discount-narrow.png') })
+    await captureEvidence(card, {
+      path: testInfo.outputPath('discount-narrow.png'),
+    })
     await waitForStablePage(page)
   })
 
@@ -551,7 +556,7 @@ for (const theme of ['light', 'dark'] as const)
           .locator('[data-discount-effective]')
           .boundingBox()
         expect(effective!.y - panel!.y).toBeLessThan(240)
-        await card.screenshot({
+        await captureEvidence(card, {
           path: testInfo.outputPath(`standard-${width}.png`),
         })
       }
@@ -604,7 +609,9 @@ for (const theme of ['light', 'dark'] as const)
       card.locator('[data-discount-progress="month"]')
     ).toContainText('0.000002 USD to 2%')
     await expectReadableCard(card)
-    await card.screenshot({ path: testInfo.outputPath('long-amounts.png') })
+    await captureEvidence(card, {
+      path: testInfo.outputPath('long-amounts.png'),
+    })
     await page.setViewportSize({ width: 1280, height: 1000 })
     await page.evaluate(() => {
       document.documentElement.style.fontSize = '200%'
@@ -615,6 +622,8 @@ for (const theme of ['light', 'dark'] as const)
     await card.scrollIntoViewIfNeeded()
     await expectReadableCard(card)
     await expect(card.locator('[data-discount-factor]')).toHaveText('0.9999×')
-    await card.screenshot({ path: testInfo.outputPath('text-200-percent.png') })
+    await captureEvidence(card, {
+      path: testInfo.outputPath('text-200-percent.png'),
+    })
     await waitForStablePage(page)
   })

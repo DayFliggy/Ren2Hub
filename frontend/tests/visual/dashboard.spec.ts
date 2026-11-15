@@ -14,6 +14,7 @@ import {
   visualDateKey,
   waitForStablePage,
   type VisualTheme,
+  captureEvidence,
 } from './fixtures'
 
 const test = base.extend<{
@@ -780,7 +781,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
             card.locator('[data-usage-scroll-fade="end"]')
           ).toBeVisible()
           await assertNoHorizontalOverflow(page)
-          await card.screenshot({
+          await captureEvidence(card, {
             path: testInfo.outputPath(`${period}.png`),
           })
         }

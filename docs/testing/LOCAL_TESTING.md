@@ -4,15 +4,15 @@ Ren2Hub 的质量门槛在本地运行，CI 调用同一入口。Go、Vue 的业
 
 ## 来源与取舍
 
-测试入口最初参考以下只读快照；当前应用同步目标为 `b388140acfd80369ec6243b16869daff1b4051f4`，不增加 Git 上游。NewAPI 是唯一上游，另外两个项目只提供测试设计参考。
+当前应用同步目标为 `b388140acfd80369ec6243b16869daff1b4051f4`，不增加 Git 上游。NewAPI 是唯一上游，另外两个项目只提供测试设计参考。2026-11-15 按以下只读快照复核三者的测试分层：
 
-| 来源    | 固定提交                                   | 采用的方式                                                                                                  | 不照搬的方式                                                                                     |
-| ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| NewAPI  | `e449cc700eb569cdfc2199cb73e97de46944f43c` | `.github/workflows/ci.yml`、`makefile` 的 root/relaykit/tokenkit 独立测试，原生 Go 测试与协议夹具           | 缺 MySQL/PostgreSQL DSN 后跳过，不能算完整数据库验收；不照搬 React 的 Bun 1.4.4 / `bun check -b` |
-| Sub2API | `a34f373973bf547ccec301c7405eb45194e1f28a` | `backend/Makefile` 的分层入口，`backend/internal/repository/integration_harness_test.go` 的每轮真实新数据库 | 不增加 testcontainers 大依赖，不给上游共享测试批量加 build tag；本地缺 Docker 也失败             |
-| AxonHub | `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` | `.github/workflows/test.yml` 的独立模块验证、协议请求/响应/流夹具、迁移独立场景                             | 不按用户前缀清理已有库，不使用真实供应商 key，不以固定等待或自动重试掩盖失败                     |
+| 来源    | 复核提交    | 日常 CI                                                                                                  | 重型测试                                                               | Ren2Hub 的取舍                                                                                     |
+| ------- | ----------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| NewAPI  | `bd6bb5301` | `ci.yml`：三模块 `go vet`、`go build`、`make test`（SQLite 内存库）；前端 `bun check -b`、`bun run test` | 无 race、无 e2e；MySQL/PostgreSQL DSN 测试缺环境即跳过                 | `quick` 对应这一层；跳过不能算数据库验收，三种数据库由 `databases` 实跑                            |
+| Sub2API | `4a4a83ee5` | `backend-ci.yml`：`make test-unit`（`-tags=unit`）、`make test-integration`（testcontainers）、前端单测  | e2e 用 `-tags=e2e` 手动运行；集成测试每包一个 TestMain，每用例事务回滚 | 采用分层入口；不引入 testcontainers，不给上游共享测试批量加 build tag                              |
+| AxonHub | `8a9df5228` | `test.yml`：`make test-backend-all`（enttest SQLite）、`pnpm test:unit`                                  | e2e 脚本手动运行；数据库竞态用独立标签                                 | 采用协议夹具和独立模块验证；不按用户前缀清理已有库，不用真实供应商 key，不以固定等待或重试掩盖失败 |
 
-源码链接：[NewAPI CI](https://github.com/QuantumNous/new-api/blob/e449cc700eb569cdfc2199cb73e97de46944f43c/.github/workflows/ci.yml)、[Sub2API 数据库设施](https://github.com/Wei-Shaw/sub2api/blob/a34f373973bf547ccec301c7405eb45194e1f28a/backend/internal/repository/integration_harness_test.go)、[AxonHub 测试入口](https://github.com/looplj/axonhub/blob/cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913/Makefile)。NewAPI 的 React CI 已更新到 Bun 1.4.4 和 `bun check -b`；Ren2Hub 仍使用适配 Vue 的 Bun 1.4.0、vue-tsc、ESLint 和 Prettier。此处是源码设计参考，不代表上游测试已在本机运行。
+三者的共同做法是日常 CI 只跑快速单元层，重型套件按需运行。Ren2Hub 因此分三档：`affected` 只跑与当前改动相关的测试，用于迭代；`quick`（unit、static、build）对应上游日常 CI，在提交前运行；`all` 和完整 candidate 仍是发布门槛，覆盖不因分档减少。NewAPI 前端已用 Bun 1.4.4 和 `bun check -b`；Ren2Hub 仍使用适配 Vue 的 Bun 1.4.0、vue-tsc、ESLint 和 Prettier。此处是源码设计参考，不代表上游测试已在本机运行。
 
 ## 运行入口
 
@@ -23,6 +23,8 @@ Ren2Hub 的质量门槛在本地运行，CI 调用同一入口。Go、Vue 的业
 ```sh
 python3 -B scripts/testing/run.py diagnostics
 python3 -B scripts/testing/run.py known_upstream_restored
+python3 -B scripts/testing/run.py affected [--base <提交>]
+python3 -B scripts/testing/run.py quick
 python3 -B scripts/testing/run.py unit
 python3 -B scripts/testing/run.py databases
 python3 -B scripts/testing/run.py static
@@ -36,17 +38,28 @@ python3 -B scripts/testing/run.py candidate --image <应用不可变镜像ID> --
 python3 -B scripts/testing/run.py all --image <应用不可变镜像ID> --image-identity <应用identity.json> --simulator-image <模拟器不可变镜像ID> --simulator-identity <模拟器identity.json>
 ```
 
-| 层           | 实际验证                                                                           | 依赖及通过条件                                                                                                |
-| ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| diagnostics  | 显式白名单 Go 标签诊断、真实失败指纹和标签包 vet | 精确测试名；编译/超时/缺项/跳过/未知失败/意外通过均失败，本地失败不能归为上游 |
-| unit         | Go 三模块、Vue 业务断言；httptest 模拟协议、计费、权限、路由、任务、工单           | 自动发现 Go 用例，每批最多 20 个，单次 `-timeout=60s`；检查 JSON 测试事件，零用例/失败/意外跳过均失败         |
-| databases    | 空库初始化、旧账务拒绝、钱包/返利/充值、路由、管理操作、模型目录、任务、日志与迁移 | SQLite + 新 MySQL 8.4 + PostgreSQL 15.19；每包只编译一次测试二进制，每个合同仍以独立进程、独立新库和 `-test.timeout=60s` 运行，报告记录二进制 SHA256；检查每个方言的运行与通过事件                      |
-| static       | Vue 类型、Lint、格式；三个 Go 模块 vet                                             | 全部退出 0；缺工具是失败                                                                                      |
-| build        | Vue 构建、嵌入资源图、实际 Go 二进制与两个独立模块                                 | 不用 placeholder 代替生产资源验证，记录二进制 SHA256                                                          |
-| race         | 轮询、并发资金、服务准入、WebSocket 结算、监听器连接计数、流量采样与读取并发       | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                             |
-| browser      | 全新实例真实登录/刷新/注销、权限、Token、邀请归属与设置交互                        | 桌面/手机 × 明/暗，每组独立数据库；核心流程直接调用真实后端，插件 UI 场景使用显式同源合同桩；不接已有服务器，不接受任意目标地址                         |
-| ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                        | 自动发现该目录全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端，不做像素比较 |
-| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同；指定旧镜像时增加跨版本普通升级 | 全新隔离 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过 |
+| 层           | 实际验证                                                                                              | 依赖及通过条件                                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| affected     | 只运行与 `--base`（默认 HEAD 与 origin/main 的分叉点）以来改动相关的 Go、数据库、race、Vue 与视觉用例 | 选择写入 `selection.json`；报告标记 `release_evidence: false`，不能代替 `quick` 或 `all`                                                                                           |
+| quick        | 依次执行 unit、static、build，对应上游日常 CI                                                         | 任一层失败即中止；不含数据库矩阵、race、浏览器、ui-contracts 和 candidate，不能代替 `all`                                                                                          |
+| diagnostics  | 显式白名单 Go 标签诊断、真实失败指纹和标签包 vet                                                      | 精确测试名；编译/超时/缺项/跳过/未知失败/意外通过均失败，本地失败不能归为上游                                                                                                      |
+| unit         | Go 三模块、Vue 业务断言；httptest 模拟协议、计费、权限、路由、任务、工单                              | 自动发现 Go 用例，每批最多 20 个，单次 `-timeout=60s`；检查 JSON 测试事件，零用例/失败/意外跳过均失败                                                                              |
+| databases    | 空库初始化、旧账务拒绝、钱包/返利/充值、路由、管理操作、模型目录、任务、日志与迁移                    | SQLite + 新 MySQL 8.4 + PostgreSQL 15.19；每包只编译一次测试二进制，每个合同仍以独立进程、独立新库和 `-test.timeout=60s` 运行，报告记录二进制 SHA256；检查每个方言的运行与通过事件 |
+| static       | Vue 类型、Lint、格式；三个 Go 模块 vet                                                                | 全部退出 0；缺工具是失败                                                                                                                                                           |
+| build        | Vue 构建、嵌入资源图、实际 Go 二进制与两个独立模块                                                    | 不用 placeholder 代替生产资源验证，记录二进制 SHA256                                                                                                                               |
+| race         | 轮询、并发资金、服务准入、WebSocket 结算、监听器连接计数、流量采样与读取并发                          | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                                                                                                  |
+| browser      | 全新实例真实登录/刷新/注销、权限、Token、邀请归属与设置交互                                           | 桌面/手机 × 明/暗，每组独立数据库；核心流程直接调用真实后端，插件 UI 场景使用显式同源合同桩；不接已有服务器，不接受任意目标地址                                                    |
+| ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                                           | 自动发现该目录全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端，不做像素比较                                                                      |
+| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同；指定旧镜像时增加跨版本普通升级 | 全新隔离 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过                                                                                             |
+
+`affected` 的选择规则在 `scripts/testing/affected.py`，由 `test_affected.py` 保护：
+
+- Go：用 `go list` 包图求改动包。生产文件（含删除和受构建标签排除的文件）及 `go.mod`/`go.sum` 改动会传给反向依赖和测试导入方；`_test.go` 与 `testdata/` 改动只选本包。测试源码中能解析到真实路径的相对路径（如 `../frontend/tests/fixtures/native`）也会选中读取它的包。选中包运行 unit 批次和 vet；与数据库矩阵、race 清单重合的包只运行这些包的套件，数据库仍启动三种引擎。
+- Vue：`vitest related` 按导入图选用例；typecheck 在任何前端代码改动时整体运行；lint 与 Prettier 只查改动文件；`package.json`、`bun.lock`、tsconfig、Vite/Vitest/ESLint/Prettier 配置改动时对应层整体运行。改动构建输入时运行 build。
+- 视觉：spec 按 URL 打开页面，导入图关联不到 `src`。`ui-contracts` 每次通过后，按 Playwright 单 worker 串行的时间窗把 Vite 返回的 `/src`、`/public` 模块归到各 spec，写入 `.local-tests/ui-impact.json`。affected 只运行加载过改动模块的 spec、改动的 spec、导入改动辅助文件的 spec 以及影响图未记录的 spec；没有影响图或改动全局配置时整层运行并生成影响图。影响图只决定迭代选择，不进入发布证据。
+- 不覆盖的层：候选合同（`scripts/testing/contracts/`、`candidate.py`、Dockerfile）、真实后端 browser（`browser.py`、`tests/local/`）、diagnostics 和 known_upstream_* 的输入改动只在报告中列出应单独运行的档位，不自动启动。
+
+改动 `scripts/testing/*.py` 时 affected 运行 Python 单测（`python3 -B -m unittest discover -s scripts/testing -p 'test_*.py'`）。迭代中按 affected → 提交前 quick → 发布 all/candidate 的顺序运行；同一源码指纹和环境下已通过的层直接复用，不重复运行。
 
 `unit` 只把数据库矩阵列为转交 `databases`，把嵌入产物测试转交 `build`；不会把它们计入 unit 通过数量。需要真实 VLLM 的可选用例明确不在本地方案内。`unit` 通过不等于 `all` 通过。数据库清单中测试被删除、改名或缺失不能静默减少覆盖。
 
@@ -65,7 +78,7 @@ python3 -B scripts/testing/run.py routing --image sha256:<应用镜像ID> --simu
 
 诊断执行器与发布复核共用 `routing_result.py` 中的完整探针清单；新增执行探针不会自动加入已批准的豁免集合。完整候选的 manifest 中，`success` 表示可发布，`candidate_success` 表示测试是否全部通过；存在精确豁免时后者仍为 false，不能把已知缺陷和阻断计入通过数。
 
-路由报告使用 `pass`、`fail`、`known_upstream`、`blocked`、`not_run`。退出 0 表示所有必测项通过；退出 1 表示本地/未分类失败、缺项、源码变化或清理失败；退出 2 仅表示已确认上游缺陷及其阻断，不能计为通过或发布。供应商到达序号不是状态更新游标，等待挂起完成时保留原游标重复查询；不靠固定 sleep 猜测并发交错。HTTP 请求 ID、供应商实际命中、重试轨迹、状态、预期/实际扣费与并发释放共同构成证据。Go 行锁、精确时间测试单列，不冒充实际 HTTP。必测清单独立于执行列表；已知上游允许表绑定用例名和诊断。成功 WS create 从唯一原生结算日志关联请求 ID，取消及被拒绝的 WS 若不能取得 ID，明确记录缺失并保留供应商/余额证据，不伪造。每个可关联请求核对日志净扣费，零扣费附加短稳定窗口；完整边界随 routing 报告的 limits 保存。
+路由报告使用 `pass`、`fail`、`known_upstream`、`blocked`、`not_run`。退出 0 表示所有必测项通过；退出 1 表示本地/未分类失败、缺项、源码变化或清理失败；退出 2 仅表示已确认上游缺陷及其阻断，不能计为通过或发布。供应商到达序号不是状态更新游标，等待挂起完成时保留原游标重复查询；不靠固定 sleep 猜测并发交错。HTTP 请求 ID、供应商实际命中、重试轨迹、状态、预期/实际扣费与并发释放共同构成证据。Go 行锁、精确时间测试单列，不冒充实际 HTTP。必测清单独立于执行列表；已知上游允许表绑定用例名和诊断。成功 WS create 从唯一原生结算日志关联请求 ID，取消及被拒绝的 WS 若不能取得 ID，明确记录缺失并保留供应商/余额证据，不伪造。每个可关联请求核对日志净扣费，零扣费附加短稳定窗口；完整边界随 routing 报告的 limits 保存。异步任务合同中，同一 Token 下只依赖已完成原始任务的续作先逐个提交并核对扣费与单次供应商 POST，再一起轮询到完成并核对总扣费，省去逐个等待原生轮询周期；跨 Token、渠道禁用和占满并发场景仍逐个执行，避免共享模拟器步骤被未完成任务的轮询消耗。
 
 产物默认进入 `.local-tests/run-*`，可用 `--output-parent` 放到仓库外；每轮新目录，禁止覆盖旧证据。记录源码 base SHA、干净时的 candidate SHA、未提交时的内容指纹、工具版本、每层报告、日志哈希与失败原因。私有目录 0700、凭据 0600；不把密钥和生产数据写进仓库。候选 SDK 可通过 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`、`GATEWAY_SDK_NODE_MODULE` 指定现有依赖；未指定时使用仓库内 `.test-tools/` 默认路径。候选在启动容器前检查这三项，缺失时直接以 `explicit_sdk_*` 失败。服务器现行工作区不允许未跟踪目录，正式候选必须指向工作区外的运行时。`success` 只表示各阶段通过，正式更新另需 manifest 的 `deployment_eligible` 为 true（干净源码、镜像修订与 gitlink 一致）；直接运行 `candidate.py` 时 CLI 输出同时给出两者，经 `run.py` 运行时以 `report.json` 的 `stages.candidate` 和 `candidate-manifest.json` 为准。runner 校验运行时版本并记录包元数据哈希，但不保证依赖目录只读或位于仓库外；`.test-tools/` 被 Git 忽略，不属于源码身份。
 
@@ -87,7 +100,7 @@ python3 -B scripts/testing/run.py routing --image sha256:<应用镜像ID> --simu
 
 | 旧资产                                                                    | 新位置与状态                                                                                                                |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境；8 个基础阶段，普通升级另加 7 个阶段；旧入口删除 |
+| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境；8 个基础阶段，普通升级另加 7 个阶段；旧入口删除       |
 | Go `*_test.go` 与 Vue `src/**/*.spec.ts`                                  | 保留原生行为断言，统一发现并运行；共享SQLite fixture补齐用户硬删除的路由表                                                  |
 | 日期审计 spec 的8组业务回归及必要fixtures                                 | 随 `frontend/tests/contracts/` 退役；`tests/visual/` 继续复用其中的 `native-core-fixture.ts` 与 `channel-core-fixtures.ts`  |
 | 旧 `frontend/tests/live/`                                                 | 新 `frontend/tests/local/` 对实际产物执行登录、权限、Token、邀请与设置；旧页面穷举不再作为现行门槛                          |
@@ -152,7 +165,6 @@ A4 已成为默认回归；诊断白名单只保留精确确认的上游问题�
 用户另行批准保留与固定 b388 相同的 `logger/logger.go`。`known_upstream_logger_race` 单独冻结 16 个并行流式测试和 3 个双渠道任务测试、日志计数访问点、调用帧以及按 goroutine ID 绑定的完整创建链；正常 race 精确移交这些测试后，由本阶段保持相同参数和内部并发执行，不删除 `t.Parallel` 或降低并行度。没有竞争且所有业务断言通过时退出 0；只有精确已知计数竞争时退出 2、`success=false`；任何其他竞争、业务断言失败、缺少用例、跳过、编译错误或超时均阻断。此授权不修改定价竞争及旧 12+30 名单。最终候选与发布分别从已发布源码重算报告，脏工作树准备证据不能冒充最终候选。
 
 普通 `ordinary_race` 由 `run.py race` 与候选调用同一执行器，固定 11 组、129 次顶层执行；`race_selection.json` 的 SHA 固定，19 个移交测试另由日志计数阶段保持原并发执行。候选记录普通检查的源码身份、命令、清单及原始日志，发布独立重算；任何数据竞争、缺项、跳过或断言失败阻断。资金 13 项定向 race 单独报告，不混入 129 的计数。
-
 
 ### 第四轮原生接点回归
 

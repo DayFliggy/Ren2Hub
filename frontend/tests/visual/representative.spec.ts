@@ -213,9 +213,9 @@ test('light mobile dashboard-auto-route', async ({ page }) => {
   await auditScenario('light', 'mobile', scenario, page)
 })
 
+// Dashboard and its stats tab run in light desktop and dark mobile; the
+// audit has no theme-specific assertion for them.
 for (const name of [
-  'dashboard',
-  'dashboard-stats',
   'sign-up',
   'activity',
   'invite',

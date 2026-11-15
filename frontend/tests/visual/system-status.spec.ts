@@ -17,6 +17,7 @@ import {
   configureStablePage,
   waitForStablePage,
   type VisualTheme,
+  captureEvidence,
 } from './fixtures'
 
 interface ResourceReadings {
@@ -433,7 +434,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
         await page.setViewportSize({ width, height: 900 })
         await expectReadingsInsideTiles(card)
         if (name === 'widest') {
-          await card.screenshot({
+          await captureEvidence(card, {
             path: testInfo.outputPath(`system-card-${theme}-${width}.png`),
           })
         }

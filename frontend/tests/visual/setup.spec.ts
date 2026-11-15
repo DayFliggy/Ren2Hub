@@ -5,6 +5,7 @@ import {
   assertNoHorizontalOverflow,
   configureStablePage,
   waitForStablePage,
+  captureEvidence,
 } from './fixtures'
 
 test.describe('setup wizard', () => {
@@ -175,7 +176,7 @@ test.describe('setup wizard', () => {
           theme === 'dark' ? 1200 : 1100
         )
 
-        await page.screenshot({
+        await captureEvidence(page, {
           path: testInfo.outputPath(
             `setup-account-${theme}-${viewport.name}.png`
           ),
@@ -193,7 +194,7 @@ test.describe('setup wizard', () => {
         await expect(
           page.getByRole('heading', { name: '复核并初始化', exact: true })
         ).toBeVisible()
-        await page.screenshot({
+        await captureEvidence(page, {
           path: testInfo.outputPath(
             `setup-review-${theme}-${viewport.name}.png`
           ),

@@ -1,0 +1,291 @@
+"""按当前改动选择开发期测试。结果只服务迭代，不能替代 quick、all 或候选发布证据。"""
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from pathlib import Path, PurePosixPath
+
+MODULES = ('.', 'relaykit', 'tokenkit')
+# 这些文件改变工具链、依赖或全局配置，对应层只能整体重跑。
+FRONTEND_GLOBAL = {'frontend/package.json', 'frontend/bun.lock', 'frontend/tsconfig.json',
+                   'frontend/tsconfig.app.json', 'frontend/tsconfig.node.json', 'frontend/vite.config.ts'}
+VITEST_GLOBAL = FRONTEND_GLOBAL | {'frontend/vitest.config.ts'}
+VISUAL_GLOBAL = FRONTEND_GLOBAL | {'frontend/playwright.config.ts', 'frontend/index.html'}
+LINT_GLOBAL = FRONTEND_GLOBAL | {'frontend/eslint.config.js'}
+FORMAT_GLOBAL = FRONTEND_GLOBAL | {'frontend/.prettierrc.json', 'frontend/.prettierignore'}
+BUILD_INPUTS = ('frontend/src/', 'frontend/public/', 'frontend/index.html', 'scripts/prepare-frontend-embed.mjs')
+SCRIPT_CODE = re.compile(r'\.(ts|tsx|vue|js|mjs|cjs)$')
+LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"|`([^`]*)`')
+JOIN = re.compile(r'filepath\.Join\(((?:\s*"[^"]*"\s*,?)+)')
+IMPACT_MAP = 'ui-impact.json'
+
+
+def git(source: Path, *args: str) -> list[str]:
+    raw = subprocess.check_output(['git', '-C', str(source), *args])
+    return [name for name in raw.decode().split('\0') if name]
+
+
+def changed_files(source: Path, base: str) -> list[str]:
+    """提交差异、暂存、未暂存和未跟踪文件，均相对 Ren2Hub 根目录。"""
+    names = set(git(source, 'diff', '--name-only', '-z', base, '--'))
+    names.update(git(source, 'ls-files', '--others', '--exclude-standard', '-z'))
+    return sorted(name for name in names if not name.startswith('docs/developer-notes/'))
+
+
+def default_base(source: Path) -> str:
+    """未指定时与内部 main 的分叉点比较；没有 origin/main 时只看工作区改动。"""
+    try:
+        return git(source, 'merge-base', 'HEAD', 'origin/main')[0].strip()
+    except (subprocess.CalledProcessError, IndexError):
+        return 'HEAD'
+GO_FIELDS = ('ImportPath', 'Dir', 'Deps', 'Imports', 'TestImports', 'XTestImports', 'GoFiles', 'CgoFiles',
+             'TestGoFiles', 'XTestGoFiles', 'OtherFiles', 'SFiles', 'EmbedFiles', 'TestEmbedFiles', 'XTestEmbedFiles')
+
+
+def go_packages(source: Path, env: dict[str, str]) -> dict[str, dict]:
+    """三个模块的包图；包目录相对 Ren2Hub 根目录。"""
+    packages = {}
+    for module in MODULES:
+        raw = subprocess.run(['go', 'list', '-buildvcs=false', '-json=' + ','.join(GO_FIELDS), './...'],
+                             cwd=source / module, env=env, check=True, capture_output=True, text=True).stdout
+        for item in decode_stream(raw):
+            directory = Path(item['Dir']).resolve().relative_to(source.resolve()).as_posix()
+            packages[item['ImportPath']] = {**item, 'Dir': directory, 'module': module}
+    return packages
+
+
+def decode_stream(raw: str):
+    decoder, index = json.JSONDecoder(), 0
+    while index < len(raw):
+        if raw[index].isspace():
+            index += 1
+            continue
+        item, index = decoder.raw_decode(raw, index)
+        yield item
+
+
+def test_read_paths(source: Path, package: dict) -> set[str]:
+    """测试源码里能解析到真实文件或目录的相对路径，例如 ../frontend/tests/fixtures/native。"""
+    found = set()
+    directory = source / package['Dir']
+    for name in package.get('TestGoFiles', []) + package.get('XTestGoFiles', []):
+        text = (directory / name).read_text(encoding='utf-8')
+        candidates = [a or b for a, b in LITERAL.findall(text)]
+        candidates += ['/'.join(re.findall(r'"([^"]*)"', args)) for args in JOIN.findall(text)]
+        for value in candidates:
+            if len(value) > 200 or re.search(r'\s', value) or ('/' not in value and not re.fullmatch(r'[\w.-]+\.\w+', value)):
+                continue
+            value = re.split(r'[*?\[]', value, maxsplit=1)[0]
+            target = (directory / value).resolve()
+            try:
+                relative = target.relative_to(source.resolve()).as_posix()
+            except ValueError:
+                continue
+            if relative not in ('', '.') and target.exists():
+                found.add(relative)
+    return found
+
+
+PRODUCTION_KEYS = ('GoFiles', 'CgoFiles', 'OtherFiles', 'SFiles', 'EmbedFiles')
+TEST_KEYS = ('TestGoFiles', 'XTestGoFiles', 'TestEmbedFiles', 'XTestEmbedFiles')
+
+
+def owned_files(package: dict, keys: tuple[str, ...]) -> set[str]:
+    prefix = '' if package['Dir'] == '.' else package['Dir'] + '/'
+    return {prefix + name for key in keys for name in package.get(key) or []}
+
+
+def under(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip('/') + '/')
+
+
+def changed_packages(packages: dict[str, dict], files: list[str]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """返回（生产改动，仅测试改动）。生产改动会传给反向依赖；测试文件、testdata 只影响本包测试。"""
+    production: dict[str, list[str]] = {}
+    test_only: dict[str, list[str]] = {}
+    for path in files:
+        for name, package in packages.items():
+            module = PurePosixPath(package['module'])
+            prefix = '' if package['Dir'] == '.' else package['Dir'] + '/'
+            # 删除或受构建标签排除的 .go 文件不在 go list 文件表中，按所在目录归属。
+            loose_go = path.endswith('.go') and PurePosixPath(path).parent.as_posix() == package['Dir']
+            if path in (str(module / 'go.mod'), str(module / 'go.sum')) or path in owned_files(package, PRODUCTION_KEYS) \
+                    or (loose_go and not path.endswith('_test.go')):
+                production.setdefault(name, []).append(path)
+            elif path in owned_files(package, TEST_KEYS) or loose_go or path.startswith(prefix + 'testdata/'):
+                test_only.setdefault(name, []).append(path)
+    return production, test_only
+
+
+def test_closure(package: dict, packages: dict[str, dict]) -> set[str]:
+    """测试二进制会链接的本仓库包：自身、生产依赖、测试导入及其依赖。"""
+    closure = {package['ImportPath'], *(package.get('Deps') or [])}
+    for name in (package.get('TestImports') or []) + (package.get('XTestImports') or []):
+        closure.add(name)
+        closure.update(packages.get(name, {}).get('Deps') or [])
+    return closure
+
+
+def summary(prefix: str, values: list[str]) -> str:
+    return prefix + ', '.join(values[:3]) + (' …' if len(values) > 3 else '')
+
+
+def select_go(source: Path, packages: dict[str, dict], files: list[str]) -> dict:
+    """返回需 vet 的包及需运行测试的包（单测、数据库矩阵、race 共用），附选择原因。"""
+    production, test_only = changed_packages(packages, files)
+    vet, tested, reasons = set(test_only), set(), {}
+    for name, package in packages.items():
+        has_tests = bool(package.get('TestGoFiles') or package.get('XTestGoFiles'))
+        # vet 检查生产代码会被改动波及的包；测试闭包另含测试导入。
+        if {name, *(package.get('Deps') or [])} & production.keys():
+            vet.add(name)
+        if not has_tests:
+            continue
+        hits = sorted(test_closure(package, packages) & production.keys())
+        roots = test_read_paths(source, package)
+        reads = sorted(path for path in files if any(under(path, root) for root in roots))
+        if hits:
+            reasons[name] = summary('links changed ', hits)
+        elif name in test_only:
+            reasons[name] = summary('test files ', test_only[name])
+        elif reads:
+            reasons[name] = summary('test reads ', reads)
+        else:
+            continue
+        tested.add(name)
+        vet.add(name)
+    return {'changed': sorted(production.keys() | test_only.keys()), 'vet': sorted(vet), 'tested': sorted(tested),
+            'tested_dirs': sorted({packages[name]['Dir'] for name in tested}),
+            'vet_modules': {module: sorted(name for name in vet if packages[name]['module'] == module)
+                            for module in MODULES if any(packages[name]['module'] == module for name in vet)},
+            'reasons': {name: reasons[name] for name in sorted(tested)}}
+
+
+def select_frontend(source: Path, files: list[str]) -> dict:
+    """Vitest 用导入图（vitest related）；lint/prettier 只查改动文件；全局配置改动则整层运行。"""
+    front = [path for path in files if path.startswith('frontend/') and not path.startswith('frontend/embed-dist/')]
+    present = [path for path in front if (source / path).is_file()]
+    code = [path for path in present if SCRIPT_CODE.search(path)]
+    return {
+        'vitest': 'all' if VITEST_GLOBAL & set(front) else [path for path in present if path.startswith(('frontend/src/', 'frontend/tests/'))],
+        'typecheck': any(SCRIPT_CODE.search(path) or path in FRONTEND_GLOBAL for path in front),
+        'lint': 'all' if LINT_GLOBAL & set(front) else code,
+        'format': 'all' if FORMAT_GLOBAL & set(front) else present,
+        'build': any(path in FRONTEND_GLOBAL or path.startswith(BUILD_INPUTS) for path in files),
+    }
+
+
+def helper_dependents(source: Path, changed: str) -> set[str]:
+    """frontend/tests 下辅助模块的反向导入闭包中的视觉 spec 文件名。"""
+    tests = source / 'frontend/tests'
+    imports: dict[str, set[str]] = {}
+    for path in tests.rglob('*.ts'):
+        relative = path.relative_to(source).as_posix()
+        targets = set()
+        for spec in re.findall(r"""from\s+['"](\.{1,2}/[^'"]+)['"]""", path.read_text(encoding='utf-8')):
+            target = (path.parent / spec).resolve()
+            for candidate in (target, target.with_name(target.name + '.ts'), target / 'index.ts'):
+                if candidate.is_file():
+                    targets.add(candidate.relative_to(source.resolve()).as_posix())
+        imports[relative] = targets
+    reached, frontier = {changed}, [changed]
+    while frontier:
+        current = frontier.pop()
+        for importer, targets in imports.items():
+            if current in targets and importer not in reached:
+                reached.add(importer)
+                frontier.append(importer)
+    return {PurePosixPath(path).name for path in reached
+            if path.startswith('frontend/tests/visual/') and path.endswith('.spec.ts')}
+
+
+def select_visual(source: Path, files: list[str], impact: dict | None) -> dict:
+    """视觉 spec 通过 URL 加载页面，导入图无法关联 src；用上次运行记录的模块影响图选择。"""
+    specs = {path.name for path in (source / 'frontend/tests/visual').glob('*.spec.ts')}
+    global_hits = sorted(VISUAL_GLOBAL & set(files))
+    if global_hits:
+        return {'mode': 'all', 'files': sorted(specs), 'reasons': {'*': 'global: ' + ', '.join(global_hits)}}
+    selected: dict[str, str] = {}
+    app_changes = [path for path in files if path.startswith(('frontend/src/', 'frontend/public/'))]
+    for path in files:
+        name = PurePosixPath(path).name
+        if path.startswith('frontend/tests/visual/') and name in specs:
+            selected.setdefault(name, 'spec changed')
+        elif path.startswith('frontend/tests/') and not path.startswith('frontend/tests/local/') and (source / path).is_file():
+            for spec in helper_dependents(source, path):
+                selected.setdefault(spec, 'imports ' + path)
+    if app_changes and impact is None:
+        return {'mode': 'all', 'files': sorted(specs), 'reasons': {'*': '没有 ui-impact.json；本轮全量运行并生成影响图'}}
+    if app_changes:
+        mapped = impact.get('specs', {})
+        for spec in sorted(specs):
+            if spec not in mapped:
+                selected.setdefault(spec, '影响图未记录该 spec')
+                continue
+            hits = sorted(set(app_changes) & set(mapped[spec]))
+            if hits:
+                selected.setdefault(spec, 'loads ' + ', '.join(hits[:3]) + (' …' if len(hits) > 3 else ''))
+    mode = 'all' if specs and set(selected) == specs else 'subset'
+    return {'mode': mode, 'files': sorted(selected), 'reasons': dict(sorted(selected.items()))}
+
+
+def build_impact(playwright: dict, request_log: str, specs) -> dict:
+    """按测试时间窗把 Vite 返回的 /src 模块归到 spec；ui-contracts 固定单 worker 串行执行。"""
+    requests = []
+    for line in request_log.splitlines():
+        stamp, _, url = line.partition(' ')
+        path = url.split('?', 1)[0]
+        if stamp.isdigit() and path.startswith(('/src/', '/public/')):
+            requests.append((int(stamp), 'frontend' + path))
+    requests.sort()
+    mapped: dict[str, set[str]] = {}
+    for spec in specs:
+        name = PurePosixPath(spec['file']).name
+        bucket = mapped.setdefault(name, set())
+        for test in spec.get('tests', []):
+            for result in test.get('results', []):
+                start = iso_ms(result['startTime'])
+                end = start + int(result.get('duration', 0))
+                bucket.update(path for stamp, path in requests if start <= stamp <= end)
+    if not requests or not any(mapped.values()):
+        raise RuntimeError('视觉影响图为空：Vite 请求日志未记录 /src 模块')
+    return {'schema_version': 1, 'specs': {name: sorted(paths) for name, paths in sorted(mapped.items())}}
+
+
+def iso_ms(value: str) -> int:
+    from datetime import datetime
+    return int(datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp() * 1000)
+
+
+def load_impact(path: Path) -> dict | None:
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text())
+    if data.get('schema_version') != 1 or not isinstance(data.get('specs'), dict):
+        raise RuntimeError(f'视觉影响图格式无效：{path}')
+    return data
+
+
+# 改动这些路径时 affected 不覆盖对应门槛，报告提示需要单独运行的档位。
+EXTERNAL_LAYERS = (
+    ('scripts/testing/contracts/', 'routing 或 candidate（候选合同）'),
+    ('scripts/testing/candidate.py', 'routing 或 candidate（候选合同）'),
+    ('scripts/testing/browser.py', 'browser'),
+    ('frontend/tests/local/', 'browser'),
+    ('scripts/testing/diagnostics.py', 'diagnostics'),
+    ('scripts/testing/native_', 'known_upstream_*'),
+    ('scripts/testing/known_upstream_', 'known_upstream_*'),
+    ('scripts/testing/fixtures/known_upstream_', 'known_upstream_*'),
+    ('docs/upstream/NATIVE_B388_', 'known_upstream_restored'),
+    ('Dockerfile', 'candidate'),
+)
+
+
+def plan(source: Path, files: list[str], packages: dict[str, dict], impact: dict | None) -> dict:
+    go = select_go(source, packages, files)
+    notes = sorted({layer for path in files for prefix, layer in EXTERNAL_LAYERS if path.startswith(prefix)})
+    return {'files': files, 'go': go, 'frontend': select_frontend(source, files),
+            'visual': select_visual(source, files, impact),
+            'python': any(path.startswith('scripts/testing/') and path.endswith('.py') for path in files),
+            'not_covered': notes}

@@ -134,12 +134,15 @@ def verify_report(report, output, root, expected_source=None):
             'groups': [group['id'] for group in groups], 'test_count': 129}
 
 
-def run(root, output, supplied_env=None):
+def run(root, output, supplied_env=None, packages=None):
+    """packages 为 None 时运行并验收固定完整选择；否则只运行所列包的组，结果不可作为发布证据。"""
     from candidate import source_identity
     from diagnostics import command, environment
     root, output = root.resolve(), output.resolve()
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     _, groups = load_selection(root)
+    if packages is not None:
+        groups = [group for group in groups if group['package'] in packages]
     source = source_identity(root)
     env, started = environment(output, supplied_env), time.time()
     caches = subprocess.run(['go', 'env', 'GOMODCACHE', 'GOCACHE'], cwd=root, env=env, check=True,
@@ -181,8 +184,12 @@ def run(root, output, supplied_env=None):
             row['observed'], _ = execution(log, result.returncode, group)
         report['source_after'] = source_identity(root)
         require(source == report['source_after'], 'ordinary_race_source_changed')
-        report.update(success=True, contracts_success=True, exit_code=0, counts={'pass': 129})
-        verify_report(report, output, root, source)
+        report.update(success=True, contracts_success=True, exit_code=0,
+                      counts={'pass': sum(len(group['names']) for group in groups)})
+        if packages is None:
+            verify_report(report, output, root, source)
+        else:
+            report['partial_groups'] = [group['id'] for group in groups]
     except (InvalidEvidence, ValueError, TypeError, KeyError, IndexError) as error:
         report.update(success=False, contracts_success=False, exit_code=1, counts={'fail': 1},
                       error=str(error) if isinstance(error, InvalidEvidence) else 'invalid_ordinary_race_evidence')

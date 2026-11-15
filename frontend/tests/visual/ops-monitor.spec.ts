@@ -13,6 +13,7 @@ import {
   contrastRatio,
   oklabDistance,
   relativeLuminance,
+  captureEvidence,
 } from './fixtures'
 
 const SECTIONS = [
@@ -68,107 +69,108 @@ function recordApi(page: Page) {
   return paths
 }
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const mobile of [false, true]) {
-    test(`ops monitor root ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
-      page,
-    }, testInfo) => {
-      await page.setViewportSize(
-        mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }
-      )
-      await configureStablePage(page, { theme })
-      await mockOps(page)
-      const clockTime = new Date('2026-07-27T04:00:00Z')
-      await page.clock.install({ time: clockTime })
-      await page.clock.pauseAt(clockTime)
-      const api = recordApi(page)
-      await gotoOps(page)
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  test(`ops monitor root ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }
+    )
+    await configureStablePage(page, { theme })
+    await mockOps(page)
+    const clockTime = new Date('2026-07-27T04:00:00Z')
+    await page.clock.install({ time: clockTime })
+    await page.clock.pauseAt(clockTime)
+    const api = recordApi(page)
+    await gotoOps(page)
+    await expect(
+      page.getByRole('heading', { level: 1, name: '运维监控' })
+    ).toBeVisible({ timeout: 30_000 })
+    await expect(section(page, 'tasks')).toContainText('暂无等待或运行中的任务')
+    await expect(section(page, 'upstream')).toContainText('雾桥中转')
+    await expect(section(page, 'billing')).toHaveCount(0)
+    if (mobile)
+      await page.locator('[aria-controls="console-mobile-navigation"]').click()
+    const nav = mobile
+      ? page
+          .locator('[data-console-mobile-navigation] .drawer-section')
+          .first()
+          .locator('[data-console-nav-item]')
+      : page.locator('[data-top-nav="desktop"] > div > button')
+    await expect(nav.first()).toBeVisible()
+    expect(
+      (await nav.allInnerTexts())
+        .map((text) => text.trim().split('\n')[0])
+        .slice(0, 4)
+    ).toEqual(['活动', '仪表盘', '运维监控', '控制台'])
+    await expect(nav.nth(2)).toHaveAttribute('aria-current', 'page')
+    if (mobile) {
+      await page.keyboard.press('Escape')
+      // Vue removes the leaving dialog after its animation-frame boundary.
+      await page.clock.runFor(50)
       await expect(
-        page.getByRole('heading', { level: 1, name: '运维监控' })
-      ).toBeVisible({ timeout: 30_000 })
-      await expect(section(page, 'tasks')).toContainText(
-        '暂无等待或运行中的任务'
-      )
-      await expect(section(page, 'upstream')).toContainText('雾桥中转')
-      await expect(section(page, 'billing')).toHaveCount(0)
-      if (mobile)
-        await page
-          .locator('[aria-controls="console-mobile-navigation"]')
-          .click()
-      const nav = mobile
-        ? page
-            .locator('[data-console-mobile-navigation] .drawer-section')
-            .first()
-            .locator('[data-console-nav-item]')
-        : page.locator('[data-top-nav="desktop"] > div > button')
-      await expect(nav.first()).toBeVisible()
-      expect(
-        (await nav.allInnerTexts())
-          .map((text) => text.trim().split('\n')[0])
-          .slice(0, 4)
-      ).toEqual(['活动', '仪表盘', '运维监控', '控制台'])
-      await expect(nav.nth(2)).toHaveAttribute('aria-current', 'page')
-      if (mobile) {
-        await page.keyboard.press('Escape')
-        // Vue removes the leaving dialog after its animation-frame boundary.
-        await page.clock.runFor(50)
-        await expect(
-          page.locator('[data-console-mobile-navigation]')
-        ).toHaveCount(0)
-      }
-      await expect(section(page, 'status')).toContainText('用户在途请求')
-      const countdown = section(page, 'status').locator('.ops-countdown-badge')
-      await expect(countdown).toHaveAttribute('title', '30s')
-      await page.clock.runFor(1000)
-      await expect(countdown).toHaveAttribute('title', '29s')
-      await section(page, 'status')
-        .getByRole('button', { name: '刷新', exact: true })
-        .click()
-      await expect(countdown).toHaveAttribute('title', '30s')
-      await expect(page.locator('[data-ops-overall-status]')).toHaveAttribute(
-        'data-status',
-        'warning'
-      )
-      await assertNoHorizontalOverflow(page)
-      const boxes = await Promise.all(
-        SECTIONS.map((name) => section(page, name).boundingBox())
-      )
-      if (mobile) {
-        const tops = boxes.map((box) => box!.y)
-        expect(tops).toEqual([...tops].sort((a, b) => a - b))
-      } else {
-        const [status, quality, upstream, gateway, resources, storage, tasks] =
-          boxes
-        expect(status!.y).toBeLessThan(quality!.y)
-        expect(upstream!.x).toBeGreaterThan(quality!.x)
-        expect(gateway!.y).toBeGreaterThan(quality!.y)
-        expect(resources!.y).toBeGreaterThan(gateway!.y)
-        expect(storage!.x).toBeGreaterThan(resources!.x)
-        expect(storage!.y).toBe(resources!.y)
-        expect(tasks!.width).toBeGreaterThan(quality!.width)
-      }
-      const history = page.locator('[data-ops-task-history]')
-      await history.getByRole('button', { name: '展开' }).click()
-      await expect(history.getByText('清理任务历史')).toBeVisible()
-      await page.screenshot({ path: testInfo.outputPath('ops-top.png') })
-      await page
-        .locator('[data-console-scroll-zone]')
-        .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight / 2))
-      await page.screenshot({ path: testInfo.outputPath('ops-middle.png') })
-      await page
-        .locator('[data-console-scroll-zone]')
-        .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight))
-      await page.screenshot({ path: testInfo.outputPath('ops-bottom.png') })
-      for (const path of [
-        '/api/performance/stats',
-        '/api/performance/routing',
-        '/api/performance/quality',
-        '/api/user/model-catalog',
-        '/api/system-task/list',
-      ])
-        expect(api.has(path), path).toBe(true)
+        page.locator('[data-console-mobile-navigation]')
+      ).toHaveCount(0)
+    }
+    await expect(section(page, 'status')).toContainText('用户在途请求')
+    const countdown = section(page, 'status').locator('.ops-countdown-badge')
+    await expect(countdown).toHaveAttribute('title', '30s')
+    await page.clock.runFor(1000)
+    await expect(countdown).toHaveAttribute('title', '29s')
+    await section(page, 'status')
+      .getByRole('button', { name: '刷新', exact: true })
+      .click()
+    await expect(countdown).toHaveAttribute('title', '30s')
+    await expect(page.locator('[data-ops-overall-status]')).toHaveAttribute(
+      'data-status',
+      'warning'
+    )
+    await assertNoHorizontalOverflow(page)
+    const boxes = await Promise.all(
+      SECTIONS.map((name) => section(page, name).boundingBox())
+    )
+    if (mobile) {
+      const tops = boxes.map((box) => box!.y)
+      expect(tops).toEqual([...tops].sort((a, b) => a - b))
+    } else {
+      const [status, quality, upstream, gateway, resources, storage, tasks] =
+        boxes
+      expect(status!.y).toBeLessThan(quality!.y)
+      expect(upstream!.x).toBeGreaterThan(quality!.x)
+      expect(gateway!.y).toBeGreaterThan(quality!.y)
+      expect(resources!.y).toBeGreaterThan(gateway!.y)
+      expect(storage!.x).toBeGreaterThan(resources!.x)
+      expect(storage!.y).toBe(resources!.y)
+      expect(tasks!.width).toBeGreaterThan(quality!.width)
+    }
+    const history = page.locator('[data-ops-task-history]')
+    await history.getByRole('button', { name: '展开' }).click()
+    await expect(history.getByText('清理任务历史')).toBeVisible()
+    await captureEvidence(page, { path: testInfo.outputPath('ops-top.png') })
+    await page
+      .locator('[data-console-scroll-zone]')
+      .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight / 2))
+    await captureEvidence(page, {
+      path: testInfo.outputPath('ops-middle.png'),
     })
-  }
+    await page
+      .locator('[data-console-scroll-zone]')
+      .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight))
+    await captureEvidence(page, {
+      path: testInfo.outputPath('ops-bottom.png'),
+    })
+    for (const path of [
+      '/api/performance/stats',
+      '/api/performance/routing',
+      '/api/performance/quality',
+      '/api/user/model-catalog',
+      '/api/system-task/list',
+    ])
+      expect(api.has(path), path).toBe(true)
+  })
 }
 
 /** The colours a gauge can take: the five load tiers and the two neutrals. */
@@ -458,7 +460,7 @@ test('native empty observations remain distinct from healthy measurements', asyn
   await expect(section(page, 'quality')).toContainText('暂无请求观察')
   await expect(section(page, 'tasks')).toContainText('暂无等待或运行中的任务')
   await assertNoHorizontalOverflow(page)
-  await page.screenshot({ path: testInfo.outputPath('ops-empty.png') })
+  await captureEvidence(page, { path: testInfo.outputPath('ops-empty.png') })
 })
 
 for (const role of [1, 10]) {

@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { configureStablePage, waitForStablePage } from './fixtures'
+import {
+  configureStablePage,
+  waitForStablePage,
+  captureEvidence,
+} from './fixtures'
 
 const DESKTOP_WIDTHS = [1024, 1100, 1180, 1280, 1366, 1440]
 
@@ -178,7 +182,7 @@ for (const theme of ['light', 'dark'] as const) {
         }
       }
     }
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath(`drawer-${theme}-font200.png`),
     })
     await page.keyboard.press('Escape')

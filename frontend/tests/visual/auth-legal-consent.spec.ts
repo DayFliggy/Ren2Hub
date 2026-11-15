@@ -37,59 +37,60 @@ async function openAuthPage(
   await waitForStablePage(page)
 }
 
-for (const [screen, viewport] of Object.entries(viewports)) {
-  for (const theme of ['light', 'dark'] as const) {
-    for (const path of ['/sign-in', '/sign-up'] as const) {
-      test(`${screen} ${theme} ${path} requires consent before every method`, async ({
-        page,
-      }) => {
-        await openAuthPage(page, path, theme, viewport)
-        const consent = page.locator('[data-legal-consent]')
-        await expect(consent).toHaveCount(1)
-        await expect(consent).toBeVisible()
-        await expect(
-          consent.getByRole('link', { name: '用户协议' })
-        ).toHaveAttribute('href', '/user-agreement')
-        await expect(
-          consent.getByRole('link', { name: '隐私政策' })
-        ).toHaveAttribute('target', '_blank')
-        const box = (await consent.boundingBox())!
-        const card = (await page.locator('.auth-card').boundingBox())!
-        expect(box.x).toBeGreaterThanOrEqual(card.x)
-        expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width)
-        // The whole label is the hit area for the checkbox.
-        expect(box.height).toBeGreaterThanOrEqual(44)
+// Theme does not change the consent geometry; each viewport keeps both auth pages.
+for (const [screen, theme] of [
+  ['desktop', 'light'],
+  ['mobile', 'dark'],
+] as const) {
+  const viewport = viewports[screen]
+  for (const path of ['/sign-in', '/sign-up'] as const) {
+    test(`${screen} ${theme} ${path} requires consent before every method`, async ({
+      page,
+    }) => {
+      await openAuthPage(page, path, theme, viewport)
+      const consent = page.locator('[data-legal-consent]')
+      await expect(consent).toHaveCount(1)
+      await expect(consent).toBeVisible()
+      await expect(
+        consent.getByRole('link', { name: '用户协议' })
+      ).toHaveAttribute('href', '/user-agreement')
+      await expect(
+        consent.getByRole('link', { name: '隐私政策' })
+      ).toHaveAttribute('target', '_blank')
+      const box = (await consent.boundingBox())!
+      const card = (await page.locator('.auth-card').boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(card.x)
+      expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width)
+      // The whole label is the hit area for the checkbox.
+      expect(box.height).toBeGreaterThanOrEqual(44)
 
-        const github = page.getByRole('button', { name: /GitHub/ })
-        await expect(github).toBeDisabled()
-        const consentId = await consent.getAttribute('id')
-        expect(consentId).toBeTruthy()
-        await expect(github).toHaveAttribute('aria-describedby', consentId!)
-        // A link inside the label opens the document without toggling consent.
-        const popup = page.context().waitForEvent('page')
-        await consent.getByRole('link', { name: '隐私政策' }).click()
-        await (await popup).close()
-        await expect(
-          consent.locator('input[type="checkbox"]')
-        ).not.toBeChecked()
-        await assertNoHorizontalOverflow(page)
-        if (shotsDir) {
-          mkdirSync(shotsDir, { recursive: true })
-          await consent.scrollIntoViewIfNeeded()
-          await page.screenshot({
-            path: `${shotsDir}/${screen}-${theme}-${path.slice(1)}-unchecked.png`,
-          })
-        }
+      const github = page.getByRole('button', { name: /GitHub/ })
+      await expect(github).toBeDisabled()
+      const consentId = await consent.getAttribute('id')
+      expect(consentId).toBeTruthy()
+      await expect(github).toHaveAttribute('aria-describedby', consentId!)
+      // A link inside the label opens the document without toggling consent.
+      const popup = page.context().waitForEvent('page')
+      await consent.getByRole('link', { name: '隐私政策' }).click()
+      await (await popup).close()
+      await expect(consent.locator('input[type="checkbox"]')).not.toBeChecked()
+      await assertNoHorizontalOverflow(page)
+      if (shotsDir) {
+        mkdirSync(shotsDir, { recursive: true })
+        await consent.scrollIntoViewIfNeeded()
+        await page.screenshot({
+          path: `${shotsDir}/${screen}-${theme}-${path.slice(1)}-unchecked.png`,
+        })
+      }
 
-        await consent.locator('input[type="checkbox"]').check()
-        await expect(github).toBeEnabled()
-        await expect(github).not.toHaveAttribute('aria-describedby', /.+/)
-        if (shotsDir && screen === 'mobile')
-          await page.screenshot({
-            path: `${shotsDir}/${screen}-${theme}-${path.slice(1)}-checked.png`,
-          })
-      })
-    }
+      await consent.locator('input[type="checkbox"]').check()
+      await expect(github).toBeEnabled()
+      await expect(github).not.toHaveAttribute('aria-describedby', /.+/)
+      if (shotsDir && screen === 'mobile')
+        await page.screenshot({
+          path: `${shotsDir}/${screen}-${theme}-${path.slice(1)}-checked.png`,
+        })
+    })
   }
 }
 

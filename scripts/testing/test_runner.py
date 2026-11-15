@@ -176,7 +176,8 @@ class RunnerContractTests(unittest.TestCase):
                 return json.dumps(report)
 
             with patch.dict('os.environ', {}, clear=True), \
-                    patch('run.UI_CONTRACTS_PORT', port), patch('run.execute', side_effect=execute):
+                    patch('run.UI_CONTRACTS_PORT', port), patch('run.execute', side_effect=execute), \
+                    patch('run.record_impact'):
                 self.assertTrue(ui_contracts(root, root, {})['success'])
                 # Close the server side first, leaving a real TIME_WAIT socket.
                 # A completed visual run must not block the next fixed-origin run.

@@ -7,6 +7,7 @@ import {
   freezeAndInspectHomeCanvas,
   isExpectedGuestRefreshConsoleMessage,
   waitForStablePage,
+  captureEvidence,
 } from './fixtures'
 import { VISUAL_ROUTES } from './routes'
 
@@ -35,7 +36,7 @@ for (const viewport of [viewports[0], viewports[2]]) {
       await expect(page.locator('[data-key-page]')).toHaveCount(0)
     }
     await assertNoHorizontalOverflow(page)
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath('retired-next.png'),
       fullPage: true,
     })
@@ -84,7 +85,7 @@ for (const viewport of [viewports[0], viewports[2]]) {
     await waitForStablePage(page)
     await freezeAndInspectHomeCanvas(page)
     await assertNoHorizontalOverflow(page)
-    await page.screenshot({
+    await captureEvidence(page, {
       path: testInfo.outputPath(`home-${viewport.name}.png`),
       fullPage: true,
     })

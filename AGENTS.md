@@ -30,7 +30,7 @@
 
 先定向测试，再类型和静态检查、受影响构建、最小冒烟。Go 单包测试超时 60 秒。新测试应保护真实行为，不以文件存在或实现镜像断言替代回归。
 
-本地统一入口和分层门槛见 docs/testing/LOCAL_TESTING.md。Vue 执行适用的 test:run、typecheck、lint、format:check、build，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
+本地统一入口和分层门槛见 docs/testing/LOCAL_TESTING.md：迭代用 `run.py affected`，提交前 `quick`，发布用 `all` 或完整 candidate。Vue 执行适用的 test:run、typecheck、lint、format:check、build，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
 
 独立候选必须隔离数据库、Redis、网络、密钥与存储。旧合同测试记录退役，不算通过。源码、候选和正式部署分别记录证据；未提交工作 candidate_sha=null。
 

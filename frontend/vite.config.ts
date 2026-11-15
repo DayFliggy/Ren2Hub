@@ -2,14 +2,38 @@ import { fileURLToPath, URL } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
-import { defineConfig, loadEnv } from 'vite'
+import { appendFileSync } from 'node:fs'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
+
+// Local ui-contracts runs record which /src modules each spec loads, so
+// scripts/testing/affected.py can map source changes to browser specs.
+function sourceRequestLog(path: string | undefined): Plugin[] {
+  if (!path) return []
+  return [
+    {
+      name: 'ren2hub-source-request-log',
+      apply: 'serve',
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          if (request.url?.startsWith('/src/'))
+            appendFileSync(path, `${Date.now()} ${request.url}\n`)
+          next()
+        })
+      },
+    },
+  ]
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget = env.VITE_API_TARGET || 'http://localhost:3000'
 
   return {
-    plugins: [vue(), tailwindcss()],
+    plugins: [
+      vue(),
+      tailwindcss(),
+      ...sourceRequestLog(process.env.REN2HUB_VISUAL_REQUEST_LOG),
+    ],
     base: '/',
     resolve: {
       alias: {

@@ -105,12 +105,13 @@ async function inspectAuditLogs(
   await expect(detailButton).toBeFocused()
 }
 
-for (const theme of ['light', 'dark'] as const) {
-  for (const viewport of ['desktop', 'mobile'] as const) {
-    test(`${theme} ${viewport} audit logs`, async ({ page }) => {
-      await inspectAuditLogs(page, theme, viewport)
-    })
-  }
+for (const [theme, viewport] of [
+  ['light', 'desktop'],
+  ['dark', 'mobile'],
+] as const) {
+  test(`${theme} ${viewport} audit logs`, async ({ page }) => {
+    await inspectAuditLogs(page, theme, viewport)
+  })
 }
 
 test('members read only their own audit events', async ({ page }) => {

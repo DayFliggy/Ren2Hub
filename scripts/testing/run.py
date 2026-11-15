@@ -22,7 +22,10 @@ MODULES = ('.', 'relaykit', 'tokenkit')
 # Invitation URLs render window.location.origin. A random transport port changes
 # visible content between reference creation and verification. Fail if occupied.
 UI_CONTRACTS_PORT = 41739
-PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'diagnostics', 'known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race', 'candidate', 'routing', 'all')
+PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'diagnostics', 'known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race', 'candidate', 'routing', 'affected', 'quick', 'all')
+# affected 只跑与改动相关的测试；quick 对应上游 CI 的日常门槛；all 是发布门槛，候选只在 all 内运行一次诊断。
+COMPOSITES = {'quick': ('unit', 'static', 'build'),
+              'all': ('unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate')}
 DEFERRED = {
     'TestVLLMStatusLive': '需要真实外部供应商；本地方案不执行',
     'TestProductionEmbeddedAssetGraph': 'build 阶段验证实际前端产物',
@@ -114,7 +117,7 @@ def go_result(text: str, required: list[str]) -> dict:
     return {'passed': len(passed), 'top_level_passed': sum('/' not in name for name in passed), 'skipped': 0}
 
 
-def go_unit(source: Path, output: Path, env: dict[str, str]) -> dict:
+def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | None = None) -> dict:
     from database import REQUIRED_TESTS
     deferred = dict(DEFERRED)
     deferred.update({name: 'databases 阶段在全新三数据库执行' for name in REQUIRED_TESTS})
@@ -128,6 +131,8 @@ def go_unit(source: Path, output: Path, env: dict[str, str]) -> dict:
                            cwd, output, label + '-packages', env).splitlines()
         for index, entry in enumerate(filter(None, packages)):
             package, directory = entry.split('|', 1)
+            if only is not None and package not in only:
+                continue
             name = f'{label}-{index}'
             binary = output / (name + '.test')
             execute(['go', 'test', '-c', '-p=2', '-o', str(binary), package], cwd, output,
@@ -150,7 +155,7 @@ def go_unit(source: Path, output: Path, env: dict[str, str]) -> dict:
                 results.append({'package': package, 'inventory_count': len(found),
                                 'binary_sha256': binary_hash, **go_result(log, batch)})
             binary.unlink()
-    if not results:
+    if not results and only is None:
         raise RuntimeError('Go 测试清单为空')
     return {'success': True, 'batches': results, 'deferred': excluded}
 
@@ -236,13 +241,17 @@ def playwright_result(data: dict, expected_ids: set[str]) -> int:
     return len(expected_ids)
 
 
-def ui_contracts(source: Path, output: Path, env: dict[str, str]) -> dict:
+def ui_contracts(source: Path, output: Path, env: dict[str, str], only: list[str] | None = None) -> dict:
     # tests/visual asserts behaviour and layout against mocked native APIs; it has
     # no reviewed pixel references, so this layer does not claim pixel equality.
     suite = source / 'frontend/tests/visual'
     files = {path.name for path in suite.glob('*.spec.ts')}
     if not files:
         raise RuntimeError('tests/visual contains no browser specs')
+    if only is not None:
+        if not set(only) <= files:
+            raise RuntimeError(f'选择了不存在的浏览器 spec：{sorted(set(only) - files)}')
+        files = set(only)
     env = {key: value for key, value in env.items() if key != 'REN2HUB_LOCAL_SESSION'}
     with socket.socket() as reservation:
         # Permit the previous server's TIME_WAIT connections, never a live listener.
@@ -257,6 +266,10 @@ def ui_contracts(source: Path, output: Path, env: dict[str, str]) -> dict:
     # Playwright empties outputDir before each run; keep attachments with this run's evidence.
     command = ['bun', 'x', '--no-install', 'playwright', 'test', '--config', 'playwright.config.ts',
                '--output', str(output / 'artifacts')]
+    if only is not None:
+        command += ['tests/visual/' + name for name in sorted(files)]
+    requests = output / 'vite-requests.log'
+    env['REN2HUB_VISUAL_REQUEST_LOG'] = str(requests)
     discovered = json.loads(execute(command + ['--list', '--reporter=json'],
                                    source / 'frontend', output, 'ui-inventory', env, 120))
     expected_ids = playwright_cases(discovered, files)
@@ -266,9 +279,27 @@ def ui_contracts(source: Path, output: Path, env: dict[str, str]) -> dict:
     report = output / 'playwright.json'
     run_env = {**env, 'PLAYWRIGHT_JSON_OUTPUT_FILE': str(report)}
     execute(command + ['--reporter=list,json'], source / 'frontend', output, 'ui-contracts', run_env, deadline)
-    passed = playwright_result(json.loads(report.read_text()), expected_ids)
+    data = json.loads(report.read_text())
+    passed = playwright_result(data, expected_ids)
+    record_impact(source, data, requests.read_text() if requests.exists() else '', only is not None)
     return {'success': True, 'passed': passed, 'files': sorted(files),
             'kind': 'mock-api-ui-behaviour', 'origin': origin, 'pixel_comparison': False}
+
+
+def record_impact(source: Path, data: dict, requests: str, partial: bool) -> None:
+    """通过的运行更新 spec→/src 模块影响图；局部运行只刷新已执行的 spec。"""
+    from affected import IMPACT_MAP, build_impact, load_impact
+    path = source / '.local-tests' / IMPACT_MAP
+    current = load_impact(path)
+    if partial and current is None:
+        return
+    fresh = build_impact(data, requests, browser_specs(data))
+    if partial:
+        fresh = {**current, 'specs': {**current['specs'], **fresh['specs']}}
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(fresh, ensure_ascii=False, indent=1) + '\n')
+    temporary.replace(path)
 
 
 def race_selection(source: Path) -> tuple[dict, list[dict]]:
@@ -281,12 +312,111 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     return run(source, output / 'ordinary-race', env)
 
 
+def frontend_related(source: Path, output: Path, env: dict[str, str], files: list[str]) -> dict:
+    """vitest related 按导入图只跑受改动影响的用例；没有相关用例时如实记录 0。"""
+    report = output / 'vitest.json'
+    relative = [str(Path(path).relative_to('frontend')) for path in files]
+    execute(['bun', 'x', '--no-install', 'vitest', 'related', '--run', '--passWithNoTests', '--reporter=json',
+             '--outputFile=' + str(report), *relative], source / 'frontend', output, 'vitest', env, 900)
+    data = json.loads(report.read_text())
+    count = data.get('numPassedTests', 0)
+    if not data.get('success') or data.get('numTotalTests') != count:
+        raise RuntimeError('Vitest 失败或跳过，详见 vitest.json')
+    return {'success': True, 'passed': count, 'files': len(data.get('testResults', [])), 'related_to': relative}
+
+
+def frontend_checks(source: Path, output: Path, env: dict[str, str], selection: dict) -> dict:
+    """改动文件级 lint/prettier；全局配置改动时回到整层脚本。"""
+    frontend, done = source / 'frontend', []
+    if selection['typecheck']:
+        execute(['bun', 'run', 'typecheck'], frontend, output, 'typecheck', env, 300)
+        done.append('typecheck')
+    for key, script, command in (
+            ('lint', 'lint', ['bun', 'x', '--no-install', 'eslint', '--max-warnings', '0', '--no-warn-ignored']),
+            ('format', 'format:check', ['bun', 'x', '--no-install', 'prettier', '--check', '--ignore-unknown'])):
+        chosen = selection[key]
+        if chosen == 'all':
+            execute(['bun', 'run', script], frontend, output, key, env, 300)
+        elif chosen:
+            execute(command + [str(Path(path).relative_to('frontend')) for path in chosen], frontend, output, key, env, 300)
+        else:
+            continue
+        done.append(key)
+    return {'success': True, 'ran': done}
+
+
+def python_unit(source: Path, output: Path, env: dict[str, str]) -> dict:
+    execute([sys.executable, '-B', '-m', 'unittest', 'discover', '-s', 'scripts/testing', '-p', 'test_*.py'],
+            source, output, 'unittest', env, 300)
+    return {'success': True}
+
+
+def go_vet(source: Path, output: Path, env: dict[str, str], modules: dict[str, list[str]]) -> dict:
+    for module, packages in modules.items():
+        execute(['go', 'vet', '-p=2', *packages], source / module, output,
+                'vet-' + ('root' if module == '.' else module), env, 300)
+    return {'success': True, 'packages': sum(len(names) for names in modules.values())}
+
+
+def affected(source: Path, output: Path, env: dict[str, str], base: str | None) -> dict:
+    """只运行与 base 以来改动相关的层；结果用于迭代，不是发布证据。"""
+    import affected as selector
+    from database import PACKAGES as DATABASE_PACKAGES
+    base = base or selector.default_base(source)
+    files = selector.changed_files(source, base)
+    impact = selector.load_impact(source / '.local-tests' / selector.IMPACT_MAP)
+    selection = selector.plan(source, files, selector.go_packages(source, env), impact)
+    selection['base'] = base
+    (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
+    go, frontend, visual = selection['go'], selection['frontend'], selection['visual']
+    tested = set(go['tested_dirs'])
+    stages = {}
+
+    def stage(name, function, *arguments):
+        directory = output / name
+        directory.mkdir(mode=0o700)
+        print(f'执行 affected/{name}', flush=True)
+        started = time.monotonic()
+        stages[name] = function(directory, *arguments)
+        stages[name]['elapsed_seconds'] = round(time.monotonic() - started, 1)
+        if not stages[name].get('success'):
+            raise RuntimeError(f'affected/{name} 未通过，查看 {directory}')
+
+    if selection['python']:
+        stage('python', lambda d: python_unit(source, d, env))
+    if go['vet_modules']:
+        stage('go-vet', lambda d: go_vet(source, d, env, go['vet_modules']))
+    if go['tested']:
+        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested'])))
+    if tested & DATABASE_PACKAGES:
+        from database import run as databases
+        stage('databases', lambda d: databases(source, d / 'matrix', tested & DATABASE_PACKAGES))
+    race_packages = tested & {group['package'] for group in race_selection(source)[1]}
+    if race_packages:
+        from ordinary_race import run as ordinary_race
+        stage('race', lambda d: ordinary_race(source, d / 'ordinary-race', env, race_packages))
+    if frontend['vitest'] == 'all':
+        stage('vitest', lambda d: frontend_unit(source, d, env))
+    elif frontend['vitest']:
+        stage('vitest', lambda d: frontend_related(source, d, env, frontend['vitest']))
+    if frontend['typecheck'] or frontend['lint'] or frontend['format']:
+        stage('frontend-static', lambda d: frontend_checks(source, d, env, frontend))
+    if frontend['build']:
+        stage('build', lambda d: build(source, d, env))
+    if visual['files']:
+        stage('ui-contracts', lambda d: ui_contracts(source, d, env, None if visual['mode'] == 'all' else visual['files']))
+    for note in selection['not_covered']:
+        print('affected 未覆盖：' + note, flush=True)
+    return {'success': True, 'release_evidence': False, 'base': base, 'changed_files': len(files),
+            'stages': stages, 'not_covered': selection['not_covered']}
+
 def main() -> int:
     def interrupt(signum, frame):
         raise KeyboardInterrupt('收到终止信号')
     signal.signal(signal.SIGTERM, interrupt)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('profile', choices=PROFILES)
+    parser.add_argument('--base', help='affected 的比较起点；默认 HEAD 与 origin/main 的分叉点')
     parser.add_argument('--output-parent', type=Path, default=SOURCE / '.local-tests')
     parser.add_argument('--image', help='candidate/all 使用已构建的不可变镜像；无默认生产目标')
     parser.add_argument('--simulator-image', help='candidate/routing/all 使用的独立供应商模拟器镜像')
@@ -321,8 +451,7 @@ def main() -> int:
         report['tools'] = tools
         if tools and (not re.search(r'\bgo1\.26\.10\b', tools['go']) or ('bun' in tools and tools['bun'] != '1.4.0')):
             raise RuntimeError('要求 Go 1.26.10 与 Bun 1.4.0；不会自动下载或切换工具链')
-        # Candidate runs diagnostics once and merges their failure after its checks.
-        profiles = ('unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate') if args.profile == 'all' else (args.profile,)
+        profiles = COMPOSITES.get(args.profile, (args.profile,))
         for profile in profiles:
             stage = output / profile
             if profile not in ('known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race'):
@@ -340,6 +469,8 @@ def main() -> int:
             elif profile == 'known_upstream_logger_race':
                 from native_logger_race import run
                 result = run(SOURCE, stage, env)
+            elif profile == 'affected':
+                result = affected(SOURCE, stage, env, args.base)
             elif profile == 'unit':
                 result = {'go': go_unit(SOURCE, stage, env), 'vue': frontend_unit(SOURCE, stage, env), 'success': True}
             elif profile == 'static':

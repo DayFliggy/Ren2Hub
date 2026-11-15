@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test'
 
-import { configureStablePage, waitForStablePage } from './fixtures'
+import {
+  configureStablePage,
+  waitForStablePage,
+  captureEvidence,
+} from './fixtures'
 
 // Wallet is the existing PageHero accent caller.
 test('wallet hero keeps the ampersand swash accent', async ({ page }) => {
@@ -17,7 +21,7 @@ test('wallet hero keeps the ampersand swash accent', async ({ page }) => {
   // The new underline modifier must not leak onto the original caller.
   await expect(accent).not.toHaveClass(/brush-highlight--underline/)
 
-  await page.screenshot({
+  await captureEvidence(page, {
     path: 'output/hero-accent-wallet-light.png',
     clip: { x: 0, y: 0, width: 1440, height: 320 },
   })
