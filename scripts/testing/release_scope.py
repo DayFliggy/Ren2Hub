@@ -19,9 +19,11 @@ PART_STAGES = {
 PARTS = tuple(PART_STAGES)
 # plugin 阶段复用 billing 初始化的实例凭据；升级演练在 management 阶段回读旧版写入的工单附件。
 IMPLIED = {'plugin': ('billing',), 'upgrade': ('management',)}
-# 不进入服务端程序、也不改变镜像运行时的路径：前端（嵌入的静态资源）、文档、脚本和测试文件。
-# 只改这些时，新版本启动后读取、迁移和改写已有数据的方式不变。
-STARTUP_NEUTRAL = re.compile(r'(?:frontend|docs|scripts|\.github|\.agents)/.*|.*\.md|.*_test\.go|(?:.*/)?testdata/.*')
+# 不进入服务端程序、也不改变镜像运行时的路径：前端（嵌入的静态资源）、文档、脚本、仓库元数据、
+# 根目录的 Markdown 和 Go 测试文件。只改这些时，新版本启动后读取、迁移和改写已有数据的方式不变。
+# testdata/ 和包目录里的其他文件不在其中：go:embed 会把整棵目录嵌入程序（plugins/tasks 的每个子目录
+# 都在启动时注册为插件），目录名不能说明文件不参与启动。
+STARTUP_NEUTRAL = re.compile(r'(?:frontend|docs|scripts|\.github|\.agents)/.*|[^/]*\.md|.*_test\.go')
 
 
 def required_parts(files) -> list[str]:

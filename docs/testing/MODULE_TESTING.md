@@ -7,7 +7,7 @@
 1. 列出改动文件（`git diff --name-only <基线>`），按下表判断涉及哪些模块。
 2. 迭代中用 `targeted` 点名运行相关测试；失败后只重跑失败的那一项，定位到具体包、测试或 spec 再修。
 3. 提交前，改动跨多个包或说不清影响面时运行一次 `affected`，由导入图自动选择；能点名覆盖的小改动用 `targeted` 即可。
-4. 部署前运行按范围的候选 `candidate --scope auto`。它核对镜像身份并在全新实例启动；差异含前端、文档、脚本和测试文件以外的改动时自动加上升级演练。
+4. 部署前运行按范围的候选 `candidate --scope auto`。它核对镜像身份并在全新实例启动；差异含前端、文档、脚本和 Go 测试文件以外的改动时自动加上升级演练。
 5. 报告里写明实际运行了什么、没有运行什么。定向结果不能写成全量通过。
 
 每个档位先运行 `registry`（登记检查，不到一秒）。它核对冻结夹具哈希、race 固定选择、数据库矩阵登记和核心来源清单，并列出偏离的具体文件；这些偏离以前要等数据库矩阵、race 或候选运行到一半才暴露。
@@ -65,7 +65,7 @@ python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previou
 
 `candidate --scope` 决定候选运行哪些部分，规则在 `scripts/testing/release_scope.py`，候选和工作区的发布校验器加载同一份：
 
-- `auto`：比较旧镜像修订与当前提交。差异只含 `frontend/`、`docs/`、`scripts/`、`.github/`、`.agents/`、Markdown、`*_test.go` 和 `testdata/` 时不选任何阶段；含其他任何文件时加入 `upgrade`。启动时会迁移表结构、解析已存配置、重置内置角色策略、注册 OAuth 提供方并编译已有插件，这些代码分布在多个包，所以规则按“改动是否进入服务端程序”划分，不逐个列路径。
+- `auto`：比较旧镜像修订与当前提交。差异只含 `frontend/`、`docs/`、`scripts/`、`.github/`、`.agents/`、根目录的 Markdown 和 `*_test.go` 时不选任何阶段；含其他任何文件时加入 `upgrade`。启动时会迁移表结构、解析已存配置、重置内置角色策略、注册 OAuth 提供方并编译已有插件，这些代码分布在多个包，`go:embed` 还会把整棵目录（含其中的 `testdata/`）嵌入程序，所以规则按“改动是否进入服务端程序”划分，不逐个列路径。
 - 部分名：`upgrade`、`billing`、`websocket`、`compact`、`plugin`、`management`、`sdk`，逗号分隔，可与 `auto` 同用。`plugin` 自动带上 `billing`，`upgrade` 自动带上 `management`（回读旧版写入的工单附件）。
 - `boot`：不选阶段，只核对镜像身份并在全新实例启动。
 - `full`（默认）：完整候选，含 routing、12 项诊断、原生恢复诊断和三组 race。只在明确要求全量时使用；`all` 档位和首次安装始终用它。

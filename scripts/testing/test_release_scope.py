@@ -25,13 +25,16 @@ class ScopeRuleTests(unittest.TestCase):
                      'service/authz/seed.go', 'service/authz/adapter.go', 'types/rw_map.go', 'common/json.go',
                      'oauth/registry.go', 'controller/task_plugin.go', 'relay/channel/openai/adaptor.go',
                      'relaykit/dto/a.go', 'tokenkit/image.go', 'main.go', 'go.mod', 'go.sum', 'relaykit/go.mod',
-                     'Dockerfile', '.dockerignore', 'i18n/locales/zh-CN.yaml', 'VERSION', 'a_new_top_level_file'):
+                     'Dockerfile', '.dockerignore', 'i18n/locales/zh-CN.yaml', 'VERSION', 'a_new_top_level_file',
+                     # go:embed 嵌入整棵目录：plugins/tasks 下任何子目录的 plugin.js 都会在启动时注册。
+                     'plugins/tasks/testdata/plugin.js', 'plugins/tasks/sora/plugin.js', 'plugins/tasks/sora/README.md',
+                     'relaykit/relayconvert/testdata/a.json', 'testdata/b.json', 'relaykit/README.md'):
             self.assertEqual(release_scope.required_parts([path]), ['upgrade'], path)
         for path in ('frontend/src/main.ts', 'frontend/package.json', 'frontend/tests/visual/a.spec.ts',
-                     'docs/billing/TOPUP_BONUS.md', 'AGENTS.md', 'relaykit/README.md', 'scripts/testing/run.py',
-                     'scripts/prepare-frontend-embed.mjs', '.github/workflows/ci.yml', '.agents/skills/a/SKILL.md',
-                     'model/topup_test.go', 'main_test.go', 'relaykit/relayconvert/testdata/a.json',
-                     'testdata/b.json'):
+                     'frontend/README.md', 'docs/billing/TOPUP_BONUS.md', 'AGENTS.md', 'README.zh_CN.md',
+                     'scripts/testing/run.py', 'scripts/prepare-frontend-embed.mjs', '.github/workflows/ci.yml',
+                     '.agents/skills/a/SKILL.md', 'model/topup_test.go', 'main_test.go',
+                     'relaykit/relayconvert/internal/oai_chat/convert_test.go'):
             self.assertEqual(release_scope.required_parts([path]), [], path)
         self.assertEqual(release_scope.required_parts([]), [])
         self.assertEqual(release_scope.required_parts(['docs/a.md', 'frontend/src/a.vue', 'service/b.go']), ['upgrade'])
@@ -73,7 +76,8 @@ class ScopedCandidateTests(unittest.TestCase):
         with self.diff as execute:
             runner.select_scope()
         if previous_image:
-            self.assertEqual(execute.call_args.args[0][3:], ['diff', '--name-only', '-z', 'c' * 40, 'HEAD', '--'])
+            self.assertEqual(execute.call_args.args[0][3:],
+                             ['diff', '--name-only', '--no-renames', '-z', 'c' * 40, 'HEAD', '--'])
         return runner
 
     def test_auto_runs_the_upgrade_only_when_persistence_changed(self):

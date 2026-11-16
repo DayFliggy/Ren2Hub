@@ -377,7 +377,9 @@ class Candidate:
             labels = json.loads(self.docker('image', 'inspect', self.previous_image).stdout)[0]['Config'].get('Labels') or {}
             base = labels.get('org.opencontainers.image.revision', '')
             require(re.fullmatch(r'[0-9a-f]{40}', base), 'distinct_immutable_previous_image_required')
-            changed = execute(['git', '-C', str(self.source), 'diff', '--name-only', '-z', base, 'HEAD', '--'], check=False)
+            # --no-renames：重命名按删除加新增列出，移走的文件不会被目标路径掩盖。
+            changed = execute(['git', '-C', str(self.source), 'diff', '--name-only', '--no-renames', '-z',
+                               base, 'HEAD', '--'], check=False)
             require(changed.returncode == 0, 'previous_revision_missing_in_source')
             required = required_parts(name for name in changed.stdout.decode().split('\0') if name)
         require('auto' not in requested or required is not None, 'auto_scope_requires_previous_image')
