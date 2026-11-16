@@ -4,7 +4,7 @@
 
 ## 流程
 
-1. 列出改动文件（`git diff --name-only <基线>`），按下表判断涉及哪些模块。
+1. 列出改动文件（`git diff --name-only <基线>`），按下表判断涉及哪些模块。`affected --plan --base <基线>` 几秒内列出导入图和视觉影响图选中的包、矩阵测试、race 组、Vitest 文件和视觉 spec，以及需要单独运行的冻结诊断，不执行任何测试；点名时以它为参考。
 2. 迭代中用 `targeted` 点名运行相关测试；失败后只重跑失败的那一项，定位到具体包、测试或 spec 再修。
 3. 提交前，改动跨多个包或说不清影响面时运行一次 `affected`，由导入图自动选择；能点名覆盖的小改动用 `targeted` 即可。
 4. 部署前运行按范围的候选 `candidate --scope auto`。它核对镜像身份并在全新实例启动；差异含前端、文档、脚本和 Go 测试文件以外的改动时自动加上升级演练。
@@ -17,6 +17,7 @@ python3 -B scripts/testing/run.py registry
 python3 -B scripts/testing/run.py targeted --go model:^TestTopUpBonus --db TestTopUpBonusDatabaseMatrix \
   --vitest frontend/src/api/__tests__/topupBonus.spec.ts --lint frontend/src/api/topupBonus.ts \
   --visual bonus-card.spec.ts
+python3 -B scripts/testing/run.py affected --plan --base <基线提交>
 python3 -B scripts/testing/run.py affected --base <基线提交> [--skip ui-contracts]
 python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previous-image <现行正式镜像> \
   --image <镜像ID> --image-identity <identity.json> --simulator-image <镜像ID> --simulator-identity <identity.json>

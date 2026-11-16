@@ -25,7 +25,7 @@ Ren2Hub 的质量门槛在本地运行，CI 调用同一入口。Go、Vue 的业
 ```sh
 python3 -B scripts/testing/run.py registry
 python3 -B scripts/testing/run.py targeted [--go 目录[:正则]] [--db 测试名] [--race 目录] [--vitest 路径] [--lint 路径] [--visual spec] [--python]
-python3 -B scripts/testing/run.py affected [--base <提交>] [--skip <层>]
+python3 -B scripts/testing/run.py affected [--base <提交>] [--plan] [--skip <层>]
 python3 -B scripts/testing/run.py candidate --scope auto[,<部分>] --previous-image ren2hub-test:<旧版完整SHA>-v1 --image <应用不可变镜像ID> --image-identity <应用identity.json> --simulator-image <模拟器不可变镜像ID> --simulator-identity <模拟器identity.json>
 python3 -B scripts/testing/run.py diagnostics
 python3 -B scripts/testing/run.py known_upstream_restored

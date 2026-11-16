@@ -285,7 +285,8 @@ class RunnerContractTests(unittest.TestCase):
                 run.frontend_related(run.SOURCE, Path(directory), {}, files, named=True)
 
     def test_selectors_are_rejected_outside_their_profile(self):
-        for argv in (['targeted'], ['affected', '--go', 'model'], ['quick', '--skip', 'race'],
+        for argv in (['targeted'], ['affected', '--go', 'model'], ['quick', '--skip', 'race'], ['quick', '--plan'],
+                     ['targeted', '--python', '--plan'],
                      ['all', '--scope', 'auto'], ['candidate', '--scope', 'routing'], ['affected', '--skip', 'registry']):
             with self.subTest(argv=argv), tempfile.TemporaryDirectory() as directory, \
                     patch.object(sys, 'argv', ['run.py', *argv, '--output-parent', directory]), \
@@ -349,6 +350,33 @@ class RunnerContractTests(unittest.TestCase):
         self.assertEqual((result['release_evidence'], result['skipped_layers'], result['not_covered']),
                          (False, ['ui-contracts'], ['browser']))
         self.assertEqual(list(result['stages']), ['registry', 'go-unit'])
+
+    def test_affected_plan_lists_the_selection_without_running_anything(self):
+        plan = {'files': ['model/a.go', 'frontend/src/a.vue'], 'go': {'tested_dirs': ['model', 'service']},
+                'frontend': {'vitest': ['frontend/src/a.vue'], 'typecheck': True, 'lint': [], 'format': [], 'build': True},
+                'visual': {'mode': 'subset', 'files': ['wallet.spec.ts']}, 'python': False,
+                'not_covered': ['known_upstream_restored（冻结夹具或源码改动）']}
+        groups = [{'package': 'model'}]
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
+            for target, value in (('affected.changed_files', ['model/a.go', 'frontend/src/a.vue']),
+                                  ('affected.load_impact', None), ('affected.go_packages', {}), ('affected.plan', plan),
+                                  ('run.race_selection', ({}, groups))):
+                stack.enter_context(patch(target, return_value=value))
+            checks = stack.enter_context(patch('run.registry_stage'))
+            executor = stack.enter_context(patch('run.run_selection'))
+            stack.enter_context(contextlib.redirect_stdout(output))
+            result = run.affected(run.SOURCE, Path(directory), {}, 'base-sha', (), True)
+            self.assertTrue((Path(directory) / 'selection.json').is_file())
+        checks.assert_not_called()
+        executor.assert_not_called()
+        self.assertEqual((result['plan_only'], result['release_evidence'], result['stages']), (True, False, {}))
+        text = output.getvalue()
+        for expected in ('基线 base-sha，改动 2 个文件', 'Go 单测与 vet（包目录）：model, service', '三库矩阵（包）：model',
+                         'race（包）：model', 'Vitest：frontend/src/a.vue', '前端静态检查：typecheck', '前端构建：是',
+                         'wallet.spec.ts', '需单独运行：known_upstream_restored'):
+            self.assertIn(expected, text)
+        self.assertNotIn('Python 单测', text)
 
     def test_go_accepts_executed_test(self):
         result = go_result(json.dumps({'Action': 'pass', 'Test': 'TestMoney'}), ['TestMoney'])

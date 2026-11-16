@@ -441,11 +441,34 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
     return stages, skipped
 
 
-def affected(source: Path, output: Path, env: dict[str, str], base: str | None, skip: tuple[str, ...] = ()) -> dict:
-    """只运行与 base 以来改动相关的层；结果用于迭代，不是发布证据。"""
+def print_plan(selection: dict, total_specs: int) -> None:
+    """列出 affected 会运行的内容，供按模块点名（targeted）时参考。"""
+    def names(values, limit=8):
+        values = list(values)
+        return ', '.join(values[:limit]) + (f' …共 {len(values)} 项' if len(values) > limit else '')
+    go, frontend, visual = selection['go'], selection['frontend'], selection['visual']
+    rows = [('Go 单测与 vet（包目录）', names(go['tested_dirs'])),
+            ('三库矩阵（包）', names((selection['databases'] or {}).get('packages') or [])),
+            ('race（包）', names(selection['race'])),
+            ('Vitest', '全部' if frontend['vitest'] == 'all' else names(frontend['vitest'])),
+            ('前端静态检查', names(key for key in ('typecheck', 'lint', 'format') if frontend[key])),
+            ('前端构建', '是' if frontend['build'] else ''),
+            (f'视觉 spec（{len(visual["files"])}/{total_specs}）', names(visual['files'])),
+            ('Python 单测', '是' if selection['python'] else ''),
+            ('需单独运行', names(selection['not_covered']))]
+    print(f'affected 计划（未执行）：基线 {selection["base"]}，改动 {len(selection["files"])} 个文件', flush=True)
+    for label, value in rows:
+        if value:
+            print(f'  {label}：{value}', flush=True)
+
+
+def affected(source: Path, output: Path, env: dict[str, str], base: str | None, skip: tuple[str, ...] = (),
+             plan_only: bool = False) -> dict:
+    """只运行与 base 以来改动相关的层；结果用于迭代，不是发布证据。plan_only 只写出并打印选择。"""
     import affected as selector
     from database import PACKAGES as DATABASE_PACKAGES
-    registry = registry_stage(source)
+    # 计划模式只读取差异和包图，不执行任何检查。
+    registry = None if plan_only else registry_stage(source)
     base = base or selector.default_base(source)
     files = selector.changed_files(source, base)
     impact = selector.load_impact(source / '.local-tests' / selector.IMPACT_MAP)
@@ -455,6 +478,11 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None, 
     selection.update(base=base, databases={'packages': packages, 'tests': None} if packages else None,
                      race=sorted(tested & {group['package'] for group in race_selection(source)[1]}))
     (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
+    if plan_only:
+        print_plan(selection, len(list((source / 'frontend/tests/visual').glob('*.spec.ts'))))
+        print(f'  完整选择及原因：{output / "selection.json"}', flush=True)
+        return {'success': True, 'release_evidence': False, 'plan_only': True, 'base': base,
+                'changed_files': len(files), 'stages': {}, 'not_covered': selection['not_covered']}
     stages, skipped = run_selection(source, output, env, selection, 'affected', skip)
     for note in selection['not_covered']:
         print('affected 未覆盖：' + note, flush=True)
@@ -484,6 +512,7 @@ def main() -> int:
     parser.add_argument('--base', help='affected 的比较起点；默认 HEAD 与 origin/main 的分叉点')
     parser.add_argument('--skip', nargs='+', action='extend', default=[], choices=LAYERS, metavar='LAYER',
                         help='affected 跳过所列层（' + '、'.join(LAYERS) + '），跳过项写入报告')
+    parser.add_argument('--plan', action='store_true', help='affected 只列出会选中的测试，不执行')
     many = {'nargs': '+', 'action': 'extend', 'default': []}
     parser.add_argument('--go', metavar='DIR[:REGEX]', **many,
                         help='targeted：运行该 Go 包目录的单测与 vet，可用顶层测试名正则筛选，例如 model:^TestTopUpBonus')
@@ -509,8 +538,8 @@ def main() -> int:
     request = {key: getattr(args, key) for key in ('go', 'db', 'race', 'vitest', 'visual', 'lint', 'python')}
     if any(request.values()) != (args.profile == 'targeted'):
         parser.error('--go/--db/--race/--vitest/--visual/--lint/--python 只用于 targeted，且至少给出一项')
-    if args.skip and args.profile != 'affected':
-        parser.error('--skip 只用于 affected')
+    if (args.skip or args.plan) and args.profile != 'affected':
+        parser.error('--skip 与 --plan 只用于 affected')
     if args.scope != 'full' and args.profile != 'candidate':
         parser.error('--scope 只用于 candidate；all 始终运行完整候选')
     from release_scope import parse as parse_scope
@@ -568,7 +597,7 @@ def main() -> int:
                 from native_logger_race import run
                 result = run(SOURCE, stage, env)
             elif profile == 'affected':
-                result = affected(SOURCE, stage, env, args.base, tuple(args.skip))
+                result = affected(SOURCE, stage, env, args.base, tuple(args.skip), args.plan)
             elif profile == 'unit':
                 result = {'go': go_unit(SOURCE, stage, env), 'vue': frontend_unit(SOURCE, stage, env), 'success': True}
             elif profile == 'static':
