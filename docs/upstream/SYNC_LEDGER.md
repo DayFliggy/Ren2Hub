@@ -51,7 +51,16 @@ Codex `gpt-6-astra` 复核实现，未发现 P0/P1。两项 P2 已修复并经�
   - Vitest 1,887 项、前端静态检查和构建通过。
   - ui-contracts 565/565 通过。
 
-未运行 `all`、完整 candidate（含升级合同实跑）、真实支付。正式应用未切换，生产仍是充值折扣。
+本地分层未运行 `all`，真实支付未验证。
+
+同日正式发布。首个发布候选 `b994dbbef` 因 `known_upstream_restored` 冻结 fixture 指纹不符，在诊断阶段失败，失败报告保留，修正见上文。最终发布 Ren2Hub `0780f4573afca52ceba4922169f323821439d266`，根 `034dac1d9b9cdde5efcc64a8372a546d24672db7`，镜像 `sha256:30bb7eca4998b0d950a211f5a5111fb6583fae0fb9faec781a4bdc59080cb380`。
+
+完整隔离候选从正式 `ff82c3d9d` 镜像升级，结果为 `candidate_success=false / exit 2 / deployment_eligible=true`：
+
+- 上游豁免、12 项诊断与 30 项阻断、routing 30/1/6、77 项原生差异、两项冻结 race 和普通 race 均与 ff82 正式候选相同，外部请求为零。
+- 升级合同实跑通过：三个 `bonus_quota` 列全为 0；旧折扣配置复制为加赠版本 1；7 行小时用量相加迁移；旧表删除。重复启动后数据和 schema 不变，回退副本可启动。
+
+Claude Code Opus 5.5（xhigh）最终审计 PASS，无 P0/P1/P2。08:33 UTC 普通更新完成，生产库原本没有折扣配置和小时用量，迁移后使用内置版本 0（无加赠），public 表由 48 张变为 46 张。现场核验与回退边界见根工作区服务器档案。
 
 ## 2026-11-14 后端全面回归原生
 
