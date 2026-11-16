@@ -38,7 +38,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 来源清单用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 的只读 NewAPI 检出>` 重算，计数为 881 `upstream_equal`、281 `adapted`、351 `extension`、45 `removed`。合同 `topup-discount` 替换为 `topup-bonus`；`payment-single-credit` 的依据指向新文档；`candidate_sha` 为空。NATIVE_B388_REVIEW.json 只记录 2026-11-14 回归时的折扣代码，不回改，受影响文件的 review basis 指向本条。
 
-Codex `gpt-6-astra` 复核实现，未发现 P0/P1。两项 P2 已修复并经复核关闭：迁移把系统目录查询失败当作表不存在；升级合同漏了兑换码和决策表。迁移修复配有回归测试，用 `-overlay` 换回旧实现时该测试失败。`bonus-card` 的四张像素基线随改名重建，与旧折扣卡人工对照后，布局只有文案和比例表示变化。
+Codex `gpt-6-astra` 复核实现，未发现 P0/P1。两项 P2 已修复并经复核关闭：迁移把系统目录查询失败当作表不存在；升级合同漏了兑换码和决策表。迁移修复配有回归测试，用 `-overlay` 换回旧实现时该测试失败。后续审计确认快照之后的改动没有削弱测试，下文验证数字与原始证据一致。它指出 `TOPUP_BONUS.md` 有三处不准确，已更正：迁移中途失败后的数据状态、在线订单的定档与决策落库时点、JSON 数字的适用范围。`bonus-card` 的四张像素基线随改名重建，与旧折扣卡人工对照后，布局只有文案和比例表示变化。
 
 2026-11-16 在独立克隆中按 `37f7257cc` 验证，`dirty=false`：
 
