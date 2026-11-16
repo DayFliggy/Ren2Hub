@@ -160,12 +160,14 @@ func UpdateRedemption(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	cleanRedemption, err := model.GetRedemptionById(redemption.Id)
-	if err != nil {
+	if _, err := model.GetRedemptionById(redemption.Id); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if statusOnly == "" {
+	var cleanRedemption *model.Redemption
+	if statusOnly != "" {
+		cleanRedemption, err = model.SetRedemptionStatus(redemption.Id, redemption.Status)
+	} else {
 		if redemption.Quota <= 0 {
 			common.ApiErrorT(c, "Redemption quota must be positive")
 			return
@@ -178,15 +180,8 @@ func UpdateRedemption(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
-		// If you add more fields, please also update redemption.Update()
-		cleanRedemption.Name = redemption.Name
-		cleanRedemption.Quota = redemption.Quota
-		cleanRedemption.ExpiredTime = redemption.ExpiredTime
+		cleanRedemption, err = model.UpdateUnusedRedemption(redemption.Id, redemption.Name, redemption.Quota, redemption.ExpiredTime)
 	}
-	if statusOnly != "" {
-		cleanRedemption.Status = redemption.Status
-	}
-	err = cleanRedemption.Update()
 	if err != nil {
 		common.ApiError(c, err)
 		return

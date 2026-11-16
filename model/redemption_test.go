@@ -208,3 +208,45 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
 	assert.Equal(t, 300, user.Quota, "quota must be credited exactly once")
 }
+
+// A used code is the record of one credit: no edit may change its quota or
+// status, and administrators can never mark a code used without redeeming it.
+func TestUsedRedemptionCannotBeEdited(t *testing.T) {
+	userId, key := setupRedeemFixture(t, 500)
+	_, err := Redeem(key, userId)
+	require.NoError(t, err)
+	var used Redemption
+	require.NoError(t, DB.First(&used, "key = ?", key).Error)
+
+	_, err = UpdateUnusedRedemption(used.Id, "renamed", 900, 0)
+	require.ErrorIs(t, err, ErrRedemptionUsed)
+	_, err = SetRedemptionStatus(used.Id, common.RedemptionCodeStatusEnabled)
+	require.ErrorIs(t, err, ErrRedemptionUsed)
+	var stored Redemption
+	require.NoError(t, DB.First(&stored, used.Id).Error)
+	assert.Equal(t, used, stored)
+
+	unused := &Redemption{Name: "unused", Key: "10000000000000000000000000000003", Status: common.RedemptionCodeStatusEnabled, Quota: 100}
+	require.NoError(t, DB.Create(unused).Error)
+	_, err = SetRedemptionStatus(unused.Id, common.RedemptionCodeStatusUsed)
+	require.ErrorIs(t, err, ErrRedemptionStatusInvalid)
+
+	disabled, err := SetRedemptionStatus(unused.Id, common.RedemptionCodeStatusDisabled)
+	require.NoError(t, err)
+	assert.Equal(t, common.RedemptionCodeStatusDisabled, disabled.Status)
+	assert.Equal(t, 100, disabled.Quota)
+
+	edited, err := UpdateUnusedRedemption(unused.Id, "edited", 200, 0)
+	require.NoError(t, err)
+	assert.Equal(t, "edited", edited.Name)
+	assert.Equal(t, 200, edited.Quota)
+	assert.Equal(t, common.RedemptionCodeStatusDisabled, edited.Status, "a field edit keeps the status")
+
+	// A code redeemed after the edit read it still wins: the update has no effect.
+	require.NoError(t, DB.Model(&Redemption{}).Where("id = ?", unused.Id).Update("status", common.RedemptionCodeStatusUsed).Error)
+	_, err = UpdateUnusedRedemption(unused.Id, "late", 300, 0)
+	require.ErrorIs(t, err, ErrRedemptionUsed)
+	var late Redemption
+	require.NoError(t, DB.First(&late, unused.Id).Error)
+	assert.Equal(t, 200, late.Quota)
+}

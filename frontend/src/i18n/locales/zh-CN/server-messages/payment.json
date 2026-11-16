@@ -69,6 +69,8 @@
   "redemption code expired": "兑换码已过期",
   "select between 1 and 1000 redemption codes": "请选择 1 至 1000 个兑换码",
   "redemption IDs must be positive": "兑换码 ID 必须为正整数",
+  "Used redemption codes cannot be modified": "已使用的兑换码不能修改",
+  "Redemption code status must be enabled or disabled": "兑换码状态只能设为启用或禁用",
   "Top-up discount is temporarily unavailable, please try again": "充值优惠暂时无法计算，请稍后重试",
   "The top-up price changed, please confirm the new price": "充值价格已变化，请确认新价格"
 }
