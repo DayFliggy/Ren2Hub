@@ -195,7 +195,8 @@ const rangeOptions = computed(() => [
 
     <div
       :id="dashboardPanelId"
-      class="min-w-0"
+      :key="activeTab"
+      class="console-panel-enter min-w-0"
       role="tabpanel"
       :aria-labelledby="`${dashboardPanelId}-tab-${activeTab}`"
     >

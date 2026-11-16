@@ -13,6 +13,8 @@ declare module 'vue-router' {
     protected?: boolean
     feature?: string
     nav?: string
+    /** Routes sharing a value are tabs of one page under a common header. */
+    tabGroup?: string
     topNav?: 'activities' | 'dashboard' | 'ops' | 'console'
     setupRoute?: boolean
     setupError?: boolean

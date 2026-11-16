@@ -101,6 +101,7 @@ onBeforeUnmount(() => {
         :title="group.disabled ? t('nav.comingSoon') : undefined"
         :aria-expanded="group.children ? openGroup === group.name : undefined"
         :aria-current="isActive(group) && group.route ? 'page' : undefined"
+        :data-prefetch-route="group.disabled ? undefined : group.route"
         @click="onGroupClick(group)"
       >
         {{ t(group.labelKey) }}

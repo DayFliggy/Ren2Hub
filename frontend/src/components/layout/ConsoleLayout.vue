@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeMount, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
 import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
@@ -8,6 +8,7 @@ import { useAppStore } from '@/stores'
 import '@/styles/console.css'
 
 const route = useRoute()
+const router = useRouter()
 const app = useAppStore()
 const noPageScroll = computed(() => Boolean(route.meta.noPageScroll))
 const featureStatus = computed(() => app.featureStatus(route.meta.feature))
@@ -25,6 +26,16 @@ function onScroll() {
   }, 2300)
 }
 
+// Routes that are tabs of one page (the log pages) swap only what is below
+// the shared breadcrumb row; any other navigation fades the whole page in.
+const pageSwap = ref<'page' | 'tab'>('page')
+const stopTrackingSwap = router.afterEach((to, from) => {
+  pageSwap.value =
+    to.meta.tabGroup !== undefined && to.meta.tabGroup === from.meta.tabGroup
+      ? 'tab'
+      : 'page'
+})
+
 // Pages scroll inside this zone, not the window the router's scrollBehavior
 // resets. A new path starts at the top; query-only updates such as filters
 // and pagination keep their place.
@@ -40,6 +51,7 @@ onBeforeMount(() => {
 })
 
 onBeforeUnmount(() => {
+  stopTrackingSwap()
   document.documentElement.removeAttribute('data-console-layout')
   if (scrollTimer) clearTimeout(scrollTimer)
 })
@@ -70,11 +82,12 @@ onBeforeUnmount(() => {
         </div>
         <main class="min-w-0 px-4 py-8 sm:px-6 lg:px-8">
           <div
-            class="console-content mx-auto transition-[max-width] duration-300"
+            class="console-content mx-auto"
             :class="{ 'console-content--wide': route.meta.wide }"
+            :data-page-swap="pageSwap"
           >
             <RouterView v-slot="{ Component }">
-              <Transition name="page" mode="out-in">
+              <Transition name="page">
                 <component :is="Component" />
               </Transition>
             </RouterView>
@@ -84,19 +97,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.page-enter-active {
-  transition: all 0.22s ease;
-}
-.page-leave-active {
-  transition: all 0.15s ease;
-}
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-.page-leave-to {
-  opacity: 0;
-}
-</style>

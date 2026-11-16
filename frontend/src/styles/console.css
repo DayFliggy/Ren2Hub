@@ -29,6 +29,47 @@ html[data-console-layout] {
   max-width: var(--console-wide-width);
 }
 
+/*
+ * Page swaps. The leaving page is dropped at once, so the next page mounts and
+ * requests its data in the same frame and the scroll reset never shows the old
+ * page jumping; only the arriving page animates. The width above changes in
+ * one step for the same reason. Opacity alone keeps fixed-position children
+ * (the dashboard contact ball) anchored to the viewport.
+ */
+@keyframes console-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Changes nothing; it only gives a page the duration of its children's fade. */
+@keyframes console-fade-hold {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+.console-content > .page-leave-active {
+  display: none !important;
+}
+
+.console-content > .page-enter-active {
+  animation: console-fade-in 0.16s ease-out;
+}
+
+/* Between tabs of one page the breadcrumb row and its tab strip stay put. */
+.console-content[data-page-swap='tab'] > .page-enter-active {
+  animation: console-fade-hold 0.16s;
+}
+
+.console-content[data-page-swap='tab']
+  > .page-enter-active
+  > :not([data-page-header]),
+.console-panel-enter {
+  animation: console-fade-in 0.16s ease-out;
+}
+
 html.dark [data-handdrawn-scope='console'] {
   background:
     radial-gradient(

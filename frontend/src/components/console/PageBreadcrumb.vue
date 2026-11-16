@@ -16,6 +16,7 @@ withDefaults(
 <template>
   <div
     class="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    data-page-header
   >
     <Breadcrumb :crumbs="crumbs" spacing="" class="shrink-0" />
     <div

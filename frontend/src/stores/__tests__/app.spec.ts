@@ -126,6 +126,30 @@ describe('public application state', () => {
     expect(store.online).toBe(true)
   })
 
+  it('reports the status as known while the home summaries are still loading', async () => {
+    publicApi.notice.mockReturnValue(new Promise(() => {}))
+    const store = useAppStore()
+
+    await store.whenStatusKnown()
+
+    expect(store.statusReachable).toBe(true)
+    expect(store.phase).toBe('loading')
+    expect(publicApi.status).toHaveBeenCalledOnce()
+  })
+
+  it('reports an unreachable status as known and retries on the next call', async () => {
+    publicApi.status.mockRejectedValueOnce(new Error('offline'))
+    const store = useAppStore()
+
+    await store.whenStatusKnown()
+    expect(store.statusReachable).toBe(false)
+    expect(store.phase).toBe('error')
+
+    await store.whenStatusKnown()
+    expect(store.statusReachable).toBe(true)
+    expect(publicApi.status).toHaveBeenCalledTimes(2)
+  })
+
   it('shares one in-flight initialization across callers', async () => {
     let resolveStatus!: (value: { system_name: string }) => void
     publicApi.status.mockImplementationOnce(

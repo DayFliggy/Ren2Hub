@@ -1,8 +1,12 @@
 import {
   createRouter,
   createWebHistory,
+  isNavigationFailure,
+  NavigationFailureType,
+  START_LOCATION,
   parseQuery,
   stringifyQuery,
+  type RouteLocationNormalized,
   type RouteLocationRaw,
 } from 'vue-router'
 
@@ -19,7 +23,7 @@ import { useSetupStore } from '@/stores/setup'
 import { publicRoutes } from '@/router/publicRoutes'
 import { adminRoutes } from '@/router/adminRoutes'
 import { canonicalLegacyLocation } from '@/router/legacyRoutes'
-import { navigationError } from '@/router/navigationState'
+import { navigationError, navigationPending } from '@/router/navigationState'
 import { ApiError } from '@/api/types'
 import { getAuthSessionSnapshot } from '@/api/authSession'
 import {
@@ -79,6 +83,11 @@ export function sanitizeRedirect(value: unknown): string | null {
   } catch {
     return null
   }
+}
+
+/** Where a completed sign-in continues: the requested page or the console. */
+export function signInDestination(redirect: unknown): RouteLocationRaw {
+  return sanitizeRedirect(redirect) ?? CONSOLE_ENTRY
 }
 
 prepareInitialPluginLoginCallback(import.meta.env.BASE_URL)
@@ -205,7 +214,12 @@ const router = createRouter({
           path: '/usage-logs',
           name: 'logs',
           component: () => import('@/views/console/LogsView.vue'),
-          meta: { wide: true, noPageScroll: true, feature: 'logs' },
+          meta: {
+            wide: true,
+            noPageScroll: true,
+            feature: 'logs',
+            tabGroup: 'logs',
+          },
         },
         {
           path: '/usage-logs/drawing',
@@ -216,6 +230,7 @@ const router = createRouter({
             noPageScroll: true,
             feature: 'logs',
             nav: 'logs',
+            tabGroup: 'logs',
           },
         },
         {
@@ -227,6 +242,7 @@ const router = createRouter({
             noPageScroll: true,
             feature: 'logs',
             nav: 'logs',
+            tabGroup: 'logs',
           },
         },
         {
@@ -240,6 +256,7 @@ const router = createRouter({
             noPageScroll: true,
             feature: 'audit',
             nav: 'logs',
+            tabGroup: 'logs',
           },
         },
         {
@@ -431,7 +448,15 @@ const router = createRouter({
   },
 })
 
-router.beforeEach(async (to) => {
+// The latest navigation that entered the guards. One that a newer navigation
+// replaced must not end the pending state the newer one still needs.
+let latestNavigation: RouteLocationNormalized | null = null
+
+router.beforeEach(async (to, from) => {
+  latestNavigation = to
+  // The first page load keeps its plain start; only navigations inside the
+  // running app report progress.
+  if (from !== START_LOCATION) navigationPending.value = true
   // Secrets must leave the address before setup/auth checks or lazy imports can
   // fail, redirect, or offer a retry URL. The component consumes memory once.
   if (
@@ -477,7 +502,7 @@ router.beforeEach(async (to) => {
 
   if (to.meta.feature || to.name === 'sign-up') {
     const app = useAppStore()
-    await app.initialize()
+    await app.whenStatusKnown()
     const featureUnavailable =
       to.meta.feature &&
       (!app.statusReachable || !app.isFeatureEnabled(to.meta.feature))
@@ -534,6 +559,7 @@ const CHUNK_LOAD_ERROR =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 router.onError((error, to) => {
+  if (to === latestNavigation) navigationPending.value = false
   discardPluginLoginCallback()
   navigationError.value = {
     kind:
@@ -557,6 +583,8 @@ router.onError((error, to) => {
 })
 
 router.afterEach((_to, _from, failure) => {
+  if (!isNavigationFailure(failure, NavigationFailureType.cancelled))
+    navigationPending.value = false
   if (failure) {
     discardPluginLoginCallback()
     return

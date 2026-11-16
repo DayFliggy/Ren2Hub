@@ -31,7 +31,7 @@ import { clearAuthBundle, setAuthBundle } from '@/api/authSession'
 import { ApiError } from '@/api/types'
 import router from '@/router'
 import { sanitizeSetupRedirect, sanitizeRedirect } from '@/router'
-import { navigationError } from '@/router/navigationState'
+import { navigationError, navigationPending } from '@/router/navigationState'
 import { guardPublicModule } from '@/router/publicRoutes'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -203,7 +203,7 @@ describe('capability route guard', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     sessionStorage.setItem('ren2hub_chunk_reload', '1')
     const failure = new Error(message)
-    vi.spyOn(useAppStore(), 'initialize').mockRejectedValueOnce(failure)
+    vi.spyOn(useAppStore(), 'whenStatusKnown').mockRejectedValueOnce(failure)
     await expect(router.push(callbackPath + callbackSecrets)).rejects.toBe(
       failure
     )
@@ -742,6 +742,84 @@ describe('capability route guard', () => {
     await router.push('/models/pricing')
     expect(router.currentRoute.value.path).toBe('/models/pricing')
     expect(router.currentRoute.value.meta.nav).toBe('models-admin')
+  })
+})
+
+describe('navigation responsiveness', () => {
+  it('enters a protected page while the home summaries are still loading', async () => {
+    publicApi.notice.mockReturnValue(new Promise(() => {}))
+    publicApi.uptime.mockReturnValue(new Promise(() => {}))
+
+    const entered = await Promise.race([
+      router.push('/keys').then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 2_000)),
+    ])
+
+    expect(entered).toBe(true)
+    expect(router.currentRoute.value.name).toBe('keys')
+  })
+
+  it('stays pending until the latest navigation settles', async () => {
+    const answers: Array<(status: object) => void> = []
+    publicApi.status.mockImplementation(
+      () => new Promise((resolve) => answers.push(resolve))
+    )
+    expect(navigationPending.value).toBe(false)
+
+    const superseded = router.push('/pricing')
+    await flushPromises()
+    expect(navigationPending.value).toBe(true)
+    const latest = router.push('/about')
+    await flushPromises()
+
+    answers[0]!({})
+    await superseded
+    expect(navigationPending.value).toBe(true)
+
+    answers[1]!({})
+    await latest
+    expect(router.currentRoute.value.name).toBe('about')
+    expect(navigationPending.value).toBe(false)
+  })
+
+  it('does not report the first page load as pending', async () => {
+    vi.resetModules()
+    const state = await import('@/router/navigationState')
+    const { default: fresh } = await import('@/router')
+    setActivePinia(createPinia())
+    const answers: Array<(status: object) => void> = []
+    setupApi.status.mockImplementation(
+      () => new Promise((resolve) => answers.push(resolve))
+    )
+
+    const first = fresh.push('/404')
+    await flushPromises()
+    expect(state.navigationPending.value).toBe(false)
+
+    answers[0]!({ status: true, root_init: true, database_type: 'sqlite' })
+    await first
+    expect(fresh.currentRoute.value.name).toBe('status-404')
+  })
+
+  it('clears the pending state when a redirect ends on the current page', async () => {
+    // Unreachable status sends /keys to the dashboard and on to home, where
+    // the navigation already is: no guard runs for that last hop.
+    publicApi.status.mockRejectedValue(new Error('offline'))
+
+    await router.push('/keys')
+
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(navigationPending.value).toBe(false)
+  })
+
+  it('clears the pending state when a guard throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const failure = new Error('navigation unavailable')
+    vi.spyOn(useAppStore(), 'whenStatusKnown').mockRejectedValueOnce(failure)
+
+    await expect(router.push('/keys')).rejects.toBe(failure)
+
+    expect(navigationPending.value).toBe(false)
   })
 })
 

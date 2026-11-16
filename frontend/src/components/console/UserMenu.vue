@@ -75,6 +75,7 @@ onBeforeUnmount(() => {
         type="button"
         class="group flex min-h-11 w-full items-center justify-between rounded-none px-4 py-2.5 text-left text-sm font-normal transition-colors hover:bg-[var(--accent-soft)]"
         data-user-menu-item
+        data-prefetch-route="wallet"
         @click="goto('wallet')"
       >
         <span
@@ -92,6 +93,7 @@ onBeforeUnmount(() => {
         type="button"
         class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
         data-user-menu-item
+        data-prefetch-route="profile"
         @click="goto('profile')"
       >
         {{ t('profile.title') }}
@@ -100,6 +102,7 @@ onBeforeUnmount(() => {
         type="button"
         class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
         data-user-menu-item
+        data-prefetch-route="security"
         @click="goto('security')"
       >
         {{ t('nav.securityAccess') }}

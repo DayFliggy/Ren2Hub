@@ -104,6 +104,7 @@ export const useAppStore = defineStore('app', () => {
   let statusRequested = 0
   let statusApplied = 0
   let startupStatus: Promise<void> | null = null
+  let startupStatusKnown: Promise<void> | null = null
   const pricingRequest = useLatestRequest()
   onScopeDispose(() => {
     modelCount.value = null
@@ -248,6 +249,13 @@ export const useAppStore = defineStore('app', () => {
     return startupStatus ?? refreshStatus()
   }
 
+  function failInitialization(error: unknown): void {
+    statusReachable.value = false
+    lastError.value = error
+    phase.value = 'error'
+    modelCountState.value = 'error'
+  }
+
   async function runInitialization(): Promise<void> {
     phase.value = 'loading'
     lastError.value = null
@@ -255,7 +263,11 @@ export const useAppStore = defineStore('app', () => {
     uptimePercent.value = null
     try {
       startupStatus = refreshStatus()
-      await startupStatus
+      // Settles once the status is applied or its failure is recorded. Route
+      // guards wait for this, not for the summaries below.
+      startupStatusKnown = startupStatus.catch(failInitialization)
+      await startupStatusKnown
+      if (!statusReachable.value) return
 
       const summaries = await Promise.allSettled([
         publicApi.notice(),
@@ -289,10 +301,7 @@ export const useAppStore = defineStore('app', () => {
         ? 'ready'
         : 'degraded'
     } catch (error) {
-      statusReachable.value = false
-      lastError.value = error
-      phase.value = 'error'
-      modelCountState.value = 'error'
+      failInitialization(error)
     }
   }
 
@@ -306,6 +315,16 @@ export const useAppStore = defineStore('app', () => {
       initializationPromise = null
     })
     return initializationPromise
+  }
+
+  /**
+   * Resolves when the feature switches from /api/status are known, or known
+   * to be unreachable. The home summaries may still be loading.
+   */
+  function whenStatusKnown(): Promise<void> {
+    if (initialized.value) return Promise.resolve()
+    void initialize()
+    return startupStatusKnown ?? Promise.resolve()
   }
 
   async function loadModelCount(): Promise<void> {
@@ -398,6 +417,7 @@ export const useAppStore = defineStore('app', () => {
     isFeatureEnabled,
     isSidebarModuleEnabled,
     initialize,
+    whenStatusKnown,
     refreshStatus,
     statusAtStartup,
     retry,

@@ -211,6 +211,8 @@ onMounted(loadVendors)
     </div>
     <div
       id="model-management-panel"
+      :key="section"
+      class="console-panel-enter"
       role="tabpanel"
       :aria-labelledby="`model-management-panel-tab-${section}`"
     >

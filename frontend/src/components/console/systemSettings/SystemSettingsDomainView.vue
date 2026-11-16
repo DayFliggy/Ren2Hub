@@ -295,7 +295,10 @@ onMounted(() => load())
       </nav>
     </aside>
 
-    <div class="min-w-0 flex-1">
+    <div
+      :key="`${domain}/${activeSection.id}`"
+      class="console-panel-enter min-w-0 flex-1"
+    >
       <div
         v-if="statusRefreshError"
         role="alert"

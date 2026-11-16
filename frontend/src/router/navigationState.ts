@@ -12,3 +12,10 @@ export interface NavigationFailure {
 }
 
 export const navigationError = ref<NavigationFailure | null>(null)
+
+/**
+ * True from the first guard of a navigation inside the running app until the
+ * latest navigation is confirmed, aborted or fails. A navigation that a newer
+ * one replaced does not clear it; the first page load never sets it.
+ */
+export const navigationPending = ref(false)

@@ -20,7 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLegalConsent } from '@/composables/useLegalConsent'
 import { useToast } from '@/composables/useToast'
 import { ApiError } from '@/api/types'
-import { sanitizeRedirect } from '@/router'
+import { sanitizeRedirect, signInDestination } from '@/router'
 import { useAppStore } from '@/stores'
 import {
   clearAffiliateAttribution,
@@ -85,9 +85,7 @@ function validateCredentials(): boolean {
 // Replace the sign-in entry so Back leaves the console instead of returning
 // to a guest-only page that immediately redirects forward again.
 async function enterDestination() {
-  await router.replace(
-    sanitizeRedirect(route.query.redirect) || { name: 'dashboard' }
-  )
+  await router.replace(signInDestination(route.query.redirect))
 }
 
 function turnstileReady(): boolean {
