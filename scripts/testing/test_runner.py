@@ -366,15 +366,18 @@ class RunnerContractTests(unittest.TestCase):
             checks = stack.enter_context(patch('run.registry_stage'))
             executor = stack.enter_context(patch('run.run_selection'))
             stack.enter_context(contextlib.redirect_stdout(output))
-            result = run.affected(run.SOURCE, Path(directory), {}, 'base-sha', (), True)
+            # python 没有被选中，跳过它不改变计划，也不记为已跳过。
+            result = run.affected(run.SOURCE, Path(directory), {}, 'base-sha', ('ui-contracts', 'go-unit', 'python'), True)
             self.assertTrue((Path(directory) / 'selection.json').is_file())
         checks.assert_not_called()
         executor.assert_not_called()
         self.assertEqual((result['plan_only'], result['release_evidence'], result['stages']), (True, False, {}))
+        self.assertEqual(result['skipped_layers'], ['go-unit', 'ui-contracts'])
         text = output.getvalue()
-        for expected in ('基线 base-sha，改动 2 个文件', 'Go 单测与 vet（包目录）：model, service', '三库矩阵（包）：model',
-                         'race（包）：model', 'Vitest：frontend/src/a.vue', '前端静态检查：typecheck', '前端构建：是',
-                         'wallet.spec.ts', '需单独运行：known_upstream_restored'):
+        for expected in ('基线 base-sha，改动 2 个文件', 'Go 单测与 vet（包目录）：model, service（--skip 跳过 go-unit）',
+                         '三库矩阵（包）：model, service\n', 'race（包）：model\n', 'Vitest：frontend/src/a.vue\n',
+                         '前端静态检查：typecheck\n', '前端构建：是\n', 'wallet.spec.ts（--skip 跳过 ui-contracts）',
+                         '需单独运行：known_upstream_restored'):
             self.assertIn(expected, text)
         self.assertNotIn('Python 单测', text)
 

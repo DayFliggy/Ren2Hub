@@ -441,25 +441,30 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
     return stages, skipped
 
 
-def print_plan(selection: dict, total_specs: int) -> None:
-    """列出 affected 会运行的内容，供按模块点名（targeted）时参考。"""
+def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = ()) -> list[str]:
+    """列出 affected 会运行的内容，供按模块点名（targeted）时参考；返回其中被 --skip 跳过的层。"""
     def names(values, limit=8):
         values = list(values)
         return ', '.join(values[:limit]) + (f' …共 {len(values)} 项' if len(values) > limit else '')
     go, frontend, visual = selection['go'], selection['frontend'], selection['visual']
-    rows = [('Go 单测与 vet（包目录）', names(go['tested_dirs'])),
-            ('三库矩阵（包）', names((selection['databases'] or {}).get('packages') or [])),
-            ('race（包）', names(selection['race'])),
-            ('Vitest', '全部' if frontend['vitest'] == 'all' else names(frontend['vitest'])),
-            ('前端静态检查', names(key for key in ('typecheck', 'lint', 'format') if frontend[key])),
-            ('前端构建', '是' if frontend['build'] else ''),
-            (f'视觉 spec（{len(visual["files"])}/{total_specs}）', names(visual['files'])),
-            ('Python 单测', '是' if selection['python'] else ''),
-            ('需单独运行', names(selection['not_covered']))]
+    rows = [(('go-vet', 'go-unit'), 'Go 单测与 vet（包目录）', names(go['tested_dirs'])),
+            (('databases',), '三库矩阵（包）', names((selection['databases'] or {}).get('packages') or [])),
+            (('race',), 'race（包）', names(selection['race'])),
+            (('vitest',), 'Vitest', '全部' if frontend['vitest'] == 'all' else names(frontend['vitest'])),
+            (('frontend-static',), '前端静态检查', names(key for key in ('typecheck', 'lint', 'format') if frontend[key])),
+            (('build',), '前端构建', '是' if frontend['build'] else ''),
+            (('ui-contracts',), f'视觉 spec（{len(visual["files"])}/{total_specs}）', names(visual['files'])),
+            (('python',), 'Python 单测', '是' if selection['python'] else ''),
+            ((), '需单独运行', names(selection['not_covered']))]
     print(f'affected 计划（未执行）：基线 {selection["base"]}，改动 {len(selection["files"])} 个文件', flush=True)
-    for label, value in rows:
-        if value:
-            print(f'  {label}：{value}', flush=True)
+    skipped = []
+    for layers, label, value in rows:
+        if not value:
+            continue
+        dropped = [layer for layer in layers if layer in skip]
+        skipped += dropped
+        print(f'  {label}：{value}' + (f'（--skip 跳过 {"、".join(dropped)}）' if dropped else ''), flush=True)
+    return skipped
 
 
 def affected(source: Path, output: Path, env: dict[str, str], base: str | None, skip: tuple[str, ...] = (),
@@ -479,10 +484,11 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None, 
                      race=sorted(tested & {group['package'] for group in race_selection(source)[1]}))
     (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
     if plan_only:
-        print_plan(selection, len(list((source / 'frontend/tests/visual').glob('*.spec.ts'))))
+        skipped = print_plan(selection, len(list((source / 'frontend/tests/visual').glob('*.spec.ts'))), skip)
         print(f'  完整选择及原因：{output / "selection.json"}', flush=True)
         return {'success': True, 'release_evidence': False, 'plan_only': True, 'base': base,
-                'changed_files': len(files), 'stages': {}, 'not_covered': selection['not_covered']}
+                'changed_files': len(files), 'stages': {}, 'skipped_layers': skipped,
+                'not_covered': selection['not_covered']}
     stages, skipped = run_selection(source, output, env, selection, 'affected', skip)
     for note in selection['not_covered']:
         print('affected 未覆盖：' + note, flush=True)
