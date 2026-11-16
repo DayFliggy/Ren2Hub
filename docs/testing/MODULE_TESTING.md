@@ -4,72 +4,96 @@
 
 ## 流程
 
-1. 列出改动文件（`git diff --name-only <基线>`），按下表判断涉及哪些模块。`affected --plan --base <基线>` 几秒内列出导入图和视觉影响图选中的包、矩阵测试、race 组、Vitest 文件和视觉 spec，以及需要单独运行的冻结诊断，不执行任何测试；点名时以它为参考。同时给出 `--skip` 时，被跳过的层照样列出并标明。
-2. 迭代中用 `targeted` 点名运行相关测试；失败后只重跑失败的那一项，定位到具体包、测试或 spec 再修。
-3. 提交前，改动跨多个包或说不清影响面时运行一次 `affected`，由导入图自动选择；能点名覆盖的小改动用 `targeted` 即可。
-4. 部署前运行按范围的候选 `candidate --scope auto`。它核对镜像身份并在全新实例启动；差异含前端、文档、脚本和 Go 测试文件以外的改动时自动加上升级演练。
-5. 报告里写明实际运行了什么、没有运行什么。定向结果不能写成全量通过。
+每个任务和实施计划先写测试计划，再按计划运行。计划格式、八类接点和“定向不扩大”的规则在工作区的 task-testing 技能（`skills/task-testing/`）里，下面是 Ren2Hub 的摘要。
 
-每个档位先运行 `registry`（登记检查，不到一秒）。它核对冻结夹具哈希、race 固定选择、数据库矩阵登记和核心来源清单，并列出偏离的具体文件；这些偏离以前要等数据库矩阵、race 或候选运行到一半才暴露。
+1. 写计划：基线（迭代时是分支起点，部署时是现行正式提交）；改动 → 功能 → 性质；每个外部可观察的行为按接点逐项判断，点名检查，必要接点的保护测试写完整名字。不涉及的接点写依据。
+2. 运行 `registry`（登记检查，不到一秒）。它核对冻结夹具哈希、race 固定选择、数据库矩阵登记和核心来源清单，并列出偏离的具体文件；失败时先修正登记。
+3. 迭代中用 `targeted` 运行计划里点名的项；失败后只重跑包含失败项的最小单位，定位后再修。不改代码的重跑只算诊断，结果保持未解决，直到原因查明。
+4. 提交前对最终 diff 运行 `affected --plan --base <基线>`，把它列出的每一项要么点名、要么写一行理由，记入计划的“机械对照”。计划外的项只有在 diff 变化、工具指出未处置项、失败根因在计划外、影响面说不清或用户点名时才加入。
+5. 只有影响面说不清（依赖、构建配置、全局样式、被大量使用的共用函数）时才运行不带 `--plan` 的 `affected`：先点名已确定的测试，再对仍说不清的层运行，已覆盖的层用 `--skip` 跳过。自动选择等于整层时它拒绝执行，因为整层运行属于全量档位。
+6. 部署前运行按范围的候选 `candidate --scope auto[,部分]`，见“部署候选的范围”。
+7. 报告写明运行了什么、没有运行什么及原因。定向结果不能写成全量通过。
 
 ```sh
 python3 -B scripts/testing/run.py registry
-python3 -B scripts/testing/run.py targeted --go model:^TestTopUpBonus --db TestTopUpBonusDatabaseMatrix \
+python3 -B scripts/testing/run.py targeted --go 'service:^(TestResolveTopUpBonusFromHourlyWindows|TestEvaluateTopUpBonusFormula)$' \
+  --db TestTopUpBonusDatabaseMatrix --race service \
   --vitest frontend/src/api/__tests__/topupBonus.spec.ts --lint frontend/src/api/topupBonus.ts \
-  --visual bonus-card.spec.ts
+  --visual topup-bonus.spec.ts bonus-card.spec.ts
 python3 -B scripts/testing/run.py affected --plan --base <基线提交>
-python3 -B scripts/testing/run.py affected --base <基线提交> [--skip ui-contracts]
+python3 -B scripts/testing/run.py affected --base <基线提交> --skip <已点名覆盖的层>
 python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previous-image <现行正式镜像> \
   --image <镜像ID> --image-identity <identity.json> --simulator-image <镜像ID> --simulator-identity <identity.json>
 ```
 
 `targeted` 的选择项可以任意组合，至少给一项：
 
-| 选择项             | 运行内容                                                                                                          |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `--go 目录[:正则]` | 该包的 vet 和单测；正则按顶层测试名筛选。没有可运行的测试（只有矩阵测试，或正则没有匹配）时报错，不把空运行算通过 |
-| `--db 测试名`      | 已登记的矩阵测试，在 SQLite、MySQL、PostgreSQL 各跑一次；未登记的名称报错                                         |
-| `--race 目录`      | 该包在固定 race 选择中的组（`model`、`service`、`controller`、`common`、`relay`、`relay/helper`）                 |
-| `--vitest 路径`    | `frontend/` 下的 spec 或源码文件，按导入图运行相关 Vitest 用例；一个用例都没有时报错                              |
-| `--lint 路径`      | 对所列前端文件运行 ESLint 和 Prettier，并整体 typecheck                                                           |
-| `--visual spec`    | `frontend/tests/visual/` 下的 spec 文件                                                                           |
-| `--python`         | `scripts/testing` 的 Python 单测                                                                                  |
+| 选择项             | 运行内容                                                                                                                                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--go 目录[:正则]` | 该包的 vet 和单测，按所属模块以 `GOWORK=off` 运行；正则按顶层测试名筛选。没有可运行的测试（只有矩阵测试，或正则没有匹配）时报错，不把空运行算通过。正则非空不能证明关键测试还在，必要的测试写完整名字 |
+| `--db 测试名`      | 已登记的矩阵测试，在 SQLite、MySQL、PostgreSQL 各跑一次；单方言测试只跑登记的方言；未登记的名称报错                                                                                                   |
+| `--race 目录`      | 该包在固定 race 选择中的全部组（`model`、`service`、`controller`、`common`、`relay`、`relay/helper`），不能只选一个组                                                                                 |
+| `--vitest 路径`    | `frontend/` 下的 spec 或源码文件。点名的每个 spec 都必须运行到用例；点名源码时按 `vitest related` 找用例，每个文件要 22 到 35 秒，只保证整批非空，所以计划里点名 spec                                 |
+| `--lint 路径`      | 对所列前端文件运行 ESLint 和 Prettier，并整体 typecheck                                                                                                                                               |
+| `--visual spec`    | `frontend/tests/visual/` 下的整个 spec，包括它内部遍历的全部视口、主题和语言；运行时记录该 spec 加载的模块，供 `affected` 选择                                                                        |
+| `--python`         | `scripts/testing` 的整套 Python 单测，4 到 5 秒，这一层不再细分                                                                                                                                       |
 
-`targeted` 和 `affected` 可以直接在工作树里运行，不要求提交或独立克隆；报告标记 `release_evidence: false`。`affected --skip <层>` 跳过指定层并把它写入报告的 `skipped_layers`。常见用法是文案或全局样式改动让 `affected` 选中全部视觉 spec 时，跳过 `ui-contracts`，再用 `targeted --visual` 运行断言了这些文案或样式的 spec。
+`targeted` 和 `affected` 可以直接在工作树里运行，不要求提交或独立克隆；报告标记 `release_evidence: false`。`affected --skip <层>` 跳过指定层并把它写入报告的 `skipped_layers`；`--plan` 同时给出 `--skip` 时，被跳过的层照样列出并标明。
 
 实测耗时（4 核主机）：充值加赠这块改动用 `targeted` 运行一个 Go 包筛选、一项三库测试、一个 Vitest 文件和一个视觉 spec，共 4 分钟；同一批改动的 `affected` 是 66 分钟，其中视觉层 37 分钟、三库矩阵 10 分钟、race 9 分钟。`quick` 约 13 分钟。
 
+## 接点与选择项
+
+接点的定义和必测条件见 task-testing 技能，这里只列 Ren2Hub 用什么检查它。
+
+| 接点           | 检查                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 逻辑           | `--go 包:^(测试名)$`；前端 `--vitest <spec>`                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 入口与权限     | 经过真实注册的 router、middleware 测试（调用 `SetApiRouter`、`SetRelayRouter` 等，例如 `router/access_token_scope_test.go`）；浏览器端的真实会话用 `run.py browser`。手工挂载中间件的 controller 测试和直接调用 handler 的合同测试不能代替                                                                                                                                                                                                      |
+| 调用方         | 语义受影响的调用方：点名其包内的行为测试。只有编译依赖：根目录 `GOWORK=off go build ./...`；`relaykit`、`tokenkit` 在各自目录 `GOWORK=off go build ./... && GOWORK=off go vet ./...`，改它们的导出接口时根目录也要编译                                                                                                                                                                                                                          |
+| 状态           | `--db <矩阵测试>`；改变已存数据读法时加升级种子（见“编写与更新测试”）                                                                                                                                                                                                                                                                                                                                                                           |
+| 合同两侧       | 生产侧是 controller 的 `TestFrontendContract*`，用 `-update` 改写 `frontend/tests/fixtures/native/*.json`；消费侧是直接导入该 JSON 的 Vitest spec，以及经 `frontend/tests/contracts/native-core-fixture.ts` 用 `readFileSync` 读取它的视觉 spec。后者不在导入图里，按夹具文件名在 `frontend/tests/` 里搜索。视觉 spec 内联的 `page.route` 模拟与后端没有机械联系，不算合同的消费侧。供应商和支付协议的合同在候选的 `scripts/testing/contracts/` |
+| 并发与时序     | `--race <包>`，只含 `race_selection.json` 登记的组；登记外的并发测试用 `--go` 运行，没有 race 证据，计划里写明                                                                                                                                                                                                                                                                                                                                  |
+| 呈现           | `--visual <spec>`；`--lint <改动文件>`                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 生命周期与交付 | `run.py build`（何时必须运行见下）；升级演练是候选的 `upgrade` 部分，只证明种子覆盖到的数据；改了冻结对象时运行 `registry` 指出的 `known_upstream_*` 档位                                                                                                                                                                                                                                                                                       |
+
+`affected` 对任何 `frontend/src/` 改动都列出构建。以下改动运行 `run.py build`：新增路由、页面或 `frontend/public/` 静态资源；构建配置（`vite.config.ts`、`tsconfig*.json`、`package.json`、`bun.lock`）；嵌入脚本 `scripts/prepare-frontend-embed.mjs`；`go:embed` 的目录；Go 依赖。其余前端改动由 typecheck 和部署时的镜像构建覆盖，计划写一行理由。
+
 ## 模块对照
 
-| 改动位置                                                                | 迭代中点名                                                                                            | 部署候选在 `auto` 之外追加的部分                                              |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `model/` 表结构、迁移、事务，`setting/` 配置解析，根 `main.go`          | `--go model:<正则>`，涉及的矩阵测试用 `--db`，并发路径加 `--race model`                               | 无；改变已存数据的读法时先给升级合同补旧数据种子                              |
-| `controller/`、`router/` 的支付、充值、兑换、工单、管理接口             | `--go controller:<正则>`，三库管理测试用 `--db`                                                       | 无（`upgrade` 已带 `management`）                                             |
-| `service/`、`middleware/` 的预扣、结算、鉴权、限流                      | `--go service:<正则>`、`--go middleware`，并发路径加 `--race service`                                 | `billing`                                                                     |
-| `relay/`、`relaykit/`、`tokenkit/` 协议转换与计量                       | `--go relay/<子包>`，流式生命周期加 `--race relay/helper`                                             | `billing`；WebSocket 加 `websocket`，Compact 加 `compact`，SDK 兼容面加 `sdk` |
-| `plugins/` 和任务提交、轮询、结算                                       | `--go plugins`、`--go service:Task`，加 `--race service`                                              | `plugin`                                                                      |
-| 渠道选择、Token 路由                                                    | 对应包的 `--go`                                                                                       | 不属于范围候选；单独运行 `run.py routing`                                     |
-| `logger/logger.go`、`model/pricing.go`、`native_restored_*` 等冻结对象  | `registry` 指出的档位：`known_upstream_restored`、`known_upstream_race`、`known_upstream_logger_race` | 无                                                                            |
-| `frontend/src` 组件、视图、store、API                                   | `--vitest <源码或 spec>`、`--lint <改动文件>`、`--visual <相关 spec>`                                 | 无；`auto` 不选任何阶段，只核对镜像并启动                                     |
-| 前端文案、全局样式                                                      | `--lint <改动文件>`，`--visual` 运行断言了这些文案或样式的 spec                                       | 同上                                                                          |
-| 登录、会话、权限的真实后端流程（`frontend/tests/local/`、`browser.py`） | `run.py browser`                                                                                      | 无                                                                            |
-| `scripts/testing/*.py`                                                  | `--python`                                                                                            | 无                                                                            |
-| `scripts/testing/contracts/`                                            | 候选中对应的部分                                                                                      | 同左                                                                          |
-| `go.mod`、`go.sum`、`Dockerfile`、`package.json`、`bun.lock`、构建配置  | `affected`（这些输入让对应层整体运行）                                                                | 无                                                                            |
-| 文档                                                                    | 不运行测试；检查 diff、链接和格式                                                                     | 不需要部署                                                                    |
+| 改动位置                                                                | 迭代中点名                                                                                                            | 部署候选在 `auto` 之外追加的部分                                              |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `model/` 表结构、迁移、事务，`setting/` 配置解析，根 `main.go`          | `--go model:<正则>`，涉及的矩阵测试用 `--db`，并发路径加 `--race model`                                               | 无；改变已存数据的读法时先给升级合同补旧数据种子                              |
+| `controller/`、`router/` 的支付、充值、兑换、工单、管理接口             | `--go controller:<正则>`，三库管理测试用 `--db`                                                                       | 无（`upgrade` 已带 `management`）                                             |
+| `service/`、`middleware/` 的预扣、结算、鉴权、限流                      | `--go service:<正则>`、`--go middleware`，并发路径加 `--race service`                                                 | `billing`                                                                     |
+| `relay/`、`relaykit/`、`tokenkit/` 协议转换与计量                       | `--go relay/<子包>`，流式生命周期加 `--race relay/helper`                                                             | `billing`；WebSocket 加 `websocket`，Compact 加 `compact`，SDK 兼容面加 `sdk` |
+| `plugins/` 和任务提交、轮询、结算                                       | `--go plugins`、`--go service:Task`，加 `--race service`                                                              | `plugin`                                                                      |
+| 渠道选择、Token 路由                                                    | 对应包的 `--go`                                                                                                       | 不属于范围候选；单独运行 `run.py routing`                                     |
+| `logger/logger.go`、`model/pricing.go`、`native_restored_*` 等冻结对象  | `registry` 指出的档位：`known_upstream_restored`、`known_upstream_race`、`known_upstream_logger_race`                 | 无                                                                            |
+| `frontend/src` 组件、视图、store、API                                   | `--vitest <源码或 spec>`、`--lint <改动文件>`、`--visual <相关 spec>`                                                 | 无；`auto` 不选任何阶段，只核对镜像并启动                                     |
+| 前端文案、全局样式                                                      | `--lint <改动文件>`；`--visual` 运行断言了这些文案或样式的 spec（按 i18n 键或类名在 `frontend/tests/visual/` 里搜索） | 同上                                                                          |
+| 登录、会话、权限的真实后端流程（`frontend/tests/local/`、`browser.py`） | `run.py browser`                                                                                                      | 无                                                                            |
+| `scripts/testing/*.py`                                                  | `--python`                                                                                                            | 无                                                                            |
+| `scripts/testing/contracts/`                                            | 候选中对应的部分                                                                                                      | 同左                                                                          |
+| `go.mod`、`go.sum`、`Dockerfile`、`package.json`、`bun.lock`、构建配置  | 先按调用方规则点名直接使用改动依赖的包；仍说不清时对那几层运行 `affected`，自动选择等于整层时按全量档位处理           | 无                                                                            |
+| 文档                                                                    | 不运行测试；检查 diff、链接和格式                                                                                     | 不需要部署                                                                    |
 
 后端各行的改动都会让 `auto` 选中 `upgrade`（连带 `management`），表中只列还要追加的部分。
 
-三库矩阵包含 `model`、`controller`、`service`、`middleware`、`pkg/perf_metrics` 的 161 项登记测试，清单在 `scripts/testing/database.py`。工作区部署脚本（根仓库 `scripts/server/`）用 `python3 -B scripts/test-local.py infra`。
+三库矩阵包含 `model`、`controller`、`service`、`middleware`、`pkg/perf_metrics` 的 161 项登记测试，清单在 `scripts/testing/database.py`。工作区部署脚本（根仓库 `scripts/server/`）用 `python3 -B scripts/test-local.py infra [模块|类|方法]`，路径与测试模块的对照在 task-testing 技能的根仓库适配里。
+
+## 功能链路
+
+资金、权限和路由几条链路已知的保护测试与缺口见[功能链路](FUNCTION_CHAINS.md)。它不是完整清单，运行范围由接点判断决定，不整行运行；任务触及其中没有的功能时，把计划里查到的测试补成一节。
 
 ## 部署候选的范围
 
-`candidate --scope` 决定候选运行哪些部分，规则在 `scripts/testing/release_scope.py`，候选和工作区的发布校验器加载同一份：
+`candidate --scope` 决定候选运行哪些部分，必须显式给出，漏写时报错而不是默认运行完整候选。规则在 `scripts/testing/release_scope.py`，候选和工作区的发布校验器加载同一份：
 
 - `auto`：比较旧镜像修订与当前提交。差异只含 `frontend/`、`docs/`、`scripts/`、`.github/`、`.agents/`、根目录的 Markdown 和 `*_test.go` 时不选任何阶段；含其他任何文件时加入 `upgrade`。启动时会迁移表结构、解析已存配置、重置内置角色策略、注册 OAuth 提供方并编译已有插件，这些代码分布在多个包，`go:embed` 还会把整棵目录（含其中的 `testdata/`）嵌入程序，所以规则按“改动是否进入服务端程序”划分，不逐个列路径。
 - 部分名：`upgrade`、`billing`、`websocket`、`compact`、`plugin`、`management`、`sdk`，逗号分隔，可与 `auto` 同用。`plugin` 自动带上 `billing`，`upgrade` 自动带上 `management`（回读旧版写入的工单附件）。
 - `boot`：不选阶段，只核对镜像身份并在全新实例启动。
-- `full`（默认）：完整候选，含 routing、12 项诊断、原生恢复诊断和三组 race。只在明确要求全量时使用；`all` 档位和首次安装始终用它。
+- `full`：完整候选，含 routing、12 项诊断、原生恢复诊断和三组 race。只在明确要求全量时使用；`all` 档位和首次安装始终用它。
 
 范围候选的 manifest 记录 `scope`，只列所选阶段的报告。没有运行的 routing、诊断和 race 不出现在 manifest 里，也不能写成通过。更新执行器在停机前按现行正式版本复核，以下情况拒绝：
 
@@ -86,26 +110,28 @@ python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previou
 - 只在某个数据库失败：`--db 测试名`，逐方言日志在 `databases/matrix/NN-测试名.jsonl`。
 - 视觉 spec 失败：`--visual spec`，截图和 trace 在 `ui-contracts/artifacts/`。
 - 回归测试是否有效：用 `go test -overlay` 把旧实现换回去运行一次，新测试应当失败；不需要改动工作树。
-- 定向通过、`affected` 失败：失败项属于被改动波及的反向依赖，把它加进 `targeted` 选择后继续定位。
+- 计划外的测试失败：失败项属于被改动波及的反向依赖，点名加进计划（修订记录写触发和证据）后继续定位。
+- 不改代码重跑后通过：两次结果都记，这一项保持未解决，直到查明原因或在基线上复现为既有问题；诊断重跑以一次为限。
 
 ## 编写与更新测试
 
 测试放在源码旁，由对应层自动发现；不被任何层运行的测试文件不入库。新测试保护一个真实行为、合同或回归，不照抄实现，也不断言文件布局。
 
-| 测试类型           | 位置                                                                                             | 新增、改名或删除时同步                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Go 单测            | 源码旁 `*_test.go`，单项 60 秒内，不允许 skip                                                    | 核心目录的 Go 文件改动后，提交前刷新 `docs/upstream/CORE_SOURCE_DELTA.json`                                            |
-| 三库矩阵测试       | 读取 `TEST_*_DSN` 或方言环境变量的 Go 测试                                                       | 登记到 `scripts/testing/database.py`；未登记时它在 `unit` 里因 skip 失败                                               |
-| race 测试          | 并发路径的 Go 测试                                                                               | `race_selection.json` 的组、`ordinary_race.py` 的 `FROZEN_SELECTION` 和计数一起更新                                    |
-| 冻结诊断夹具       | `known_upstream_*.json` 绑定的文件                                                               | 内容改变后更新该文件的全部哈希，并重跑对应的 `known_upstream_*` 档位，确认冻结断言照原样复现                           |
-| Vitest             | `frontend/src/**/*.spec.ts`                                                                      | jsdom 没有布局，尺寸和触控结论用视觉 spec 验证                                                                         |
-| 视觉 spec          | `frontend/tests/visual/*.spec.ts`，模拟接口取自 `tests/contracts/` 和 `tests/visual/fixtures.ts` | 像素基线只有 `bonus-card.spec.ts-snapshots/`：首次运行写入缺失基线并判失败，第二次必须零差异通过，人工对照后提交       |
-| 真实后端浏览器流程 | `frontend/tests/local/`                                                                          | 由 `browser.py` 启动隔离后端                                                                                           |
-| 候选合同           | `scripts/testing/contracts/`                                                                     | 新部分要同时进 `release_scope.py`                                                                                      |
-| 升级合同           | `scripts/testing/upgrade_contract.py` 与 `candidate.py` 的升级种子                               | 改动改变已存数据的读取、迁移或启动时改写时，给旧镜像阶段补对应的种子数据，并在升级后比较；演练只能证明种子覆盖到的数据 |
-| runner 自身        | `scripts/testing/test_*.py`                                                                      | `--python`                                                                                                             |
+| 测试类型           | 位置                                                                                                | 新增、改名或删除时同步                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Go 单测            | 源码旁 `*_test.go`，单项 60 秒内，不允许 skip                                                       | 核心目录的 Go 文件改动后，提交前刷新 `docs/upstream/CORE_SOURCE_DELTA.json`                                                                                    |
+| 三库矩阵测试       | 读取 `TEST_*_DSN` 或方言环境变量的 Go 测试                                                          | 登记到 `scripts/testing/database.py`；未登记时它在 `unit` 里因 skip 失败                                                                                       |
+| race 测试          | 并发路径的 Go 测试                                                                                  | `race_selection.json` 的组、`ordinary_race.py` 的 `FROZEN_SELECTION` 和计数一起更新                                                                            |
+| 冻结诊断夹具       | `known_upstream_*.json` 绑定的文件                                                                  | 内容改变后更新该文件的全部哈希，并重跑对应的 `known_upstream_*` 档位，确认冻结断言照原样复现                                                                   |
+| Vitest             | `frontend/src/**/*.spec.ts`                                                                         | jsdom 没有布局，尺寸和触控结论用视觉 spec 验证                                                                                                                 |
+| 前端合同夹具       | `frontend/tests/fixtures/native/*.json`，由 controller 的 `TestFrontendContract*` 加 `-update` 生成 | 改写内容在 diff 里审阅，再用新夹具运行消费侧的 Vitest 与视觉 spec                                                                                              |
+| 视觉 spec          | `frontend/tests/visual/*.spec.ts`，模拟接口取自 `tests/contracts/` 和 `tests/visual/fixtures.ts`    | 像素基线只有 `bonus-card.spec.ts-snapshots/`：首次运行写入缺失基线并判失败，第二次必须零差异通过，人工对照后提交。新 spec 第一次 `--visual` 运行后才进入影响图 |
+| 真实后端浏览器流程 | `frontend/tests/local/`                                                                             | 由 `browser.py` 启动隔离后端                                                                                                                                   |
+| 候选合同           | `scripts/testing/contracts/`                                                                        | 新部分要同时进 `release_scope.py`                                                                                                                              |
+| 升级合同           | `scripts/testing/upgrade_contract.py` 与 `candidate.py` 的升级种子                                  | 改动改变已存数据的读取、迁移或启动时改写时，给旧镜像阶段补对应的种子数据，并在升级后比较；演练只能证明种子覆盖到的数据                                         |
+| runner 自身        | `scripts/testing/test_*.py`                                                                         | `--python`                                                                                                                                                     |
 
-步骤：先写出会失败的测试并确认它因目标行为失败，再改实现；用 `targeted` 运行它和同包相关测试；运行 `registry` 处理登记项；提交前刷新来源清单。
+步骤：先写出会失败的测试并确认它因目标行为失败，再改实现；用 `targeted` 运行它和同包相关测试；运行 `registry` 处理登记项；提交前刷新来源清单。新增、改名或删除保护测试时，同步[功能链路](FUNCTION_CHAINS.md)里引用它的条目。
 
 ## 一次性测试文件
 

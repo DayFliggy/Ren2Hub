@@ -30,7 +30,7 @@
 
 先定向测试，再类型和静态检查、受影响构建、最小冒烟。Go 单包测试超时 60 秒。新测试应保护真实行为，不以文件存在或实现镜像断言替代回归。
 
-默认按改动模块测试，方法和模块对照见 docs/testing/MODULE_TESTING.md，各层的验证内容见 docs/testing/LOCAL_TESTING.md：迭代用 `run.py targeted` 点名运行，说不清影响面时用 `affected`；部署用 `candidate --scope auto`，按改动追加部分。`quick`、`all`、完整 candidate 和整套 ui-contracts 是全量档位，只在用户明确要求全量测试时运行。Vue 改动对涉及的文件执行相关用例、typecheck、lint、format:check，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
+默认按改动模块测试，方法和模块对照见 docs/testing/MODULE_TESTING.md，各层的验证内容见 docs/testing/LOCAL_TESTING.md：每个任务和实施计划先写测试计划，格式和定向不扩大的规则见工作区的 task-testing 技能；迭代用 `run.py targeted` 点名运行，提交前用 `affected --plan` 对照影响面，只在影响面说不清时运行 `affected`，自动选择等于整层时按全量档位处理；部署用 `candidate --scope auto`，按改动追加部分。`quick`、`all`、完整 candidate 和整套 ui-contracts 是全量档位，只在用户明确要求全量测试时运行。Vue 改动对涉及的文件执行相关用例、typecheck、lint、format:check，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
 
 独立候选必须隔离数据库、Redis、网络、密钥与存储。旧合同测试记录退役，不算通过。源码、候选和正式部署分别记录证据；未提交工作 candidate_sha=null。范围候选只证明所选部分，未运行的 routing、诊断和 race 不计通过。
 

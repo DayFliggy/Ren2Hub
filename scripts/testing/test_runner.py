@@ -287,7 +287,10 @@ class RunnerContractTests(unittest.TestCase):
     def test_selectors_are_rejected_outside_their_profile(self):
         for argv in (['targeted'], ['affected', '--go', 'model'], ['quick', '--skip', 'race'], ['quick', '--plan'],
                      ['targeted', '--python', '--plan'],
-                     ['all', '--scope', 'auto'], ['candidate', '--scope', 'routing'], ['affected', '--skip', 'registry']):
+                     ['all', '--scope', 'auto'], ['candidate', '--scope', 'routing'], ['affected', '--skip', 'registry'],
+                     # 漏写范围不能默认成完整候选。
+                     ['candidate', '--image', 'x', '--simulator-image', 'y', '--image-identity', 'a.json',
+                      '--simulator-identity', 'b.json']):
             with self.subTest(argv=argv), tempfile.TemporaryDirectory() as directory, \
                     patch.object(sys, 'argv', ['run.py', *argv, '--output-parent', directory]), \
                     patch('run.signal.signal'), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -325,7 +328,8 @@ class RunnerContractTests(unittest.TestCase):
 
     def test_affected_limits_database_and_race_layers_to_touched_packages(self):
         plan = {'files': ['model/a.go'], 'go': {'tested_dirs': ['dto', 'model', 'relay/helper']},
-                'frontend': {}, 'visual': {}, 'python': False, 'not_covered': ['browser']}
+                'frontend': {'vitest': []}, 'visual': {'mode': 'subset', 'files': []}, 'python': False,
+                'not_covered': ['browser']}
         captured = {}
 
         def run_selection(source, output, env, selection, label, skip):
@@ -351,12 +355,66 @@ class RunnerContractTests(unittest.TestCase):
                          (False, ['ui-contracts'], ['browser']))
         self.assertEqual(list(result['stages']), ['registry', 'go-unit'])
 
+    def test_affected_refuses_a_whole_layer_selection_unless_it_is_skipped(self):
+        # 全局配置让视觉选择等于整层；整层属于全量档位，affected 不能替用户决定运行它。
+        plan = {'files': ['frontend/playwright.config.ts'], 'go': {'tested_dirs': []},
+                'frontend': {'vitest': []}, 'visual': {'mode': 'all', 'files': ['a.spec.ts', 'b.spec.ts']},
+                'python': False, 'not_covered': []}
+        for skip, refused in (((), True), (('ui-contracts',), False)):
+            with self.subTest(skip=skip), tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
+                for target, value in (('affected.default_base', 'base-sha'), ('affected.changed_files', plan['files']),
+                                      ('affected.load_impact', None), ('affected.go_packages', {}), ('affected.plan', plan),
+                                      ('run.registry_stage', {'success': True}), ('run.race_selection', ({}, []))):
+                    stack.enter_context(patch(target, return_value=value))
+                executor = stack.enter_context(patch('run.run_selection', return_value=({}, list(skip))))
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                if refused:
+                    with self.assertRaisesRegex(RuntimeError, '整层：ui-contracts'):
+                        run.affected(run.SOURCE, Path(directory), {}, None, skip)
+                    executor.assert_not_called()
+                else:
+                    run.affected(run.SOURCE, Path(directory), {}, None, skip)
+                    executor.assert_called_once()
+
+    def test_partial_visual_run_starts_the_impact_map_and_drops_deleted_specs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            (source / 'frontend/tests/visual').mkdir(parents=True)
+            for name in ('a.spec.ts', 'b.spec.ts'):
+                (source / 'frontend/tests/visual' / name).write_text('')
+            path = source / '.local-tests/ui-impact.json'
+            with patch('affected.build_impact', return_value={'schema_version': 1, 'specs': {'a.spec.ts': ['frontend/src/A.vue']}}), \
+                    patch('run.browser_specs', return_value=[]):
+                # 新检出没有影响图：点名运行一个 spec 就开始建立它，不需要整层运行。
+                run.record_impact(source, {}, '', partial=True)
+                self.assertEqual(json.loads(path.read_text())['specs'], {'a.spec.ts': ['frontend/src/A.vue']})
+                path.write_text(json.dumps({'schema_version': 1, 'specs': {
+                    'b.spec.ts': ['frontend/src/B.vue'], 'gone.spec.ts': ['frontend/src/Old.vue']}}))
+                run.record_impact(source, {}, '', partial=True)
+            self.assertEqual(json.loads(path.read_text())['specs'],
+                             {'a.spec.ts': ['frontend/src/A.vue'], 'b.spec.ts': ['frontend/src/B.vue']})
+
+    def test_each_named_vitest_spec_must_run_a_case(self):
+        ran = str((run.SOURCE / 'frontend/src/api/__tests__/topup.spec.ts').resolve())
+
+        def vitest(command, cwd, output, name, env, timeout=300):
+            report = next(value.split('=', 1)[1] for value in command if value.startswith('--outputFile='))
+            Path(report).write_text(json.dumps({'success': True, 'numPassedTests': 3, 'numTotalTests': 3, 'testResults': [
+                {'name': ran, 'assertionResults': [{'status': 'passed'}] * 3}]}))
+
+        with tempfile.TemporaryDirectory() as directory, patch('run.execute', side_effect=vitest):
+            # 整批有用例不能掩盖另一个点名的 spec 什么都没运行。
+            files = ['frontend/src/api/__tests__/topup.spec.ts', 'frontend/src/api/__tests__/topupBonus.spec.ts']
+            with self.assertRaisesRegex(RuntimeError, 'topupBonus.spec.ts'):
+                run.frontend_related(run.SOURCE, Path(directory), {}, files, named=True)
+            self.assertEqual(run.frontend_related(run.SOURCE, Path(directory), {}, files[:1], named=True)['passed'], 3)
+
     def test_affected_plan_lists_the_selection_without_running_anything(self):
         plan = {'files': ['model/a.go', 'frontend/src/a.vue'], 'go': {'tested_dirs': ['model', 'service']},
                 'frontend': {'vitest': ['frontend/src/a.vue'], 'typecheck': True, 'lint': [], 'format': [], 'build': True},
                 'visual': {'mode': 'subset', 'files': ['wallet.spec.ts']}, 'python': False,
                 'not_covered': ['known_upstream_restored（冻结夹具或源码改动）']}
-        groups = [{'package': 'model'}]
+        groups = [{'package': 'model'}, {'package': 'common'}]
         output = io.StringIO()
         with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
             for target, value in (('affected.changed_files', ['model/a.go', 'frontend/src/a.vue']),
@@ -376,8 +434,8 @@ class RunnerContractTests(unittest.TestCase):
         text = output.getvalue()
         for expected in ('基线 base-sha，改动 2 个文件', 'Go 单测与 vet（包目录）：model, service（--skip 跳过 go-unit）',
                          '三库矩阵（包）：model, service\n', 'race（包）：model\n', 'Vitest：frontend/src/a.vue\n',
-                         '前端静态检查：typecheck\n', '前端构建：是\n', 'wallet.spec.ts（--skip 跳过 ui-contracts）',
-                         '需单独运行：known_upstream_restored'):
+                         '前端静态检查：typecheck\n', '主程序与独立模块）：是\n', 'wallet.spec.ts（--skip 跳过 ui-contracts）',
+                         '需单独处置：known_upstream_restored'):
             self.assertIn(expected, text)
         self.assertNotIn('Python 单测', text)
 
@@ -528,7 +586,8 @@ class HostTrafficCandidateTests(unittest.TestCase):
     def test_run_passes_traffic_interface_to_candidate(self):
         def execute(command, cwd, output, name, env, timeout=300):
             return {'go': 'go version go1.26.10 linux/amd64', 'bun': '1.4.0', 'node': 'v24.0.0'}[command[0]]
-        for extra, expected, expected_scope in ((['--traffic-host-interface', 'eth0'], 'eth0', None), ([], None, None),
+        for extra, expected, expected_scope in ((['--scope', 'full', '--traffic-host-interface', 'eth0'], 'eth0', None),
+                                                (['--scope', 'full'], None, None),
                                                 (['--scope', 'auto,billing'], None, ['auto', 'billing'])):
             with self.subTest(expected=expected, scope=expected_scope), tempfile.TemporaryDirectory() as directory, \
                     patch.object(sys, 'argv', ['run.py', 'candidate', '--image', 'ren2hub-test:x', '--simulator-image', 'channel-simulator:x', '--image-identity', 'app-identity.json', '--simulator-identity', 'sim-identity.json', '--output-parent', directory, *extra]), \
@@ -549,7 +608,8 @@ class HostTrafficCandidateTests(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()), patch('candidate.run') as runner:
             for name in ('', 'eth0;id', 'a' * 16):
                 with self.subTest(name=name), self.assertRaises(SystemExit), patch.object(sys, 'argv', [
-                        'run.py', 'candidate', '--image', 'x', '--output-parent', directory, '--traffic-host-interface', name]):
+                        'run.py', 'candidate', '--scope', 'boot', '--image', 'x', '--output-parent', directory,
+                        '--traffic-host-interface', name]):
                     run.main()
             self.assertEqual(list(Path(directory).iterdir()), [])
             runner.assert_not_called()

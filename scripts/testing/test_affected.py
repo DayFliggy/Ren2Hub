@@ -111,8 +111,11 @@ class FrozenInputTests(unittest.TestCase):
                 '{"cases": [{"fixtures": {"service/task_missing_channel_database_test.go": "0"}}]}')
             (source / 'scripts/testing/known_upstream_logger_race.json').write_text(
                 '{"local_fixture_files": {"relay/helper/stream_test.go": "0"}, "current_functions": {"logger/logger.go:LogInfo": "0"}}')
+            (source / 'service').mkdir()
+            (source / 'service/unrelated_test.go').write_text('package service\n')
+            packages = dict([package('m/service', 'service', tests=['unrelated_test.go'])])
             plan = affected.plan(source, ['service/task_missing_channel_database_test.go', 'logger/logger.go',
-                                          'service/unrelated_test.go'], {}, None)
+                                          'service/unrelated_test.go'], packages, None)
             self.assertEqual(plan['not_covered'], ['known_upstream_logger_race（冻结夹具或源码改动）',
                                                    'known_upstream_restored（冻结夹具或源码改动）'])
 
@@ -145,12 +148,44 @@ class FrontendSelectionTests(unittest.TestCase):
     def test_shared_helper_selects_transitive_importers(self):
         self.assertEqual(self.visual('frontend/tests/visual/routes.ts')['files'], ['wallet.spec.ts'])
 
-    def test_impact_map_selects_loaders_and_unmapped_specs(self):
+    def test_impact_map_selects_loaders_and_reports_specs_without_records(self):
         result = self.visual('frontend/src/views/Wallet.vue', impact=self.impact)
-        self.assertEqual(result['files'], ['orphan.spec.ts', 'wallet.spec.ts'])
+        # 没有影响记录的 spec 只报告：自动选中它们会让一份局部影响图把几乎所有 spec 重新拉进来。
+        self.assertEqual((result['files'], result['unrecorded_specs'], result['unlinked']),
+                         (['wallet.spec.ts'], ['orphan.spec.ts'], []))
 
-    def test_app_change_without_impact_map_runs_everything(self):
-        self.assertEqual(self.visual('frontend/src/views/Wallet.vue')['mode'], 'all')
+    def test_missing_impact_map_selects_nothing_and_reports_the_change(self):
+        result = self.visual('frontend/src/views/Wallet.vue')
+        self.assertEqual((result['mode'], result['files']), ('subset', []))
+        self.assertEqual(result['unlinked'], ['frontend/src/views/Wallet.vue'])
+        self.assertEqual(result['unrecorded_specs'], ['home.spec.ts', 'orphan.spec.ts', 'wallet.spec.ts'])
+
+    def test_changes_no_spec_is_known_to_load_are_reported(self):
+        fixture = self.source / 'frontend/tests/fixtures/native/topup.get.json'
+        fixture.parent.mkdir(parents=True)
+        fixture.write_text('{}')
+        # 新页面不在影响图里；原生夹具由 readFileSync 读取，导入闭包看不到它的视觉使用方。
+        result = self.visual('frontend/src/views/New.vue', 'frontend/tests/fixtures/native/topup.get.json',
+                             impact=self.impact)
+        self.assertEqual(result['files'], [])
+        self.assertEqual(result['unlinked'], ['frontend/src/views/New.vue', 'frontend/tests/fixtures/native/topup.get.json'])
+
+    def test_plan_names_files_no_layer_covers(self):
+        (self.source / 'scripts/testing').mkdir(parents=True)
+        files = ['scripts/generate-licenses.py', '.github/workflows/ci.yml', 'scripts/refresh-core-source-delta.py',
+                 'scripts/testing/release_scope.py', 'scripts/testing/race_selection.json', 'docs/testing/X.md', 'README.md',
+                 'frontend/src/views/Wallet.vue', 'frontend/src/api/__tests__/topup.spec.ts', 'frontend/src/api/__tests__/topupFixtures.ts']
+        plan = affected.plan(self.source, files, {}, self.impact)
+        self.assertEqual(plan['unclassified'], ['.github/workflows/ci.yml', 'scripts/generate-licenses.py'])
+        self.assertTrue(plan['python'])
+        # 根仓库的发布校验器按文件加载 release_scope.py：改它要提示工作区 infra。
+        self.assertIn(affected.WORKSPACE_GATE, plan['not_covered'])
+        self.assertIn('未触发任何层：2 个文件', plan['not_covered'])
+        # Vitest 用例和它的辅助文件不由页面加载，不算视觉关联缺口。
+        self.assertEqual(plan['visual']['unlinked'], [])
+        plan = affected.plan(self.source, ['scripts/testing/candidate.py'], {}, self.impact)
+        # 一个文件可以同时有多个外部使用方，提示不能互相覆盖。
+        self.assertEqual(plan['not_covered'], ['routing 或 candidate（候选合同）', affected.WORKSPACE_GATE])
 
     def test_frontend_layers_follow_changed_files(self):
         result = affected.select_frontend(self.source, ['frontend/src/views/Wallet.vue', 'model/channel.go'])

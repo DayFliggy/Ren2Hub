@@ -134,7 +134,7 @@ def summary(prefix: str, values: list[str]) -> str:
 def select_go(source: Path, packages: dict[str, dict], files: list[str]) -> dict:
     """返回需 vet 的包及需运行测试的包（单测、数据库矩阵、race 共用），附选择原因。"""
     production, test_only = changed_packages(packages, files)
-    vet, tested, reasons = set(test_only), set(), {}
+    vet, tested, reasons, read = set(test_only), set(), {}, set()
     for name, package in packages.items():
         has_tests = bool(package.get('TestGoFiles') or package.get('XTestGoFiles'))
         # vet 检查生产代码会被改动波及的包；测试闭包另含测试导入。
@@ -145,6 +145,7 @@ def select_go(source: Path, packages: dict[str, dict], files: list[str]) -> dict
         hits = sorted(test_closure(package, packages) & production.keys())
         roots = test_read_paths(source, package)
         reads = sorted(path for path in files if any(under(path, root) for root in roots))
+        read.update(reads)
         if hits:
             reasons[name] = summary('links changed ', hits)
         elif name in test_only:
@@ -159,7 +160,8 @@ def select_go(source: Path, packages: dict[str, dict], files: list[str]) -> dict
             'tested_dirs': sorted({packages[name]['Dir'] for name in tested}),
             'vet_modules': {module: sorted(name for name in vet if packages[name]['module'] == module)
                             for module in MODULES if any(packages[name]['module'] == module for name in vet)},
-            'reasons': {name: reasons[name] for name in sorted(tested)}}
+            'reasons': {name: reasons[name] for name in sorted(tested)},
+            'owned_files': sorted({path for paths in (*production.values(), *test_only.values()) for path in paths} | read)}
 
 
 def select_frontend(source: Path, files: list[str]) -> dict:
@@ -201,33 +203,42 @@ def helper_dependents(source: Path, changed: str) -> set[str]:
 
 
 def select_visual(source: Path, files: list[str], impact: dict | None) -> dict:
-    """视觉 spec 通过 URL 加载页面，导入图无法关联 src；用上次运行记录的模块影响图选择。"""
+    """视觉 spec 通过 URL 加载页面，导入图无法关联 src；用此前运行记录的影响图选择。
+
+    影响图按检出各一份，由点名或整层运行逐步建立。没有影响记录的 spec 和关联不到任何 spec 的改动
+    只报告，不自动运行：它们需要按行为点名，自动全选会把一次缓存缺失变成整层运行。
+    """
     specs = {path.name for path in (source / 'frontend/tests/visual').glob('*.spec.ts')}
     global_hits = sorted(VISUAL_GLOBAL & set(files))
     if global_hits:
-        return {'mode': 'all', 'files': sorted(specs), 'reasons': {'*': 'global: ' + ', '.join(global_hits)}}
+        return {'mode': 'all', 'files': sorted(specs), 'reasons': {'*': 'global: ' + ', '.join(global_hits)},
+                'unlinked': [], 'unrecorded_specs': []}
     selected: dict[str, str] = {}
-    app_changes = [path for path in files if path.startswith(('frontend/src/', 'frontend/public/'))]
+    unlinked: list[str] = []
     for path in files:
         name = PurePosixPath(path).name
         if path.startswith('frontend/tests/visual/') and name in specs:
             selected.setdefault(name, 'spec changed')
         elif path.startswith('frontend/tests/') and not path.startswith('frontend/tests/local/') and (source / path).is_file():
-            for spec in helper_dependents(source, path):
+            dependents = helper_dependents(source, path)
+            for spec in dependents:
                 selected.setdefault(spec, 'imports ' + path)
-    if app_changes and impact is None:
-        return {'mode': 'all', 'files': sorted(specs), 'reasons': {'*': '没有 ui-impact.json；本轮全量运行并生成影响图'}}
-    if app_changes:
-        mapped = impact.get('specs', {})
-        for spec in sorted(specs):
-            if spec not in mapped:
-                selected.setdefault(spec, '影响图未记录该 spec')
-                continue
-            hits = sorted(set(app_changes) & set(mapped[spec]))
-            if hits:
-                selected.setdefault(spec, 'loads ' + ', '.join(hits[:3]) + (' …' if len(hits) > 3 else ''))
+            if not dependents:
+                # 例如 fixtures/native/*.json：native-core-fixture.ts 用 readFileSync 读取，导入闭包看不到。
+                unlinked.append(path)
+    mapped = (impact or {}).get('specs', {})
+    recorded = {module for modules in mapped.values() for module in modules}
+    # Vitest 用例和 __tests__ 下的辅助文件不被页面加载，由 Vitest 层负责。
+    app_changes = [path for path in files if path.startswith(('frontend/src/', 'frontend/public/'))
+                   and '/__tests__/' not in path and not re.search(r'\.(spec|test)\.ts$', path)]
+    for spec in sorted(specs & mapped.keys()):
+        hits = sorted(set(app_changes) & set(mapped[spec]))
+        if hits:
+            selected.setdefault(spec, 'loads ' + ', '.join(hits[:3]) + (' …' if len(hits) > 3 else ''))
+    unlinked += [path for path in app_changes if path not in recorded]
     mode = 'all' if specs and set(selected) == specs else 'subset'
-    return {'mode': mode, 'files': sorted(selected), 'reasons': dict(sorted(selected.items()))}
+    return {'mode': mode, 'files': sorted(selected), 'reasons': dict(sorted(selected.items())),
+            'unlinked': sorted(unlinked), 'unrecorded_specs': sorted(specs - mapped.keys()) if app_changes else []}
 
 
 def build_impact(playwright: dict, request_log: str, specs) -> dict:
@@ -267,6 +278,9 @@ def load_impact(path: Path) -> dict | None:
     return data
 
 
+# RenAI 工作区的发布校验器（根仓库 scripts/server/ren2hub_release.py）按文件加载下列模块；
+# 单独克隆 Ren2Hub 时没有这一层，报告为未运行。
+WORKSPACE_GATE = '工作区 infra（发布校验器加载此模块；单独克隆时报告未运行）'
 # 改动这些路径时 affected 不覆盖对应门槛，报告提示需要单独运行的档位。
 EXTERNAL_LAYERS = (
     ('scripts/testing/contracts/', 'routing 或 candidate（候选合同）'),
@@ -279,7 +293,9 @@ EXTERNAL_LAYERS = (
     ('scripts/testing/fixtures/known_upstream_', 'known_upstream_*'),
     ('docs/upstream/NATIVE_B388_', 'known_upstream_restored'),
     ('Dockerfile', 'candidate'),
-)
+) + tuple((f'scripts/testing/{name}', WORKSPACE_GATE) for name in (
+    'routing_result.py', 'release_scope.py', 'candidate.py', 'native_restored.py', 'native_pricing_race.py',
+    'native_logger_race.py', 'ordinary_race.py'))
 
 
 def frozen_inputs(source: Path) -> dict[str, str]:
@@ -300,15 +316,32 @@ def frozen_inputs(source: Path) -> dict[str, str]:
     return inputs
 
 
+PYTHON_EXTRA = ('scripts/refresh-core-source-delta.py',)  # 由 test_registry.py 覆盖
+
+
+def is_documentation(path: str) -> bool:
+    return path.endswith('.md') or path.startswith('docs/')
+
+
 def plan(source: Path, files: list[str], packages: dict[str, dict], impact: dict | None) -> dict:
     go = select_go(source, packages, files)
     frozen = frozen_inputs(source)
-    notes = sorted({layer for path in files for prefix, layer in EXTERNAL_LAYERS if path.startswith(prefix)}
-                   | {frozen[path] + '（冻结夹具或源码改动）' for path in files if path in frozen})
-    return {'files': files, 'go': go, 'frontend': select_frontend(source, files),
-            'visual': select_visual(source, files, impact),
-            'python': any(path.startswith('scripts/testing/') and path.endswith('.py') for path in files),
-            'not_covered': notes}
+    visual = select_visual(source, files, impact)
+    # runner 的代码和数据（清单、夹具、合同）都在 scripts/testing/，由 Python 单测和 registry 覆盖。
+    python = [path for path in files if path.startswith('scripts/testing/') or path in PYTHON_EXTRA]
+    external = [(path, layer) for path in files for prefix, layer in EXTERNAL_LAYERS if path.startswith(prefix)]
+    notes = {layer for _, layer in external} | {frozen[path] + '（冻结夹具或源码改动）' for path in files if path in frozen}
+    if visual['unlinked']:
+        notes.add(f'视觉：{len(visual["unlinked"])} 个前端改动没有关联到任何 spec，需按行为点名')
+    if visual['unrecorded_specs']:
+        notes.add(f'视觉：{len(visual["unrecorded_specs"])} 个 spec 没有影响记录，未自动选中')
+    covered = set(go['owned_files']) | set(python) | {path for path, _ in external} | frozen.keys()
+    unclassified = sorted(path for path in files if path not in covered and not path.startswith('frontend/')
+                          and not is_documentation(path))
+    if unclassified:
+        notes.add(f'未触发任何层：{len(unclassified)} 个文件')
+    return {'files': files, 'go': go, 'frontend': select_frontend(source, files), 'visual': visual,
+            'python': bool(python), 'unclassified': unclassified, 'not_covered': sorted(notes)}
 
 
 def targeted(source: Path, packages: dict[str, dict], request: dict, database_tests: set[str],

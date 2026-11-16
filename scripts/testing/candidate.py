@@ -1092,8 +1092,8 @@ def main():
     parser.add_argument('--previous-image', help='普通升级合同使用的固定旧镜像；必须与新镜像修订不同')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
-    parser.add_argument('--scope', default='full',
-                        help='full 为完整候选；否则为逗号分隔的部分名（见 release_scope.py），可含 auto 或 boot')
+    parser.add_argument('--scope', required=True,
+                        help='auto[,部分]、boot 或 full（完整候选，只在用户明确要求全量时使用）；部分名见 release_scope.py')
     args = parser.parse_args()
     try:
         from release_scope import parse

@@ -308,15 +308,18 @@ def ui_contracts(source: Path, output: Path, env: dict[str, str], only: list[str
 
 
 def record_impact(source: Path, data: dict, requests: str, partial: bool) -> None:
-    """通过的运行更新 spec→/src 模块影响图；局部运行只刷新已执行的 spec。"""
+    """通过的运行更新 spec→/src 模块影响图；局部运行只刷新已执行的 spec。
+
+    没有影响图时局部运行从空图开始，这样点名运行会逐步建立它，不需要为补缓存而运行整层；
+    已删除的 spec 从图中去掉。
+    """
     from affected import IMPACT_MAP, build_impact, load_impact
     path = source / '.local-tests' / IMPACT_MAP
-    current = load_impact(path)
-    if partial and current is None:
-        return
-    fresh = build_impact(data, requests, browser_specs(data))
+    fresh = build_impact(data, requests, browser_specs(data))['specs']
     if partial:
-        fresh = {**current, 'specs': {**current['specs'], **fresh['specs']}}
+        fresh = {**(load_impact(path) or {'specs': {}})['specs'], **fresh}
+    existing = {spec.name for spec in (source / 'frontend/tests/visual').glob('*.spec.ts')}
+    fresh = {'schema_version': 1, 'specs': {name: modules for name, modules in sorted(fresh.items()) if name in existing}}
     path.parent.mkdir(mode=0o700, exist_ok=True)
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(fresh, ensure_ascii=False, indent=1) + '\n')
@@ -346,6 +349,13 @@ def frontend_related(source: Path, output: Path, env: dict[str, str], files: lis
         raise RuntimeError('Vitest 失败或跳过，详见 vitest.json')
     if named and count <= 0:
         raise RuntimeError('点名的文件没有相关 Vitest 用例：' + ', '.join(relative))
+    if named:
+        # 点名的 spec 逐个核对：整批非空不能证明每个点名的 spec 都运行了。点名源码文件只能保证整批非空。
+        ran = {Path(item['name']).resolve() for item in data.get('testResults', []) if item.get('assertionResults')}
+        missing = [path for path in relative if re.search(r'\.(spec|test)\.ts$', path)
+                   and (source / 'frontend' / path).resolve() not in ran]
+        if missing:
+            raise RuntimeError('点名的 Vitest spec 没有运行任何用例：' + ', '.join(missing))
     return {'success': True, 'passed': count, 'files': len(data.get('testResults', [])), 'related_to': relative}
 
 
@@ -441,7 +451,19 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
     return stages, skipped
 
 
-def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = ()) -> list[str]:
+def whole_layers(selection: dict, test_packages: int, race_packages: set[str]) -> list[str]:
+    """自动选择等于整层的层。整层运行属于全量档位，affected 不代替用户的全量要求去执行它。"""
+    from database import PACKAGES as DATABASE_PACKAGES
+    go, databases = selection['go'], selection['databases'] or {}
+    checks = (('go-unit', test_packages > 0 and len(go['tested_dirs']) >= test_packages),
+              ('databases', set(databases.get('packages') or []) >= DATABASE_PACKAGES),
+              ('race', bool(race_packages) and set(selection['race']) >= race_packages),
+              ('vitest', selection['frontend']['vitest'] == 'all'),
+              ('ui-contracts', selection['visual']['mode'] == 'all'))
+    return [layer for layer, whole in checks if whole]
+
+
+def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = (), whole: tuple[str, ...] = ()) -> list[str]:
     """列出 affected 会运行的内容，供按模块点名（targeted）时参考；返回其中被 --skip 跳过的层。"""
     def names(values, limit=8):
         values = list(values)
@@ -452,10 +474,13 @@ def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = ()) ->
             (('race',), 'race（包）', names(selection['race'])),
             (('vitest',), 'Vitest', '全部' if frontend['vitest'] == 'all' else names(frontend['vitest'])),
             (('frontend-static',), '前端静态检查', names(key for key in ('typecheck', 'lint', 'format') if frontend[key])),
-            (('build',), '前端构建', '是' if frontend['build'] else ''),
+            (('build',), '构建（run.py build：前端、嵌入资源、主程序与独立模块）', '是' if frontend['build'] else ''),
             (('ui-contracts',), f'视觉 spec（{len(visual["files"])}/{total_specs}）', names(visual['files'])),
+            ((), '视觉关联不到 spec 的改动', names(visual.get('unlinked', []))),
+            ((), '没有影响记录的 spec', names(visual.get('unrecorded_specs', []))),
             (('python',), 'Python 单测', '是' if selection['python'] else ''),
-            ((), '需单独运行', names(selection['not_covered']))]
+            ((), '未触发任何层的文件', names(selection.get('unclassified', []))),
+            ((), '需单独处置', names(selection['not_covered']))]
     print(f'affected 计划（未执行）：基线 {selection["base"]}，改动 {len(selection["files"])} 个文件', flush=True)
     skipped = []
     for layers, label, value in rows:
@@ -463,7 +488,9 @@ def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = ()) ->
             continue
         dropped = [layer for layer in layers if layer in skip]
         skipped += dropped
-        print(f'  {label}：{value}' + (f'（--skip 跳过 {"、".join(dropped)}）' if dropped else ''), flush=True)
+        entire = [layer for layer in layers if layer in whole and layer not in skip]
+        print(f'  {label}：{value}' + (f'（--skip 跳过 {"、".join(dropped)}）' if dropped else '')
+              + ('（整层，属全量档位，affected 不执行）' if entire else ''), flush=True)
     return skipped
 
 
@@ -477,18 +504,26 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None, 
     base = base or selector.default_base(source)
     files = selector.changed_files(source, base)
     impact = selector.load_impact(source / '.local-tests' / selector.IMPACT_MAP)
-    selection = selector.plan(source, files, selector.go_packages(source, env), impact)
+    go_packages = selector.go_packages(source, env)
+    selection = selector.plan(source, files, go_packages, impact)
     tested = set(selection['go']['tested_dirs'])
     packages = sorted(tested & DATABASE_PACKAGES)
+    race_packages = {group['package'] for group in race_selection(source)[1]}
     selection.update(base=base, databases={'packages': packages, 'tests': None} if packages else None,
-                     race=sorted(tested & {group['package'] for group in race_selection(source)[1]}))
+                     race=sorted(tested & race_packages))
+    test_packages = sum(1 for package in go_packages.values() if package.get('TestGoFiles') or package.get('XTestGoFiles'))
+    whole = [layer for layer in whole_layers(selection, test_packages, race_packages) if layer not in skip]
+    selection['whole_layers'] = whole
     (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
     if plan_only:
-        skipped = print_plan(selection, len(list((source / 'frontend/tests/visual').glob('*.spec.ts'))), skip)
+        skipped = print_plan(selection, len(list((source / 'frontend/tests/visual').glob('*.spec.ts'))), skip, tuple(whole))
         print(f'  完整选择及原因：{output / "selection.json"}', flush=True)
         return {'success': True, 'release_evidence': False, 'plan_only': True, 'base': base,
                 'changed_files': len(files), 'stages': {}, 'skipped_layers': skipped,
                 'not_covered': selection['not_covered']}
+    if whole:
+        raise RuntimeError('自动选择等于整层：' + '、'.join(whole) + '。整层运行属于全量档位，只在用户明确要求时运行；'
+                           '用 --skip 跳过这些层，再用 targeted 点名直接使用改动的测试')
     stages, skipped = run_selection(source, output, env, selection, 'affected', skip)
     for note in selection['not_covered']:
         print('affected 未覆盖：' + note, flush=True)
@@ -530,8 +565,7 @@ def main() -> int:
     parser.add_argument('--lint', metavar='PATH', **many,
                         help='targeted：对所列 frontend/ 文件运行 ESLint 与 Prettier，并整体 typecheck')
     parser.add_argument('--python', action='store_true', help='targeted：运行 scripts/testing 的 Python 单测')
-    parser.add_argument('--scope', default='full',
-                        help='candidate：full 为完整候选；否则为逗号分隔的部分名，可含 auto 或 boot，见 release_scope.py')
+    parser.add_argument('--scope', help='candidate 必填：auto[,部分]（按差异与改动选择）、boot（只核对镜像并启动）或 full（完整候选，只在用户明确要求全量时使用）；部分名见 release_scope.py')
     parser.add_argument('--output-parent', type=Path, default=SOURCE / '.local-tests')
     parser.add_argument('--image', help='candidate/all 使用已构建的不可变镜像；无默认生产目标')
     parser.add_argument('--simulator-image', help='candidate/routing/all 使用的独立供应商模拟器镜像')
@@ -546,11 +580,12 @@ def main() -> int:
         parser.error('--go/--db/--race/--vitest/--visual/--lint/--python 只用于 targeted，且至少给出一项')
     if (args.skip or args.plan) and args.profile != 'affected':
         parser.error('--skip 与 --plan 只用于 affected')
-    if args.scope != 'full' and args.profile != 'candidate':
-        parser.error('--scope 只用于 candidate；all 始终运行完整候选')
+    # 漏写范围不能变成完整候选：candidate 必须显式选择，all 固定运行完整候选。
+    if (args.scope is None) == (args.profile == 'candidate'):
+        parser.error('candidate 必须给出 --scope（auto[,部分]、boot 或 full）；--scope 只用于 candidate，all 始终运行完整候选')
     from release_scope import parse as parse_scope
     try:
-        scope = parse_scope(args.scope)
+        scope = parse_scope(args.scope or 'full')
     except ValueError as error:
         parser.error(str(error))
     if args.traffic_host_interface is not None:
