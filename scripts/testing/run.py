@@ -57,7 +57,7 @@ def identity(source: Path) -> dict:
     def git(*args: str) -> bytes:
         return subprocess.check_output(['git', '-C', str(source), *args])
     base = git('rev-parse', 'HEAD').decode().strip()
-    status = git('status', '--porcelain', '-z')
+    status = git('--no-optional-locks', 'status', '--porcelain', '-z')  # 只读核对，不刷新索引
     digest = hashlib.sha256()
     for name in sorted(set(git('ls-files', '--cached', '--others', '--exclude-standard', '-z',
                               '--', '.', ':(exclude)docs/developer-notes/**').split(b'\0'))):

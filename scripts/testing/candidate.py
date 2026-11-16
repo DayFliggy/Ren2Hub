@@ -103,7 +103,8 @@ def source_identity(source):
         else:
             digest.update(b'deleted\0')
         count += 1
-    status = execute(['git', '-C', str(source), 'status', '--porcelain']).stdout
+    # 只读核对：不让 status 刷新索引，否则以 root 运行的发布校验器会把索引改成 root 所有。
+    status = execute(['git', '-C', str(source), '--no-optional-locks', 'status', '--porcelain']).stdout
     return {'git_head': head, 'candidate_sha': None if status else head,
             'working_tree_sha256': digest.hexdigest(), 'files': count, 'dirty': bool(status)}
 

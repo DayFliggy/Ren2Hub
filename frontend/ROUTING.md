@@ -2,18 +2,17 @@
 
 Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`。路由定义以 `src/router/` 为准，控制台侧边栏菜单与访问条件统一维护在 `src/constants/navigation/consoleNav.ts`，顶部导航（含仅 Root 可见的“运维监控”）维护在 `src/constants/navigation/topNav.ts`；API 路径与鉴权遵循现有 Go 接口。
 
-| 域       | 规范路径                                                                                                                           | 访问约束                                                                                            |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                                                                               |
-| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                                                                            |
-| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                               |
-| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                               |
-| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                |
-| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                            |
-| 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Root，admin capability；按原生 performance 与系统任务权限读取 |
-| 排除模块 | 独立市场、发票、Farm、Bigame、旧 Gateway 配置与请求诊断                                                                            | 不注册功能路由，移除旧页面、导航、专属 API 与请求调用                                               |
-
-旧炼金室未注册路由；`/lab/*` 进入标准 404。
+| 域       | 规范路径                                                                                                                                        | 访问约束                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                              | 公开模块/法律文档配置                                                                                                           |
+| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                              | 当前 Bearer/refresh 会话                                                                                                        |
+| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/security`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                                                           |
+| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                                   | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                                                           |
+| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                                | Admin 和已有权限规则                                                                                                            |
+| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                              | Admin，admin capability；定价分区仅 Root                                                                                        |
+| 插件     | `/task-plugins`、`/request-processing`、`/oauth/plugin/:key/callback`                                                                           | 插件管理和请求处理：Root，taskPlugins capability，请求处理另需 `plugin:write`；插件登录回调：Admin 加 `channel:sensitive_write` |
+| 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                                    | 设置：Root，admin capability；`/ops`：Root，admin capability；按原生 performance 与系统任务权限读取                             |
+| 排除模块 | 独立市场、发票、Farm、Bigame、炼金室（`/lab/*`）、旧 Gateway 配置与请求诊断                                                                     | 不注册功能路由，进入标准 404；没有对应的页面、导航、专属 API 和请求调用                                                         |
 
 普通用户模型目录使用 `/models`。管理侧边栏的“模型管理”入口分为“模型”（`/models/metadata`）、“供应商”（`/models/vendors`）和 Root 可见的“定价”（`/models/pricing`），切换分区时保留 query；上游的“部署”分区已停用。模型分区的筛选参数沿用上游的 `filter/vendor/status/sync/page/pageSize`，供应商分区为 `vFilter/vPage/vPageSize`。`/models/prefill-groups` 跳转到模型分区并以 `manage=prefill-groups` 打开预填充分组弹窗。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。
 

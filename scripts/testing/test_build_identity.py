@@ -3,6 +3,7 @@ from copy import deepcopy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -13,6 +14,7 @@ from unittest.mock import Mock, patch
 
 import build_routing_image
 import candidate
+import run
 
 
 APP_ID, SIM_ID = 'sha256:'+'a'*64, 'sha256:'+'b'*64
@@ -239,6 +241,33 @@ class BuildIdentityTests(unittest.TestCase):
             self.assertEqual(docker.created,docker.removed)
             self.assertTrue(report['cleanup']['success'])
             self.assertEqual(json.loads((runner.output/'candidate.json').read_text())['exit_code'],1)
+
+
+class ReadOnlyIdentityTests(unittest.TestCase):
+    def test_identity_checks_do_not_rewrite_the_git_index(self):
+        # 发布校验器以 root 复算已发布源码的身份。git status 默认会顺手刷新索引，
+        # 索引随之变成 root 所有，work 用户之后无法再发布。
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+
+            def git(*args):
+                subprocess.run(['git', '-C', str(source), '-c', 'user.name=test', '-c', 'user.email=test@example.invalid',
+                                *args], check=True, capture_output=True)
+            git('init', '-b', 'main')
+            (source / 'app.txt').write_text('source\n')
+            git('add', 'app.txt')
+            git('commit', '-m', 'init')
+            index = source / '.git/index'
+            before = (index.read_bytes(), index.stat().st_mtime_ns)
+            # 内容不变、时间戳变化：这正是让 git status 改写索引的情形。
+            stat = (source / 'app.txt').stat()
+            os.utime(source / 'app.txt', ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+            self.assertFalse(candidate.source_identity(source)['dirty'])
+            self.assertIsNotNone(run.identity(source)['candidate_sha'])
+            self.assertEqual((index.read_bytes(), index.stat().st_mtime_ns), before)
+            (source / 'app.txt').write_text('dirty\n')
+            self.assertTrue(candidate.source_identity(source)['dirty'])
+            self.assertEqual((index.read_bytes(), index.stat().st_mtime_ns), before)
 
 
 class RoutingImageBuilderTests(unittest.TestCase):

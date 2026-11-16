@@ -1430,7 +1430,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2130,7 +2130,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/redemption.go#1, controller/redemption.go#2；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/redemption.go#1, controller/redemption.go#2；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2832,7 +2832,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2860,7 +2860,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -2880,7 +2880,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -2909,7 +2909,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2930,7 +2930,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_query.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_query.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2964,7 +2964,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2995,7 +2995,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3023,7 +3023,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3085,7 +3085,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3144,7 +3144,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user_quota.go#1, controller/user_quota.go#2, controller/user_quota.go#3, controller/user_quota.go#4；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user_quota.go#1, controller/user_quota.go#2, controller/user_quota.go#3, controller/user_quota.go#4；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3415,7 +3415,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：main.go#10, main.go#11, main.go#12, main.go#2, main.go#3, main.go#4, main.go#5, main.go#6, main.go#7, main.go#8, main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：main.go#10, main.go#11, main.go#12, main.go#2, main.go#3, main.go#4, main.go#5, main.go#6, main.go#7, main.go#8, main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3489,7 +3489,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/access_token_routes.go#1, middleware/access_token_routes.go#2, middleware/access_token_routes.go#3, middleware/access_token_routes.go#4, middleware/access_token_routes.go#5, middleware/access_token_routes.go#6, middleware/access_token_routes.go#7, middleware/access_token_routes.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/access_token_routes.go#1, middleware/access_token_routes.go#2, middleware/access_token_routes.go#3, middleware/access_token_routes.go#4, middleware/access_token_routes.go#5, middleware/access_token_routes.go#6, middleware/access_token_routes.go#7, middleware/access_token_routes.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4596,7 +4596,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4794,7 +4794,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5196,7 +5196,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/redemption.go#2, model/redemption.go#3, model/redemption.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/redemption.go#2, model/redemption.go#3, model/redemption.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5246,7 +5246,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -5614,7 +5614,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5638,7 +5638,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -5658,7 +5658,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -5684,7 +5684,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -5698,7 +5698,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -5718,7 +5718,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -5772,7 +5772,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5871,7 +5871,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5986,7 +5986,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -10720,7 +10720,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/api-router.go#1, router/api-router.go#10, router/api-router.go#11, router/api-router.go#2, router/api-router.go#3, router/api-router.go#4, router/api-router.go#5, router/api-router.go#6, router/api-router.go#7, router/api-router.go#8, router/api-router.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/api-router.go#1, router/api-router.go#10, router/api-router.go#11, router/api-router.go#2, router/api-router.go#3, router/api-router.go#4, router/api-router.go#5, router/api-router.go#6, router/api-router.go#7, router/api-router.go#8, router/api-router.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -13116,7 +13116,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -13130,7 +13130,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -13150,7 +13150,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
     },
@@ -14030,127 +14030,127 @@
   "contracts": {
     "affiliate": {
       "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "branding": {
       "basis": "保留 Ren2Hub / DayFliggy 产品名称和品牌资源。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "catalog-stats": {
       "basis": "独有模型目录、目录价格投影和统计；调用原生GetPricing/GetVendors，不保留原子快照或另建可写定价来源。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "channel-ratio": {
       "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "concurrency": {
       "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "dashboard-scope": {
       "basis": "独有个人/全站仪表盘，按当前角色切换；全站聚合不暴露用户明细。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "gmpay": {
       "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "group-removal": {
       "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "install-guard": {
       "basis": "明确退役账务边界：拒绝旧分组/独立账本，已有当前渠道钱包库可普通升级。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "native-count": {
       "basis": "已批准的原生 token 计数，继续经过现有 Token 鉴权与路由。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "no-builtin-prices": {
       "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "ops-metrics": {
       "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "price-source": {
       "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "request-limits-summary": {
       "basis": "已批准的请求限制摘要；与实际用户/模型限制共享配置和鉴权。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "retired": {
       "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用接入、io.net、Playground、旧前端和 api/next。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "single-node": {
       "basis": "明确单节点架构，不恢复 slave 模式、多节点注册与实例选主。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "stream-output-observation": {
       "basis": "路由首输出/结束原因接点：保留请求取消时ClientGone优先；不保留独立read tracker或scannerErr回传。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "stream-write-budget": {
       "basis": "流式并发合同：写出期限有界，慢客户端不得永久持有渠道槽位。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "ticket": {
       "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "token-routing": {
       "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "toolchain-security": {
       "basis": "保留批准的 Go 1.26.10 与独立模块方向；安全依赖随目标更新。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "upstream-ratio": {
       "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "vue-frontend": {
       "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "auth-cache-integrity": {
       "basis": "吸收已合并#8200缓存签名、旧缓存回源修复、计数CAS保留和会话撤销保护，适配本地MaxConcurrency及已删除分组。",
-      "authority": "SYNC_LEDGER.md#2026-11-05-路由交叉审计修复",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "origin-task-continuation": {
       "basis": "本地原渠道准入合同：只豁免手动列表，不豁免当前Key倍率上限；保留显式过滤器和即时容量。MJ找到原任务后复用准备结果，只占槽和轮换Key一次。共有错误优先级、remix上下文/动作/ID/平台/继承倍率不在本地修复范围。",
-      "authority": "SYNC_LEDGER.md#2026-11-05-路由交叉审计修复",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
     "strict-preconsume": {
@@ -14165,7 +14165,7 @@
     },
     "topup-bonus": {
       "basis": "独有充值加赠：单笔入账、固定、全站与个人用量阶梯合成一次加赠比例，实付不变，按本金另赠额度；覆盖六个在线充值渠道、兑换码与管理员加额；订单 ExpectedQuota 冻结本金加赠合计、返利基数为本金；小时统计、配置、决策记录与一次性迁移放在扩展文件；调用计价与上游一致。",
-      "authority": "SYNC_LEDGER.md#2026-11-16-充值加赠",
+      "authority": "SYNC_LEDGER.md#充值加赠接点",
       "kind": "approved_contract"
     }
   },

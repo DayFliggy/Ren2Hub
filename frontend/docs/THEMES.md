@@ -2,8 +2,6 @@
 
 前端只维护一套语义令牌和两种视觉主题：日间 `Desert Ledger` 与夜间 `B1 Studio`。夜间采用曜石炭蓝、暖金强调、展示级衬线标题、轻玻璃导航和不透明数据表面；日间保留原有配色、字体与手账质感，共享必要的响应式结构改进。
 
-本轮实施范围、运行证据和未验证边界见 [B1 Studio 实施与验收](B1_STUDIO_ACCEPTANCE.md)。
-
 ## 文件职责
 
 - `src/styles/fonts.css`：本地自托管 WOFF2 字体声明。
@@ -100,7 +98,7 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 
 ## 品牌与媒体例外
 
-外部供应商 Logo 保留官方品牌色；活动 Banner、游戏和农场插画保留业务强调色。为保证媒体文字可读性，可以使用 `--media-scrim-strong/medium/soft` 黑色遮罩，不得在组件内复制固定暗色渐变。除供应商品牌色外，Canvas 与 ECharts 的结构色必须从 CSS 语义令牌解析。
+外部供应商 Logo 保留官方品牌色；活动 Banner 保留业务强调色。为保证媒体文字可读性，可以使用 `--media-scrim-strong/medium/soft` 黑色遮罩，不得在组件内复制固定暗色渐变。除供应商品牌色外，Canvas 与 ECharts 的结构色必须从 CSS 语义令牌解析。
 
 2FA 二维码容器是唯一的功能性纯白例外：扫码识别要求固定 `#ffffff` 底色，不随主题切换（SecurityAccessView）。
 
@@ -134,4 +132,4 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 
 - `bun run test:visual`
 
-该命令审计当前页面的行为与布局；折扣卡的两种主题保留已审阅像素基线，其余页面不做历史截图逐像素比较。默认只在失败时保存截图；设置 `PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 可保留本次页面截图，输出位于 `output/playwright/`。测试环境使用 `Asia/Shanghai`、符合真实 wire contract 的认证与 API 夹具、本地字体和 `reduced-motion`；需要固定时间的用例由浏览器 fixture 控制。审计覆盖运行错误、DOM 状态、响应式布局、横向溢出、交互遮挡、主题与字体契约。服务启动和 Go 产物验证方式见[路由约定](../ROUTING.md)。
+该命令审计当前页面的行为与布局；加赠卡的两种主题保留已审阅像素基线，其余页面不做历史截图逐像素比较。默认只在失败时保存截图；设置 `PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 可保留本次页面截图，输出位于 `output/playwright/`。测试环境使用 `Asia/Shanghai`、符合真实 wire contract 的认证与 API 夹具、本地字体和 `reduced-motion`；需要固定时间的用例由浏览器 fixture 控制。审计覆盖运行错误、DOM 状态、响应式布局、横向溢出、交互遮挡、主题与字体契约。服务启动和 Go 产物验证方式见[路由约定](../ROUTING.md)。

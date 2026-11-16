@@ -1,29 +1,25 @@
-# 等待上游与本地待办
+# 等待上游与本地合同边界
 
-最后检查：2026-11-13。固定适配目标为 NewAPI `b20e0566b235716383da42450c6c536689de9b43`，从 rc.49 基线 `48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0` 吸收 13 个提交。下表保留此前针对共有缺陷的决定；本轮精确诊断仍有 12 个已知失败指纹、30 个后续阻断，未扩大豁免。最终发布证据须匹配最终提交与隔离候选。本表不自动创建 issue、PR 或定时任务。
+下表的问题与冻结同步目标（见[同步账本](SYNC_LEDGER.md)）的上游源码相同，没有在本地修复。精确诊断把它们冻结为 12 个已知失败指纹和 30 个后续阻断，集合不扩大，规则见[本地测试方案](../testing/LOCAL_TESTING.md#已接受的原生差异)。本表不自动创建 issue、PR 或定时任务；上游 issue 的状态在每次同步时复核。
 
 ## 共有问题
 
-| 问题 | 当前源码位置与触发 | 上游关联及处置 |
-| --- | --- | --- |
-| N1 remix 使用公开任务 ID | `relay/relay_task.go` 的 `ResolveOriginTask`；公开 ID 与供应商 ID 不同 | [#4120](https://github.com/QuantumNous/new-api/issues/4120)、[#4946](https://github.com/QuantumNous/new-api/pull/4946) 未合并；撤回今天提前吸收的一行，等待上游。真实入口先被 N2 阻断，分层 Go 诊断仍保留 |
-| N2 原生 remix 空渠道上下文 panic | 同函数使用尚未初始化的 `ChannelMeta`；原生 `/v1/videos/:task_id/remix` | [#4121](https://github.com/QuantumNous/new-api/issues/4121)、[#7676](https://github.com/QuantumNous/new-api/issues/7676)；撤回本日共有修复。必须以具体 nil pointer 栈识别，不能接受任意 500 |
-| N3 remix 动作变成新生成 | `relay/channel/task/jsplugin/adaptor.go` 原生验证覆盖动作 | 冻结上游同实现；等待。真实入口的后续动作/不支持 remix 的供应商行为受 N2 阻断，不能算通过 |
-| A5 原任务模型与错误顺序 | `middleware/distributor.go`、`relay/relay_task.go`；受限 Key remix、任务不存在/存储失败 | [#5327](https://github.com/QuantumNous/new-api/pull/5327) 已关闭未合并；不吸收其跳过模型限制方案。撤回今天抽出的统一模型推导，不扩展历史差异 |
-| A7 继承倍率及表达式用量 | `relay/relay_task.go` 和提交估算；续作时长/尺寸、缺少 `UsageFacts` | 冻结上游同路径；撤回新增 `OriginOtherRatios`，等待；原生 HTTP 后续计费断言受 N2 阻断 |
-| 原生/插件实际平台归属 | `relay/relay_task.go`；`middleware/task_plugin.go` 准备阶段使用首个候选元数据 | 撤回新增原生平台字段/守卫；多个候选与实际执行插件不一致仍待上游；不能把准备阶段校验描述为实际执行保证 |
-| draft_task 原任务声明 | `plugins/tasks/doubao/plugin.js` 的协议解码 | [#8127](https://github.com/QuantumNous/new-api/pull/8127) 未合并；只解决豆包 OpenAI 视频协议的原任务声明，不能代替通用归属/续作修复 |
-| MJ/插件存储错误分类 | `relay/mjproxy_handler.go` image-seed 的 `GetByMJId` 吞错；`middleware/task_plugin.go` 存储失败仍用 not_found code；`getTaskOriginModelName` 吞错 | 冻结上游共有语义，保留错误诊断并等待。image-seed 非满载准入错误仍为 400 `code=4`，不声称统一 503 |
-| MJ simple-change、模型限制和 HTTP 配置 | 只有 content 的 simple-change 映射 change；image-seed 模型限制；全局 MJ HTTP 客户端 | 冻结上游相同行为；本轮只保留原渠道准入接点，不扩展协议/错误语义 |
+| 问题                                   | 源码位置与触发                                                                                                                                    | 上游关联及处置                                                                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| N1 remix 使用公开任务 ID               | `relay/relay_task.go` 的 `ResolveOriginTask`；公开 ID 与供应商 ID 不同                                                                            | [#4120](https://github.com/QuantumNous/new-api/issues/4120)、[#4946](https://github.com/QuantumNous/new-api/pull/4946) 未合并，等待上游。真实入口先被 N2 阻断，分层 Go 诊断保留 |
+| N2 原生 remix 空渠道上下文 panic       | 同函数使用尚未初始化的 `ChannelMeta`；原生 `/v1/videos/:task_id/remix`                                                                            | [#4121](https://github.com/QuantumNous/new-api/issues/4121)、[#7676](https://github.com/QuantumNous/new-api/issues/7676)。必须以具体的 nil pointer 栈识别，不能接受任意 500     |
+| N3 remix 动作变成新生成                | `relay/channel/task/jsplugin/adaptor.go` 原生验证覆盖动作                                                                                         | 等待上游。真实入口的后续动作和不支持 remix 的供应商行为受 N2 阻断，不能算通过                                                                                                   |
+| A5 原任务模型与错误顺序                | `middleware/distributor.go`、`relay/relay_task.go`；受限 Key remix、任务不存在或存储失败                                                          | [#5327](https://github.com/QuantumNous/new-api/pull/5327) 已关闭未合并；不吸收其跳过模型限制的方案                                                                              |
+| A7 继承倍率及表达式用量                | `relay/relay_task.go` 和提交估算；续作时长与尺寸、缺少 `UsageFacts`                                                                               | 等待上游；原生 HTTP 的后续计费断言受 N2 阻断                                                                                                                                    |
+| 原生与插件的实际平台归属               | `relay/relay_task.go`；`middleware/task_plugin.go` 准备阶段使用首个候选的元数据                                                                   | 多个候选与实际执行插件不一致时仍待上游；准备阶段的校验不等于实际执行的保证                                                                                                      |
+| draft_task 原任务声明                  | `plugins/tasks/doubao/plugin.js` 的协议解码                                                                                                       | [#8127](https://github.com/QuantumNous/new-api/pull/8127) 未合并；它只解决豆包 OpenAI 视频协议的原任务声明，不能代替通用的归属和续作修复                                        |
+| MJ 与插件的存储错误分类                | `relay/mjproxy_handler.go` image-seed 的 `GetByMJId` 吞错；`middleware/task_plugin.go` 存储失败仍用 not_found code；`getTaskOriginModelName` 吞错 | 保留错误诊断并等待。image-seed 非满载的准入错误仍为 400 `code=4`，不声称统一 503                                                                                                |
+| MJ simple-change、模型限制和 HTTP 配置 | 只有 content 的 simple-change 映射为 change；image-seed 模型限制；全局 MJ HTTP 客户端                                                             | 与上游相同；本地只保留原渠道准入接点，不扩展协议和错误语义                                                                                                                      |
 
-## 本地合同与未解决项
+## 本地合同，不属于等待上游
 
-续作倍率上限、自动/有序手动路由、即时并发、路由观测、预览范围、路由表锁序是 Ren2Hub 定制，不能归为等待上游。续作只豁免手动列表，超出当前 Key 上限须在占槽和预扣前拒绝。插件错误净化仅放行宿主生成的 `channel_ratio_exceeded`，不放行任意供应商错误。
+续作倍率上限、自动与有序手动路由、即时并发、路由观测、预览范围、路由表锁序是 Ren2Hub 定制，行为见[统一路由](../routing/UNIFIED_ROUTING.md)。续作只豁免手动列表，超出当前 Key 上限须在占槽和预扣前拒绝。插件错误净化仅放行宿主生成的 `channel_ratio_exceeded`，不放行任意供应商错误。锁序验收必须跑真实的 MySQL 和 PostgreSQL，SQLite 不能证明行锁安全。
 
-2026-11-05 修订计划已批准修复四项本地缺陷：六类多行渠道写与保存统一锁序；非锁定任务重试的全部选路失败保留上次实际发送后的 TaskError（含本地包装的响应错误，排除未发送的预扣/构造失败）；WS 和插件预览复用实际资格规则。A4 已移入默认回归，不再使用 routing_diagnostic 标签或等待上游分类。锁序验收必须跑真实 MySQL/PostgreSQL，SQLite 不能证明行锁安全；旧 PostgreSQL 40P01 和预览红灯证据保留，不以新实现覆盖旧记录。
+普通 HTTP 成功路径里，客户端断开后供应商的在途尝试继续，结束后结算一次、释放一次；不做立即取消传播和退款。
 
-普通 HTTP 成功路径采用现行共享合同：客户端断开后供应商在途尝试继续，结束后一次结算和释放。立即取消传播和退款不在本轮范围，也不再作为未决定的测试期望。实际验证以同一源码指纹的最新报告为准；任何本地失败仍为 fail，缺项为 not_run。
-
-## 已吸收
-
-[#8200](https://github.com/QuantumNous/new-api/pull/8200) 与 [#8218](https://github.com/QuantumNous/new-api/pull/8218) 已随 rc.49 吸收：缓存签名、旧缓存修复、撤销会话保护及有效额度保留，适配本地 `MaxConcurrency`；fence/version 键加入同槽标记。生产是单实例 Redis，同槽标记没有功能收益，只保持键结构与上游一致；旧版本键成为无 TTL 残留，清理未授权。这不表示应用已支持 Redis Cluster。三库/缓存断言和真实 Redis 验证分别记账，不把 miniredis 说成实际 Redis。
+上游 #8218 给 fence/version 键加了同槽标记。生产是单实例 Redis，这个标记没有功能收益，只保持键结构与上游一致，不表示应用支持 Redis Cluster；旧的 `auth:user:version:<id>` 键成为无 TTL 残留，清理属于生产 Redis 写操作，没有授权。

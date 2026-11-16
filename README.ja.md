@@ -1,6 +1,6 @@
 # Ren2Hub
 
-Ren2Hub / DayFliggy は Vue 管理画面を備えた単一ノードの AI ゲートウェイです。[NewAPI](https://github.com/QuantumNous/new-api) を唯一の上流とし、現在のコアは `b388140acfd80369ec6243b16869daff1b4051f4` に基づきます。
+Ren2Hub / DayFliggy は Vue 管理画面を備えた単一ノードの AI ゲートウェイです。[NewAPI](https://github.com/QuantumNous/new-api) を唯一の上流とします。現在のコアの基準コミットは[英語版 README](README.md) に記載しています。
 
 ウォレット課金、プロトコル、タスクプラグインと権限は NewAPI を使用します。モデルの既定価格と組み込み課金式は含みません。汎用プロバイダープラグインはログインと認証情報の更新に対応します。業務グループは廃止しました。各 Key は自動または順序付き手動チャネルルーティングを使用し、チャネル倍率と待機しないユーザー・チャネル同時実行制限を適用します。工单、GMPay、モデルカタログ、統計、紹介報酬を提供します。サイト内サブスクリプション、旧 Codex/type 57 専用連携、io.net、Playground、React、Electron は廃止しました。
 

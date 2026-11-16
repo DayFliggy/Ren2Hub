@@ -18,7 +18,7 @@ curl --fail http://127.0.0.1:3000/api/status
 
 本地HTTP保持非Secure Cookie；公开HTTPS必须启用 `SESSION_COOKIE_SECURE`、精确 `SESSION_COOKIE_TRUSTED_URL` 和实际 `TRUSTED_PROXIES`，反代支持SSE和WebSocket。认证见[会话合同](../authentication.md)。独立开发栈与正式栈不得共用数据、端口或凭据。
 
-正式新核心切换另行批准独立数据库与另一个核实为空的 Redis 目标，保留全部旧数据目标；旧在途任务/支付归零后才能执行。回退需匹配应用和数据，不是只换镜像，详见[发布契约](../routing/GATEWAY_RELEASE.md)。
+新安装使用空数据库和空的 Redis 编号。回退需匹配应用和数据，不是只换镜像，详见[安装与更新的边界](../routing/GATEWAY_RELEASE.md)。
 
 ## 宿主网卡流量
 

@@ -31,9 +31,9 @@
 
 ## 在线充值与 GMPay
 
-先读取 `GET /api/user/topup/info` 的开关、`pay_methods`、最低充值额、预设金额及折扣，只显示服务端启用的方法。选中方式的最低额取全局或渠道最低额与该方式 `min_topup` 中的较大值；`min_topup` 缺失、空串或 `"0"` 表示该方式没有额外下限，其他非整数值视为无效响应。方式级下限只在控制台生效，服务端与上游一样只校验全局或渠道最低额。EPay 与 GMPay 均通过 `POST /api/user/amount` 获取原生金额。`amount` 为整数，GMPay 方法必须保留完整标识，例如 `gmpay:usdt.tron`。
+先读取 `GET /api/user/topup/info` 的开关、`pay_methods`、最低充值额和预设金额，只显示服务端启用的方法。选中方式的最低额取全局或渠道最低额与该方式 `min_topup` 中的较大值；`min_topup` 缺失、空串或 `"0"` 表示该方式没有额外下限，其他非整数值视为无效响应。方式级下限只在控制台生效，服务端与上游一样只校验全局或渠道最低额。EPay 与 GMPay 均通过 `POST /api/user/amount` 获取原生金额。`amount` 为整数，GMPay 方法必须保留完整标识，例如 `gmpay:usdt.tron`。
 
-普通金额展示模式按原生充值单位提交；TOKENS 模式按 `quota_per_unit` 换算最低额和预设值，并限制为完整充值单位，避免付款数额与原生截断后的到账 quota 不一致。报价是当前配置计算结果，不是冻结报价令牌；创建时服务端再次计算和校验。请求不携带旧报价指纹、账户版本或 `amount_unit`。
+普通金额展示模式按原生充值单位提交；TOKENS 模式按 `quota_per_unit` 换算最低额和预设值，并限制为完整充值单位，避免付款数额与原生截断后的到账 quota 不一致。报价是当前配置的计算结果，带实付和按本金另赠的额度（充值加赠）。下单时把用户看到的 `expected_pay_amount`、`expected_currency` 和 `expected_bonus_quota` 一并提交，服务端重新计算，价格或加赠不一致时返回 `topup_quote_changed` 或 `topup_bonus_changed` 并附新的报价，页面展示后等用户再次确认；Stripe 和 Creem 先用 `GET /api/user/topup-bonus/preview` 取加赠。规则见[充值加赠](../../docs/billing/TOPUP_BONUS.md#在线充值的报价与确认)。请求不携带账户版本或 `amount_unit`。
 
 EPay 使用 `POST /api/user/pay`，按成功响应的 `url` 和字符串表单字段跳转。其他提供方使用各自原生 amount/pay 路由；没有明确币种时不猜测为 USD。GMPay 使用 `POST /api/user/gmpay/pay`，以 **CNY 法币金额计价、加密资产支付**：响应给出 `trade_no`、`currency: "CNY"`、`pay_amount`、数值 `expected_quota`、`token`、`network` 和 HTTPS 收银台地址。实际转账数量、地址及网络以收银台和服务端核验后的支付证据为准。
 
@@ -51,7 +51,7 @@ Waffo Pancake 设置的“创建店铺和商品”失败时，原生响应在 `d
 
 详情分别使用 `GET /api/user/topup/detail/:trade_no` 和 `GET /api/user/topup/admin/detail/:trade_no`，两者都带 `user_deleted:boolean`。订单所属用户被删除后详情仍可读取：`user_id` 保持原值，软删除保留用户名和邮箱，硬删除两者为空串；订单详情和管理员工单队列都显示“用户已删除”，硬删除的工单用户以 `#id` 显示。GMPay 详情区分创建时收银台信息与结算后的实际回执，请求网络不能冒充已核验的实际支付网络。管理员通过 `POST /api/user/topup/complete` 提交 `{ trade_no }` 人工补单，受权限与后端事务控制。重复回调、并发回调及回调与补单竞争不得重复入账。
 
-`GET /api/user/topup/stats` 返回 `currencies`、`daily`、时间范围与计数，各币种分别汇总，`paid_amount` 保持十进制字符串。历史记录缺少支付金额或币种时显示未知，并计入 `unknown_amount_count`，不补零、不贴 USD 标签。未由接口提供的支付占比、消费榜单或分面统计不凭空生成。
+`GET /api/user/topup/stats` 返回 `currencies`、`methods`、`daily`、时间范围与计数，各币种和各支付方式分别汇总，`paid_amount` 保持十进制字符串。`GET /api/user/topup/ranking` 返回按到账额度排序的前 10 名用户（`user_id`、`username`、`paid_count`、`credited_quota`）。历史记录缺少支付金额或币种时显示未知，并计入 `unknown_amount_count`，不补零、不贴 USD 标签。接口没有提供的统计不凭空生成。
 
 订单统计、返利信息和用量概览请求都由 `viewerTzOffset()`（`src/utils/format.ts`）附带浏览器当前的 `tz_offset`，服务端按访问者所在的日历日和月份分桶。偏移在整个窗口内固定，跨夏令时切换的窗口按请求时的偏移划界。
 
@@ -77,12 +77,19 @@ Root 在 `/models/pricing` 维护价格，旧 `/system-settings/billing/model-pr
 
 “自动获取”通过 `POST /api/ratio_sync/fetch` 获取 Sub2API、AxonHub、basellm、models.dev、OpenRouter 来源，显示失败与不支持原因。选定来源和模型范围后回填草稿，保存才写入；不自动选择最低价，不混合来源覆盖。取消、失败及过期响应不丢失已有草稿。
 
+定价编辑器有四条与上游 React 不同的本地规则，都是为了避免保存后少收：
+
+- 改任务单价后“生成任务计价草稿”只重建能无损还原的表达式：顶层乘积里恰好一个单阶梯、无常数项的 `tier()` 价格因子，其余因子都是 `cond ? 数字 : 1` 乘数；空白或纯数字表达式直接替换。重建时保留这些乘数和 `v1:` 前缀。其他形状一律拒绝并提示直接编辑表达式，原表达式不变（`repriceTaskExpression`）。
+- “配置普通 OpenAI 价格”写入的占位 0 价不能直接保存：表达式仍是占位时提交报 `ordinaryPriceRequired`，需要免费时显式改写。
+- 汇率调整只换算以站点币种报价的来源，保存值始终是 USD 基础价。表达式只改 `tier()` 价格叶和 `fixed()`，阈值、零价、版本前缀、`image_count` 和请求条件倍率保持原文；无法识别的结构、非法汇率、溢出或下溢都拒绝，任一选中行出错时禁止填入。
+- 保存前用确认框左右对照当前与保存后的价格；待删除行提示保存后变为未定价、请求会被拒绝。已修改的行也可以撤销回已保存的价格。
+
 公开 `/api/pricing` 与登录用户 `/api/user/model-catalog` 使用原生价格投影，后者还提供渠道报价；前者受站点入口和权限控制。动态表达式不能伪造成固定 Token 单价，每千/每百万 Token 切换仅改变尺度。渠道倍率由服务端在原生结算链中应用一次，客户端不维护第二份售价。当前请求结算不恢复旧冻结报价或加密求值重放。
 
 ## 日志与验证边界
 
 用户、管理员日志分别读取 `GET /api/log/self`、`GET /api/log/`，对应统计和导出接口提供汇总与下载。详情显示已记录的 `quota`、模型和原生 `other` 数据；`other` 可为对象或 JSON 字符串。它不是旧 `charge_result` 版本化证明，界面不按当前价格重算历史收费，也不要求 schema 5 字段或 Token 资金事件。前端不请求已退役的 `/api/billing/self/events`，也不维护 Token 账本或冻结报价兼容层。
 
-前端回归覆盖安全整数、输入精确换算、原生响应格式、报价和付款失败、订单归属、回跳状态、未知创建不重复、全额返利幂等、价格版本冲突、权限及响应式布局。浏览器的真实合同模拟不能代替三库事务测试和隔离候选上的真实 HTTP 回调。验证顺序见[前端文档](../README.md)，服务端合同见[资金 API](../../docs/billing/API.md)、[定价](../../docs/billing/PRICING.md)、[GMPay](../../docs/billing/GMPAY.md)及[资金验证](../../docs/billing/VALIDATION.md)。
+前端回归覆盖安全整数、输入精确换算、原生响应格式、报价和付款失败、订单归属、回跳状态、未知创建不重复、全额返利幂等、价格版本冲突、权限及响应式布局。浏览器的真实合同模拟不能代替三库事务测试和隔离候选上的真实 HTTP 回调。验证顺序见[前端文档](../README.md)，服务端合同见[资金 API](../../docs/billing/API.md)、[定价](../../docs/billing/PRICING.md)、[GMPay](../../docs/billing/GMPAY.md)，测试方法见[按改动模块测试](../../docs/testing/MODULE_TESTING.md)。
 
 主要维护落点：[`topup.ts`](../src/api/topup.ts)、[`adminOrders.ts`](../src/api/adminOrders.ts)、[`affiliate.ts`](../src/api/affiliate.ts)、[`pricingConfig.ts`](../src/api/pricingConfig.ts)、[`contracts.ts`](../src/api/contracts.ts)、[`WalletView.vue`](../src/views/console/WalletView.vue)、[`LogBillingDetail.vue`](../src/components/console/log-ui/LogBillingDetail.vue)。路由和状态以 [`api-router.go`](../../router/api-router.go)、[`extensions.go`](../../router/extensions.go)、[`topup.go`](../../controller/topup.go)、[`topup_query.go`](../../model/topup_query.go)、[`affiliate.go`](../../model/affiliate.go) 为准。
