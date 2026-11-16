@@ -7,7 +7,7 @@
 1. 列出改动文件（`git diff --name-only <基线>`），按下表判断涉及哪些模块。
 2. 迭代中用 `targeted` 点名运行相关测试；失败后只重跑失败的那一项，定位到具体包、测试或 spec 再修。
 3. 提交前，改动跨多个包或说不清影响面时运行一次 `affected`，由导入图自动选择；能点名覆盖的小改动用 `targeted` 即可。
-4. 部署前运行按范围的候选 `candidate --scope auto`。它核对镜像身份并在全新实例启动；差异触及持久化或启动路径时自动加上升级演练。
+4. 部署前运行按范围的候选 `candidate --scope auto`。它核对镜像身份并在全新实例启动；差异触及持久化、已存配置的解析或启动路径时自动加上升级演练。
 5. 报告里写明实际运行了什么、没有运行什么。定向结果不能写成全量通过。
 
 每个档位先运行 `registry`（登记检查，不到一秒）。它核对冻结夹具哈希、race 固定选择、数据库矩阵登记和核心来源清单，并列出偏离的具体文件；这些偏离以前要等数据库矩阵、race 或候选运行到一半才暴露。
@@ -24,15 +24,15 @@ python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previou
 
 `targeted` 的选择项可以任意组合，至少给一项：
 
-| 选择项             | 运行内容                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------- |
-| `--go 目录[:正则]` | 该包的 vet 和单测；正则按顶层测试名筛选。只匹配到矩阵测试或没有匹配时报错，不把空运行算通过       |
-| `--db 测试名`      | 已登记的矩阵测试，在 SQLite、MySQL、PostgreSQL 各跑一次；未登记的名称报错                         |
-| `--race 目录`      | 该包在固定 race 选择中的组（`model`、`service`、`controller`、`common`、`relay`、`relay/helper`） |
-| `--vitest 路径`    | `frontend/` 下的 spec 或源码文件，按导入图运行相关 Vitest 用例                                    |
-| `--lint 路径`      | 对所列前端文件运行 ESLint 和 Prettier，并整体 typecheck                                           |
-| `--visual spec`    | `frontend/tests/visual/` 下的 spec 文件                                                           |
-| `--python`         | `scripts/testing` 的 Python 单测                                                                  |
+| 选择项             | 运行内容                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `--go 目录[:正则]` | 该包的 vet 和单测；正则按顶层测试名筛选。没有可运行的测试（只有矩阵测试，或正则没有匹配）时报错，不把空运行算通过 |
+| `--db 测试名`      | 已登记的矩阵测试，在 SQLite、MySQL、PostgreSQL 各跑一次；未登记的名称报错                                         |
+| `--race 目录`      | 该包在固定 race 选择中的组（`model`、`service`、`controller`、`common`、`relay`、`relay/helper`）                 |
+| `--vitest 路径`    | `frontend/` 下的 spec 或源码文件，按导入图运行相关 Vitest 用例；一个用例都没有时报错                              |
+| `--lint 路径`      | 对所列前端文件运行 ESLint 和 Prettier，并整体 typecheck                                                           |
+| `--visual spec`    | `frontend/tests/visual/` 下的 spec 文件                                                                           |
+| `--python`         | `scripts/testing` 的 Python 单测                                                                                  |
 
 `targeted` 和 `affected` 可以直接在工作树里运行，不要求提交或独立克隆；报告标记 `release_evidence: false`。`affected --skip <层>` 跳过指定层并把它写入报告的 `skipped_layers`。常见用法是文案或全局样式改动让 `affected` 选中全部视觉 spec 时，跳过 `ui-contracts`，再用 `targeted --visual` 运行断言了这些文案或样式的 spec。
 
@@ -42,7 +42,7 @@ python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previou
 
 | 改动位置                                                                | 迭代中点名                                                                                            | 部署候选追加的部分                                                            |
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `model/` 表结构、迁移、事务，根 `main.go`                               | `--go model:<正则>`，涉及的矩阵测试用 `--db`，并发路径加 `--race model`                               | `upgrade`（规则强制）                                                         |
+| `model/` 表结构、迁移、事务，`setting/` 配置解析，根 `main.go`          | `--go model:<正则>`，涉及的矩阵测试用 `--db`，并发路径加 `--race model`                               | `upgrade`（规则强制）                                                         |
 | `controller/`、`router/` 的支付、充值、兑换、工单、管理接口             | `--go controller:<正则>`，三库管理测试用 `--db`                                                       | `management`                                                                  |
 | `service/`、`middleware/` 的预扣、结算、鉴权、限流                      | `--go service:<正则>`、`--go middleware`，并发路径加 `--race service`                                 | `billing`                                                                     |
 | `relay/`、`relaykit/`、`tokenkit/` 协议转换与计量                       | `--go relay/<子包>`，流式生命周期加 `--race relay/helper`                                             | `billing`；WebSocket 加 `websocket`，Compact 加 `compact`，SDK 兼容面加 `sdk` |
@@ -63,12 +63,18 @@ python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previou
 
 `candidate --scope` 决定候选运行哪些部分，规则在 `scripts/testing/release_scope.py`，候选和工作区的发布校验器加载同一份：
 
-- `auto`：比较旧镜像修订与当前提交。差异含 `model/` 下非测试 Go 文件、`main.go`、`go.mod`、`go.sum` 或 `Dockerfile` 时加入 `upgrade`，否则不选任何阶段。
+- `auto`：比较旧镜像修订与当前提交。差异含 `model/` 或 `setting/` 下非测试 Go 文件、`main.go`、`go.mod`、`go.sum` 或 `Dockerfile` 时加入 `upgrade`，否则不选任何阶段。`model/` 含 AutoMigrate 和数据迁移；启动时 `model.InitOptionMap` 经 `setting/` 的解析器读取已存配置。只在请求期发生的迁移不在规则里，按上表追加对应的业务部分。
 - 部分名：`upgrade`、`billing`、`websocket`、`compact`、`plugin`、`management`、`sdk`，逗号分隔，可与 `auto` 同用。`plugin` 自动带上 `billing`，`upgrade` 自动带上 `management`（回读旧版写入的工单附件）。
 - `boot`：不选阶段，只核对镜像身份并在全新实例启动。
 - `full`（默认）：完整候选，含 routing、12 项诊断、原生恢复诊断和三组 race。只在明确要求全量时使用；`all` 档位和首次安装始终用它。
 
-范围候选的 manifest 记录 `scope`，只列所选阶段的报告。没有运行的 routing、诊断和 race 不出现在 manifest 里，也不能写成通过。更新执行器用现行正式提交到新提交的差异复算最低范围：缺少规则要求的部分、报告与范围不符、升级演练的旧镜像不是现行正式版本，都在停机前拒绝。
+范围候选的 manifest 记录 `scope`，只列所选阶段的报告。没有运行的 routing、诊断和 race 不出现在 manifest 里，也不能写成通过。更新执行器在停机前按现行正式版本复核，以下情况拒绝：
+
+- 现行正式提交到新提交的差异按规则需要的部分没有运行。
+- 本次更新改变了流量来源（启用或撤销宿主网卡计数），而候选没有运行 `management`；这项变更只有它实测。
+- 报告与范围不符，或所选阶段有失败。
+- 升级演练的旧镜像不是现行正式镜像本身；提交相同但镜像 ID 不同的另一次构建不算。
+- 候选容器的计数挂载或网卡配置与正式 Compose 不同。候选要带与正式一致的 `--traffic-host-interface`。
 
 ## 排查
 

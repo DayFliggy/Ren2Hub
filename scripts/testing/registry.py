@@ -65,7 +65,10 @@ def pricing_race(root: Path) -> list[str]:
 
 
 def race_selection(root: Path) -> list[str]:
-    """固定选择的哈希、委托关系，以及每个被选测试仍在所属包的测试源码中。"""
+    """固定选择的哈希、委托关系，以及每个被选测试仍在所属包的测试源码中。
+
+    这是源码文本扫描，用来尽早发现改名和删除；race 层自己用 `go test -list` 核对实际清单，以它为准。
+    """
     import ordinary_race
     from native_restored import InvalidEvidence
     try:
@@ -76,7 +79,7 @@ def race_selection(root: Path) -> list[str]:
     for group in selection['groups']:
         declared = set()
         for path in (root / group['package']).glob('*_test.go'):
-            declared.update(re.findall(r'^func (Test\w+)\(', path.read_text(encoding='utf-8'), re.M))
+            declared.update(re.findall(r'^func\s+(Test\w+)\s*\(', path.read_text(encoding='utf-8'), re.M))
         missing.extend(f'{group["package"]}/{name}：测试已不存在（组 {group["id"]}）'
                        for name in group['names'] if name not in declared)
     return missing

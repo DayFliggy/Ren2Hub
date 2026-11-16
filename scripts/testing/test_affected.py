@@ -78,6 +78,7 @@ class TargetedSelectionTests(GoSelectionTests):
         self.assertEqual(selection['databases'], {'packages': None, 'tests': ['TestWalletDatabases']})
         self.assertEqual(selection['race'], ['service'])
         self.assertEqual(selection['visual']['files'], [])
+        self.assertTrue(selection['named'])
 
     def test_frontend_targets_become_related_tests_and_file_level_checks(self):
         for path in ('frontend/src/a.ts', 'frontend/src/a.css', 'frontend/tests/visual/wallet.spec.ts'):

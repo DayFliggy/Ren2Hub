@@ -18,12 +18,18 @@ class ScopeRuleTests(unittest.TestCase):
         self.assertEqual((*base, 'routing'), candidate.STAGES)
 
     def test_persistence_and_startup_changes_require_the_upgrade_rehearsal(self):
-        for path in ('model/topup_bonus_migration.go', 'model/main.go', 'main.go', 'go.mod', 'go.sum', 'Dockerfile'):
+        # 启动时 model.InitOptionMap 经 setting/ 的解析器读取已存配置，所以 setting/ 与 model/ 同样需要演练。
+        for path in ('model/topup_bonus_migration.go', 'model/main.go', 'model/option.go', 'model/sub/migrate.go',
+                     'setting/retired_business_options.go', 'setting/ratio_setting/model_ratio.go',
+                     'setting/operation_setting/tools.go', 'setting/config/config.go',
+                     'main.go', 'go.mod', 'go.sum', 'Dockerfile'):
             self.assertEqual(release_scope.required_parts([path]), ['upgrade'], path)
-        for path in ('model/topup_test.go', 'controller/topup.go', 'service/topup_bonus.go', 'relaykit/go.mod',
+        for path in ('model/topup_test.go', 'setting/ratio_setting/model_ratio_test.go', 'controller/topup.go',
+                     'service/topup_bonus.go', 'service/login_verification.go', 'relaykit/go.mod',
                      'frontend/src/main.ts', 'docs/billing/TOPUP_BONUS.md', 'scripts/testing/run.py',
-                     'model/testdata/a.go'):
+                     'model/fixture.json', 'settings/a.go', 'xmodel/a.go'):
             self.assertEqual(release_scope.required_parts([path]), [], path)
+        self.assertEqual(release_scope.required_parts(['docs/a.md', 'setting/a.go', 'controller/b.go']), ['upgrade'])
 
     def test_expand_adds_dependencies_in_execution_order(self):
         self.assertEqual(release_scope.expand(['plugin']), ['billing', 'plugin'])
@@ -90,7 +96,7 @@ class ScopedCandidateTests(unittest.TestCase):
             with self.subTest(code=code), self.diff, self.assertRaisesRegex(candidate.CandidateError, code):
                 runner.select_scope()
 
-    def manifest(self, **overrides):
+    def manifest(self, stable=True, published=True, **overrides):
         with tempfile.TemporaryDirectory() as directory:
             runner = candidate.Candidate.__new__(candidate.Candidate)
             runner.output, runner.workspace_sha, runner.stages = Path(directory), 'd' * 40, ('billing',)
@@ -98,9 +104,11 @@ class ScopedCandidateTests(unittest.TestCase):
                              'image': {'revision': 'a' * 40, 'id': 'sha256:' + 'e' * 64},
                              'stages': {'billing': {'success': True}}, 'cleanup': {'success': True},
                              'identity_verification': {'stable': True}, 'image_matches_clean_source': True,
+                             'isolation': {'traffic': {'configured_interface': 'eth0', 'scope': None, 'interface': None,
+                                                       'mounts': [['bind', '/proc/1/net/dev', '/host/proc/net/dev', True]]}},
                              'scope': {'parts': ['billing'], 'required': [], 'base_revision': None}, **overrides}
             reports = {'billing': {'path': str(runner.output / 'billing.json'), 'sha256': 'f' * 64}}
-            runner.scoped_manifest(reports, True, True)
+            runner.scoped_manifest(reports, stable, published)
             return json.loads((runner.output / 'candidate-manifest.json').read_text())
 
     def test_scoped_manifest_is_deployable_only_when_every_selected_stage_passed(self):
@@ -110,6 +118,12 @@ class ScopedCandidateTests(unittest.TestCase):
         # 未运行的诊断和 routing 不出现在 manifest 中，不能被读成通过。
         for key in ('diagnostics', 'known_upstream_restored', 'ordinary_race', 'upstream_exemption'):
             self.assertNotIn(key, manifest)
+        # 没有 management 实测时 scope/interface 为空，但候选容器的网卡配置仍写入，供发布校验器对照正式 compose。
+        self.assertEqual(manifest['traffic'], {'scope': None, 'interface': None, 'configured_interface': 'eth0',
+                                               'mounts': [['bind', '/proc/1/net/dev', '/host/proc/net/dev', True]]})
+        # 运行期间源码变化，或提交、gitlink 与已发布状态不符，都不可部署。
+        self.assertFalse(self.manifest(stable=False)['deployment_eligible'])
+        self.assertFalse(self.manifest(published=False)['deployment_eligible'])
         for overrides in ({'stages': {'billing': {'success': False}}}, {'exit_code': 1}, {'error_code': 'x'},
                           {'cleanup': {'success': False}}, {'image_matches_clean_source': False}):
             self.assertFalse(self.manifest(**overrides)['deployment_eligible'], overrides)

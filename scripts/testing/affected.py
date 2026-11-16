@@ -357,4 +357,4 @@ def targeted(source: Path, packages: dict[str, dict], request: dict, database_te
         'frontend': {'vitest': sorted(set(request['vitest'])), 'typecheck': bool(lint),
                      'lint': [path for path in lint if SCRIPT_CODE.search(path)], 'format': lint, 'build': False},
         'visual': {'mode': 'subset', 'files': specs},
-        'python': bool(request['python']), 'not_covered': []}
+        'python': bool(request['python']), 'not_covered': [], 'named': True}

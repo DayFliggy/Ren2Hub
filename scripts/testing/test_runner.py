@@ -265,6 +265,24 @@ class RunnerContractTests(unittest.TestCase):
         # 只匹配到矩阵测试时提示它属于另一层，而不是报告 0 项通过。
         with self.assertRaisesRegex(RuntimeError, '转交其他层的测试：TestTopUpBonusDatabaseMatrix'):
             run.select_tests('m/model', found, deferred, 'DatabaseMatrix$')
+        # 整包都转交其他层：affected 选中它时是正常情况，targeted 点名它时必须报错。
+        only_matrix = ['TestTopUpBonusDatabaseMatrix']
+        self.assertEqual(run.select_tests('m/pkg', only_matrix, deferred, None), ([], only_matrix))
+        with self.assertRaisesRegex(RuntimeError, '转交其他层的测试'):
+            run.select_tests('m/pkg', only_matrix, deferred, None, named=True)
+
+    def test_named_vitest_target_without_related_tests_fails(self):
+        def vitest(command, cwd, output, name, env, timeout=300):
+            report = next(value.split('=', 1)[1] for value in command if value.startswith('--outputFile='))
+            Path(report).write_text(json.dumps({'success': True, 'numPassedTests': 0, 'numTotalTests': 0,
+                                                'testResults': []}))
+            return ''
+        with tempfile.TemporaryDirectory() as directory, patch('run.execute', side_effect=vitest):
+            files = ['frontend/src/styles/tokens.css']
+            # affected：改动文件没有相关用例是如实的 0；targeted：点名的文件什么都没跑不能算通过。
+            self.assertEqual(run.frontend_related(run.SOURCE, Path(directory), {}, files)['passed'], 0)
+            with self.assertRaisesRegex(RuntimeError, '没有相关 Vitest 用例'):
+                run.frontend_related(run.SOURCE, Path(directory), {}, files, named=True)
 
     def test_selectors_are_rejected_outside_their_profile(self):
         for argv in (['targeted'], ['affected', '--go', 'model'], ['quick', '--skip', 'race'],
@@ -276,8 +294,9 @@ class RunnerContractTests(unittest.TestCase):
             self.assertEqual(list(Path(directory).iterdir()) if Path(directory).exists() else [], [])
 
     def test_affected_and_targeted_share_one_executor_and_report_skipped_layers(self):
-        selection = {'python': True, 'go': {'vet_modules': {'.': ['m/model']}, 'tested': ['m/model'],
-                                            'patterns': {'m/model': '^TestTopUp'}},
+        selection = {'python': True, 'named': True,
+                     'go': {'vet_modules': {'.': ['m/model']}, 'tested': ['m/model'],
+                            'patterns': {'m/model': '^TestTopUp'}},
                      'databases': {'packages': None, 'tests': ['TestWalletDatabases']}, 'race': ['model'],
                      'frontend': {'vitest': ['frontend/src/a.ts'], 'typecheck': False, 'lint': [], 'format': [], 'build': False},
                      'visual': {'mode': 'subset', 'files': ['wallet.spec.ts']}}
@@ -298,9 +317,38 @@ class RunnerContractTests(unittest.TestCase):
             stages, skipped = run.run_selection(run.SOURCE, Path(directory), {}, selection, 'targeted', ('race',))
         self.assertEqual(list(stages), ['python', 'go-vet', 'go-unit', 'databases', 'vitest', 'ui-contracts'])
         self.assertEqual(skipped, ['race'])
-        self.assertEqual(calls['go-unit'][3:], ({'m/model'}, {'m/model': '^TestTopUp'}))
+        self.assertEqual(calls['go-unit'][3:], ({'m/model'}, {'m/model': '^TestTopUp'}, True))
+        self.assertEqual(calls['vitest'][3:], (['frontend/src/a.ts'], True))
         self.assertEqual(calls['databases'][2:], (None, {'TestWalletDatabases'}))
         self.assertEqual(calls['ui-contracts'][3], ['wallet.spec.ts'])
+
+    def test_affected_limits_database_and_race_layers_to_touched_packages(self):
+        plan = {'files': ['model/a.go'], 'go': {'tested_dirs': ['dto', 'model', 'relay/helper']},
+                'frontend': {}, 'visual': {}, 'python': False, 'not_covered': ['browser']}
+        captured = {}
+
+        def run_selection(source, output, env, selection, label, skip):
+            captured.update(selection=selection, label=label, skip=skip)
+            return {'go-unit': {'success': True}}, ['ui-contracts']
+
+        groups = [{'package': 'model'}, {'package': 'relay/helper'}, {'package': 'service'}]
+        with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
+            for target, value in (('affected.default_base', 'base-sha'), ('affected.changed_files', ['model/a.go']),
+                                  ('affected.load_impact', None), ('affected.go_packages', {}), ('affected.plan', plan),
+                                  ('run.registry_stage', {'success': True}), ('run.race_selection', ({}, groups))):
+                stack.enter_context(patch(target, return_value=value))
+            stack.enter_context(patch('run.run_selection', side_effect=run_selection))
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            result = run.affected(run.SOURCE, Path(directory), {}, None, ('ui-contracts',))
+            written = json.loads((Path(directory) / 'selection.json').read_text())
+        # 只有属于三库矩阵的包启动矩阵，只有属于固定 race 选择的包运行 race。
+        self.assertEqual(captured['selection']['databases'], {'packages': ['model'], 'tests': None})
+        self.assertEqual(captured['selection']['race'], ['model', 'relay/helper'])
+        self.assertEqual((captured['label'], captured['skip']), ('affected', ('ui-contracts',)))
+        self.assertEqual(written['base'], 'base-sha')
+        self.assertEqual((result['release_evidence'], result['skipped_layers'], result['not_covered']),
+                         (False, ['ui-contracts'], ['browser']))
+        self.assertEqual(list(result['stages']), ['registry', 'go-unit'])
 
     def test_go_accepts_executed_test(self):
         result = go_result(json.dumps({'Action': 'pass', 'Test': 'TestMoney'}), ['TestMoney'])

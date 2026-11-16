@@ -19,8 +19,11 @@ PART_STAGES = {
 PARTS = tuple(PART_STAGES)
 # plugin 阶段复用 billing 初始化的实例凭据；升级演练在 management 阶段回读旧版写入的工单附件。
 IMPLIED = {'plugin': ('billing',), 'upgrade': ('management',)}
-# 这些路径决定已有数据在新版本启动时如何被读取或迁移，改动后必须从现行正式镜像做升级演练。
-UPGRADE_PATHS = re.compile(r'model/(?!.*_test\.go$)[^/]+\.go|main\.go|go\.mod|go\.sum|Dockerfile')
+# 这些路径决定已有数据在新版本启动时如何被读取或迁移，改动后必须从现行正式镜像做升级演练：
+# model/ 含 AutoMigrate 与数据迁移；启动时 model.InitOptionMap 经 setting/ 的解析器读取已存配置；
+# main.go 决定启动顺序；go.mod、go.sum、Dockerfile 改变驱动和运行时。
+# 请求期才发生的迁移（如登录时的校验迁移）不在这里，由执行者按模块追加业务部分。
+UPGRADE_PATHS = re.compile(r'(?:model|setting)/(?!.*_test\.go$).+\.go|main\.go|go\.mod|go\.sum|Dockerfile')
 
 
 def required_parts(files) -> list[str]:

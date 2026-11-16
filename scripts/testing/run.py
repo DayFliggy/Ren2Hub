@@ -122,20 +122,24 @@ def go_result(text: str, required: list[str]) -> dict:
     return {'passed': len(passed), 'top_level_passed': sum('/' not in name for name in passed), 'skipped': 0}
 
 
-def select_tests(package: str, found: list[str], deferred: dict[str, str], pattern: str | None) -> tuple[list[str], list[str]]:
-    """返回（本层运行的测试，转交其他层的测试）；正则筛掉全部可运行测试时报错，不把空运行算通过。"""
+def select_tests(package: str, found: list[str], deferred: dict[str, str], pattern: str | None,
+                 named: bool = False) -> tuple[list[str], list[str]]:
+    """返回（本层运行的测试，转交其他层的测试）。
+
+    named 表示这个包是被点名的（targeted）：点名的包或正则没有可运行的测试时报错，不把空运行算通过。
+    """
     matched = [test for test in found if not pattern or re.search(pattern, test)]
     selected = [test for test in matched if test not in deferred]
     handed_over = [test for test in matched if test in deferred]
-    if pattern and not selected:
-        raise RuntimeError(f'{package} 的筛选 {pattern} ' + (
+    if (pattern or named) and not selected:
+        raise RuntimeError(f'{package}' + (f' 的筛选 {pattern} ' if pattern else ' ') + (
             '只匹配到转交其他层的测试：' + ', '.join(handed_over) if handed_over else '没有匹配任何测试'))
     return selected, handed_over
 
 
 def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | None = None,
-            patterns: dict[str, str] | None = None) -> dict:
-    """only 限定包；patterns 再按顶层测试名正则筛选（targeted 使用）。"""
+            patterns: dict[str, str] | None = None, named: bool = False) -> dict:
+    """only 限定包；patterns 再按顶层测试名正则筛选；named 表示这些包是 targeted 点名的。"""
     from database import REQUIRED_TESTS
     deferred = dict(DEFERRED)
     deferred.update({name: 'databases 阶段在全新三数据库执行' for name in REQUIRED_TESTS})
@@ -160,7 +164,7 @@ def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | No
             found = [line for line in inventory.splitlines() if re.fullmatch(r'(Test|Example|Fuzz)\w+', line)]
             if not found:
                 raise RuntimeError('声明了测试源码但发现清单为空: ' + package)
-            selected, handed_over = select_tests(package, found, deferred, (patterns or {}).get(package))
+            selected, handed_over = select_tests(package, found, deferred, (patterns or {}).get(package), named)
             excluded.extend({'package': package, 'test': test, 'reason': deferred[test]} for test in handed_over)
             binary_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
             for batch_index in range(0, len(selected), 20):
@@ -329,8 +333,9 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     return run(source, output / 'ordinary-race', env)
 
 
-def frontend_related(source: Path, output: Path, env: dict[str, str], files: list[str]) -> dict:
-    """vitest related 按导入图只跑受改动影响的用例；没有相关用例时如实记录 0。"""
+def frontend_related(source: Path, output: Path, env: dict[str, str], files: list[str], named: bool = False) -> dict:
+    """vitest related 按导入图只跑相关用例。affected 的改动文件可以没有相关用例，如实记录 0；
+    named 表示文件是 targeted 点名的，一个用例都没有运行时报错。"""
     report = output / 'vitest.json'
     relative = [str(Path(path).relative_to('frontend')) for path in files]
     execute(['bun', 'x', '--no-install', 'vitest', 'related', '--run', '--passWithNoTests', '--reporter=json',
@@ -339,6 +344,8 @@ def frontend_related(source: Path, output: Path, env: dict[str, str], files: lis
     count = data.get('numPassedTests', 0)
     if not data.get('success') or data.get('numTotalTests') != count:
         raise RuntimeError('Vitest 失败或跳过，详见 vitest.json')
+    if named and count <= 0:
+        raise RuntimeError('点名的文件没有相关 Vitest 用例：' + ', '.join(relative))
     return {'success': True, 'passed': count, 'files': len(data.get('testResults', [])), 'related_to': relative}
 
 
@@ -389,6 +396,8 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
                   skip: tuple[str, ...] = ()) -> tuple[dict, list[str]]:
     """按选择逐层执行；affected 与 targeted 共用。返回各层结果和被 --skip 跳过的层。"""
     go, frontend, visual, databases = selection['go'], selection['frontend'], selection['visual'], selection['databases']
+    # 点名的选择（targeted）里，每个目标都必须实际运行到测试。
+    named = bool(selection.get('named'))
     stages, skipped = {}, []
 
     def stage(name, function):
@@ -410,7 +419,7 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
     if go['vet_modules']:
         stage('go-vet', lambda d: go_vet(source, d, env, go['vet_modules']))
     if go['tested']:
-        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested']), go.get('patterns')))
+        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested']), go.get('patterns'), named))
     if databases:
         from database import run as database_matrix
         packages, tests = databases['packages'], databases['tests']
@@ -422,7 +431,7 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
     if frontend['vitest'] == 'all':
         stage('vitest', lambda d: frontend_unit(source, d, env))
     elif frontend['vitest']:
-        stage('vitest', lambda d: frontend_related(source, d, env, frontend['vitest']))
+        stage('vitest', lambda d: frontend_related(source, d, env, frontend['vitest'], named))
     if frontend['typecheck'] or frontend['lint'] or frontend['format']:
         stage('frontend-static', lambda d: frontend_checks(source, d, env, frontend))
     if frontend['build']:

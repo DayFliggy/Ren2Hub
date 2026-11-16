@@ -40,8 +40,10 @@ class RegistryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'model').mkdir()
-            (root / 'model/cache_test.go').write_text('package model\n\nfunc TestKept(t *testing.T) {\n}\n')
-            selection = {'groups': [{'id': 'cache', 'package': 'model', 'names': ['TestKept', 'TestRenamed']}]}
+            (root / 'model/cache_test.go').write_text(
+                'package model\n\nfunc TestKept(t *testing.T) {\n}\n\nfunc  TestSpaced (\n\tt *testing.T) {\n}\n')
+            selection = {'groups': [{'id': 'cache', 'package': 'model',
+                                     'names': ['TestKept', 'TestSpaced', 'TestRenamed']}]}
             with patch('ordinary_race.load_selection', return_value=(selection, [])):
                 self.assertEqual(registry.race_selection(root), ['model/TestRenamed：测试已不存在（组 cache）'])
 

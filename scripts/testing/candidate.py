@@ -982,7 +982,10 @@ class Candidate:
                     'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
                     'upgrade': self.report.get('upgrade'), 'simulator': self.report.get('simulator'),
                     'build_identities': self.report.get('build_identities'),
-                    'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
+                    # scope/interface 是 management 阶段的实测值，未选它时为 None；
+                    # configured_interface 是候选容器实际使用的配置，发布校验器用它对照正式 compose。
+                    'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts', 'configured_interface')}
+                    if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
 
