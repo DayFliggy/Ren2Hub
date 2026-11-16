@@ -34,7 +34,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 - `service/topup_bonus*.go`：求值、报价与估算。
 - `controller/topup_bonus*.go`：接口与下单接点。
 
-迁移在 AutoMigrate 后执行：最新折扣配置原样复制为加赠版本 1，校验并加载后删除旧表；小时用量按批逐行相加移入，可中断重跑；删除 `topup_discounts`、`usage_discount_configs`、`usage_discount_hourly`。判断旧表是否存在时直接查询系统目录并传播错误，不用 GORM `HasTable`，因为它把查询失败当作表不存在，会跳过迁移继续启动。候选升级合同同步改为：`top_ups`、`admin_quota_operations`、`redemptions` 新增的 `bonus_quota` 列首次升级时必须全为 0，其余行逐表不变；向折扣版本源注入两版配置、两条小时用量和已用/未用两个兑换码，验证复制、相加迁移、旧表删除、决策表存在且启动不写入，以及重复启动后保持不变。`race_selection.json` 随测试改名，冻结哈希更新，组数与执行数不变。
+迁移在 AutoMigrate 后执行：最新折扣配置原样复制为加赠版本 1，校验并加载后删除旧表；小时用量按批逐行相加移入，可中断重跑；删除 `topup_discounts`、`usage_discount_configs`、`usage_discount_hourly`。判断旧表是否存在时直接查询系统目录并传播错误，不用 GORM `HasTable`，因为它把查询失败当作表不存在，会跳过迁移继续启动。候选升级合同同步改为：`top_ups`、`admin_quota_operations`、`redemptions` 新增的 `bonus_quota` 列首次升级时必须全为 0，其余行逐表不变；向折扣版本源注入两版配置、两条小时用量和已用/未用两个兑换码，验证复制、相加迁移、旧表删除、决策表存在且启动不写入，以及重复启动后保持不变。`race_selection.json` 随测试改名，冻结哈希更新，组数与执行数不变。`known_upstream_restored.json` 中 6 项诊断共用的 fixture `service/task_missing_channel_database_test.go` 因同一类型改名换了指纹，只更新该指纹，诊断节点和断言不变；这一层不在 affected/quick 内，由首次发布候选发现。
 
 来源清单用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 的只读 NewAPI 检出>` 重算，计数为 881 `upstream_equal`、281 `adapted`、351 `extension`、45 `removed`。合同 `topup-discount` 替换为 `topup-bonus`；`payment-single-credit` 的依据指向新文档；`candidate_sha` 为空。NATIVE_B388_REVIEW.json 只记录 2026-11-14 回归时的折扣代码，不回改，受影响文件的 review basis 指向本条。
 

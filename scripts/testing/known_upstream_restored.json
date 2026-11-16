@@ -2903,7 +2903,7 @@
       "package": "service",
       "test": "TestRestoredNativeCacheWriteLogTotalIncludes12h",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f",
+        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
         "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
         "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
       },
@@ -2940,7 +2940,7 @@
       "package": "service",
       "test": "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f",
+        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
         "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
         "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
       },
@@ -2988,7 +2988,7 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateBatchTasksKeepsTasksWhenChannelReadFails",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f",
+        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
         "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
         "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
       },
@@ -3020,7 +3020,7 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f",
+        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
         "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
         "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
       },
@@ -3062,7 +3062,7 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f",
+        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
         "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
         "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
       },
@@ -3094,7 +3094,7 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f",
+        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
         "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
         "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
       },
