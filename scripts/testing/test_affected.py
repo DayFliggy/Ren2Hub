@@ -170,17 +170,27 @@ class FrontendSelectionTests(unittest.TestCase):
         self.assertEqual(result['files'], [])
         self.assertEqual(result['unlinked'], ['frontend/src/views/New.vue', 'frontend/tests/fixtures/native/topup.get.json'])
 
+    def test_deleted_specs_and_helpers_leave_a_reported_gap(self):
+        # 影响图里已删除 spec 的记录不算覆盖；删除的辅助文件找不到依赖方，同样交给计划处置。
+        impact = {'schema_version': 1, 'specs': {**self.impact['specs'], 'gone.spec.ts': ['frontend/src/views/Old.vue']}}
+        result = self.visual('frontend/src/views/Old.vue', 'frontend/tests/fixtures/native/removed.get.json', impact=impact)
+        self.assertEqual(result['files'], [])
+        self.assertEqual(result['unlinked'], ['frontend/src/views/Old.vue', 'frontend/tests/fixtures/native/removed.get.json'])
+
     def test_plan_names_files_no_layer_covers(self):
         (self.source / 'scripts/testing').mkdir(parents=True)
         files = ['scripts/generate-licenses.py', '.github/workflows/ci.yml', 'scripts/refresh-core-source-delta.py',
                  'scripts/testing/release_scope.py', 'scripts/testing/race_selection.json', 'docs/testing/X.md', 'README.md',
+                 'docs/upstream/CORE_SOURCE_DELTA.json',
                  'frontend/src/views/Wallet.vue', 'frontend/src/api/__tests__/topup.spec.ts', 'frontend/src/api/__tests__/topupFixtures.ts']
         plan = affected.plan(self.source, files, {}, self.impact)
-        self.assertEqual(plan['unclassified'], ['.github/workflows/ci.yml', 'scripts/generate-licenses.py'])
+        # docs/ 下的 JSON 可能被程序读取，不按文档放过。
+        self.assertEqual(plan['unclassified'], ['.github/workflows/ci.yml', 'docs/upstream/CORE_SOURCE_DELTA.json',
+                                                'scripts/generate-licenses.py'])
         self.assertTrue(plan['python'])
         # 根仓库的发布校验器按文件加载 release_scope.py：改它要提示工作区 infra。
         self.assertIn(affected.WORKSPACE_GATE, plan['not_covered'])
-        self.assertIn('未触发任何层：2 个文件', plan['not_covered'])
+        self.assertIn('未触发任何层：3 个文件', plan['not_covered'])
         # Vitest 用例和它的辅助文件不由页面加载，不算视觉关联缺口。
         self.assertEqual(plan['visual']['unlinked'], [])
         plan = affected.plan(self.source, ['scripts/testing/candidate.py'], {}, self.impact)

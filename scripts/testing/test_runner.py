@@ -262,6 +262,11 @@ class RunnerContractTests(unittest.TestCase):
                          (['TestTopUpBonusTiers'], ['TestTopUpBonusDatabaseMatrix']))
         with self.assertRaisesRegex(RuntimeError, '没有匹配任何测试'):
             run.select_tests('m/model', found, deferred, 'TestMissing')
+        # 完整名字并列时逐个核对：其中一个改名或删除，其余照样匹配，整体不会变空。
+        self.assertEqual(run.select_tests('m/model', found, deferred, '^(TestTopUpBonusTiers|TestWallet)$')[0],
+                         ['TestTopUpBonusTiers', 'TestWallet'])
+        with self.assertRaisesRegex(RuntimeError, '没有这些测试：TestGone'):
+            run.select_tests('m/model', found, deferred, '^(TestWallet|TestGone)$')
         # 只匹配到矩阵测试时提示它属于另一层，而不是报告 0 项通过。
         with self.assertRaisesRegex(RuntimeError, '转交其他层的测试：TestTopUpBonusDatabaseMatrix'):
             run.select_tests('m/model', found, deferred, 'DatabaseMatrix$')
@@ -369,12 +374,22 @@ class RunnerContractTests(unittest.TestCase):
                 executor = stack.enter_context(patch('run.run_selection', return_value=({}, list(skip))))
                 stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
                 if refused:
-                    with self.assertRaisesRegex(RuntimeError, '整层：ui-contracts'):
+                    with self.assertRaisesRegex(RuntimeError, '达到整层：ui-contracts'):
                         run.affected(run.SOURCE, Path(directory), {}, None, skip)
                     executor.assert_not_called()
                 else:
                     run.affected(run.SOURCE, Path(directory), {}, None, skip)
                     executor.assert_called_once()
+
+    def test_a_selection_near_a_whole_layer_counts_as_the_whole_layer(self):
+        # 根模块全部测试包、六个 race 包里的五个、70 个视觉 spec 里的 68 个，成本都与整层相当。
+        selection = {'go': {'tested_dirs': [f'p{i}' for i in range(60)]}, 'databases': {'packages': ['model']},
+                     'race': ['a', 'b', 'c', 'd', 'e'], 'frontend': {'vitest': ['frontend/src/a.spec.ts', 'frontend/src/A.vue']},
+                     'visual': {'mode': 'subset', 'files': [f's{i}.spec.ts' for i in range(68)]}}
+        totals = {'go-unit': 73, 'databases': 5, 'race': 6, 'vitest': 298, 'ui-contracts': 70}
+        self.assertEqual(run.whole_layers(selection, totals), ['go-unit', 'race', 'ui-contracts'])
+        selection['frontend']['vitest'] = 'all'
+        self.assertIn('vitest', run.whole_layers(selection, totals))
 
     def test_partial_visual_run_starts_the_impact_map_and_drops_deleted_specs(self):
         with tempfile.TemporaryDirectory() as directory:

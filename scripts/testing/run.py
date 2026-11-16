@@ -22,6 +22,8 @@ MODULES = ('.', 'relaykit', 'tokenkit')
 # Invitation URLs render window.location.origin. A random transport port changes
 # visible content between reference creation and verification. Fail if occupied.
 UI_CONTRACTS_PORT = 41739
+NAME_LIST = re.compile(r'\^(?:\((\w+(?:\|\w+)*)\)|(\w+))\$')
+TEST_FILE = re.compile(r'\.(spec|test)\.ts$')
 PROFILES = ('registry', 'targeted', 'affected', 'unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts',
             'diagnostics', 'known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race',
             'candidate', 'routing', 'quick', 'all')
@@ -128,6 +130,11 @@ def select_tests(package: str, found: list[str], deferred: dict[str, str], patte
 
     named 表示这个包是被点名的（targeted）：点名的包或正则没有可运行的测试时报错，不把空运行算通过。
     """
+    # 完整名字（^A$ 或 ^(A|B)$）逐个核对：并列的名字里有一个改名或删除时，其余名字照样匹配，整体不会变空。
+    names = NAME_LIST.fullmatch(pattern or '')
+    missing = sorted(set((names.group(1) or names.group(2)).split('|')) - set(found)) if names else []
+    if missing:
+        raise RuntimeError(f'{package} 没有这些测试：' + ', '.join(missing))
     matched = [test for test in found if not pattern or re.search(pattern, test)]
     selected = [test for test in matched if test not in deferred]
     handed_over = [test for test in matched if test in deferred]
@@ -352,7 +359,7 @@ def frontend_related(source: Path, output: Path, env: dict[str, str], files: lis
     if named:
         # 点名的 spec 逐个核对：整批非空不能证明每个点名的 spec 都运行了。点名源码文件只能保证整批非空。
         ran = {Path(item['name']).resolve() for item in data.get('testResults', []) if item.get('assertionResults')}
-        missing = [path for path in relative if re.search(r'\.(spec|test)\.ts$', path)
+        missing = [path for path in relative if TEST_FILE.search(path)
                    and (source / 'frontend' / path).resolve() not in ran]
         if missing:
             raise RuntimeError('点名的 Vitest spec 没有运行任何用例：' + ', '.join(missing))
@@ -451,16 +458,23 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
     return stages, skipped
 
 
-def whole_layers(selection: dict, test_packages: int, race_packages: set[str]) -> list[str]:
-    """自动选择等于整层的层。整层运行属于全量档位，affected 不代替用户的全量要求去执行它。"""
-    from database import PACKAGES as DATABASE_PACKAGES
-    go, databases = selection['go'], selection['databases'] or {}
-    checks = (('go-unit', test_packages > 0 and len(go['tested_dirs']) >= test_packages),
-              ('databases', set(databases.get('packages') or []) >= DATABASE_PACKAGES),
-              ('race', bool(race_packages) and set(selection['race']) >= race_packages),
-              ('vitest', selection['frontend']['vitest'] == 'all'),
-              ('ui-contracts', selection['visual']['mode'] == 'all'))
-    return [layer for layer, whole in checks if whole]
+# 自动选择达到一层的八成就按整层处理：接近整层的运行与全量档位成本相当。
+WHOLE_SHARE = 0.8
+
+
+def whole_layers(selection: dict, totals: dict[str, int]) -> list[str]:
+    """自动选择达到整层（按 WHOLE_SHARE）的层。整层运行属于全量档位，affected 不代替用户的全量要求去执行它。
+
+    totals 是各层的单位总数：测试包、三库包、race 包、Vitest 用例文件、视觉 spec。源码文件经
+    vitest related 的选择要运行时才知道，这里只计点名的用例文件。
+    """
+    vitest, visual = selection['frontend']['vitest'], selection['visual']
+    chosen = {'go-unit': len(selection['go']['tested_dirs']),
+              'databases': len((selection['databases'] or {}).get('packages') or []),
+              'race': len(selection['race']),
+              'vitest': totals['vitest'] if vitest == 'all' else sum(bool(TEST_FILE.search(path)) for path in vitest),
+              'ui-contracts': totals['ui-contracts'] if visual['mode'] == 'all' else len(visual['files'])}
+    return [layer for layer, total in totals.items() if total and chosen[layer] >= WHOLE_SHARE * total]
 
 
 def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = (), whole: tuple[str, ...] = ()) -> list[str]:
@@ -490,7 +504,7 @@ def print_plan(selection: dict, total_specs: int, skip: tuple[str, ...] = (), wh
         skipped += dropped
         entire = [layer for layer in layers if layer in whole and layer not in skip]
         print(f'  {label}：{value}' + (f'（--skip 跳过 {"、".join(dropped)}）' if dropped else '')
-              + ('（整层，属全量档位，affected 不执行）' if entire else ''), flush=True)
+              + ('（达到整层，属全量档位，affected 不执行）' if entire else ''), flush=True)
     return skipped
 
 
@@ -511,8 +525,11 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None, 
     race_packages = {group['package'] for group in race_selection(source)[1]}
     selection.update(base=base, databases={'packages': packages, 'tests': None} if packages else None,
                      race=sorted(tested & race_packages))
-    test_packages = sum(1 for package in go_packages.values() if package.get('TestGoFiles') or package.get('XTestGoFiles'))
-    whole = [layer for layer in whole_layers(selection, test_packages, race_packages) if layer not in skip]
+    totals = {'go-unit': sum(1 for package in go_packages.values() if package.get('TestGoFiles') or package.get('XTestGoFiles')),
+              'databases': len(DATABASE_PACKAGES), 'race': len(race_packages),
+              'vitest': sum(1 for path in (source / 'frontend/src').rglob('*.ts') if TEST_FILE.search(path.name)),
+              'ui-contracts': len(list((source / 'frontend/tests/visual').glob('*.spec.ts')))}
+    whole = [layer for layer in whole_layers(selection, totals) if layer not in skip]
     selection['whole_layers'] = whole
     (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
     if plan_only:
@@ -522,7 +539,7 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None, 
                 'changed_files': len(files), 'stages': {}, 'skipped_layers': skipped,
                 'not_covered': selection['not_covered']}
     if whole:
-        raise RuntimeError('自动选择等于整层：' + '、'.join(whole) + '。整层运行属于全量档位，只在用户明确要求时运行；'
+        raise RuntimeError('自动选择达到整层：' + '、'.join(whole) + '。整层运行属于全量档位，只在用户明确要求时运行；'
                            '用 --skip 跳过这些层，再用 targeted 点名直接使用改动的测试')
     stages, skipped = run_selection(source, output, env, selection, 'affected', skip)
     for note in selection['not_covered']:

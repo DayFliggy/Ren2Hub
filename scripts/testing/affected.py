@@ -219,19 +219,21 @@ def select_visual(source: Path, files: list[str], impact: dict | None) -> dict:
         name = PurePosixPath(path).name
         if path.startswith('frontend/tests/visual/') and name in specs:
             selected.setdefault(name, 'spec changed')
-        elif path.startswith('frontend/tests/') and not path.startswith('frontend/tests/local/') and (source / path).is_file():
-            dependents = helper_dependents(source, path)
+        elif path.startswith('frontend/tests/') and not path.startswith('frontend/tests/local/'):
+            # 删除的辅助文件找不到依赖方，和没有依赖方的文件一样交给计划处置。
+            dependents = helper_dependents(source, path) if (source / path).is_file() else set()
             for spec in dependents:
                 selected.setdefault(spec, 'imports ' + path)
             if not dependents:
                 # 例如 fixtures/native/*.json：native-core-fixture.ts 用 readFileSync 读取，导入闭包看不到。
                 unlinked.append(path)
-    mapped = (impact or {}).get('specs', {})
+    # 影响图里已删除 spec 的记录不算覆盖。
+    mapped = {spec: modules for spec, modules in (impact or {}).get('specs', {}).items() if spec in specs}
     recorded = {module for modules in mapped.values() for module in modules}
     # Vitest 用例和 __tests__ 下的辅助文件不被页面加载，由 Vitest 层负责。
     app_changes = [path for path in files if path.startswith(('frontend/src/', 'frontend/public/'))
                    and '/__tests__/' not in path and not re.search(r'\.(spec|test)\.ts$', path)]
-    for spec in sorted(specs & mapped.keys()):
+    for spec in sorted(mapped):
         hits = sorted(set(app_changes) & set(mapped[spec]))
         if hits:
             selected.setdefault(spec, 'loads ' + ', '.join(hits[:3]) + (' …' if len(hits) > 3 else ''))
@@ -320,7 +322,8 @@ PYTHON_EXTRA = ('scripts/refresh-core-source-delta.py',)  # 由 test_registry.py
 
 
 def is_documentation(path: str) -> bool:
-    return path.endswith('.md') or path.startswith('docs/')
+    # docs/ 下的 JSON 等文件可能被程序读取（例如来源清单），不算文档。
+    return path.endswith('.md')
 
 
 def plan(source: Path, files: list[str], packages: dict[str, dict], impact: dict | None) -> dict:
