@@ -30,8 +30,8 @@
 
 先定向测试，再类型和静态检查、受影响构建、最小冒烟。Go 单包测试超时 60 秒。新测试应保护真实行为，不以文件存在或实现镜像断言替代回归。
 
-本地统一入口和分层门槛见 docs/testing/LOCAL_TESTING.md：迭代用 `run.py affected`，提交前 `quick`，发布用 `all` 或完整 candidate。Vue 执行适用的 test:run、typecheck、lint、format:check、build，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
+默认按改动模块测试，方法和模块对照见 docs/testing/MODULE_TESTING.md，各层的验证内容见 docs/testing/LOCAL_TESTING.md：迭代用 `run.py targeted` 点名运行，说不清影响面时用 `affected`；部署用 `candidate --scope auto`，按改动追加部分。`quick`、`all`、完整 candidate 和整套 ui-contracts 是全量档位，只在用户明确要求全量测试时运行。Vue 改动对涉及的文件执行相关用例、typecheck、lint、format:check，并验证桌面/手机、明暗主题及权限变化。新数据库和支付改动需验证三种数据库。仅使用本地供应商和支付模拟服务。
 
-独立候选必须隔离数据库、Redis、网络、密钥与存储。旧合同测试记录退役，不算通过。源码、候选和正式部署分别记录证据；未提交工作 candidate_sha=null。
+独立候选必须隔离数据库、Redis、网络、密钥与存储。旧合同测试记录退役，不算通过。源码、候选和正式部署分别记录证据；未提交工作 candidate_sha=null。范围候选只证明所选部分，未运行的 routing、诊断和 race 不计通过。
 
-恢复原生造成的已知行为差异独立进入 `known_upstream_restored`：保留正确历史断言和原始失败日志，改动前冻结旧版/原生对照及精确指纹。不扩大既有 12 项上游诊断和 30 项阻断；新增、缺失、超时、编译错误、意外跳过或行为变化阻断交付。已接受诊断仍为退出 2、candidate_success=false，不能称全绿。正式切换另行授权。
+恢复原生造成的已知行为差异独立进入 `known_upstream_restored`：保留正确历史断言和原始失败日志，改动前冻结旧版/原生对照及精确指纹。不扩大既有 12 项上游诊断和 30 项阻断；新增、缺失、超时、编译错误、意外跳过或行为变化阻断交付。完整候选里已接受诊断仍为退出 2、candidate_success=false，不能称全绿。改动冻结对象时 `run.py registry` 会指出要重跑的档位。正式切换另行授权。

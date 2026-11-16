@@ -4,16 +4,16 @@ Ren2Hub / DayFliggy 是采用 NewAPI 核心的单节点 AI 网关，使用 Vue �
 
 钱包、协议、权限及任务生命周期沿用 NewAPI；代码不内置模型和表达式价格，模型价格只来自管理员配置；工具调用沿用上游内置单价。业务分组已删除；每个 Key 采用自动或有序手动渠道路由，支持渠道倍率、最高倍率限制，以及无等待的用户和渠道并发限制。保留工单、GMPay、模型目录、统计及邀请返利扩展。钱包是唯一资金来源，Token 额度是附加消费限制。通用提供商插件登录、刷新与凭据管理开放。旧 Codex/type 57 专用接入、站内订阅套餐、io.net 部署、Playground、React 和 Electron 已退役；普通 API Key、站点 OAuth 和原生钱包支付仍保留。
 
-| 主题       | 入口                                                                                                                                                                                          |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 安装与发布 | [安装](installation/DOCKER.md)、[宝塔](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md)                                                                                          |
-| 登录与权限 | [认证](authentication.md)、[扩展接口](routing/GATEWAY_API.md)                                                                                                                                 |
-| 路由与协议 | [自动及私有路由](routing/UNIFIED_ROUTING.md)、[协议边界](routing/GATEWAY_SUPPORT_MATRIX.md)、[渠道](channel/TYPES.md)、[渠道上游倍率](channel/UPSTREAM_RATIO.md)                              |
-| 钱包与定价 | [实现](billing/IMPLEMENTATION.md)、[API](billing/API.md)、[定价](billing/PRICING.md)、[充值加赠](billing/TOPUP_BONUS.md)、[恢复](billing/RECOVERY.md)                                         |
-| 充值       | [原生易支付](billing/EPAY.md)、[GMPay](billing/GMPAY.md)、[支付设置](billing/PAYMENT_SETTINGS.md)                                                                                             |
-| 异步任务   | [插件入口](plugin-api/README.md)、[上游 v1 ABI](plugin-api/v1.md)                                                                                                                             |
-| Vue        | [前端](../frontend/README.md)、[仪表盘与数据范围](console/DASHBOARD.md)、[模型](console/MODELS.md)、[日志](console/LOGS.md)、[术语](translation-glossary.md)                                                                            |
-| 验证       | [本地测试方案](testing/LOCAL_TESTING.md)、 [网关](routing/GATEWAY_VALIDATION.md)、[资金](billing/VALIDATION.md)、[单节点边界](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[依赖](dependencies.md) |
+| 主题       | 入口                                                                                                                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 安装与发布 | [安装](installation/DOCKER.md)、[宝塔](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md)                                                                                                                                       |
+| 登录与权限 | [认证](authentication.md)、[扩展接口](routing/GATEWAY_API.md)                                                                                                                                                                              |
+| 路由与协议 | [自动及私有路由](routing/UNIFIED_ROUTING.md)、[协议边界](routing/GATEWAY_SUPPORT_MATRIX.md)、[渠道](channel/TYPES.md)、[渠道上游倍率](channel/UPSTREAM_RATIO.md)                                                                           |
+| 钱包与定价 | [实现](billing/IMPLEMENTATION.md)、[API](billing/API.md)、[定价](billing/PRICING.md)、[充值加赠](billing/TOPUP_BONUS.md)、[恢复](billing/RECOVERY.md)                                                                                      |
+| 充值       | [原生易支付](billing/EPAY.md)、[GMPay](billing/GMPAY.md)、[支付设置](billing/PAYMENT_SETTINGS.md)                                                                                                                                          |
+| 异步任务   | [插件入口](plugin-api/README.md)、[上游 v1 ABI](plugin-api/v1.md)                                                                                                                                                                          |
+| Vue        | [前端](../frontend/README.md)、[仪表盘与数据范围](console/DASHBOARD.md)、[模型](console/MODELS.md)、[日志](console/LOGS.md)、[术语](translation-glossary.md)                                                                               |
+| 验证       | [按改动模块测试](testing/MODULE_TESTING.md)、[本地测试方案](testing/LOCAL_TESTING.md)、 [网关](routing/GATEWAY_VALIDATION.md)、[资金](billing/VALIDATION.md)、[单节点边界](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[依赖](dependencies.md) |
 
 启动从 `main.go`、`model/main.go` 阅读；请求沿 `router/` → `middleware/` → `controller/` → `service/` / `model/` 进入 `relay/`。RelayKit 与 TokenKit 是独立 Go 模块。Vue 从 `frontend/src/router/`、`stores/` 和 `api/` 核对入口与真实接口；菜单可见不代替服务端授权。
 

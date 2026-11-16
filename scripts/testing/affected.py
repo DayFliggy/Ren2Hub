@@ -282,10 +282,79 @@ EXTERNAL_LAYERS = (
 )
 
 
+def frozen_inputs(source: Path) -> dict[str, str]:
+    """冻结诊断绑定的源码与夹具文件 → 需单独重跑的档位。改这些文件后哈希要更新，诊断也要重跑。"""
+    testing, inputs = source / 'scripts/testing', {}
+    for manifest, layer, keys in (
+            ('known_upstream_restored.json', 'known_upstream_restored', ()),
+            ('known_upstream_race.json', 'known_upstream_race', ('fixtures', 'local_fixture_functions')),
+            ('known_upstream_logger_race.json', 'known_upstream_logger_race',
+             ('local_fixture_files', 'fixture_functions', 'local_fixture_functions', 'current_functions'))):
+        path = testing / manifest
+        if not path.is_file():
+            continue
+        data = json.loads(path.read_text())
+        names = [name for case in data.get('cases', []) for name in case['fixtures']]
+        names += [key.split(':', 1)[0] for field in keys for key in data.get(field, {})]
+        inputs.update({name: layer for name in names})
+    return inputs
+
+
 def plan(source: Path, files: list[str], packages: dict[str, dict], impact: dict | None) -> dict:
     go = select_go(source, packages, files)
-    notes = sorted({layer for path in files for prefix, layer in EXTERNAL_LAYERS if path.startswith(prefix)})
+    frozen = frozen_inputs(source)
+    notes = sorted({layer for path in files for prefix, layer in EXTERNAL_LAYERS if path.startswith(prefix)}
+                   | {frozen[path] + '（冻结夹具或源码改动）' for path in files if path in frozen})
     return {'files': files, 'go': go, 'frontend': select_frontend(source, files),
             'visual': select_visual(source, files, impact),
             'python': any(path.startswith('scripts/testing/') and path.endswith('.py') for path in files),
             'not_covered': notes}
+
+
+def targeted(source: Path, packages: dict[str, dict], request: dict, database_tests: set[str],
+             race_packages: set[str]) -> dict:
+    """把点名的测试整理成与 plan() 相同形状的选择；名称不存在时报错，不静默缩小范围。"""
+    by_directory = {package['Dir']: name for name, package in packages.items()
+                    if package.get('TestGoFiles') or package.get('XTestGoFiles')}
+    tested, patterns = [], {}
+    for value in request['go']:
+        directory, _, pattern = value.partition(':')
+        directory = directory.removeprefix('./').rstrip('/') or '.'
+        if directory not in by_directory:
+            raise ValueError(f'--go {directory}：不是含测试的 Go 包目录')
+        name = by_directory[directory]
+        if name not in tested:
+            tested.append(name)
+        if pattern:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f'--go {value}：正则无效（{error}）') from None
+            if name in patterns:
+                raise ValueError(f'--go {directory}：同一个包只能给一个正则，用 | 合并')
+            patterns[name] = pattern
+    for flag, values, known in (('--db', request['db'], database_tests), ('--race', request['race'], race_packages)):
+        unknown = sorted(set(values) - known)
+        if unknown:
+            raise ValueError(f'{flag} 未登记：{", ".join(unknown)}；可选：{", ".join(sorted(known))}')
+    for flag in ('vitest', 'lint'):
+        missing = [path for path in request[flag]
+                   if not path.startswith('frontend/') or not (source / path).is_file()]
+        if missing:
+            raise ValueError(f'--{flag} 需要相对 Ren2Hub 根目录、位于 frontend/ 下的现有文件：{", ".join(missing)}')
+    specs = sorted({PurePosixPath(value).name for value in request['visual']})
+    missing = [name for name in specs if not (source / 'frontend/tests/visual' / name).is_file()]
+    if missing:
+        raise ValueError('--visual 不存在：' + ', '.join(missing))
+    lint = sorted(set(request['lint']))
+    return {
+        'go': {'tested': sorted(tested), 'tested_dirs': sorted(packages[name]['Dir'] for name in tested),
+               'vet_modules': {module: sorted(name for name in tested if packages[name]['module'] == module)
+                               for module in MODULES if any(packages[name]['module'] == module for name in tested)},
+               'patterns': patterns},
+        'databases': {'packages': None, 'tests': sorted(set(request['db']))} if request['db'] else None,
+        'race': sorted(set(request['race'])),
+        'frontend': {'vitest': sorted(set(request['vitest'])), 'typecheck': bool(lint),
+                     'lint': [path for path in lint if SCRIPT_CODE.search(path)], 'format': lint, 'build': False},
+        'visual': {'mode': 'subset', 'files': specs},
+        'python': bool(request['python']), 'not_covered': []}

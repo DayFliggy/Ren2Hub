@@ -26,9 +26,13 @@ def requires_reasons(row):
 
 ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--upstream-repo', type=Path, required=True,
+parser.add_argument('--upstream-repo', type=Path,
                     help='只读参考仓库，必须已有清单中的冻结核心对象；不 fetch')
+parser.add_argument('--check-local', action='store_true',
+                    help='只核对清单记录的本地哈希和文件覆盖，不读取上游，不写清单')
 args = parser.parse_args()
+if not args.check_local and args.upstream_repo is None:
+    parser.error('--upstream-repo is required unless --check-local is given')
 MANIFEST = ROOT / 'docs/upstream/CORE_SOURCE_DELTA.json'
 data = json.loads(MANIFEST.read_text())
 upstream = UPSTREAM_SHA
@@ -42,10 +46,23 @@ root_files = sorted({path for path in previous if '/' not in path}
 scopes = directories + root_files
 if any(path == 'docs' or path.startswith('docs/') or path in ('.', '..') for path in scopes):
     raise ValueError('documentation is outside the core manifest scope')
-source_paths = set(git('ls-tree', '-r', '--name-only', '-z', upstream, '--', *scopes, repository=args.upstream_repo)
-                   .decode().strip('\0').split('\0'))
 local_paths = set(git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', *scopes)
                   .decode().strip('\0').split('\0'))
+if args.check_local:
+    # 上游侧哈希只有刷新时才能复算；这里只回答“工作树是否已偏离清单”。
+    recorded = {row['path']: row['local_sha256'] for row in data['files']}
+    stale = []
+    for path in sorted((previous | local_paths) - {''}):
+        local_file = ROOT / path
+        local = hashlib.sha256(local_file.read_bytes()).hexdigest() if local_file.is_file() else None
+        if recorded.get(path) != local:
+            stale.append(path)
+    for path in stale:
+        print(path, file=sys.stderr)
+    print(json.dumps({'checked': len(recorded), 'stale': len(stale)}))
+    sys.exit(1 if stale else 0)
+source_paths = set(git('ls-tree', '-r', '--name-only', '-z', upstream, '--', *scopes, repository=args.upstream_repo)
+                   .decode().strip('\0').split('\0'))
 rows = []
 for path in sorted((previous | source_paths | local_paths) - {''}):
     if path.startswith('docs/developer-notes/'):

@@ -22,10 +22,15 @@ MODULES = ('.', 'relaykit', 'tokenkit')
 # Invitation URLs render window.location.origin. A random transport port changes
 # visible content between reference creation and verification. Fail if occupied.
 UI_CONTRACTS_PORT = 41739
-PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'diagnostics', 'known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race', 'candidate', 'routing', 'affected', 'quick', 'all')
-# affected 只跑与改动相关的测试；quick 对应上游 CI 的日常门槛；all 是发布门槛，候选只在 all 内运行一次诊断。
-COMPOSITES = {'quick': ('unit', 'static', 'build'),
-              'all': ('unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate')}
+PROFILES = ('registry', 'targeted', 'affected', 'unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts',
+            'diagnostics', 'known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race',
+            'candidate', 'routing', 'quick', 'all')
+# 默认按改动模块测试：targeted 运行点名的测试，affected 按差异自动选择。quick 与 all 是全量档位，
+# 只在明确要求全量时运行；候选只在 all 内运行一次诊断。registry 是秒级登记检查，各档位先跑它。
+COMPOSITES = {'quick': ('registry', 'unit', 'static', 'build'),
+              'all': ('registry', 'unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate')}
+# affected --skip 可跳过的层；registry 不可跳过。
+LAYERS = ('python', 'go-vet', 'go-unit', 'databases', 'race', 'vitest', 'frontend-static', 'build', 'ui-contracts')
 DEFERRED = {
     'TestVLLMStatusLive': '需要真实外部供应商；本地方案不执行',
     'TestProductionEmbeddedAssetGraph': 'build 阶段验证实际前端产物',
@@ -117,7 +122,20 @@ def go_result(text: str, required: list[str]) -> dict:
     return {'passed': len(passed), 'top_level_passed': sum('/' not in name for name in passed), 'skipped': 0}
 
 
-def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | None = None) -> dict:
+def select_tests(package: str, found: list[str], deferred: dict[str, str], pattern: str | None) -> tuple[list[str], list[str]]:
+    """返回（本层运行的测试，转交其他层的测试）；正则筛掉全部可运行测试时报错，不把空运行算通过。"""
+    matched = [test for test in found if not pattern or re.search(pattern, test)]
+    selected = [test for test in matched if test not in deferred]
+    handed_over = [test for test in matched if test in deferred]
+    if pattern and not selected:
+        raise RuntimeError(f'{package} 的筛选 {pattern} ' + (
+            '只匹配到转交其他层的测试：' + ', '.join(handed_over) if handed_over else '没有匹配任何测试'))
+    return selected, handed_over
+
+
+def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | None = None,
+            patterns: dict[str, str] | None = None) -> dict:
+    """only 限定包；patterns 再按顶层测试名正则筛选（targeted 使用）。"""
     from database import REQUIRED_TESTS
     deferred = dict(DEFERRED)
     deferred.update({name: 'databases 阶段在全新三数据库执行' for name in REQUIRED_TESTS})
@@ -140,11 +158,10 @@ def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | No
             inventory = execute([str(binary), '-test.list=.'], Path(directory), output,
                                 name + '-inventory', env, 60)
             found = [line for line in inventory.splitlines() if re.fullmatch(r'(Test|Example|Fuzz)\w+', line)]
-            selected = [test for test in found if test not in deferred]
-            excluded.extend({'package': package, 'test': test, 'reason': deferred[test]}
-                            for test in found if test in deferred)
             if not found:
                 raise RuntimeError('声明了测试源码但发现清单为空: ' + package)
+            selected, handed_over = select_tests(package, found, deferred, (patterns or {}).get(package))
+            excluded.extend({'package': package, 'test': test, 'reason': deferred[test]} for test in handed_over)
             binary_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
             for batch_index in range(0, len(selected), 20):
                 batch = selected[batch_index:batch_index + 20]
@@ -358,43 +375,50 @@ def go_vet(source: Path, output: Path, env: dict[str, str], modules: dict[str, l
     return {'success': True, 'packages': sum(len(names) for names in modules.values())}
 
 
-def affected(source: Path, output: Path, env: dict[str, str], base: str | None) -> dict:
-    """只运行与 base 以来改动相关的层；结果用于迭代，不是发布证据。"""
-    import affected as selector
-    from database import PACKAGES as DATABASE_PACKAGES
-    base = base or selector.default_base(source)
-    files = selector.changed_files(source, base)
-    impact = selector.load_impact(source / '.local-tests' / selector.IMPACT_MAP)
-    selection = selector.plan(source, files, selector.go_packages(source, env), impact)
-    selection['base'] = base
-    (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
-    go, frontend, visual = selection['go'], selection['frontend'], selection['visual']
-    tested = set(go['tested_dirs'])
-    stages = {}
+def registry_stage(source: Path) -> dict:
+    """迭代档位先核对登记；冻结清单已偏离时后面的选择和执行都不可信。"""
+    import registry
+    print('执行 registry', flush=True)
+    result = registry.run(source, iteration=True)
+    if not result['success']:
+        raise RuntimeError('registry 未通过：登记与工作树不一致，见上方清单')
+    return result
 
-    def stage(name, function, *arguments):
+
+def run_selection(source: Path, output: Path, env: dict[str, str], selection: dict, label: str,
+                  skip: tuple[str, ...] = ()) -> tuple[dict, list[str]]:
+    """按选择逐层执行；affected 与 targeted 共用。返回各层结果和被 --skip 跳过的层。"""
+    go, frontend, visual, databases = selection['go'], selection['frontend'], selection['visual'], selection['databases']
+    stages, skipped = {}, []
+
+    def stage(name, function):
+        if name in skip:
+            skipped.append(name)
+            print(f'{label} 跳过 {name}（--skip）', flush=True)
+            return
         directory = output / name
         directory.mkdir(mode=0o700)
-        print(f'执行 affected/{name}', flush=True)
+        print(f'执行 {label}/{name}', flush=True)
         started = time.monotonic()
-        stages[name] = function(directory, *arguments)
+        stages[name] = function(directory)
         stages[name]['elapsed_seconds'] = round(time.monotonic() - started, 1)
         if not stages[name].get('success'):
-            raise RuntimeError(f'affected/{name} 未通过，查看 {directory}')
+            raise RuntimeError(f'{label}/{name} 未通过，查看 {directory}')
 
     if selection['python']:
         stage('python', lambda d: python_unit(source, d, env))
     if go['vet_modules']:
         stage('go-vet', lambda d: go_vet(source, d, env, go['vet_modules']))
     if go['tested']:
-        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested'])))
-    if tested & DATABASE_PACKAGES:
-        from database import run as databases
-        stage('databases', lambda d: databases(source, d / 'matrix', tested & DATABASE_PACKAGES))
-    race_packages = tested & {group['package'] for group in race_selection(source)[1]}
-    if race_packages:
+        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested']), go.get('patterns')))
+    if databases:
+        from database import run as database_matrix
+        packages, tests = databases['packages'], databases['tests']
+        stage('databases', lambda d: database_matrix(source, d / 'matrix', None if packages is None else set(packages),
+                                                    None if tests is None else set(tests)))
+    if selection['race']:
         from ordinary_race import run as ordinary_race
-        stage('race', lambda d: ordinary_race(source, d / 'ordinary-race', env, race_packages))
+        stage('race', lambda d: ordinary_race(source, d / 'ordinary-race', env, set(selection['race'])))
     if frontend['vitest'] == 'all':
         stage('vitest', lambda d: frontend_unit(source, d, env))
     elif frontend['vitest']:
@@ -405,10 +429,42 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None) 
         stage('build', lambda d: build(source, d, env))
     if visual['files']:
         stage('ui-contracts', lambda d: ui_contracts(source, d, env, None if visual['mode'] == 'all' else visual['files']))
+    return stages, skipped
+
+
+def affected(source: Path, output: Path, env: dict[str, str], base: str | None, skip: tuple[str, ...] = ()) -> dict:
+    """只运行与 base 以来改动相关的层；结果用于迭代，不是发布证据。"""
+    import affected as selector
+    from database import PACKAGES as DATABASE_PACKAGES
+    registry = registry_stage(source)
+    base = base or selector.default_base(source)
+    files = selector.changed_files(source, base)
+    impact = selector.load_impact(source / '.local-tests' / selector.IMPACT_MAP)
+    selection = selector.plan(source, files, selector.go_packages(source, env), impact)
+    tested = set(selection['go']['tested_dirs'])
+    packages = sorted(tested & DATABASE_PACKAGES)
+    selection.update(base=base, databases={'packages': packages, 'tests': None} if packages else None,
+                     race=sorted(tested & {group['package'] for group in race_selection(source)[1]}))
+    (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
+    stages, skipped = run_selection(source, output, env, selection, 'affected', skip)
     for note in selection['not_covered']:
         print('affected 未覆盖：' + note, flush=True)
     return {'success': True, 'release_evidence': False, 'base': base, 'changed_files': len(files),
-            'stages': stages, 'not_covered': selection['not_covered']}
+            'stages': {'registry': registry, **stages}, 'skipped_layers': skipped,
+            'not_covered': selection['not_covered']}
+
+
+def targeted(source: Path, output: Path, env: dict[str, str], request: dict) -> dict:
+    """只运行点名的测试；选择由执行者按改动模块决定并写入报告，不是发布证据。"""
+    import affected as selector
+    from database import REQUIRED_TESTS
+    registry = registry_stage(source)
+    packages = selector.go_packages(source, env) if request['go'] else {}
+    selection = selector.targeted(source, packages, request, set(REQUIRED_TESTS),
+                                  {group['package'] for group in race_selection(source)[1]})
+    (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
+    stages, _ = run_selection(source, output, env, selection, 'targeted')
+    return {'success': True, 'release_evidence': False, 'request': request, 'stages': {'registry': registry, **stages}}
 
 def main() -> int:
     def interrupt(signum, frame):
@@ -417,6 +473,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('profile', choices=PROFILES)
     parser.add_argument('--base', help='affected 的比较起点；默认 HEAD 与 origin/main 的分叉点')
+    parser.add_argument('--skip', nargs='+', action='extend', default=[], choices=LAYERS, metavar='LAYER',
+                        help='affected 跳过所列层（' + '、'.join(LAYERS) + '），跳过项写入报告')
+    many = {'nargs': '+', 'action': 'extend', 'default': []}
+    parser.add_argument('--go', metavar='DIR[:REGEX]', **many,
+                        help='targeted：运行该 Go 包目录的单测与 vet，可用顶层测试名正则筛选，例如 model:^TestTopUpBonus')
+    parser.add_argument('--db', metavar='TEST', **many, help='targeted：在三种数据库运行已登记的矩阵测试')
+    parser.add_argument('--race', metavar='DIR', **many, help='targeted：运行该包目录在固定 race 选择中的组')
+    parser.add_argument('--vitest', metavar='PATH', **many,
+                        help='targeted：frontend/ 下的 spec 或源码文件，按导入图运行相关 Vitest 用例')
+    parser.add_argument('--visual', metavar='SPEC', **many, help='targeted：frontend/tests/visual 下的 spec 文件名')
+    parser.add_argument('--lint', metavar='PATH', **many,
+                        help='targeted：对所列 frontend/ 文件运行 ESLint 与 Prettier，并整体 typecheck')
+    parser.add_argument('--python', action='store_true', help='targeted：运行 scripts/testing 的 Python 单测')
+    parser.add_argument('--scope', default='full',
+                        help='candidate：full 为完整候选；否则为逗号分隔的部分名，可含 auto 或 boot，见 release_scope.py')
     parser.add_argument('--output-parent', type=Path, default=SOURCE / '.local-tests')
     parser.add_argument('--image', help='candidate/all 使用已构建的不可变镜像；无默认生产目标')
     parser.add_argument('--simulator-image', help='candidate/routing/all 使用的独立供应商模拟器镜像')
@@ -426,6 +497,18 @@ def main() -> int:
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='candidate/all 只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
+    request = {key: getattr(args, key) for key in ('go', 'db', 'race', 'vitest', 'visual', 'lint', 'python')}
+    if any(request.values()) != (args.profile == 'targeted'):
+        parser.error('--go/--db/--race/--vitest/--visual/--lint/--python 只用于 targeted，且至少给出一项')
+    if args.skip and args.profile != 'affected':
+        parser.error('--skip 只用于 affected')
+    if args.scope != 'full' and args.profile != 'candidate':
+        parser.error('--scope 只用于 candidate；all 始终运行完整候选')
+    from release_scope import parse as parse_scope
+    try:
+        scope = parse_scope(args.scope)
+    except ValueError as error:
+        parser.error(str(error))
     if args.traffic_host_interface is not None:
         from candidate import HOST_INTERFACE
         if not re.fullmatch(HOST_INTERFACE, args.traffic_host_interface):
@@ -444,7 +527,8 @@ def main() -> int:
     print(f'证据目录：{output}', flush=True)
     try:
         tools = {}
-        tool_commands = ([(['go', 'version'], 'go')] if args.profile in ('routing','diagnostics','known_upstream_restored','known_upstream_race','known_upstream_logger_race')
+        tool_commands = ([] if args.profile == 'registry' else
+                         [(['go', 'version'], 'go')] if args.profile in ('routing','diagnostics','known_upstream_restored','known_upstream_race','known_upstream_logger_race')
                          else [(['go', 'version'], 'go'), (['bun', '--version'], 'bun'), (['node', '--version'], 'node')])
         for command, key in tool_commands:
             tools[key] = execute(command, SOURCE, output, 'version-' + key, env).strip()
@@ -457,7 +541,12 @@ def main() -> int:
             if profile not in ('known_upstream_restored', 'known_upstream_race', 'known_upstream_logger_race'):
                 stage.mkdir(mode=0o700)
             print(f'执行 {profile}', flush=True)
-            if profile == 'diagnostics':
+            if profile == 'registry':
+                from registry import run
+                result = run(SOURCE)
+            elif profile == 'targeted':
+                result = targeted(SOURCE, stage, env, request)
+            elif profile == 'diagnostics':
                 from diagnostics import run
                 result = run(SOURCE, stage, env)
             elif profile == 'known_upstream_restored':
@@ -470,7 +559,7 @@ def main() -> int:
                 from native_logger_race import run
                 result = run(SOURCE, stage, env)
             elif profile == 'affected':
-                result = affected(SOURCE, stage, env, args.base)
+                result = affected(SOURCE, stage, env, args.base, tuple(args.skip))
             elif profile == 'unit':
                 result = {'go': go_unit(SOURCE, stage, env), 'vue': frontend_unit(SOURCE, stage, env), 'success': True}
             elif profile == 'static':
@@ -498,7 +587,7 @@ def main() -> int:
                     raise RuntimeError('candidate/routing/all 必须显式传入 --image、--simulator-image、--image-identity 和 --simulator-identity')
                 from candidate import run
                 result = run(SOURCE, stage, args.image, args.traffic_host_interface, args.previous_image, args.simulator_image, profile == 'routing',
-                             args.image_identity, args.simulator_identity)
+                             args.image_identity, args.simulator_identity, scope if args.profile == 'candidate' else None)
             report['stages'][profile] = result
             if not result.get('success') and result.get('exit_code') != 2:
                 raise RuntimeError(f'{profile} 未通过，查看分层报告')

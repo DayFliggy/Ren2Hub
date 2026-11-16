@@ -137,14 +137,15 @@ class RunnerContractTests(unittest.TestCase):
                         stack.enter_context(patch(module + '.run', return_value={
                             'success': False, 'contracts_success': True, 'exit_code': 2}))
                     stack.enter_context(patch('ordinary_race.run', return_value={'success': True, 'exit_code': 0}))
+                    stack.enter_context(patch('registry.run', side_effect=passed('registry')))
                     stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
                     stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
                     code = run.main()
-                self.assertEqual(observed, ['unit-go', 'unit-vue', 'databases', 'static', 'build',
+                self.assertEqual(observed, ['registry', 'unit-go', 'unit-vue', 'databases', 'static', 'build',
                                             'race', 'browser', 'ui-contracts', 'candidate', 'prepare', 'cleanup'])
                 probe.assert_called_once()
                 report = json.loads(next(output.glob('run-*/report.json')).read_text())
-                self.assertEqual(list(report['stages']), ['unit', 'databases', 'static', 'build',
+                self.assertEqual(list(report['stages']), ['registry', 'unit', 'databases', 'static', 'build',
                                                          'race', 'browser', 'ui-contracts', 'candidate'])
                 self.assertEqual(report['stages']['candidate']['diagnostics'], diagnostic)
                 self.assertEqual(report['stages']['candidate']['stages']['routing']['exit_code'], 2)
@@ -251,6 +252,55 @@ class RunnerContractTests(unittest.TestCase):
     def test_go_requires_parent_pass_even_when_subtest_passes(self):
         with self.assertRaises(RuntimeError):
             go_result(json.dumps({'Action': 'pass', 'Test': 'TestMoney/sqlite'}), ['TestMoney'])
+
+    def test_targeted_filter_never_passes_on_an_empty_selection(self):
+        found, deferred = ['TestTopUpBonusTiers', 'TestTopUpBonusDatabaseMatrix', 'TestWallet'], {
+            'TestTopUpBonusDatabaseMatrix': 'databases 阶段在全新三数据库执行'}
+        self.assertEqual(run.select_tests('m/model', found, deferred, None),
+                         (['TestTopUpBonusTiers', 'TestWallet'], ['TestTopUpBonusDatabaseMatrix']))
+        self.assertEqual(run.select_tests('m/model', found, deferred, '^TestTopUpBonus'),
+                         (['TestTopUpBonusTiers'], ['TestTopUpBonusDatabaseMatrix']))
+        with self.assertRaisesRegex(RuntimeError, '没有匹配任何测试'):
+            run.select_tests('m/model', found, deferred, 'TestMissing')
+        # 只匹配到矩阵测试时提示它属于另一层，而不是报告 0 项通过。
+        with self.assertRaisesRegex(RuntimeError, '转交其他层的测试：TestTopUpBonusDatabaseMatrix'):
+            run.select_tests('m/model', found, deferred, 'DatabaseMatrix$')
+
+    def test_selectors_are_rejected_outside_their_profile(self):
+        for argv in (['targeted'], ['affected', '--go', 'model'], ['quick', '--skip', 'race'],
+                     ['all', '--scope', 'auto'], ['candidate', '--scope', 'routing'], ['affected', '--skip', 'registry']):
+            with self.subTest(argv=argv), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(sys, 'argv', ['run.py', *argv, '--output-parent', directory]), \
+                    patch('run.signal.signal'), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                run.main()
+            self.assertEqual(list(Path(directory).iterdir()) if Path(directory).exists() else [], [])
+
+    def test_affected_and_targeted_share_one_executor_and_report_skipped_layers(self):
+        selection = {'python': True, 'go': {'vet_modules': {'.': ['m/model']}, 'tested': ['m/model'],
+                                            'patterns': {'m/model': '^TestTopUp'}},
+                     'databases': {'packages': None, 'tests': ['TestWalletDatabases']}, 'race': ['model'],
+                     'frontend': {'vitest': ['frontend/src/a.ts'], 'typecheck': False, 'lint': [], 'format': [], 'build': False},
+                     'visual': {'mode': 'subset', 'files': ['wallet.spec.ts']}}
+        calls = {}
+
+        def record(name):
+            def call(*args, **kwargs):
+                calls[name] = args
+                return {'success': True}
+            return call
+
+        with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
+            for target, name in (('run.python_unit', 'python'), ('run.go_vet', 'go-vet'), ('run.go_unit', 'go-unit'),
+                                 ('database.run', 'databases'), ('ordinary_race.run', 'race'),
+                                 ('run.frontend_related', 'vitest'), ('run.ui_contracts', 'ui-contracts')):
+                stack.enter_context(patch(target, side_effect=record(name)))
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            stages, skipped = run.run_selection(run.SOURCE, Path(directory), {}, selection, 'targeted', ('race',))
+        self.assertEqual(list(stages), ['python', 'go-vet', 'go-unit', 'databases', 'vitest', 'ui-contracts'])
+        self.assertEqual(skipped, ['race'])
+        self.assertEqual(calls['go-unit'][3:], ({'m/model'}, {'m/model': '^TestTopUp'}))
+        self.assertEqual(calls['databases'][2:], (None, {'TestWalletDatabases'}))
+        self.assertEqual(calls['ui-contracts'][3], ['wallet.spec.ts'])
 
     def test_go_accepts_executed_test(self):
         result = go_result(json.dumps({'Action': 'pass', 'Test': 'TestMoney'}), ['TestMoney'])
@@ -399,14 +449,16 @@ class HostTrafficCandidateTests(unittest.TestCase):
     def test_run_passes_traffic_interface_to_candidate(self):
         def execute(command, cwd, output, name, env, timeout=300):
             return {'go': 'go version go1.26.10 linux/amd64', 'bun': '1.4.0', 'node': 'v24.0.0'}[command[0]]
-        for extra, expected in ((['--traffic-host-interface', 'eth0'], 'eth0'), ([], None)):
-            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory, \
+        for extra, expected, expected_scope in ((['--traffic-host-interface', 'eth0'], 'eth0', None), ([], None, None),
+                                                (['--scope', 'auto,billing'], None, ['auto', 'billing'])):
+            with self.subTest(expected=expected, scope=expected_scope), tempfile.TemporaryDirectory() as directory, \
                     patch.object(sys, 'argv', ['run.py', 'candidate', '--image', 'ren2hub-test:x', '--simulator-image', 'channel-simulator:x', '--image-identity', 'app-identity.json', '--simulator-identity', 'sim-identity.json', '--output-parent', directory, *extra]), \
                     patch('run.identity', return_value={'source_sha256': 'fixed'}), patch('run.execute', side_effect=execute), \
                     patch('run.signal.signal'), patch('run.os.umask'), contextlib.redirect_stdout(io.StringIO()), \
                     patch('candidate.run', return_value={'success': True}) as runner:
                 self.assertEqual(run.main(), 0)
-                source, stage, image, interface, previous, simulator, routing_only, app_identity, sim_identity = runner.call_args.args
+                source, stage, image, interface, previous, simulator, routing_only, app_identity, sim_identity, scope = runner.call_args.args
+                self.assertEqual(scope, expected_scope)
                 self.assertEqual((source, stage.name, image, interface), (run.SOURCE, 'candidate', 'ren2hub-test:x', expected))
                 self.assertIsNone(previous)
                 self.assertEqual(simulator, "channel-simulator:x")

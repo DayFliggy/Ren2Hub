@@ -179,6 +179,28 @@ class DatabaseRunnerTests(unittest.TestCase):
                     runner.drop_suite_databases({"postgres": {"postgres"}})
                 sql.assert_not_called()
 
+    def test_named_tests_limit_the_matrix_and_an_empty_match_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = database.Runner(Path(directory), Path(directory), {}, None, {"TestB"})
+
+            def command(args, **kwargs):
+                if args[:3] == ["go", "test", "-c"]:
+                    Path(args[args.index("-o") + 1]).write_bytes(b"binary")
+                    return subprocess.CompletedProcess(args, 0, "")
+                return subprocess.CompletedProcess(args, 0, events("TestB", [("", "run"), ("", "pass")]))
+
+            with patch.object(runner, "command", side_effect=command), patch.object(runner, "database_names", return_value=set()), \
+                    patch.object(runner, "database_environment", return_value={"TEST_MYSQL_DSN": "rtest_1_main"}), \
+                    patch.object(runner, "drop_suite_databases"):
+                runner.suite("controller", "TestA", ("mysql",), nested=False)
+                runner.suite("controller", "TestB", ("mysql",), nested=False)
+            self.assertEqual([entry["test"] for entry in runner.report["suites"]], ["TestB"])
+            # 名称不在矩阵中时不编译、不建库，并且不能以零套件算通过。
+            runner = database.Runner(Path(directory), Path(directory), {}, None, {"TestNotRegistered"})
+            with patch.object(runner, "binary") as binary, self.assertRaises(database.Failure):
+                runner.execute()
+            binary.assert_not_called()
+
     def test_suites_reuse_one_binary_but_keep_fresh_databases(self):
         with tempfile.TemporaryDirectory() as directory:
             runner = database.Runner(Path(directory), Path(directory), {})

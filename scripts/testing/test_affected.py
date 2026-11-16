@@ -60,6 +60,62 @@ class GoSelectionTests(unittest.TestCase):
         self.assertEqual(self.select('README.md')['tested'], [])
 
 
+class TargetedSelectionTests(GoSelectionTests):
+    """targeted 由执行者点名；名称写错时必须报错，否则会把空运行当成通过。"""
+
+    def request(self, **values):
+        return {'go': [], 'db': [], 'race': [], 'vitest': [], 'visual': [], 'lint': [], 'python': False, **values}
+
+    def targeted(self, **values):
+        return affected.targeted(self.source, self.packages, self.request(**values),
+                                 {'TestWalletDatabases'}, {'model', 'service'})
+
+    def test_named_packages_keep_their_filters_and_skip_reverse_dependencies(self):
+        selection = self.targeted(go=['./model/:^TestChannel', 'common'], db=['TestWalletDatabases'], race=['service'])
+        self.assertEqual(selection['go']['tested'], ['m/common', 'm/model'])
+        self.assertEqual(selection['go']['patterns'], {'m/model': '^TestChannel'})
+        self.assertEqual(selection['go']['vet_modules'], {'.': ['m/common', 'm/model']})
+        self.assertEqual(selection['databases'], {'packages': None, 'tests': ['TestWalletDatabases']})
+        self.assertEqual(selection['race'], ['service'])
+        self.assertEqual(selection['visual']['files'], [])
+
+    def test_frontend_targets_become_related_tests_and_file_level_checks(self):
+        for path in ('frontend/src/a.ts', 'frontend/src/a.css', 'frontend/tests/visual/wallet.spec.ts'):
+            (self.source / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.source / path).write_text('')
+        selection = self.targeted(vitest=['frontend/src/a.ts'], lint=['frontend/src/a.ts', 'frontend/src/a.css'],
+                                  visual=['frontend/tests/visual/wallet.spec.ts'], python=True)
+        self.assertEqual(selection['frontend'], {'vitest': ['frontend/src/a.ts'], 'typecheck': True,
+                                                 'lint': ['frontend/src/a.ts'],
+                                                 'format': ['frontend/src/a.css', 'frontend/src/a.ts'], 'build': False})
+        self.assertEqual(selection['visual'], {'mode': 'subset', 'files': ['wallet.spec.ts']})
+        self.assertTrue(selection['python'])
+        self.assertIsNone(selection['databases'])
+
+    def test_unknown_names_are_rejected(self):
+        for values in ({'go': ['router']}, {'go': ['missing']}, {'go': ['model:(']}, {'go': ['model:^A', 'model:^B']},
+                       {'db': ['TestUnregistered']}, {'race': ['controller']}, {'vitest': ['src/a.ts']},
+                       {'lint': ['frontend/src/missing.ts']}, {'visual': ['missing.spec.ts']}):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                self.targeted(**values)
+
+
+class FrozenInputTests(unittest.TestCase):
+    def test_changing_a_frozen_fixture_asks_for_its_diagnostic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            (source / 'scripts/testing').mkdir(parents=True)
+            (source / 'frontend/tests/visual').mkdir(parents=True)
+            (source / 'scripts/testing/known_upstream_restored.json').write_text(
+                '{"cases": [{"fixtures": {"service/task_missing_channel_database_test.go": "0"}}]}')
+            (source / 'scripts/testing/known_upstream_logger_race.json').write_text(
+                '{"local_fixture_files": {"relay/helper/stream_test.go": "0"}, "current_functions": {"logger/logger.go:LogInfo": "0"}}')
+            plan = affected.plan(source, ['service/task_missing_channel_database_test.go', 'logger/logger.go',
+                                          'service/unrelated_test.go'], {}, None)
+            self.assertEqual(plan['not_covered'], ['known_upstream_logger_race（冻结夹具或源码改动）',
+                                                   'known_upstream_restored（冻结夹具或源码改动）'])
+
+
 class FrontendSelectionTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

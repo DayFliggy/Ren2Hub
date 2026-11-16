@@ -1,0 +1,123 @@
+"""保护按改动模块确定候选范围的规则：漏掉升级演练会让迁移问题直接进入正式库。"""
+import json
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+import candidate
+import release_scope
+
+
+class ScopeRuleTests(unittest.TestCase):
+    def test_parts_cover_exactly_the_candidate_stages_except_routing(self):
+        self.assertEqual(release_scope.PART_STAGES['upgrade'], candidate.UPGRADE_STAGES)
+        base = tuple(stage for part in release_scope.PARTS if part != 'upgrade'
+                     for stage in release_scope.PART_STAGES[part])
+        self.assertEqual((*base, 'routing'), candidate.STAGES)
+
+    def test_persistence_and_startup_changes_require_the_upgrade_rehearsal(self):
+        for path in ('model/topup_bonus_migration.go', 'model/main.go', 'main.go', 'go.mod', 'go.sum', 'Dockerfile'):
+            self.assertEqual(release_scope.required_parts([path]), ['upgrade'], path)
+        for path in ('model/topup_test.go', 'controller/topup.go', 'service/topup_bonus.go', 'relaykit/go.mod',
+                     'frontend/src/main.ts', 'docs/billing/TOPUP_BONUS.md', 'scripts/testing/run.py',
+                     'model/testdata/a.go'):
+            self.assertEqual(release_scope.required_parts([path]), [], path)
+
+    def test_expand_adds_dependencies_in_execution_order(self):
+        self.assertEqual(release_scope.expand(['plugin']), ['billing', 'plugin'])
+        self.assertEqual(release_scope.expand(['sdk', 'upgrade']), ['upgrade', 'management', 'sdk'])
+        self.assertEqual(release_scope.stages([]), ())
+        self.assertEqual(release_scope.stages(['upgrade']), (*candidate.UPGRADE_STAGES, 'upstream_sync'))
+        with self.assertRaises(ValueError):
+            release_scope.expand(['routing'])
+
+    def test_parse_distinguishes_full_from_selected_parts(self):
+        self.assertIsNone(release_scope.parse('full'))
+        self.assertEqual(release_scope.parse('auto, billing'), ['auto', 'billing'])
+        self.assertEqual(release_scope.parse('boot'), ['boot'])
+        for value in ('', 'full,billing', 'routing', 'diagnostics'):
+            with self.assertRaises(ValueError):
+                release_scope.parse(value)
+
+
+class ScopedCandidateTests(unittest.TestCase):
+    def runner(self, scope, previous_image, changed):
+        runner = candidate.Candidate.__new__(candidate.Candidate)
+        runner.scope, runner.previous_image, runner.report = scope, previous_image, {}
+        runner.source = Path('/source')
+        labels = {'org.opencontainers.image.revision': 'c' * 40}
+        runner.docker = lambda *argv, **kwargs: SimpleNamespace(
+            stdout=json.dumps([{'Config': {'Labels': labels}}]).encode())
+        self.diff = patch('candidate.execute', return_value=SimpleNamespace(
+            returncode=0, stdout='\0'.join(changed).encode()))
+        return runner
+
+    def select(self, scope, previous_image, changed=()):
+        runner = self.runner(scope, previous_image, changed)
+        with self.diff as execute:
+            runner.select_scope()
+        if previous_image:
+            self.assertEqual(execute.call_args.args[0][3:], ['diff', '--name-only', '-z', 'c' * 40, 'HEAD', '--'])
+        return runner
+
+    def test_auto_runs_the_upgrade_only_when_persistence_changed(self):
+        runner = self.select(['auto'], 'ren2hub-test:old', ['model/topup.go', 'frontend/src/a.vue'])
+        self.assertEqual(runner.stages, (*candidate.UPGRADE_STAGES, 'upstream_sync'))
+        self.assertEqual(runner.previous_image, 'ren2hub-test:old')
+        self.assertEqual(runner.report['scope'], {'requested': ['auto'], 'parts': ['upgrade', 'management'],
+                                                  'required': ['upgrade'], 'base_revision': 'c' * 40})
+        runner = self.select(['auto', 'billing'], 'ren2hub-test:old', ['controller/topup.go'])
+        self.assertEqual(runner.stages, ('billing',))
+        # 不做升级演练时不启动旧镜像，但仍记录用来求差异的修订。
+        self.assertIsNone(runner.previous_image)
+        self.assertEqual(runner.report['scope'], {'requested': ['auto', 'billing'], 'parts': ['billing'],
+                                                  'required': [], 'base_revision': 'c' * 40})
+
+    def test_boot_selects_no_stage(self):
+        runner = self.select(['boot'], None)
+        self.assertEqual(runner.stages, ())
+        self.assertEqual(runner.report['scope'], {'requested': ['boot'], 'parts': [], 'required': None,
+                                                  'base_revision': None})
+
+    def test_scope_cannot_drop_a_required_part_or_guess_without_a_base(self):
+        for scope, previous, changed, code in (
+                (['billing'], 'ren2hub-test:old', ['model/topup.go'], 'candidate_scope_missing_required_parts'),
+                (['auto'], None, [], 'auto_scope_requires_previous_image'),
+                (['upgrade'], None, [], 'upgrade_scope_requires_previous_image')):
+            runner = self.runner(scope, previous, changed)
+            with self.subTest(code=code), self.diff, self.assertRaisesRegex(candidate.CandidateError, code):
+                runner.select_scope()
+
+    def manifest(self, **overrides):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = candidate.Candidate.__new__(candidate.Candidate)
+            runner.output, runner.workspace_sha, runner.stages = Path(directory), 'd' * 40, ('billing',)
+            runner.report = {'success': True, 'exit_code': 0, 'source': {'candidate_sha': 'a' * 40},
+                             'image': {'revision': 'a' * 40, 'id': 'sha256:' + 'e' * 64},
+                             'stages': {'billing': {'success': True}}, 'cleanup': {'success': True},
+                             'identity_verification': {'stable': True}, 'image_matches_clean_source': True,
+                             'scope': {'parts': ['billing'], 'required': [], 'base_revision': None}, **overrides}
+            reports = {'billing': {'path': str(runner.output / 'billing.json'), 'sha256': 'f' * 64}}
+            runner.scoped_manifest(reports, True, True)
+            return json.loads((runner.output / 'candidate-manifest.json').read_text())
+
+    def test_scoped_manifest_is_deployable_only_when_every_selected_stage_passed(self):
+        manifest = self.manifest()
+        self.assertTrue(manifest['deployment_eligible'] and manifest['success'])
+        self.assertEqual(manifest['scope']['parts'], ['billing'])
+        # 未运行的诊断和 routing 不出现在 manifest 中，不能被读成通过。
+        for key in ('diagnostics', 'known_upstream_restored', 'ordinary_race', 'upstream_exemption'):
+            self.assertNotIn(key, manifest)
+        for overrides in ({'stages': {'billing': {'success': False}}}, {'exit_code': 1}, {'error_code': 'x'},
+                          {'cleanup': {'success': False}}, {'image_matches_clean_source': False}):
+            self.assertFalse(self.manifest(**overrides)['deployment_eligible'], overrides)
+        # 在确定阶段之前就失败的范围候选不可部署，manifest 仍带 scope，不会被当成完整候选校验。
+        early = self.manifest(scope={'requested': ['auto']}, stages={}, exit_code=1)
+        self.assertFalse(early['deployment_eligible'])
+        self.assertEqual(early['scope'], {'requested': ['auto']})
+
+
+if __name__ == '__main__':
+    unittest.main()

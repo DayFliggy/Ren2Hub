@@ -388,10 +388,12 @@ class ProxyConnection(socketserver.BaseRequestHandler):
 
 
 class Runner:
-    def __init__(self, source: Path, output: Path, env: dict[str, str], packages: set[str] | None = None):
+    def __init__(self, source: Path, output: Path, env: dict[str, str], packages: set[str] | None = None,
+                 tests: set[str] | None = None):
         self.source, self.output, self.env = source, output, env
-        # None 表示完整矩阵；开发期 affected 只传入受影响的包目录。
+        # None 表示完整矩阵；affected 只传入受影响的包目录，targeted 还可点名已登记的测试。
         self.packages = packages
+        self.tests = tests
         self.run_id = secrets.token_hex(8)
         self.prefix = "ren2hub-local-test-" + self.run_id
         self.password = secrets.token_hex(24)
@@ -617,6 +619,8 @@ class Runner:
               channel: bool = False, task: bool = False) -> None:
         if self.packages is not None and package not in self.packages:
             return
+        if self.tests is not None and test not in self.tests:
+            return
         binary = self.binary(package)
         before = self.known_databases or {kind: self.database_names(kind) for kind in IMAGES}
         env = self.database_environment()
@@ -692,6 +696,8 @@ class Runner:
         for package, test in PROVIDER_ROW_LOCK_TESTS:
             for dialect in ("mysql", "postgres"):
                 self.suite(package, test, (dialect,), nested=False, task=True)
+        if not self.report["suites"]:
+            raise Failure("选择没有匹配任何已登记的数据库套件")
         self.report["success"] = all(entry["success"] for entry in self.report["suites"])
 
     def cleanup(self) -> None:
@@ -743,11 +749,13 @@ def interrupt_run(signum, frame) -> None:
     raise KeyboardInterrupt
 
 
-def run(source: Path, output: Path, packages: set[str] | None = None) -> dict:
+def run(source: Path, output: Path, packages: set[str] | None = None, tests: set[str] | None = None) -> dict:
     output = private_directory(output)
-    runner = Runner(source.resolve(), output, {}, packages)
+    runner = Runner(source.resolve(), output, {}, packages, tests)
     if packages is not None:
         runner.report["selected_packages"] = sorted(packages)
+    if tests is not None:
+        runner.report["selected_tests"] = sorted(tests)
     started = time.monotonic()
     previous_sigterm = None
     if threading.current_thread() is threading.main_thread():

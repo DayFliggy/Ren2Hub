@@ -225,7 +225,7 @@ def stage_accepted(stage, returncode, report):
 
 class Candidate:
     def __init__(self, source, output, image, traffic_interface=None, previous_image=None, simulator_image=None, routing_only=False,
-                 image_identity=None, simulator_identity=None):
+                 image_identity=None, simulator_identity=None, scope=None):
         require(traffic_interface is None or re.fullmatch(HOST_INTERFACE, traffic_interface),
                 'invalid_traffic_host_interface')
         self.traffic_interface = traffic_interface or ''
@@ -252,10 +252,14 @@ class Candidate:
         self.image_identity_path = image_identity
         self.simulator_identity_path = simulator_identity
         self.routing_only = routing_only
+        # scope 为 None 时是完整候选；否则只运行按改动模块选出的部分，阶段在 prepare 读到旧镜像修订后确定。
+        self.scope = scope
         require(not routing_only or previous_image is None, "routing_does_not_run_upgrade")
+        require(not routing_only or scope is None, 'routing_has_no_scope')
         require(bool(simulator_image), "explicit_simulator_image_required")
         self.attachment_volume = None
-        self.stages = ('routing',) if routing_only else ((*UPGRADE_STAGES, *STAGES) if previous_image else STAGES)
+        self.stages = ('routing',) if routing_only else () if scope is not None else (
+            (*UPGRADE_STAGES, *STAGES) if previous_image else STAGES)
         self.workspace_identity = source_identity(self.source.parent)
         self.workspace_sha = self.workspace_identity['git_head']
         self.report = {'success': False, 'layer': 'routing' if routing_only else 'candidate', 'run_id': self.run_id,
@@ -263,6 +267,9 @@ class Candidate:
                        'external_requests': None, 'database_lifecycle': 'fresh_tmpfs',
                        'limits': ['本地模拟供应商和支付；不验证真实供应商、真实支付或生产部署。']}
         self.report['exit_code'] = 1
+        if scope is not None:
+            # 在确定阶段之前失败时，manifest 仍标明这是范围候选，不会被读成完整候选。
+            self.report['scope'] = {'requested': sorted(scope)}
 
     def docker(self, *arguments, **kwargs):
         return execute(['sudo', '-n', 'docker', '--host', 'unix:///var/run/docker.sock', *arguments], **kwargs)
@@ -361,10 +368,35 @@ class Candidate:
         self.report['build_identities'] = verified
         return verified
 
+    def select_scope(self):
+        """按请求和与旧镜像修订的差异确定本轮部分；不做升级演练时不启动旧镜像。"""
+        from release_scope import expand, required_parts, stages
+        requested = set(self.scope)
+        base, required = None, None
+        if self.previous_image:
+            labels = json.loads(self.docker('image', 'inspect', self.previous_image).stdout)[0]['Config'].get('Labels') or {}
+            base = labels.get('org.opencontainers.image.revision', '')
+            require(re.fullmatch(r'[0-9a-f]{40}', base), 'distinct_immutable_previous_image_required')
+            changed = execute(['git', '-C', str(self.source), 'diff', '--name-only', '-z', base, 'HEAD', '--'], check=False)
+            require(changed.returncode == 0, 'previous_revision_missing_in_source')
+            required = required_parts(name for name in changed.stdout.decode().split('\0') if name)
+        require('auto' not in requested or required is not None, 'auto_scope_requires_previous_image')
+        parts = expand((requested - {'auto', 'boot'}) | set(required if 'auto' in requested else ()))
+        require(required is None or set(required) <= set(parts), 'candidate_scope_missing_required_parts')
+        require('upgrade' not in parts or self.previous_image, 'upgrade_scope_requires_previous_image')
+        if 'upgrade' not in parts:
+            self.previous_image = None
+        self.stages = stages(parts)
+        self.report['scope'] = {'requested': sorted(requested), 'parts': parts, 'required': required,
+                                'base_revision': base}
+
     def prepare(self):
         self.sdk_environment = {}
         self.verify_build_identities()
-        if not getattr(self, 'routing_only', False):
+        scoped = getattr(self, 'scope', None) is not None
+        if scoped:
+            self.select_scope()
+        if not getattr(self, 'routing_only', False) and (not scoped or 'sdk' in self.stages):
             self.sdk_runtimes()
         image = json.loads(self.docker('image', 'inspect', self.image).stdout)[0]
         labels = image['Config'].get('Labels') or {}
@@ -859,6 +891,8 @@ class Candidate:
         workspace_clean = workspace_end['candidate_sha'] == self.workspace_sha
         gitlink = execute(['git', '-C', str(self.source.parent), 'ls-tree', 'HEAD', 'Ren2Hub']).stdout.decode().split()
         linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
+        if getattr(self, 'scope', None) is not None:
+            return self.scoped_manifest(reports, stable, workspace_clean and linked)
         from routing_result import release_exemption, diagnostics_complete, routing_complete
         exemption = release_exemption(self.report.get('diagnostics'), self.report['stages'].get('routing'))
         exempted = exemption is not None
@@ -931,6 +965,27 @@ class Candidate:
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
 
+    def scoped_manifest(self, reports, stable, published):
+        """按模块选择的候选：所选阶段全部通过才可部署；未运行的部分不出现在 manifest，也不计为通过。"""
+        scope = self.report.get('scope') or {}
+        complete = isinstance(scope.get('parts'), list) and len(reports) == len(self.stages) and all(
+            self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
+        deployable = bool(complete and self.report.get('exit_code') == 0 and stable
+                          and not self.report.get('error_code') and self.report.get('cleanup', {}).get('success') is True
+                          and self.report.get('image_matches_clean_source') and published)
+        traffic = self.report.get('isolation', {}).get('traffic')
+        manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
+                    'scope': scope, 'source_sha': self.report.get('image', {}).get('revision'),
+                    'workspace_sha': self.workspace_sha, 'image_id': self.report.get('image', {}).get('id'),
+                    'reports': reports, 'source_worktree': self.report['source'],
+                    'identity_verification': self.report['identity_verification'],
+                    'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
+                    'upgrade': self.report.get('upgrade'), 'simulator': self.report.get('simulator'),
+                    'build_identities': self.report.get('build_identities'),
+                    'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
+        private_write(self.output / 'candidate-manifest.json', manifest)
+        self.report['deployment_eligible'] = deployable
+
     def cleanup(self):
         errors = []
         removed = []
@@ -973,7 +1028,8 @@ def interrupted(_signum, _frame):
 
 def run(source: Path, output: Path, image: str, traffic_interface: str | None = None,
         previous_image: str | None = None, simulator_image: str | None = None, routing_only: bool = False,
-        image_identity: Path | None = None, simulator_identity: Path | None = None) -> dict:
+        image_identity: Path | None = None, simulator_identity: Path | None = None,
+        scope: list[str] | None = None) -> dict:
     previous_umask = os.umask(0o077)
     candidate = None
     old_handlers = {}
@@ -982,17 +1038,23 @@ def run(source: Path, output: Path, image: str, traffic_interface: str | None = 
             old_handlers[signum] = signal.signal(signum, interrupted)
     try:
         candidate = Candidate(source, output, image, traffic_interface, previous_image, simulator_image, routing_only,
-                              image_identity, simulator_identity)
-        candidate.diagnostics()
+                              image_identity, simulator_identity, scope)
+        # 冻结诊断与 race 是源码级检查，只随完整候选运行；按模块选择时使用各自的独立档位。
+        if scope is None:
+            candidate.diagnostics()
         candidate.prepare()
         for stage in candidate.stages:
             if stage == 'upgrade-resume-p':
                 candidate.upgrade()
             candidate.stage(stage)
         from routing_result import combined_exit_code
-        code = combined_exit_code([*candidate.report['stages'].values(), candidate.report['diagnostics'],
-                                   candidate.report['known_upstream_restored'], candidate.report['known_upstream_race'],
-                                   candidate.report['known_upstream_logger_race'], candidate.report['ordinary_race']])
+        results = list(candidate.report['stages'].values())
+        if scope is None:
+            results += [candidate.report[name] for name in (
+                'diagnostics', 'known_upstream_restored', 'known_upstream_race',
+                'known_upstream_logger_race', 'ordinary_race')]
+        # 只选 boot 时没有阶段报告；镜像身份核对与全新实例启动成功即为通过。
+        code = combined_exit_code(results) if results or scope is None else 0
         candidate.report.update(success=code == 0, exit_code=code)
     except Exception as error:
         if candidate is None:
@@ -1025,10 +1087,13 @@ def main():
     parser.add_argument('--previous-image', help='普通升级合同使用的固定旧镜像；必须与新镜像修订不同')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
+    parser.add_argument('--scope', default='full',
+                        help='full 为完整候选；否则为逗号分隔的部分名（见 release_scope.py），可含 auto 或 boot')
     args = parser.parse_args()
     try:
+        from release_scope import parse
         report = run(args.source, args.output, args.image, args.traffic_host_interface, args.previous_image, args.simulator_image, args.routing_only,
-                     args.image_identity, args.simulator_identity)
+                     args.image_identity, args.simulator_identity, parse(args.scope))
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}
