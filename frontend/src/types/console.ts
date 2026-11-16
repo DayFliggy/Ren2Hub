@@ -696,6 +696,8 @@ export interface AdminRedemptionCode extends Record<string, unknown> {
   status: AdminRedemptionStatus
   quota: string
   amount: string
+  /** Bonus credited with the code when it was redeemed; '0' otherwise. */
+  bonus_quota: string
   // redemption record
   redeemer_id: number // 0 = not yet redeemed
   created_time: number // unix epoch seconds
@@ -757,6 +759,8 @@ export interface AdminOrder extends Record<string, unknown> {
   amount: number
   /** Quota credited on completion. 0 for orders that never completed. */
   quota: string
+  /** Bonus frozen at checkout; quota includes it once credited. */
+  bonus_quota: string
   type: AdminOrderType
   currency: AdminOrderCurrency
   method: AdminOrderMethod

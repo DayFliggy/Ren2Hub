@@ -4,11 +4,11 @@ import { ref } from 'vue'
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import { dashboardFixture } from '@/api/__tests__/dashboardFixture'
-import { parseTopupDiscountSelf, topupDiscountApi } from '@/api/topupDiscount'
+import { parseTopupBonusSelf, topupBonusApi } from '@/api/topupBonus'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import DashboardView from '@/views/console/DashboardView.vue'
-import selfResponse from '../../../../tests/fixtures/native/topup-discount-self.get.json'
+import selfResponse from '../../../../tests/fixtures/native/topup-bonus-self.get.json'
 
 vi.mock('@/api/client', async (original) => ({
   ...(await original<typeof import('@/api/client')>()),
@@ -41,8 +41,8 @@ beforeEach(() => {
   vi.mocked(api.get).mockImplementation(async (path) =>
     dashboardFixture(path === '/api/data/summary' ? 999 : 10)
   )
-  vi.spyOn(topupDiscountApi, 'self').mockResolvedValue(
-    parseTopupDiscountSelf(selfResponse.data)
+  vi.spyOn(topupBonusApi, 'self').mockResolvedValue(
+    parseTopupBonusSelf(selfResponse.data)
   )
 })
 afterEach(() => {
@@ -75,7 +75,7 @@ async function render(role: number) {
           'Breadcrumb',
           'OverviewKpiStrip',
           'BalanceCard',
-          'DiscountCard',
+          'BonusCard',
           'UsageDistributionCard',
           'TokenTrendCard',
           'ModelDistributionCard',
@@ -101,20 +101,20 @@ function statsTab() {
 }
 
 it.each([1, 10, 100])(
-  'only offers discount settings to Root role %i',
+  'only offers bonus settings to Root role %i',
   async (role) => {
     await render(role)
     expect(
-      wrapper.getComponent({ name: 'DiscountCard' }).props('canConfigure')
+      wrapper.getComponent({ name: 'BonusCard' }).props('canConfigure')
     ).toBe(role === 100)
   }
 )
 
-it('hides the discount settings shortcut when the admin feature is disabled', async () => {
+it('hides the bonus settings shortcut when the admin feature is disabled', async () => {
   adminFeature.enabled = false
   await render(100)
   expect(
-    wrapper.getComponent({ name: 'DiscountCard' }).props('canConfigure')
+    wrapper.getComponent({ name: 'BonusCard' }).props('canConfigure')
   ).toBe(false)
 })
 
@@ -138,19 +138,19 @@ it.each([10, 100])(
       'xl:col-span-2'
     )
     vi.mocked(api.get).mockClear()
-    vi.mocked(topupDiscountApi.self).mockClear()
+    vi.mocked(topupBonusApi.self).mockClear()
     await allScope().trigger('click')
     await flushPromises()
     expect(wrapper.attributes('data-dashboard-scope')).toBe('all')
     expect(wrapper.find('balance-card-stub').exists()).toBe(false)
-    expect(wrapper.find('discount-card-stub').exists()).toBe(false)
+    expect(wrapper.find('bonus-card-stub').exists()).toBe(false)
     expect(wrapper.find('token-trend-card-stub').classes()).toContain(
       'xl:col-span-3'
     )
     expect(wrapper.find('model-distribution-card-stub').classes()).toContain(
       'xl:col-span-3'
     )
-    expect(topupDiscountApi.self).not.toHaveBeenCalled()
+    expect(topupBonusApi.self).not.toHaveBeenCalled()
     expect(api.get).toHaveBeenCalledTimes(4)
     expect(
       vi

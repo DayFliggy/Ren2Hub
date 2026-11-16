@@ -125,10 +125,15 @@ func legacyTopUpQuota(order *TopUp) (int, error) {
 	return quota, nil
 }
 
-// FreezeTopUpQuota records the exact paid credit before the order is sent.
-// Discounts change the checkout price; no implicit bonus quota is invented.
+// FreezeTopUpQuota records the exact credit before the order is sent.
+// ExpectedQuota is the full credit, principal plus the frozen BonusQuota, and
+// the referral base is the principal. Settlement credits ExpectedQuota alone,
+// so a release without bonus support still pays the frozen bonus.
 func FreezeTopUpQuota(order *TopUp) error {
 	if order.ExpectedQuota <= 0 {
+		if order.BonusQuota != 0 {
+			return ErrInvalidTopUpQuota
+		}
 		quota, err := legacyTopUpQuota(order)
 		if err != nil {
 			return err
@@ -138,7 +143,10 @@ func FreezeTopUpQuota(order *TopUp) error {
 	if _, err := topUpQuotaMaxCurrent(order.ExpectedQuota); err != nil {
 		return err
 	}
-	order.AffiliateBaseQuota = order.ExpectedQuota
+	if order.BonusQuota < 0 || order.BonusQuota >= order.ExpectedQuota {
+		return ErrInvalidTopUpQuota
+	}
+	order.AffiliateBaseQuota = order.ExpectedQuota - order.BonusQuota
 	order.Currency = strings.ToUpper(strings.TrimSpace(order.Currency))
 	if order.Currency != "" && !validTopUpCurrency(order.Currency) {
 		return fmt.Errorf("invalid order currency")

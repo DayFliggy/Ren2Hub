@@ -37,13 +37,9 @@ func GmpayPay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment method is unavailable"))
 		return
 	}
+	// quoteTopUp also checks the wallet can take the full credit.
 	quote := quoteTopUp(c, request.Amount, getPayMoney(request.Amount), "CNY")
 	if quote == nil {
-		return
-	}
-	// The quote's ExpectedQuota is the only credited amount of this request.
-	if err := model.ValidateTopUpQuotaCapacity(c.GetInt("id"), quote.ExpectedQuota); err != nil {
-		paymentError(c, err)
 		return
 	}
 	money := quote.PayDecimal().InexactFloat64()
@@ -59,13 +55,10 @@ func GmpayPay(c *gin.Context) {
 		amount = decimal.NewFromInt(amount).Div(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
 	}
 	topUp := &model.TopUp{UserId: c.GetInt("id"), Amount: amount, PaymentMethod: request.PaymentMethod}
-	if err := attachTopUpQuote(topUp, quote); err != nil {
-		paymentError(c, common.NewMessage("Failed to create the payment order"))
-		return
-	}
+	attachTopUpQuote(topUp, quote)
 	order, err := service.CreateGmpayTopUp(c.Request.Context(), service.GmpayOrderRequest{
 		Order:         topUp,
-		ExpectedQuota: quote.ExpectedQuota, PayAmount: quote.PayAmount, ReturnURL: paymentReturnPath("/wallet"),
+		ExpectedQuota: quote.ExpectedQuota(), PayAmount: quote.PayAmount, ReturnURL: paymentReturnPath("/wallet"),
 	}, config)
 	if err != nil {
 		logger.LogWarn(c.Request.Context(), common.LogText("GMPay order creation failed reason=%s", service.GmpayFailureCode(err)))
@@ -77,7 +70,7 @@ func GmpayPay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Failed to create the payment order"))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "url": url, "data": gin.H{"trade_no": order.Order.TradeNo, "payment_method": request.PaymentMethod, "currency": "CNY", "pay_amount": gmpay.FormatFiatAmount(order.Payment.AmountMinor), "expected_quota": quote.ExpectedQuota, "token": order.Payment.Token, "network": order.Payment.Network}})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "url": url, "data": gin.H{"trade_no": order.Order.TradeNo, "payment_method": request.PaymentMethod, "currency": "CNY", "pay_amount": gmpay.FormatFiatAmount(order.Payment.AmountMinor), "expected_quota": quote.ExpectedQuota(), "token": order.Payment.Token, "network": order.Payment.Network}})
 }
 
 func gmpayCreationError(c *gin.Context, order *service.GmpayCreatedOrder) {

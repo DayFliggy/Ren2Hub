@@ -56,11 +56,11 @@ func GetTopUpDetail(c *gin.Context) {
 	common.ApiSuccess(c, result)
 }
 
-// adminTopUpDetail adds the frozen discount decision, which may carry shadow
+// adminTopUpDetail adds the frozen bonus decision, which may carry shadow
 // rates and reasons, so it is never part of the owner's detail.
 type adminTopUpDetail struct {
 	*model.TopUpDetail
-	Discount *model.TopUpDiscount `json:"discount"`
+	Bonus *model.TopUpBonusDecisionRecord `json:"bonus"`
 }
 
 func GetAdminTopUpDetail(c *gin.Context) {
@@ -69,12 +69,12 @@ func GetAdminTopUpDetail(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	discount, err := model.GetTopUpDiscountRecord(result.Id)
+	bonus, err := model.GetTopUpBonusDecision(model.TopUpBonusSourceTopUp, result.Id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, adminTopUpDetail{TopUpDetail: result, Discount: discount})
+	common.ApiSuccess(c, adminTopUpDetail{TopUpDetail: result, Bonus: bonus})
 }
 func GetTopUpStatistics(c *gin.Context) {
 	filter, err := topUpRequestFilter(c, 0)

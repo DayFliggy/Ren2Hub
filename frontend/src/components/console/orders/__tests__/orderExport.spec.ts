@@ -14,6 +14,7 @@ const order: AdminOrder = {
   email: 'ada@example.com',
   amount: 142.5,
   quota: '10000000',
+  bonus_quota: '0',
   currency: 'CNY',
   type: 'topup',
   method: 'epay',

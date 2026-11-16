@@ -2,6 +2,7 @@ import type { AdminUser } from '@/types/console'
 import {
   invalidResponse,
   isRecord,
+  requiredQuota,
   requiredStrictInteger,
   requiredString,
 } from './contracts'
@@ -74,4 +75,16 @@ export function parseAdminUserPage(value: unknown): {
       return result as AdminUser
     }),
   }
+}
+
+/**
+ * The bonus of one administrator quota change (controller/user_quota.go);
+ * only additions earn one, and a replay repeats the committed bonus.
+ */
+export function parseQuotaAdjustmentBonus(value: unknown): string {
+  const endpoint = '/api/user/manage'
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const bonus = requiredQuota(value.bonus_quota, endpoint)
+  if (BigInt(bonus) < 0n) invalidResponse(endpoint)
+  return bonus
 }

@@ -113,7 +113,7 @@ describe('console navigation', () => {
       isRoot: true,
       hasPermission: () => true,
     }).flatMap((group) => group.items)
-    expect(items.some((item) => item.name === 'topup-discount')).toBe(false)
+    expect(items.some((item) => item.name === 'topup-bonus')).toBe(false)
     expect(items.find((item) => item.name === 'system-settings')).toMatchObject(
       {
         route: 'system-settings-site',

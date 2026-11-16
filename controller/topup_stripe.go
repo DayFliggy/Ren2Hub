@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
@@ -38,6 +39,7 @@ type StripePayRequest struct {
 	// CancelURL is the optional custom URL to redirect when payment is canceled.
 	// If empty, defaults to the server's console topup page.
 	CancelURL string `json:"cancel_url,omitempty"`
+	service.TopUpBonusExpectation
 }
 
 type StripeAdaptor struct {
@@ -94,7 +96,10 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		paymentError(c, common.NewMessage("User does not exist"))
 		return
 	}
-	if rejectInvalidCreditedQuota(c, id, getStripeCreditedQuota(req.Amount)) {
+	// Decided and confirmed before the Checkout Session exists; the order
+	// below freezes this same result.
+	bonus := quoteCreditedTopUpBonus(c, getStripeCreditedQuota(req.Amount))
+	if bonus == nil || !confirmTopUpBonus(c, req.TopUpBonusExpectation, bonus) {
 		return
 	}
 
@@ -119,6 +124,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
+	attachTopUpBonus(topUp, bonus)
 	err = topUp.Insert()
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Stripe failed to create top-up order user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, req.Amount, err.Error()))

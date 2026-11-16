@@ -71,6 +71,7 @@
   "redemption IDs must be positive": "兑换码 ID 必须为正整数",
   "Used redemption codes cannot be modified": "已使用的兑换码不能修改",
   "Redemption code status must be enabled or disabled": "兑换码状态只能设为启用或禁用",
-  "Top-up discount is temporarily unavailable, please try again": "充值优惠暂时无法计算，请稍后重试",
+  "Top-up bonus is temporarily unavailable, please try again": "充值加赠暂时无法计算，请稍后重试",
+  "The top-up bonus changed, please confirm the new bonus": "充值加赠已变化，请确认新的加赠额度",
   "The top-up price changed, please confirm the new price": "充值价格已变化，请确认新价格"
 }

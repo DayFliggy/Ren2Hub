@@ -8,7 +8,12 @@ from unittest.mock import Mock
 
 from candidate import Candidate, CandidateError, UPGRADE_STAGES
 from contracts.common import RequirementError
-from upgrade_contract import INSTANCES_KEY, SENSITIVE_KEYS, option_values, verify_options_migration
+from upgrade_contract import (ADDED_COLUMN_SUFFIX, INSTANCES_KEY, LEGACY_DISCOUNT_SEED_CONFIGS, SENSITIVE_KEYS,
+                              option_values, split_added_column, verify_options_migration, verify_persisted_data,
+                              verify_topup_bonus_migration)
+
+MIGRATED_BONUS_STATE = {'tables': ['topup_bonus_configs', 'topup_bonus_usage_hourly', 'topup_bonus_decisions'],
+                        'topup_bonus_configs': [], 'topup_bonus_usage_hourly': [], 'topup_bonus_decisions': []}
 
 
 class UpgradeOptionsTests(unittest.TestCase):
@@ -127,6 +132,21 @@ class UpgradeOptionsTests(unittest.TestCase):
                         runner.upgrade()
                     runner.verify_rollback_copy.assert_not_called()
 
+    def test_upgrade_runner_requires_the_bonus_migration_and_its_repeat_stability(self):
+        before, after = {'options': 'old', 'users': 'wallet'}, {'options': 'new', 'users': 'wallet'}
+        legacy = {'tables': ['topup_discount_configs', 'topup_discount_usage_hourly'],
+                  'topup_discount_configs': [], 'topup_discount_usage_hourly': []}
+        stale = {**MIGRATED_BONUS_STATE, 'tables': [*MIGRATED_BONUS_STATE['tables'], 'topup_discounts']}
+        for states, error in (([legacy, stale], 'upgrade_legacy_discount_tables_remain'),
+                              ([legacy, MIGRATED_BONUS_STATE, stale], 'upgrade_repeated_start_changed_persisted_data')):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as directory:
+                runner = self.upgrade_runner(directory)
+                runner.upgrade_snapshot = Mock(side_effect=[(before, self.before), (after, self.after), after])
+                runner.topup_bonus_state = Mock(side_effect=states)
+                with self.assertRaisesRegex(CandidateError, error):
+                    runner.upgrade()
+                runner.verify_rollback_copy.assert_not_called()
+
     @staticmethod
     def upgrade_runner(directory):
         runner = Candidate.__new__(Candidate)
@@ -142,7 +162,75 @@ class UpgradeOptionsTests(unittest.TestCase):
         runner.wait_healthy = Mock()
         runner.image_id, runner.revision = 'new-image', 'new-revision'
         runner.verify_rollback_copy = Mock()
+        runner.seed_legacy_topup_discount = Mock(return_value=False)
+        runner.topup_bonus_state = Mock(return_value=MIGRATED_BONUS_STATE)
         return runner
+
+
+class TopUpBonusUpgradeTests(unittest.TestCase):
+    def test_added_column_must_start_at_zero_and_then_stay_as_data(self):
+        old = [{'id': 1, 'money': 7}, {'id': 2, 'money': 9}]
+        rows, absent = split_added_column('top_ups', old)
+        self.assertEqual((rows, absent), (old, 'absent'))
+        new_rows, state = split_added_column('top_ups', [{**row, 'bonus_quota': 0} for row in old])
+        self.assertEqual(new_rows, old)
+        self.assertEqual(state['non_default'], 0)
+        key = 'top_ups' + ADDED_COLUMN_SUFFIX
+        self.assertEqual(verify_persisted_data({'top_ups': 'rows', key: absent}, {'top_ups': 'rows', key: state}),
+                         ['top_ups.bonus_quota'])
+        _, granted = split_added_column('top_ups', [{**old[0], 'bonus_quota': 5}, {**old[1], 'bonus_quota': 0}])
+        with self.assertRaisesRegex(RequirementError, 'upgrade_added_column_not_default'):
+            verify_persisted_data({key: absent}, {key: granted})
+        self.assertEqual(verify_persisted_data({key: granted}, {key: granted}), [], 'later upgrades keep the bonus')
+        with self.assertRaisesRegex(RequirementError, 'upgrade_changed_persisted_contract_data'):
+            verify_persisted_data({key: granted}, {key: state})
+        with self.assertRaisesRegex(RequirementError, 'upgrade_added_column_rows_invalid'):
+            split_added_column('top_ups', [old[0], {**old[1], 'bonus_quota': 0}])
+        self.assertEqual(split_added_column('users', old), (old, None))
+        # Codes redeemed before the upgrade keep their face value and gain no bonus.
+        self.assertEqual(split_added_column('redemptions', old)[1], 'absent')
+
+    def test_first_upgrade_copies_the_latest_config_and_adds_hourly_usage(self):
+        first, latest = LEGACY_DISCOUNT_SEED_CONFIGS
+        before = {'tables': ['topup_discount_configs', 'topup_discount_usage_hourly', 'topup_discounts'],
+                  'topup_discount_configs': [{'version': 3, 'config': first, 'created_by': 1, 'created_at': 10},
+                                             {'version': 4, 'config': latest, 'created_by': 2, 'created_at': 20}],
+                  'topup_discount_usage_hourly': [{'user_id': 7, 'hour_utc': 3600, 'quota': 12},
+                                                  {'user_id': 7, 'hour_utc': 7200, 'quota': 30}]}
+        after = {'tables': ['topup_bonus_configs', 'topup_bonus_usage_hourly', 'topup_bonus_decisions'],
+                 'topup_bonus_configs': [{'version': 1, 'config': latest, 'created_by': 2, 'created_at': 20}],
+                 'topup_bonus_usage_hourly': [{'user_id': 7, 'hour_utc': 7200, 'quota': 30},
+                                              {'user_id': 7, 'hour_utc': 3600, 'quota': 12}],
+                 'topup_bonus_decisions': []}
+        self.assertEqual(verify_topup_bonus_migration(before, after),
+                         {'legacy_tables_dropped': ['topup_discount_configs', 'topup_discount_usage_hourly', 'topup_discounts'],
+                          'config_copied': True, 'legacy_usage_rows_moved': 2})
+        changes = {
+            'upgrade_bonus_config_changed': {**after, 'topup_bonus_configs': [{**after['topup_bonus_configs'][0], 'config': first}]},
+            'upgrade_bonus_usage_changed': {**after, 'topup_bonus_usage_hourly': after['topup_bonus_usage_hourly'][:1]},
+            'upgrade_bonus_tables_missing': {**after, 'tables': ['topup_bonus_configs', 'topup_bonus_usage_hourly']},
+            'upgrade_bonus_decisions_changed': {**after, 'topup_bonus_decisions': [{'id': 1, 'source': 'topup'}]},
+        }
+        for error, changed in changes.items():
+            with self.subTest(error=error), self.assertRaisesRegex(RequirementError, error):
+                verify_topup_bonus_migration(before, changed)
+
+    def test_an_existing_bonus_table_wins_and_rolled_back_usage_adds_up(self):
+        bonus = [{'version': 2, 'config': 'bonus', 'created_by': 1, 'created_at': 5}]
+        before = {'tables': ['topup_bonus_configs', 'topup_bonus_usage_hourly', 'topup_discount_configs', 'topup_discount_usage_hourly'],
+                  'topup_bonus_configs': bonus, 'topup_discount_configs': [{'version': 1, 'config': 'discount', 'created_by': 1, 'created_at': 9}],
+                  'topup_bonus_usage_hourly': [{'user_id': 7, 'hour_utc': 3600, 'quota': 12}],
+                  'topup_discount_usage_hourly': [{'user_id': 7, 'hour_utc': 3600, 'quota': 3}]}
+        decisions = [{'id': 4, 'source': 'redemption'}]
+        before['topup_bonus_decisions'] = decisions
+        after = {'tables': ['topup_bonus_configs', 'topup_bonus_usage_hourly', 'topup_bonus_decisions'],
+                 'topup_bonus_configs': bonus, 'topup_bonus_decisions': decisions,
+                 'topup_bonus_usage_hourly': [{'user_id': 7, 'hour_utc': 3600, 'quota': 15}]}
+        self.assertFalse(verify_topup_bonus_migration(before, after)['config_copied'])
+        with self.assertRaisesRegex(RequirementError, 'upgrade_bonus_decisions_changed'):
+            verify_topup_bonus_migration(before, {**after, 'topup_bonus_decisions': []})
+        self.assertEqual(verify_topup_bonus_migration(MIGRATED_BONUS_STATE, MIGRATED_BONUS_STATE),
+                         {'legacy_tables_dropped': [], 'config_copied': False, 'legacy_usage_rows_moved': 0})
 
 
 if __name__ == '__main__':

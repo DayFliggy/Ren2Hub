@@ -65,9 +65,8 @@ func TestGetWaffoPayMoneyStaysDecimalUnderTokens(t *testing.T) {
 	})
 	setting.WaffoUnitPrice, common.QuotaPerUnit = 0.01, 1.1
 	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeTokens
-	// 33 / 1.1 is exactly 30; float division gives 29.999999999999996, which
-	// after a 5% discount rounds 0.285 down to 0.28 instead of up to 0.29.
-	list := getWaffoPayMoney(33)
-	require.Equal(t, "0.3", list.String())
-	require.Equal(t, "0.29", service.RoundTopUpPay(list.Mul(decimal.RequireFromString("0.95")), "USD"))
+	// 33 / 1.1 is exactly 30; float division gives 29.999999999999996.
+	pay := getWaffoPayMoney(33)
+	require.Equal(t, "0.3", pay.String())
+	require.Equal(t, "0.30", service.RoundTopUpPay(pay, "USD"))
 }

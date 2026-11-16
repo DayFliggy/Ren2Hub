@@ -166,6 +166,13 @@ async function submit() {
           </dd>
         </div>
       </dl>
+      <p
+        v-if="mode === 'grant'"
+        class="text-xs text-[var(--text-tertiary)]"
+        data-quota-bonus-note
+      >
+        {{ t('users.quotaBonusNote') }}
+      </p>
     </div>
 
     <template #footer>

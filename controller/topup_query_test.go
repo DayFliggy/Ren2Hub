@@ -139,31 +139,32 @@ func TestTopUpRankingResponseContract(t *testing.T) {
 	}
 }
 
-// Only the administrator detail carries the frozen discount decision; the
-// owner's detail and list never include shadow rates or reasons.
-func TestTopUpDiscountDecisionIsAdminOnly(t *testing.T) {
+// Only the administrator detail carries the frozen bonus decision; the
+// owner's detail and list carry the bonus amount but never shadow rates.
+func TestTopUpBonusDecisionIsAdminOnly(t *testing.T) {
 	db := useGmpayControllerDB(t)
-	user := model.User{Username: "discount-owner", AffCode: "DISCOUNT-OWNER"}
+	user := model.User{Username: "bonus-owner", AffCode: "BONUS-OWNER"}
 	require.NoError(t, db.Create(&user).Error)
-	order := &model.TopUp{UserId: user.Id, TradeNo: "discount-detail", PaymentProvider: model.PaymentProviderEpay, Status: common.TopUpStatusPending,
-		Amount: 1, ExpectedQuota: 500000, Currency: "CNY", PayAmount: "6.94", CreateTime: common.GetTimestamp(),
-		Discount: &model.TopUpDiscount{ConfigVersion: 3, ListPayAmount: "7.3", Decision: `{"shadow_rates":{"month":"0.05"}}`}}
+	order := &model.TopUp{UserId: user.Id, TradeNo: "bonus-detail", PaymentProvider: model.PaymentProviderEpay, Status: common.TopUpStatusPending,
+		Amount: 1, ExpectedQuota: 525000, BonusQuota: 25000, Currency: "CNY", PayAmount: "7.30", CreateTime: common.GetTimestamp(),
+		Bonus: &model.TopUpBonusGrant{BonusQuota: 25000, ConfigVersion: 3, Decision: `{"shadow_rates":{"month":"0.05"}}`}}
 	require.NoError(t, order.Insert())
 	router := gin.New()
 	router.Use(func(c *gin.Context) { c.Set("id", user.Id) })
 	router.GET("/detail/:trade_no", GetTopUpDetail)
 	router.GET("/admin/detail/:trade_no", GetAdminTopUpDetail)
 	router.GET("/self", GetUserTopUps)
-	for path, admin := range map[string]bool{"/detail/discount-detail": false, "/self": false, "/admin/detail/discount-detail": true} {
+	for path, admin := range map[string]bool{"/detail/bonus-detail": false, "/self": false, "/admin/detail/bonus-detail": true} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Contains(t, response.Body.String(), `"success":true`, path)
+		assert.Contains(t, response.Body.String(), `"bonus_quota":25000`, path)
 		if admin {
 			assert.Contains(t, response.Body.String(), `"shadow_rates`, path)
 			assert.Contains(t, response.Body.String(), `"config_version":3`, path)
 		} else {
 			assert.NotContains(t, response.Body.String(), "shadow", path)
-			assert.NotContains(t, response.Body.String(), `"discount"`, path)
+			assert.NotContains(t, response.Body.String(), `"bonus":`, path)
 		}
 	}
 }

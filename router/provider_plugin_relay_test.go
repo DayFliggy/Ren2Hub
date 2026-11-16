@@ -161,7 +161,7 @@ func newRelayHarness(t *testing.T) *relayHarness {
 		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(previousPrices))
 	})
 	require.NoError(t, model.DB.AutoMigrate(&model.Channel{}, &model.Log{}, &model.Option{}, &model.Task{}, &model.QuotaData{},
-		&model.UserAccessToken{}, &model.SystemTask{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{}))
+		&model.UserAccessToken{}, &model.SystemTask{}, &model.TopUpBonusUsageHourly{}, &model.TopUpBonusConfigVersion{}))
 	previousMemory, previousLog, previousBatch, previousTimeout := common.MemoryCacheEnabled, common.LogConsumeEnabled, common.BatchUpdateEnabled, constant.StreamingTimeout
 	common.MemoryCacheEnabled, common.LogConsumeEnabled, common.BatchUpdateEnabled, constant.StreamingTimeout = true, true, false, 30
 	t.Cleanup(func() {

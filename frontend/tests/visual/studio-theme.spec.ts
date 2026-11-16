@@ -157,10 +157,7 @@ test.describe('coarse pointer control targets', () => {
           page.locator('[data-balance-actions] button'),
           'balance actions'
         )
-        await checkTargets(
-          page.locator('[data-discount-configure]'),
-          'discount icon'
-        )
+        await checkTargets(page.locator('[data-bonus-configure]'), 'bonus icon')
         await checkTargets(
           page.locator(
             '.topbar-nav [aria-controls="console-mobile-navigation"], .topbar-nav .search-trigger, .topbar-nav [data-theme-switcher], .topbar-nav [data-user-menu-trigger], .topbar-language > button'

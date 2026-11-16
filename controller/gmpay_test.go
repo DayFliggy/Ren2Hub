@@ -37,8 +37,8 @@ func useGmpayControllerDB(t *testing.T) *gorm.DB {
 	db := model.DB
 	db.Logger = gormlogger.Default.LogMode(gormlogger.Silent)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}, &model.TopUp{}, &model.GmpayOrder{}, &model.GmpayMerchantVersion{}, &model.Log{}, &model.Ticket{}, &model.TicketMessage{}, &model.TicketAttachment{}, &model.AffiliateRecord{}, &model.AdminQuotaOperation{},
-		&model.TopUpDiscount{}, &model.TopUpDiscountConfigVersion{}, &model.TopUpDiscountUsageHourly{}))
-	service.ResetTopUpDiscountCaches()
+		&model.TopUpBonusDecisionRecord{}, &model.TopUpBonusConfigVersion{}, &model.TopUpBonusUsageHourly{}))
+	service.ResetTopUpBonusCaches()
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
@@ -52,7 +52,7 @@ func useGmpayControllerDB(t *testing.T) *gorm.DB {
 		common.RedisEnabled = oldRedis
 		common.SetMainDatabaseType(oldType)
 		common.SetLogDatabaseType(oldLogType)
-		service.ResetTopUpDiscountCaches()
+		service.ResetTopUpBonusCaches()
 		sqlDB.Close()
 	})
 	return db
@@ -101,12 +101,12 @@ func TestGmpayUsesNativeAmountQuotaAndCNY(t *testing.T) {
 	engine.Use(func(c *gin.Context) { c.Set("id", user.Id) })
 	engine.POST("/api/user/amount", RequestAmount)
 	engine.POST("/api/user/gmpay/pay", GmpayPay)
-	// A 10% fixed top-up discount lowers the checkout; credit stays full.
-	discount := model.DefaultTopUpDiscountConfig()
-	discount.CapRate, discount.FixedRate = "0.1", "0.1"
-	discountData, err := common.Marshal(discount)
+	// A 10% fixed top-up bonus keeps the checkout price and credits more.
+	bonus := model.DefaultTopUpBonusConfig()
+	bonus.CapRate, bonus.FixedRate = "0.1", "0.1"
+	bonusData, err := common.Marshal(bonus)
 	require.NoError(t, err)
-	_, err = model.SaveTopUpDiscountConfig(discountData, 0, 1, time.Now())
+	_, err = model.SaveTopUpBonusConfig(bonusData, 0, 1, time.Now())
 	require.NoError(t, err)
 	quoteRequest := httptest.NewRequest(http.MethodPost, "/api/user/amount", strings.NewReader(`{"amount":750001}`))
 	quoteRequest.Header.Set("Content-Type", "application/json")
@@ -116,34 +116,36 @@ func TestGmpayUsesNativeAmountQuotaAndCNY(t *testing.T) {
 		Message string `json:"message"`
 		Data    string `json:"data"`
 		Quote   struct {
-			ExpectedQuota int    `json:"expected_quota"`
-			Currency      string `json:"currency"`
-			ListPayAmount string `json:"list_pay_amount"`
-			Factor        string `json:"factor"`
+			PrincipalQuota int    `json:"principal_quota"`
+			BonusQuota     int    `json:"bonus_quota"`
+			ExpectedQuota  int    `json:"expected_quota"`
+			Currency       string `json:"currency"`
+			PayAmount      string `json:"pay_amount"`
 		} `json:"quote"`
 	}
 	require.NoError(t, common.Unmarshal(quoteResponse.Body.Bytes(), &quote))
 	require.Equal(t, "success", quote.Message, quoteResponse.Body.String())
 	// Native TOKENS pricing uses the untruncated 1.500002 units (upstream
 	// behavior); the credit is truncated to one whole unit.
-	assert.Equal(t, "9.86", quote.Data, "1.500002 × 7.3 × 0.9")
-	assert.Equal(t, "10.95", quote.Quote.ListPayAmount)
-	assert.Equal(t, 500000, quote.Quote.ExpectedQuota, "TOKENS input is truncated to whole units before pricing")
+	assert.Equal(t, "10.95", quote.Data, "1.500002 × 7.3")
+	assert.Equal(t, "10.95", quote.Quote.PayAmount)
+	assert.Equal(t, 500000, quote.Quote.PrincipalQuota, "TOKENS input is truncated to whole units before pricing")
+	assert.Equal(t, 50000, quote.Quote.BonusQuota)
+	assert.Equal(t, 550000, quote.Quote.ExpectedQuota)
 	assert.Equal(t, "CNY", quote.Quote.Currency)
-	assert.Equal(t, "0.9", quote.Quote.Factor)
 
-	stale := httptest.NewRequest(http.MethodPost, "/api/user/gmpay/pay", strings.NewReader(`{"amount":750001,"payment_method":"gmpay:usdt.tron","expected_pay_amount":"10.95","expected_currency":"CNY"}`))
+	stale := httptest.NewRequest(http.MethodPost, "/api/user/gmpay/pay", strings.NewReader(`{"amount":750001,"payment_method":"gmpay:usdt.tron","expected_pay_amount":"10.95","expected_currency":"CNY","expected_bonus_quota":0}`))
 	stale.Header.Set("Content-Type", "application/json")
 	staleResponse := httptest.NewRecorder()
 	engine.ServeHTTP(staleResponse, stale)
 	assert.Contains(t, staleResponse.Body.String(), `"code":"topup_quote_changed"`)
-	assert.Contains(t, staleResponse.Body.String(), `"pay_amount":"9.86"`)
-	assert.Nil(t, sent, "a changed price creates no gateway order")
+	assert.Contains(t, staleResponse.Body.String(), `"bonus_quota":50000`)
+	assert.Nil(t, sent, "a changed bonus creates no gateway order")
 	var orders int64
 	require.NoError(t, db.Model(&model.TopUp{}).Count(&orders).Error)
-	assert.Zero(t, orders, "a changed price creates no local order")
+	assert.Zero(t, orders, "a changed bonus creates no local order")
 
-	request := httptest.NewRequest(http.MethodPost, "/api/user/gmpay/pay", strings.NewReader(`{"amount":750001,"payment_method":"gmpay:usdt.tron","expected_pay_amount":"9.860","expected_currency":"cny"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/user/gmpay/pay", strings.NewReader(`{"amount":750001,"payment_method":"gmpay:usdt.tron","expected_pay_amount":"10.950","expected_currency":"cny","expected_bonus_quota":50000}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	engine.ServeHTTP(response, request)
@@ -163,23 +165,23 @@ func TestGmpayUsesNativeAmountQuotaAndCNY(t *testing.T) {
 	assert.Equal(t, quote.Data, result.Data.PayAmount)
 	assert.Equal(t, "https://callback.example.test/api/user/gmpay/notify", sent["notify_url"])
 	assert.Equal(t, "https://console.example.test/wallet", sent["redirect_url"])
-	assert.Equal(t, 500000, result.Data.ExpectedQuota, "native TOKENS normalization remains authoritative")
+	assert.Equal(t, 550000, result.Data.ExpectedQuota, "the order credits principal and bonus")
 	order, payment, _, err := model.GetGmpayOrder(context.Background(), result.Data.TradeNo)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, order.Amount)
-	assert.Equal(t, 500000, payment.ExpectedQuota)
+	assert.Equal(t, 550000, payment.ExpectedQuota)
 	assert.Equal(t, "CNY", payment.Currency)
 	require.NoError(t, db.First(&user, user.Id).Error)
 	assert.Zero(t, user.Quota, "creating a checkout never credits a wallet")
-	record, err := model.GetTopUpDiscountRecord(order.Id)
+	decision, err := model.GetTopUpBonusDecision(model.TopUpBonusSourceTopUp, order.Id)
 	require.NoError(t, err)
-	require.NotNil(t, record, "the decision is stored with the order")
-	assert.Equal(t, "10.9500146", record.ListPayAmount)
-	assert.Contains(t, record.Decision, `"factor":"0.9"`)
+	require.NotNil(t, decision, "the decision is stored with the order")
+	assert.Contains(t, decision.Decision, `"bonus_quota":50000`)
 	var stored model.TopUp
 	require.NoError(t, db.First(&stored, order.Id).Error)
 	assert.Equal(t, quote.Quote.ExpectedQuota, stored.ExpectedQuota, "order, snapshot and quote credit the same quota")
-	assert.Equal(t, quote.Quote.ExpectedQuota, stored.AffiliateBaseQuota, "the affiliate base stays the full credited quota")
+	assert.Equal(t, 50000, stored.BonusQuota)
+	assert.Equal(t, quote.Quote.PrincipalQuota, stored.AffiliateBaseQuota, "the bonus earns no referral reward")
 }
 
 func TestGmpayOrderAndConfigPrivacy(t *testing.T) {

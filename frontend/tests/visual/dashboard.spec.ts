@@ -814,21 +814,19 @@ test('statistics trend supports the single-series modes', async ({ page }) => {
   await assertInteractiveCentersVisible(page)
 })
 
-test('RPM stays unconnected while the discount card reads the user discount', async ({
+test('RPM stays unconnected while the bonus card reads the user bonus', async ({
   page,
 }) => {
   const rpm = page.locator('[data-overview-kpi] [data-kpi-cell="rpm"]')
   await expect(rpm).toContainText('请求限速')
   await expect(rpm).toContainText('未接入')
   await expect(rpm.locator('.display-number')).toHaveText('--')
-  // topup-discount-self.get.json: factor 0.98, fixed 1% and site 0%.
-  const discount = page.locator('[data-discount-card]')
-  await expect(discount).toHaveCount(1)
-  await expect(discount).toContainText('0.98×')
-  await expect(discount.locator('[data-discount-global]')).toContainText(
-    '减免 1%'
-  )
-  await expect(discount).not.toContainText('未接入')
+  // topup-bonus-self.get.json: applied 2%, fixed 1% and site 0%.
+  const bonus = page.locator('[data-bonus-card]')
+  await expect(bonus).toHaveCount(1)
+  await expect(bonus.locator('[data-bonus-rate]')).toHaveText('+2%')
+  await expect(bonus.locator('[data-bonus-global]')).toContainText('加赠 1%')
+  await expect(bonus).not.toContainText('未接入')
   await assertNoHorizontalOverflow(page)
 })
 

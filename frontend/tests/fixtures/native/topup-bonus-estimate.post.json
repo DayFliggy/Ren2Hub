@@ -1,0 +1,37 @@
+{
+  "data": {
+    "bonus_quota": 0,
+    "bonus_share": "0",
+    "capped_principal_share": "0",
+    "days": 30,
+    "earliest_hour_utc": null,
+    "from_date": "2026-09-30",
+    "history_covers_start": false,
+    "principal_quota": 0,
+    "records": 0,
+    "sources": [
+      {
+        "bonus_quota": 0,
+        "principal_quota": 0,
+        "records": 0,
+        "source": "topup"
+      },
+      {
+        "bonus_quota": 0,
+        "principal_quota": 0,
+        "records": 0,
+        "source": "redemption"
+      },
+      {
+        "bonus_quota": 0,
+        "principal_quota": 0,
+        "records": 0,
+        "source": "admin_quota"
+      }
+    ],
+    "to_date": "2026-10-29",
+    "unrated_records": 0
+  },
+  "message": "",
+  "success": true
+}

@@ -128,14 +128,14 @@ for (const theme of ['light', 'dark'] as const) {
     }
   })
 
-  test(`discount inputs preserve their larger text on phones (${theme})`, async ({
+  test(`bonus inputs preserve their larger text on phones (${theme})`, async ({
     page,
   }, testInfo) => {
     await configureStablePage(page, { theme })
     await page.setViewportSize({ width: 390, height: 900 })
-    await page.goto('/system-settings/billing/topup-discount')
+    await page.goto('/system-settings/billing/topup-bonus')
     await waitForStablePage(page)
-    const fixedRate = page.getByLabel('固定折扣', { exact: true })
+    const fixedRate = page.getByLabel('固定加赠', { exact: true })
     for (const width of [320, 390, 767, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 })
       await expect(fixedRate, `${theme}, ${width}px`).toHaveCSS(
@@ -146,7 +146,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 390, height: 900 })
     await fixedRate.scrollIntoViewIfNeeded()
     await captureEvidence(page, {
-      path: testInfo.outputPath(`discount-${theme}.png`),
+      path: testInfo.outputPath(`bonus-${theme}.png`),
     })
     await page.evaluate(() => {
       document.documentElement.style.fontSize = '20px'

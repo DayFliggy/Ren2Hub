@@ -53,7 +53,7 @@ func newMjRoute(t *testing.T) *mjRoute {
 	t.Helper()
 	require.NoError(t, appI18n.Init())
 	setupRelayRouterTestDB(t)
-	require.NoError(t, model.DB.AutoMigrate(&model.Midjourney{}, &model.Log{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.Midjourney{}, &model.Log{}, &model.TopUpBonusUsageHourly{}, &model.TopUpBonusConfigVersion{}))
 	service.InitHttpClient()
 	previousPrices := ratio_setting.ModelPrice2JSONString()
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"mj_imagine":0.1,"mj_upscale":0.1,"mj_modal":0.1,"mj_video":0.1}`))

@@ -34,6 +34,7 @@ export const nativeTopUp = {
   pay_amount: '73.00',
   expected_quota: 5000000,
   credited_quota: 0,
+  bonus_quota: 0,
   affiliate_base_quota: 5000000,
 }
 // model.TopUpDetail: the native row plus the owner fields; callers add gmpay.

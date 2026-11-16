@@ -1324,7 +1324,7 @@ func UpdateUserLastLoginAt(id int) {
 }
 
 func UpdateUserUsedQuotaAndRequestCount(id int, quota int) {
-	RecordTopUpDiscountUsage(id, quota)
+	RecordTopUpBonusUsage(id, quota)
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		addNewRecord(BatchUpdateTypeRequestCount, id, 1)
@@ -1335,7 +1335,7 @@ func UpdateUserUsedQuotaAndRequestCount(id int, quota int) {
 
 // UpdateUserUsedQuota adjusts accumulated usage without changing request count.
 func UpdateUserUsedQuota(id int, quota int) {
-	RecordTopUpDiscountUsage(id, quota)
+	RecordTopUpBonusUsage(id, quota)
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		return

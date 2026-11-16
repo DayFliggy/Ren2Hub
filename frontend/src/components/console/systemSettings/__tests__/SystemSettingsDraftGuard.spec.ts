@@ -12,21 +12,21 @@ import {
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import SystemSettingsDomainView from '../SystemSettingsDomainView.vue'
-import { parseTopupDiscountSettings } from '@/api/topupDiscount'
-import configResponse from '../../../../../tests/fixtures/native/topup-discount.get.json'
+import { parseTopupBonusSettings } from '@/api/topupBonus'
+import configResponse from '../../../../../tests/fixtures/native/topup-bonus.get.json'
 
 const mocks = vi.hoisted(() => ({
   options: {} as Record<string, string>,
   puts: [] as Array<{ key: string; value: string }>,
   failKey: '',
   refreshStatus: vi.fn(),
-  discountLoad: vi.fn(),
-  discountSave: vi.fn(),
+  bonusLoad: vi.fn(),
+  bonusSave: vi.fn(),
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }))
-vi.mock('@/api/topupDiscount', async (original) => ({
-  ...(await original<typeof import('@/api/topupDiscount')>()),
-  topupDiscountApi: { load: mocks.discountLoad, save: mocks.discountSave },
+vi.mock('@/api/topupBonus', async (original) => ({
+  ...(await original<typeof import('@/api/topupBonus')>()),
+  topupBonusApi: { load: mocks.bonusLoad, save: mocks.bonusSave },
 }))
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ refreshStatus: mocks.refreshStatus }),
@@ -69,8 +69,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   vi.clearAllMocks()
   mocks.refreshStatus.mockResolvedValue(undefined)
-  mocks.discountLoad.mockResolvedValue(
-    parseTopupDiscountSettings(configResponse.data)
+  mocks.bonusLoad.mockResolvedValue(
+    parseTopupBonusSettings(configResponse.data)
   )
   mocks.options = {
     SystemName: 'Original site',
@@ -227,8 +227,8 @@ describe('settings draft leave protection', () => {
     ).toBe('unsaved-test-secret')
   })
 
-  it('protects system discount drafts once across section changes, and releases the guard after saving', async () => {
-    const { wrapper, router } = await render('billing', 'topup-discount')
+  it('protects system bonus drafts once across section changes, and releases the guard after saving', async () => {
+    const { wrapper, router } = await render('billing', 'topup-bonus')
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const fixed = wrapper.get<HTMLInputElement>('input[id$="-fixed"]')
     await fixed.setValue('1')
@@ -238,7 +238,7 @@ describe('settings draft leave protection', () => {
       .trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.path).toBe(
-      '/system-settings/billing/topup-discount'
+      '/system-settings/billing/topup-bonus'
     )
     expect(confirm).toHaveBeenCalledOnce()
     expect(fixed.element.value).toBe('1')
@@ -246,12 +246,12 @@ describe('settings draft leave protection', () => {
     window.dispatchEvent(unload)
     expect(unload.defaultPrevented).toBe(true)
     let finish!: (value: unknown) => void
-    mocks.discountSave.mockImplementation(
+    mocks.bonusSave.mockImplementation(
       (_version, config) =>
         new Promise((resolve) => {
           finish = () =>
             resolve({
-              ...parseTopupDiscountSettings(configResponse.data),
+              ...parseTopupBonusSettings(configResponse.data),
               version: 1,
               config,
             })
@@ -263,7 +263,7 @@ describe('settings draft leave protection', () => {
       .trigger('click')
     await router.push('/system-settings/billing/epay')
     expect(router.currentRoute.value.path).toBe(
-      '/system-settings/billing/topup-discount'
+      '/system-settings/billing/topup-bonus'
     )
     expect(confirm).toHaveBeenCalledOnce()
     finish(undefined)

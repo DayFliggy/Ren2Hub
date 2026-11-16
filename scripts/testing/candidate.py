@@ -39,6 +39,15 @@ def require(condition, code):
         raise CandidateError(code)
 
 
+def contract(check, *args):
+    """Run an upgrade contract check and keep its diagnostic code in the report."""
+    from contracts.common import RequirementError
+    try:
+        return check(*args)
+    except RequirementError as error:
+        raise CandidateError(str(error)) from None
+
+
 def private_write(path: Path, value):
     require(not path.is_symlink(), 'symlink_output_rejected')
     if path.exists():
@@ -498,25 +507,70 @@ class Candidate:
     def upgrade_snapshot(self, include_options=False):
         """只记录本轮合成数据的指纹；轮询中的任务和日志另由行为合同验证。"""
         self.owned('postgres')
-        tables = ('options', 'users', 'tokens', 'channels', 'top_ups', 'gmpay_orders',
+        tables = ('options', 'users', 'tokens', 'channels', 'top_ups', 'gmpay_orders', 'redemptions',
                   'admin_quota_operations', 'token_route_profiles', 'token_route_entries',
                   'tickets', 'ticket_messages', 'ticket_attachments')
+        from upgrade_contract import ADDED_COLUMN_SUFFIX, option_values, split_added_column
         result, options = {}, None
         for table in tables:
-            query = ('BEGIN READ ONLY; SELECT COALESCE(json_agg(value ORDER BY value::text),\'[]\'::json) '
-                     'FROM (SELECT row_to_json(t) AS value FROM ' + table + ' t) s; COMMIT;')
-            raw = self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-t', '-A',
-                              '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode()).stdout
-            rows = json.loads(raw)
+            rows, added = contract(split_added_column, table, self.table_rows(table))
             result[table] = hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
+            if added is not None:
+                result[table + ADDED_COLUMN_SUFFIX] = added
             if table == 'options' and include_options:
-                from upgrade_contract import option_values
-                options = option_values(rows)
+                options = contract(option_values, rows)
         self.owned('app')
         files = self.docker('exec', self.containers['app'], 'sh', '-c',
                             'find /app/ticket-attachments -type f -exec sha256sum {} \\; | sort').stdout
         result['attachments'] = hashlib.sha256(files).hexdigest()
         return (result, options) if include_options else result
+
+    def psql_json(self, query):
+        raw = self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-t', '-A',
+                          '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode()).stdout
+        return json.loads(raw)
+
+    def table_rows(self, table):
+        return self.psql_json('BEGIN READ ONLY; SELECT COALESCE(json_agg(value ORDER BY value::text),\'[]\'::json) '
+                              'FROM (SELECT row_to_json(t) AS value FROM ' + table + ' t) s; COMMIT;')
+
+    def topup_bonus_state(self):
+        """折扣与加赠表的完整内容，只在内存比较。"""
+        from upgrade_contract import BONUS_ROW_TABLES, BONUS_TABLES, LEGACY_DISCOUNT_TABLES
+        self.owned('postgres')
+        names = ','.join("'" + table + "'" for table in (*LEGACY_DISCOUNT_TABLES, *BONUS_TABLES))
+        tables = self.psql_json('BEGIN READ ONLY; SELECT COALESCE(json_agg(t ORDER BY t),\'[]\'::json) FROM unnest(ARRAY['
+                                + names + ']) t WHERE to_regclass(\'public.\' || t) IS NOT NULL; COMMIT;')
+        state = {'tables': tables}
+        for table in tables:
+            if table in BONUS_ROW_TABLES:
+                state[table] = self.table_rows(table)
+        return state
+
+    def seed_legacy_topup_discount(self):
+        """折扣版本的升级源写入两版配置、两条小时用量和已用/未用两个兑换码，让首次升级迁移真实旧表，
+        并核对兑换码在新增 bonus_quota 列后保持不变。"""
+        from upgrade_contract import LEGACY_DISCOUNT_SEED_CONFIGS, LEGACY_DISCOUNT_SEED_USER
+        state = self.topup_bonus_state()
+        if not {'topup_discount_configs', 'topup_discount_usage_hourly'} <= set(state['tables']):
+            return False
+        first, latest = LEGACY_DISCOUNT_SEED_CONFIGS
+        require('$$' not in first + latest, 'upgrade_seed_config_invalid')
+        query = ('BEGIN; WITH base AS (SELECT COALESCE(MAX(version), 0) AS version FROM topup_discount_configs) '
+                 'INSERT INTO topup_discount_configs (version, config, created_by, created_at) '
+                 'SELECT base.version + seed.step, seed.config, 1, seed.created_at FROM base, '
+                 '(VALUES (1, $$' + first + '$$, 1793289600), (2, $$' + latest + '$$, 1793293200)) AS seed(step, config, created_at); '
+                 'INSERT INTO topup_discount_usage_hourly (user_id, hour_utc, quota) '
+                 'SELECT ' + str(LEGACY_DISCOUNT_SEED_USER) + ', EXTRACT(EPOCH FROM date_trunc(\'hour\', now()))::bigint - seed.hours * 3600, seed.quota '
+                 'FROM (VALUES (1, 1200), (25, 3400)) AS seed(hours, quota); '
+                 'INSERT INTO redemptions (user_id, "key", status, name, quota, created_time, redeemed_time, used_user_id, expired_time) '
+                 "VALUES (1, 'upgrade-contract-redemption-used', 3, 'upgrade contract', 500000, 1793289600, 1793293200, "
+                 + str(LEGACY_DISCOUNT_SEED_USER) + ", 0), "
+                 "(1, 'upgrade-contract-redemption-open', 1, 'upgrade contract', 700000, 1793289600, 0, 0, 0); COMMIT;")
+        self.owned('postgres')
+        self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1',
+                    '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode())
+        return True
 
     def upgrade(self):
         require(all(self.report['stages'].get(stage, {}).get('success') is True
@@ -524,7 +578,9 @@ class Candidate:
         previous_target = dict(self.target)
         previous_target['container_ids'] = dict(self.target['container_ids'])
         private_write(self.private / 'upgrade-source-target.json', previous_target)
+        seeded = self.seed_legacy_topup_discount()
         before, options_before = self.upgrade_snapshot(include_options=True)
+        bonus_before = self.topup_bonus_state()
         schema_before = self.schema_fingerprint()
         old = self.owned('app')
         self.docker('stop', '--time', '130', old['Id'], timeout=180)
@@ -535,23 +591,25 @@ class Candidate:
         self.start_app()
         self.wait_healthy('app')
         after, options_after = self.upgrade_snapshot(include_options=True)
+        bonus_after = self.topup_bonus_state()
         self.report['upgrade'].update(data_before=before, data_after=after, data_preserved=False,
                                       schema_before=schema_before, schema_after=self.schema_fingerprint())
-        require({key: value for key, value in before.items() if key != 'options'} ==
-                {key: value for key, value in after.items() if key != 'options'},
-                'upgrade_changed_persisted_contract_data')
-        from upgrade_contract import verify_options_migration
-        migration = verify_options_migration(options_before, options_after)
+        from upgrade_contract import verify_options_migration, verify_persisted_data, verify_topup_bonus_migration
+        added_columns = contract(verify_persisted_data, before, after)
+        bonus_migration = contract(verify_topup_bonus_migration, bonus_before, bonus_after)
+        migration = contract(verify_options_migration, options_before, options_after)
         self.report['upgrade'].update(data_preserved=True, sensitive_word_migration=migration,
-                                     rollback_limit='old_image_does_not_restore_retired_sensitive_options')
+                                     added_columns=added_columns,
+                                     topup_bonus_migration={**bonus_migration, 'legacy_seeded': seeded},
+                                     rollback_limit='old_image_does_not_restore_retired_sensitive_options_or_discount_config')
         self.target.update(container_ids=dict(self.containers), image_id=self.image_id, revision=self.revision)
         private_write(self.private / 'target.json', self.target)
         self.report['isolation']['container_ids'] = dict(self.containers)
         schema = self.schema_fingerprint()
         self.docker('restart', '--time', '130', self.containers['app'], timeout=180)
         self.wait_healthy('app')
-        require(schema == self.schema_fingerprint() and after == self.upgrade_snapshot(),
-                'upgrade_repeated_start_changed_persisted_data')
+        require(schema == self.schema_fingerprint() and after == self.upgrade_snapshot()
+                and bonus_after == self.topup_bonus_state(), 'upgrade_repeated_start_changed_persisted_data')
         self.report['upgrade']['repeated_start_preserved_data'] = True
         self.verify_rollback_copy()
 

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 348,
+    "extension": 351,
     "removed": 45
   },
   "files": [
@@ -1423,14 +1423,14 @@
       "path": "controller/gmpay.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cdf693ce50472e6c71edefc240e9febb74ddbe1830c4dfa12cbe9cab1d7abb44",
+      "local_sha256": "3960fc699af26f346c2174d0d77e70665caa3a649b2ebc3f8acb53b1af74c50a",
       "reasons": [
         "gmpay",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/gmpay.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -1454,7 +1454,7 @@
       "path": "controller/gmpay_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7f31262aa88bdcab4f25b6d255b1f58d6961b5f75b38f48859016116eb7abb72"
+      "local_sha256": "a3386552b40d1a8ac9cb99ea5964d4aac5c0fad67e22cf2a1d7d4236d6edd2cd"
     },
     {
       "path": "controller/group.go",
@@ -1864,7 +1864,7 @@
       "path": "controller/payment_webhook_availability_test.go",
       "status": "adapted",
       "upstream_sha256": "836e5e97e3e874d0aa78308def9a08affb12a55408219e894dfbcdd6b93e1ebd",
-      "local_sha256": "c3eaebf2e7f540666bca62397bbcab8a372cee9b2504080a00ac939823befaca"
+      "local_sha256": "51821dbb8e563819b617b8e0a9db5da4d2e6c6f9144de1381ff34c6c4aeaa1d1"
     },
     {
       "path": "controller/perf_metrics.go",
@@ -1983,7 +1983,7 @@
       "path": "controller/plugin_native_e2e_test.go",
       "status": "adapted",
       "upstream_sha256": "e44dcc9d9fc3369890abe2153b2edfa340009a0b4e84f046d947546302b2beff",
-      "local_sha256": "caaaf0dc4651c2ebc5274e6df346388b18d8934e174ad67102928f84090eab4b"
+      "local_sha256": "bce1584d560a159f7c643060916338828b50354ee6ea48157108e582927c8702"
     },
     {
       "path": "controller/plugin_protocol.go",
@@ -2123,13 +2123,14 @@
       "path": "controller/redemption.go",
       "status": "adapted",
       "upstream_sha256": "948603fabd05a33df4a0cd3375500995c220998563cae9aa93efe5f04c3c73b3",
-      "local_sha256": "fce5d454f783e7705edd376bb445d5eef2384c1b6bc202edfac30fa9c1e2c8bf",
+      "local_sha256": "a9e016470d617180a2dbb1600e530662013583a4eb8a0ef2e4b6d84bef9efc75",
       "reasons": [
+        "topup-bonus",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/redemption.go#1, controller/redemption.go#2",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/redemption.go#1, controller/redemption.go#2；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2148,7 +2149,7 @@
       "path": "controller/redemption_message_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9dd3e2ecaae94683e8edd7bb8ee56b9cb2194238d7b94568479016fc2a6c3e19"
+      "local_sha256": "06c48d072206c5ed694d4195e2aa3a036bb8f8381a21df20752a9a87f75d09ae"
     },
     {
       "path": "controller/redemption_sort_test.go",
@@ -2821,17 +2822,17 @@
       "path": "controller/topup.go",
       "status": "adapted",
       "upstream_sha256": "9783bd086179f2432194eb02ce457bd54efb6f4590e4d4cc471483e0879b8a23",
-      "local_sha256": "401d2739efb2f9bf28f23734e32913211b0bf71bbba41ebaa7580cf2d23117ca",
+      "local_sha256": "acaa5bb5cae026bb1f651ac9427dd39a1ff7cd1836b3133562a50d9ea4f2fd2f",
       "reasons": [
         "affiliate",
         "gmpay",
         "group-removal",
         "payment-single-credit",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2850,6 +2851,46 @@
       }
     },
     {
+      "path": "controller/topup_bonus.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "33421cb618a6fb95e730fb1ba5ea70240b9700778d9a7c4025e8b802bc673ce7",
+      "reasons": [
+        "topup-bonus"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
+      }
+    },
+    {
+      "path": "controller/topup_bonus_credit_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2a1de2af864291d1ca6435ed65934fd475edb51747c9d80ebda3b6aa66e6e201"
+    },
+    {
+      "path": "controller/topup_bonus_pay.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "35e34e9f3d3530283dc44f80892e358106aaddecd8d42022ef004f74166e29ca",
+      "reasons": [
+        "topup-bonus"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
+      }
+    },
+    {
+      "path": "controller/topup_bonus_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1568de5bca562bbd51948f74ef7b3e075233b9b8eb85338fe309e5513c0dd72b"
+    },
+    {
       "path": "controller/topup_callback_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -2859,15 +2900,16 @@
       "path": "controller/topup_creem.go",
       "status": "adapted",
       "upstream_sha256": "b717fbed0c2d57927ec209681c9b13e9c06342a02cd1034bed4650f6def0e89a",
-      "local_sha256": "aa93ebe5ad286ee3a88da9a9ea4984f7e73bee31332a030c8decf9b2783d1996",
+      "local_sha256": "5207995a69fc291442369ce9387c2087aacfe9b1f08861d4f152e3b08d2d1a2f",
       "reasons": [
         "affiliate",
         "payment-single-credit",
-        "retired"
+        "retired",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2877,60 +2919,18 @@
       }
     },
     {
-      "path": "controller/topup_discount.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "a9345a4becf341a2e5aa3115754b5daa57c362e1e4764416bcaa03b6945e714d",
-      "reasons": [
-        "topup-discount"
-      ],
-      "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_discount.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/topup_discount.go#1"
-        ]
-      }
-    },
-    {
-      "path": "controller/topup_discount_pay.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "b4325954157cd7366130f1ff05cfc87dc23b552c3f6b37004547baaa5cb0a3e0",
-      "reasons": [
-        "topup-discount"
-      ],
-      "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_discount_pay.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/topup_discount_pay.go#1"
-        ]
-      }
-    },
-    {
-      "path": "controller/topup_discount_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "67800ff7a10e9a46925aa5a59c4a76bc5792aacb593bca519b6cf5a4c0135599"
-    },
-    {
       "path": "controller/topup_query.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1d94327452225bb4f1863a41c56434158b58ff708c256a86788cedbc593efefd",
+      "local_sha256": "0b6bd458c888099d2e21fb0bbe46ee94d0c46b64c3992a7080d32d8a72c66706",
       "reasons": [
         "affiliate",
         "gmpay",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_query.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_query.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2942,7 +2942,7 @@
       "path": "controller/topup_query_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e68a97ca4198a63172c5dfb3bc5ee2ab54f51928ac09a0ed5694ef95f49015f2"
+      "local_sha256": "0d196e48c775763b6f15bf697dc92e0cb3d2809ef99de08d8b013d2bec46c568"
     },
     {
       "path": "controller/topup_quota_limit_test.go",
@@ -2954,17 +2954,17 @@
       "path": "controller/topup_stripe.go",
       "status": "adapted",
       "upstream_sha256": "b544c2b3dab224ea4d06baf197ecca9de53ac0cfa93d30c5bb3b30d2b90d1333",
-      "local_sha256": "34b2f5dd1e0f788e865eed50b3bf7ecd6ee43f3f3a9f2e09cb27f8d44891f3a2",
+      "local_sha256": "2b16de5abb22fc55c95554fdcc84310c3900f0e6a68b5844d13945c7e2109b4d",
       "reasons": [
         "affiliate",
         "group-removal",
         "payment-single-credit",
         "retired",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2985,17 +2985,17 @@
       "path": "controller/topup_waffo.go",
       "status": "adapted",
       "upstream_sha256": "8a20566d4c8db5e61d36c5e2b21e3c43952c2480fd0a569bdb31047f1a2e6bb4",
-      "local_sha256": "f6426dee25df26dcd548d8f40ca237f78ae92a34d531de6f918d8a0a164e976c",
+      "local_sha256": "c797a58be35eb172eef80ecf643d3e5c3d3e20df27fc4a1b7dc122099bd59fdb",
       "reasons": [
         "affiliate",
         "group-removal",
         "payment-single-credit",
         "retired",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3013,17 +3013,17 @@
       "path": "controller/topup_waffo_pancake.go",
       "status": "adapted",
       "upstream_sha256": "d9ba173d4f68acae5288300aace18200e52a38474b8b5d0b629ec7f71a9d1833",
-      "local_sha256": "294fbc7742e93ea0476ecd77736d2f2632167de50f59079253b35e2296ef104b",
+      "local_sha256": "abbbb917d379226cd89f0d2ef7aa79d5b1cb1b993682a13cf3eae55315f09be5",
       "reasons": [
         "affiliate",
         "group-removal",
         "payment-single-credit",
         "retired",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3042,7 +3042,7 @@
       "path": "controller/topup_waffo_pancake_test.go",
       "status": "adapted",
       "upstream_sha256": "4a64c6c1c95feceadbd577198119a2a85f6a45ab95745c27f4f9a8d0f02741bd",
-      "local_sha256": "1b368b8f4c49480e8431393d912643f6f3d3c0c262d97d13831bb5eb8f546754"
+      "local_sha256": "f939cc81dd0264cecc9adb5cea920188c6d15da19f98c54122d5d8d860f0efba"
     },
     {
       "path": "controller/twofa.go",
@@ -3072,7 +3072,7 @@
       "path": "controller/user.go",
       "status": "adapted",
       "upstream_sha256": "b02c6be9055ed0767e5667882eaaed84132388f9c436437459d80f54e76e4b08",
-      "local_sha256": "a9c2d8515f8496454ffbe877b80a0c9a9baf8dd3a59c10df9b3e8280c4449574",
+      "local_sha256": "c9593a3ccf4bb7ff8d9b39f14dfe70c81f52eeb844d626bc7cd59aaada84ebf8",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -3080,11 +3080,12 @@
         "group-removal",
         "request-limits-summary",
         "retired",
+        "topup-bonus",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3112,7 +3113,7 @@
       "path": "controller/user_manage_test.go",
       "status": "adapted",
       "upstream_sha256": "9ec3f058238615355d9df93d9f9f2a4e0cf657d268b9fa6328235811dafd13f6",
-      "local_sha256": "8be37d6b1714471b3ea034a16bda4dff1600611df91a62ccd7a14d2102e962a3"
+      "local_sha256": "4219cf2df484eec076f91c6948bd371a822efe0131e93d914e7c33550f1178d3"
     },
     {
       "path": "controller/user_publication.go",
@@ -3136,13 +3137,14 @@
       "path": "controller/user_quota.go",
       "status": "adapted",
       "upstream_sha256": "91c0416a6ec77d638137204b6e85539631fd0bfa82919a49c2f18047848ee5bd",
-      "local_sha256": "271c06f20ef91295195a5f950f33c157dde8b15d1c5ec8cb13c53b582c647946",
+      "local_sha256": "29b9aaeb63147da898a111d12d58a1cd9047db6b1969a48cf365b7e5354024cc",
       "reasons": [
-        "affiliate"
+        "affiliate",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user_quota.go#1, controller/user_quota.go#2, controller/user_quota.go#3, controller/user_quota.go#4",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user_quota.go#1, controller/user_quota.go#2, controller/user_quota.go#3, controller/user_quota.go#4；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3401,19 +3403,19 @@
       "path": "main.go",
       "status": "adapted",
       "upstream_sha256": "abbdc28ddc8588d0c6e499339959220ee7fed226fcbde573091cf34cf42ff8e9",
-      "local_sha256": "0b223616a35a4fed3d136ba01476ff020e077ccb94f9d528637267fc6c51aedf",
+      "local_sha256": "3205c1d3e70fd6e440e4f4f0def8178b57d08cc2863523bebda1dd37d555a244",
       "reasons": [
         "branding",
         "no-builtin-prices",
         "ops-metrics",
         "retired",
         "single-node",
-        "topup-discount",
+        "topup-bonus",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：main.go#10, main.go#11, main.go#12, main.go#2, main.go#3, main.go#4, main.go#5, main.go#6, main.go#7, main.go#8, main.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：main.go#10, main.go#11, main.go#12, main.go#2, main.go#3, main.go#4, main.go#5, main.go#6, main.go#7, main.go#8, main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3472,7 +3474,7 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "93645286579fe496b594c7b0e528f77dedc5bec4d1f2eaa18edae46cdcf8d6f0",
-      "local_sha256": "bb36ceda620f18b5554ee7171ee707cda59c12d16668dee3818469e138e54647",
+      "local_sha256": "5c0c67697e85a60f719e5da729e11a3a4e9aca087ebe32aaa704cab739560dbc",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -3482,12 +3484,12 @@
         "retired",
         "ticket",
         "token-routing",
-        "topup-discount",
+        "topup-bonus",
         "upstream-ratio"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/access_token_routes.go#1, middleware/access_token_routes.go#2, middleware/access_token_routes.go#3, middleware/access_token_routes.go#4, middleware/access_token_routes.go#5, middleware/access_token_routes.go#6, middleware/access_token_routes.go#7, middleware/access_token_routes.go#8",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/access_token_routes.go#1, middleware/access_token_routes.go#2, middleware/access_token_routes.go#3, middleware/access_token_routes.go#4, middleware/access_token_routes.go#5, middleware/access_token_routes.go#6, middleware/access_token_routes.go#7, middleware/access_token_routes.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4027,19 +4029,19 @@
       "path": "model/affiliate_deleted_inviter_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cf41f6d485e9f236e6775d2d7f6e121c6a49ee26674e6f878897bcb9bb26a00e"
+      "local_sha256": "38b5392a5b01606467554aac3bca410e71add38c38c70d03d501636005665a61"
     },
     {
       "path": "model/affiliate_deleted_inviter_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b3842aeb374faa0c14a9c9cba8fccc1ae979b3dc555b804783409221355b7ef2"
+      "local_sha256": "f4c52808ab0f8c164b7216d67d32f1e0fd614828d9da1d20d8d6b4af4b135d76"
     },
     {
       "path": "model/affiliate_ledger_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "88f42717dc9ff7126bee1000742df4cf6ee877bead16e035336604c5cf093bcc"
+      "local_sha256": "2f26e64fd308b47ae3dc90eeaf6e13d0fd1ba09fb8719ec82df335589b9940c4"
     },
     {
       "path": "model/affiliate_monthly_series_test.go",
@@ -4069,7 +4071,7 @@
       "path": "model/affiliate_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "11e39bf0e0c67cc766a96e5afd45e6cbef791420a189386141c46350e6a037ef"
+      "local_sha256": "58c78ee19344871e7d46fda820fd683115cdaec4aab6b21fb5193b49d5b53723"
     },
     {
       "path": "model/audit_log.go",
@@ -4587,14 +4589,14 @@
       "path": "model/gmpay.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "13ffb51d40ce696d384b9e25e9eb133121400c745d9269ca447743e0f603ed99",
+      "local_sha256": "0639a6ecac40767041f56971188152f1295e33a9860bc9fb30bc61a4dde5dad5",
       "reasons": [
         "gmpay",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/gmpay.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4624,7 +4626,7 @@
       "path": "model/gmpay_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "dd9a62e2c2d67a3caf18daf25c64474c002975d54bd6002a7d011c8e8dbd88f7"
+      "local_sha256": "78e604d72984c7553991f82b3be72e98f34c2727d1c91308f17b8a69db0bfefc"
     },
     {
       "path": "model/gmpay_test.go",
@@ -4672,7 +4674,7 @@
       "path": "model/install_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cc157b4407223bc051f9595b258a60136b95fd974b6c80fc33ed8912b29938d7"
+      "local_sha256": "13608810315db8ed20b4d0cff5945b3ad5db652b26505ecf23004feb572a7dda"
     },
     {
       "path": "model/install_guard.go",
@@ -4779,7 +4781,7 @@
       "path": "model/main.go",
       "status": "adapted",
       "upstream_sha256": "36d2ef0c7dd4124b0a07e0e5972830da44f5fc72e39b90703472ace43746a1e1",
-      "local_sha256": "82c8aaf0667bae8103312bcff85a2788a7d5a2b1d29f7268917162dd8b2b7f53",
+      "local_sha256": "06931ab92be729c1f1b8651e8bc11256b3f0e1c876dce210aadfe8d7d348b309",
       "reasons": [
         "affiliate",
         "gmpay",
@@ -4788,11 +4790,11 @@
         "retired",
         "ticket",
         "token-routing",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5187,13 +5189,14 @@
       "path": "model/redemption.go",
       "status": "adapted",
       "upstream_sha256": "89f37144add9046366b5a1aaac08b3ed060ca72eadc421c4a9c909342a738b4b",
-      "local_sha256": "a358d73c0c90b106bb0f14b36ff91036d7c57384e3476d3b00e943e0a6b3ec80",
+      "local_sha256": "70e80e33ecde0acfcf105e29991f3821e93a85c588382023394827d361e5d766",
       "reasons": [
+        "topup-bonus",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/redemption.go#2, model/redemption.go#3, model/redemption.go#8",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/redemption.go#2, model/redemption.go#3, model/redemption.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5231,7 +5234,21 @@
       "path": "model/redemption_test.go",
       "status": "adapted",
       "upstream_sha256": "d5704ef10423c4f7e4ffe691fffbad7b1bc53332250d7dd4e17ee4966a34044e",
-      "local_sha256": "50afd4fcbe733d99d8fa83c6210976365f056899ca4b4574de4dbeed6514c8ea"
+      "local_sha256": "e7f61032cb8bd21dabea117dac3b76282e5a6a305b84bcbe73f65b27e06bf5ed"
+    },
+    {
+      "path": "model/redemption_update.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c75c506a8cb31989d10fcc78dde291fe87490cbe48524402693f38dedbf4ea3a",
+      "reasons": [
+        "topup-bonus"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
+      }
     },
     {
       "path": "model/request_policy.go",
@@ -5588,16 +5605,16 @@
       "path": "model/topup.go",
       "status": "adapted",
       "upstream_sha256": "6bdecb2b21b897f49187aa3f3e8f70ab10f960b451bc12b587332cde95b8bf52",
-      "local_sha256": "f6db2c33ae4fc997559c39fea0f7c2c57160cdb3393f78df05d022fa2d60c3dd",
+      "local_sha256": "d871ba7b9d07bca2a0516f3abea187217b5e9392a8b4850f63c5b5b8f068c805",
       "reasons": [
         "affiliate",
         "gmpay",
         "payment-single-credit",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5612,69 +5629,97 @@
       }
     },
     {
-      "path": "model/topup_discount_config.go",
+      "path": "model/topup_bonus_config.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cd45bee6655b428cfe4dc1d3d82f6066210c85769eafa22062e2ce4fd86df102",
+      "local_sha256": "ba4ef00636388e72b12a3c33f5f18ed20c112bb7a9c192be60da06f1de21fed7",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_discount_config.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/topup_discount_config.go#1"
-        ]
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
       }
     },
     {
-      "path": "model/topup_discount_config_test.go",
+      "path": "model/topup_bonus_config_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "49a352d901f8342cf3ed2289718f2f6f772ff9242463f4968769a6550e382260"
+      "local_sha256": "64b3702bd9c5ab04772018a6886e34dd71d74debd02345c6d8e4f0dea2a6780c"
     },
     {
-      "path": "model/topup_discount_databases_test.go",
+      "path": "model/topup_bonus_credit.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "178493238cd7acba70c86de2bff952266b74ff72bffc9025708e5bb1e09f70b3"
-    },
-    {
-      "path": "model/topup_discount_record.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "c60db8a0b47a69dc1fcb949b6d9e2118532ec7340ee23b129ea55805209722bd",
+      "local_sha256": "8960031a2d96b4d1d31b155efdebe492180ec35aeee16512546c7ba11f766305",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_discount_record.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/topup_discount_record.go#1"
-        ]
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
       }
     },
     {
-      "path": "model/topup_discount_usage.go",
+      "path": "model/topup_bonus_credit_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d0615e86d66992959798a1626d66bdb002e6f02d554b0da0cda5624ee7a0a43a",
+      "local_sha256": "69abb221cfc99641032809db5a4948e6a14ad3d650ddf23f1e38cafc49087006"
+    },
+    {
+      "path": "model/topup_bonus_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "89e77f546600e812f3a4cb9349a9a6ed8410af3c4e20452ce0fcad409852de82"
+    },
+    {
+      "path": "model/topup_bonus_decision.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fee2490a8020cc5eabd174ff8d55214e662a5e30b78b327e5013dffee9377545",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_discount_usage.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/topup_discount_usage.go#1"
-        ]
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
+      }
+    },
+    {
+      "path": "model/topup_bonus_migration.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1bb00958debff2b88a6610e350d2189bda269507fdb26bae85d4032d3e297e58",
+      "reasons": [
+        "topup-bonus"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
+      }
+    },
+    {
+      "path": "model/topup_bonus_migration_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3ffe0456d44085b8be353a35f3ed5af2e0f4031ac4fce663da2b40f98ddc7da7"
+    },
+    {
+      "path": "model/topup_bonus_usage.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f264fc2d93f4ccc2ff4a7076826d05f3e8e3ecac4ebb84913fe5039bb63e7b79",
+      "reasons": [
+        "topup-bonus"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
       }
     },
     {
@@ -5718,15 +5763,16 @@
       "path": "model/topup_settlement.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1a4b9643130ddcad59173feb3f7b4e2001de34ec2563e4b8b0033780a11685c9",
+      "local_sha256": "7ec06582e073cb02a4095d34e87d818aa2e9e69431b6b87a30bceae4d8e885e9",
       "reasons": [
         "affiliate",
         "gmpay",
-        "payment-single-credit"
+        "payment-single-credit",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5813,19 +5859,19 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "c8e77dc565b1cb4ada75e24bac9186c89bf6a95fdd2aa49807813f5e9a590f3f",
+      "local_sha256": "8939a79f86b48d599f7cfb77302027f40e13dedc6162b29cc4aceb6082725f70",
       "reasons": [
         "affiliate",
         "auth-cache-integrity",
         "concurrency",
         "group-removal",
         "retired",
-        "topup-discount",
+        "topup-bonus",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5933,13 +5979,14 @@
       "path": "model/user_quota_adjustment.go",
       "status": "adapted",
       "upstream_sha256": "8df04e504bd239a5ae1beacc35cf08ce8fa3df58416374885fe4ad2e90fa0291",
-      "local_sha256": "d7290d0f12389ede617d7c82623bf43be725833945d192c4c14e856d78db0044",
+      "local_sha256": "6c90974bd2e6556ac046716334141abecf712fc568e674cbd3c7c5841ec1bdf1",
       "reasons": [
-        "affiliate"
+        "affiliate",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -6820,12 +6867,6 @@
       "local_sha256": "73db42238b4ba2c97991ea7ce5a8f2b9bfcad1df8bacd87b6a75eb451a3a7bea"
     },
     {
-      "path": "plugins/billing_input_validation_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "ace086b75f4dfc7880d150a99ecb54bbb75d2aa6260d67ab63850542ef6b18bd"
-    },
-    {
       "path": "plugins/builtin_plugins_test.go",
       "status": "upstream_equal",
       "upstream_sha256": "10e33216c43b889a92f71917b3e1e1880b30f69ef15167791c39dada032c63dd",
@@ -6860,12 +6901,6 @@
       "status": "upstream_equal",
       "upstream_sha256": "6dc72aa3f0da1d75a2a8808aead79b246bd7dcae7ec148a4c63e9b8a7c6a6938",
       "local_sha256": "6dc72aa3f0da1d75a2a8808aead79b246bd7dcae7ec148a4c63e9b8a7c6a6938"
-    },
-    {
-      "path": "plugins/hailuo_duration_validation_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "bb19953503c004d4b8b87f70a237e9f5daae721e7be8df803ab8d416bed05265"
     },
     {
       "path": "plugins/hailuo_responses_test.go",
@@ -6926,12 +6961,6 @@
       "status": "adapted",
       "upstream_sha256": "465f753b1bee5961171e0e449ca682d04db6cbfb2cee36cbad4e9fd68fd73e6d",
       "local_sha256": "ffc96284e34f9d087a5712c87e94f3dd32b0701577837a1058388b1cacff2405"
-    },
-    {
-      "path": "plugins/sora_protocol_validation_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "bb19953503c004d4b8b87f70a237e9f5daae721e7be8df803ab8d416bed05265"
     },
     {
       "path": "plugins/sora_responses_test.go",
@@ -10674,7 +10703,7 @@
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "a6ec29bf1844cb7d2100467937be3872ff1cc0437f354aeaaed017da3e6a96d7",
-      "local_sha256": "676fac4bfcd54f8665ec060e5b5a80191758dcae15e880a85e6c02c97d53c3fe",
+      "local_sha256": "922f3376f449a384ab9223ae33c7b658370f9d3f25fe79270a14f3d56acc7977",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -10686,12 +10715,12 @@
         "retired",
         "ticket",
         "token-routing",
-        "topup-discount",
+        "topup-bonus",
         "upstream-ratio"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/api-router.go#1, router/api-router.go#10, router/api-router.go#11, router/api-router.go#2, router/api-router.go#3, router/api-router.go#4, router/api-router.go#5, router/api-router.go#6, router/api-router.go#7, router/api-router.go#8, router/api-router.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/api-router.go#1, router/api-router.go#10, router/api-router.go#11, router/api-router.go#2, router/api-router.go#3, router/api-router.go#4, router/api-router.go#5, router/api-router.go#6, router/api-router.go#7, router/api-router.go#8, router/api-router.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#2026-11-16-充值加赠（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -10801,7 +10830,7 @@
       "path": "router/mj_origin_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3ebc851b75d280781a860d7092f22c548650be020b45a027098e2d6e3ed1b693"
+      "local_sha256": "6620cbe11000d94f1c1d322f58feb2ff3650759bbfd2de10b80a69447886e511"
     },
     {
       "path": "router/mj_origin_upstream_probe_test.go",
@@ -10861,7 +10890,7 @@
       "path": "router/provider_plugin_relay_test.go",
       "status": "adapted",
       "upstream_sha256": "3a4d55b86f1d1aa719e3118a177dc1a4fbfdd7b8771443a4e64a47126caa00e4",
-      "local_sha256": "e8bb6bc7bc4d92fe6c27ed0a155a0afdbeef5a0b386a2589a63f17b05f3521cc"
+      "local_sha256": "c318efee13aee767b0e32d31b334d60c275996ba446b1ea4e8baaec8cb459fea"
     },
     {
       "path": "router/relay-router.go",
@@ -10968,7 +10997,7 @@
       "path": "router/video_remix_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ced19d959ffc41b02268e23b38e24687a33a374c41fc3af19e57e576618987b2"
+      "local_sha256": "2da01ad1a6f18b1747d8799a104120253e7cbd3a74058784dda51da2e81a3a51"
     },
     {
       "path": "router/video_remix_upstream_probe_test.go",
@@ -12851,7 +12880,7 @@
       "path": "service/task_missing_channel_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "fd027e82085a9f41175ff3031669b08ef1971f76706a064d9f2c86f1262a344f"
+      "local_sha256": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b"
     },
     {
       "path": "service/task_plugin_audit.go",
@@ -12906,7 +12935,7 @@
       "path": "service/task_polling_contract_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "255646f6cec1f2437a719de84eb1c3b7e494626238d9e10653d906f1c1500fe9"
+      "local_sha256": "70d0564eeea830119a7c67f692e3c4d78b2ef12e1f8c55f727343136aa90b2be"
     },
     {
       "path": "service/task_polling_test.go",
@@ -13078,70 +13107,58 @@
       "local_sha256": "df29cf747402d73d66b747fe42b15709ac933c1243686e9e41c245c73b10ae04"
     },
     {
-      "path": "service/topup_discount.go",
+      "path": "service/topup_bonus.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e317cbd2c3be083a1117f1923fc78d10b5b16bcc742ce15db19415c6657a1c3b",
+      "local_sha256": "4267102dd35a0a0758e2dc54dae093285605a768e9b58b76f6f9f69bc41d6928",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/topup_discount.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/topup_discount.go#1"
-        ]
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
       }
     },
     {
-      "path": "service/topup_discount_estimate.go",
+      "path": "service/topup_bonus_estimate.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "dd61ecd977ce5b8c17512002bf3ad25bec18797ef8420a7e0679c44c68557cc7",
+      "local_sha256": "5d20107259184d2c77b3ce82c71a1ec4c44ac3e05b6cbe2895eafd489cd5f331",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/topup_discount_estimate.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/topup_discount_estimate.go#1"
-        ]
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
       }
     },
     {
-      "path": "service/topup_discount_estimate_test.go",
+      "path": "service/topup_bonus_estimate_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ee9359bf522f457cc2afaaa9c30b6fccb9ecfd9059ae07c17482489d5ba75014"
+      "local_sha256": "0955abd7bbf57120f1bc053706e0e2fce08241a95921fa158a4d1c265db27af5"
     },
     {
-      "path": "service/topup_discount_quote.go",
+      "path": "service/topup_bonus_quote.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "54fa97942d9f0a9b638369cf76a9faa424b15ae833a4c5937adc1fd827d0258a",
+      "local_sha256": "c8b1fb616ab449153a33001a28e4adf11ae419cfa2bba780525f0d9d4a54f6fb",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/topup_discount_quote.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/topup_discount_quote.go#1"
-        ]
+        "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#2026-11-16-充值加赠；替换充值折扣扩展文件，不改上游文件行为",
+        "method": "本轮实现逐文件审查；计划经 Codex 交叉审计"
       }
     },
     {
-      "path": "service/topup_discount_test.go",
+      "path": "service/topup_bonus_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1ad56aa469c00b9f02c24036f6884a10c8753365cadb892898197027dbea0b27"
+      "local_sha256": "837972fc13e5e1667a7d865ab89acbe08ac58c0f843d1dbf342fd9dda0675824"
     },
     {
       "path": "service/twofa.go",
@@ -13507,7 +13524,7 @@
       "upstream_sha256": "2043337a79fcf1f3aa542ca0c512e600ee1d42262cebdf8b22d3454e77fd69ce",
       "local_sha256": "2fe35ca7478ea8e64bb63143fec497f04fba6409ed7461d190c9bb1f6f9b03e1",
       "reasons": [
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
@@ -13793,7 +13810,7 @@
       "local_sha256": "ea601e8d7aacd7957a3f1395a5f06bc3299f621948bda08d71bd0c7cc5b3d944",
       "reasons": [
         "retired",
-        "topup-discount"
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
@@ -14126,11 +14143,6 @@
       "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
       "kind": "approved_contract"
     },
-    "topup-discount": {
-      "basis": "独有充值折扣：单笔充值、固定、全站与个人用量阶梯合成一次结账折扣，只降低易支付/GMPay/Waffo/Pancake 的实付，到账足额；调用计价回到上游；小时统计、配置与审计放在扩展文件。",
-      "authority": "SYNC_LEDGER.md#2026-11-10-充值折扣合并",
-      "kind": "approved_contract"
-    },
     "auth-cache-integrity": {
       "basis": "吸收已合并#8200缓存签名、旧缓存回源修复、计数CAS保留和会话撤销保护，适配本地MaxConcurrency及已删除分组。",
       "authority": "SYNC_LEDGER.md#2026-11-05-路由交叉审计修复",
@@ -14148,8 +14160,13 @@
     },
     "payment-single-credit": {
       "kind": "approved_contract",
-      "authority": "AGENTS.md; docs/billing/TOPUP_DISCOUNT.md:37",
+      "authority": "AGENTS.md; docs/billing/TOPUP_BONUS.md#在线充值的报价与确认",
       "basis": "支付回调与人工补单最多一次入账；保留冻结额度、PayAmount/Currency、历史额度解释和返利原子事务，不泛化为所有通道收据/ACK修复。"
+    },
+    "topup-bonus": {
+      "basis": "独有充值加赠：单笔入账、固定、全站与个人用量阶梯合成一次加赠比例，实付不变，按本金另赠额度；覆盖六个在线充值渠道、兑换码与管理员加额；订单 ExpectedQuota 冻结本金加赠合计、返利基数为本金；小时统计、配置、决策记录与一次性迁移放在扩展文件；调用计价与上游一致。",
+      "authority": "SYNC_LEDGER.md#2026-11-16-充值加赠",
+      "kind": "approved_contract"
     }
   },
   "review_scope": {

@@ -244,6 +244,17 @@ function paymentRailLabel(method: string): string {
               ? formatQuota(displayOrder.quota)
               : t('orders.notCredited')
           }}
+          <span
+            v-if="BigInt(displayOrder.bonus_quota) > 0n"
+            class="ml-1 text-xs text-[var(--status-success-text)]"
+            data-order-bonus
+          >
+            {{
+              t('orders.bonus', {
+                bonus: formatQuota(displayOrder.bonus_quota),
+              })
+            }}
+          </span>
         </dd>
       </div>
       <div class="min-w-0">

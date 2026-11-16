@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
 import BalanceCard from '@/components/console/dashboard/BalanceCard.vue'
-import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
+import BonusCard from '@/components/console/dashboard/BonusCard.vue'
 import UsageDistributionCard from '@/components/console/dashboard/UsageDistributionCard.vue'
 import TokenTrendCard from '@/components/console/dashboard/TokenTrendCard.vue'
 import ModelDistributionCard from '@/components/console/dashboard/ModelDistributionCard.vue'
@@ -49,9 +49,9 @@ const {
   recentOutOfRange,
   usageUnavailable,
   error: dashboardError,
-  discounts,
-  discountsLoading,
-  discountsError,
+  topupBonus,
+  topupBonusLoading,
+  topupBonusError,
   load,
   reset,
 } = useDashboard(scope)
@@ -268,12 +268,12 @@ const rangeOptions = computed(() => [
             "
           />
           <!-- 折扣来自独立接口，个人汇总失败时照常显示 -->
-          <DiscountCard
+          <BonusCard
             v-if="scope === 'self'"
             class="min-w-0"
-            :discounts="discounts"
-            :loading="discountsLoading"
-            :error="discountsError"
+            :bonus="topupBonus"
+            :loading="topupBonusLoading"
+            :error="topupBonusError"
             :can-configure="auth.isRoot && app.isFeatureEnabled('admin')"
           />
           <template v-if="!dashboardError">

@@ -2,7 +2,6 @@ import {
   invalidResponse,
   isRecord,
   requiredBoolean,
-  requiredQuota,
   requiredStrictInteger,
   requiredString,
 } from './contracts'
@@ -11,12 +10,9 @@ import { httpTransport } from './httpTransport'
 import { ApiError } from './types'
 import { getLocale } from '@/i18n'
 import { serverResponseMessage } from '@/i18n/serverMessages'
-import {
-  TOPUP_DISCOUNT_WINDOWS,
-  type TopupDiscountWindow,
-} from '@/types/topupDiscount'
+import { parseTopupBonusQuote } from './topupBonus'
+import type { TopupBonusQuote } from '@/types/topupBonus'
 import { compareDecimal, isDecimal } from '@/utils/decimal'
-import type { Quota } from '@/utils/quota'
 export interface PayMethod {
   type: string
   name: string
@@ -165,25 +161,17 @@ export function parseTopupInfo(value: unknown): TopupInfo {
 }
 
 /**
- * service.TopUpQuote.PublicView: the server's price for one Epay, GMPay, Waffo
- * or Waffo Pancake top-up. Amounts and rates are exact decimal strings.
+ * service.TopUpQuote.PublicView: the server's price and bonus for one Epay,
+ * GMPay, Waffo or Waffo Pancake top-up. Amounts and rates are exact decimal
+ * strings; the bonus never changes the price.
  */
-export interface TopupQuote {
-  expected_quota: Quota
+export interface TopupQuote extends TopupBonusQuote {
   currency: string
-  list_pay_amount: string
   pay_amount: string
-  factor: string
-  applied_rate: string
-  amount_rate: string
-  fixed_rate: string
-  site_rate: string
-  personal_rate: string
-  cap_applied: boolean
-  winner_window?: TopupDiscountWindow
 }
-/** Pay error code: no order exists and the response carries the new quote. */
+/** Pay error codes: no order exists and the response carries the new quote. */
 const TOPUP_QUOTE_CHANGED = 'topup_quote_changed'
+const TOPUP_BONUS_CHANGED = 'topup_bonus_changed'
 function requiredDecimal(value: unknown, endpoint: string): string {
   if (!isDecimal(value)) invalidResponse(endpoint)
   return value
@@ -195,34 +183,15 @@ function requiredPayAmount(value: unknown, endpoint: string): string {
 }
 export function parseTopupQuote(value: unknown, endpoint: string): TopupQuote {
   if (!isRecord(value)) invalidResponse(endpoint)
-  const expectedQuota = requiredQuota(value.expected_quota, endpoint)
   const currency = requiredString(value.currency, endpoint)
-  const window = value.winner_window
-  if (
-    BigInt(expectedQuota) <= 0n ||
-    !/^[A-Z]{3}$/.test(currency) ||
-    (window !== undefined &&
-      !TOPUP_DISCOUNT_WINDOWS.includes(window as TopupDiscountWindow))
-  )
-    invalidResponse(endpoint)
+  if (!/^[A-Z]{3}$/.test(currency)) invalidResponse(endpoint)
   return {
-    expected_quota: expectedQuota,
+    ...parseTopupBonusQuote(value, endpoint),
     currency,
-    list_pay_amount: requiredPayAmount(value.list_pay_amount, endpoint),
     pay_amount: requiredPayAmount(value.pay_amount, endpoint),
-    factor: requiredDecimal(value.factor, endpoint),
-    applied_rate: requiredDecimal(value.applied_rate, endpoint),
-    amount_rate: requiredDecimal(value.amount_rate, endpoint),
-    fixed_rate: requiredDecimal(value.fixed_rate, endpoint),
-    site_rate: requiredDecimal(value.site_rate, endpoint),
-    personal_rate: requiredDecimal(value.personal_rate, endpoint),
-    cap_applied: requiredBoolean(value.cap_applied, endpoint),
-    ...(window === undefined
-      ? {}
-      : { winner_window: window as TopupDiscountWindow }),
   }
 }
-/** The server's new quote when a pay request was rejected for a price change. */
+/** The server's new quote when a pay request was rejected for a changed price or bonus. */
 export function quoteChangedFrom(error: unknown): TopupQuote | null {
   if (
     !(error instanceof ApiError) ||
@@ -233,6 +202,31 @@ export function quoteChangedFrom(error: unknown): TopupQuote | null {
     return null
   // paymentRequest sets this data only after parseTopupQuote succeeds.
   return error.data.quote as unknown as TopupQuote
+}
+/** The server's new bonus when a Stripe or Creem request confirmed an old one. */
+export function bonusChangedFrom(error: unknown): TopupBonusQuote | null {
+  if (
+    !(error instanceof ApiError) ||
+    error.code !== TOPUP_BONUS_CHANGED ||
+    !isRecord(error.data) ||
+    !isRecord(error.data.bonus)
+  )
+    return null
+  // paymentRequest sets this data only after parseTopupBonusQuote succeeds.
+  return error.data.bonus as unknown as TopupBonusQuote
+}
+function failureData(
+  response: Record<string, unknown>,
+  path: string,
+  pairFailure: WaffoPancakePairFailure | undefined
+) {
+  if (response.code === TOPUP_QUOTE_CHANGED)
+    return { quote: parseTopupQuote(response.quote, path) }
+  if (response.code === TOPUP_BONUS_CHANGED)
+    return { bonus: parseTopupBonusQuote(response.bonus, path) }
+  // GMPay puts its order fields at the top level and the Pancake pair puts
+  // its failure inside data, so the two shapes cannot overlap.
+  return parseCreationFailure(response) ?? pairFailure
 }
 export function parseCreemProducts(text: string): CreemProduct[] {
   let value: unknown
@@ -294,8 +288,6 @@ export async function paymentRequest<T>(
   )
     invalidResponse(path)
   if (response.message === 'error' || response.success === false) {
-    // GMPay puts its order fields at the top level and the Pancake pair puts
-    // its failure inside data, so the two shapes cannot overlap.
     const pairFailure = parseWaffoPancakePairFailure(response.data)
     const code = typeof response.code === 'string' ? response.code : undefined
     throw new ApiError(
@@ -306,14 +298,7 @@ export async function paymentRequest<T>(
             ? response.data
             : (pairFailure?.error ?? response.message),
       }) || 'Payment failed',
-      {
-        business: true,
-        code,
-        data:
-          code === TOPUP_QUOTE_CHANGED
-            ? { quote: parseTopupQuote(response.quote, path) }
-            : (parseCreationFailure(response) ?? pairFailure),
-      }
+      { business: true, code, data: failureData(response, path, pairFailure) }
     )
   }
   if (
@@ -400,7 +385,7 @@ export const topupApi = {
       await api.get<unknown>('/api/user/topup/info', undefined, { signal })
     )
   },
-  /** Stripe answers a bare payable amount; the discounted providers a quote. */
+  /** Stripe answers a bare payable amount; the locally priced providers a quote. */
   async quote(
     method: string,
     amount: number,

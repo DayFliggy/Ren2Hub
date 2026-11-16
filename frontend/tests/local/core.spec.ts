@@ -137,21 +137,20 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       })
       expect(denied.status()).toBe(403)
       expect((await denied.json()).success).toBe(false)
-      const discount = await page.request.get('/api/user/topup-discount', {
+      const bonus = await page.request.get('/api/user/topup-bonus', {
         headers: { Authorization: 'Bearer ' + userToken },
       })
-      expect(discount.status()).toBe(200)
-      const discountBody = await discount.json()
-      expect(discountBody.success).toBe(true)
-      await expect(page.locator('[data-discount-factor]')).toHaveText(
-        discountBody.data.factor + '×'
-      )
-      await expect(page.locator('[data-discount-configure]')).toHaveCount(0)
-      const discountSettings = await page.request.get(
-        '/api/option/topup_discount',
-        { headers: { Authorization: 'Bearer ' + userToken } }
-      )
-      expect(discountSettings.status()).toBe(403)
+      expect(bonus.status()).toBe(200)
+      const bonusBody = await bonus.json()
+      expect(bonusBody.success).toBe(true)
+      // The built-in configuration grants no bonus.
+      expect(bonusBody.data.applied_rate).toBe('0')
+      await expect(page.locator('[data-bonus-rate]')).toHaveText('0%')
+      await expect(page.locator('[data-bonus-configure]')).toHaveCount(0)
+      const bonusSettings = await page.request.get('/api/option/topup_bonus', {
+        headers: { Authorization: 'Bearer ' + userToken },
+      })
+      expect(bonusSettings.status()).toBe(403)
       await layout(page, '用户首页')
     })
     await test.step('从页面创建 Token，列表仅返回脱敏 Key，阻止跨用户读取和删除', async () => {
@@ -388,9 +387,9 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         fullPage: true,
       })
     })
-    await test.step('折扣卡片读取真实配置、封顶结果与个人窗口，刷新后保持', async () => {
+    await test.step('加赠卡片读取真实配置、封顶结果与个人窗口，刷新后保持', async () => {
       const headers = { Authorization: 'Bearer ' + rootToken }
-      const loaded = await page.request.get('/api/option/topup_discount', {
+      const loaded = await page.request.get('/api/option/topup_bonus', {
         headers,
       })
       expect(loaded.status()).toBe(200)
@@ -401,7 +400,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         tiers: [{ threshold_quota: '0', rate }],
       })
       // Only the runner's isolated instance is writable; no production data.
-      const saved = await page.request.patch('/api/option/topup_discount', {
+      const saved = await page.request.patch('/api/option/topup_bonus', {
         headers,
         data: {
           expected_version: settings.data.version,
@@ -421,14 +420,14 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       })
       expect(saved.status()).toBe(200)
       expect((await saved.json()).success).toBe(true)
-      const self = await page.request.get('/api/user/topup-discount', {
+      const self = await page.request.get('/api/user/topup-bonus', {
         headers,
       })
       expect(self.status()).toBe(200)
       const result = await self.json()
       expect(result.success).toBe(true)
+      expect(result.data).not.toHaveProperty('factor')
       expect(result.data).toMatchObject({
-        factor: '0.95',
         fixed_rate: '0.01',
         site_rate: '0.02',
         personal_rate: '0.04',
@@ -438,36 +437,34 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         winner_window: 'month',
       })
       await page.goto('/dashboard')
-      const card = page.locator('[data-discount-card]')
+      const card = page.locator('[data-bonus-card]')
       for (const refresh of [false, true]) {
         if (refresh) await page.reload()
-        await expect(card.locator('[data-discount-factor]')).toHaveText('0.95×')
-        await expect(card.locator('[data-discount-global-rate]')).toHaveText(
-          '减免 3%'
+        await expect(card.locator('[data-bonus-rate]')).toHaveText('+5%')
+        await expect(card.locator('[data-bonus-global-rate]')).toHaveText(
+          '加赠 3%'
         )
-        await expect(card.locator('[data-discount-personal-rate]')).toHaveText(
-          '减免 4%'
+        await expect(card.locator('[data-bonus-personal-rate]')).toHaveText(
+          '加赠 4%'
         )
-        await expect(card.locator('[data-discount-cap]')).toContainText('5%')
-        await expect(card.locator('[data-discount-window]')).toHaveCount(3)
+        await expect(card.locator('[data-bonus-cap]')).toContainText('5%')
+        await expect(card.locator('[data-bonus-window]')).toHaveCount(3)
         await expect(card.locator('[data-selected="true"]')).toHaveAttribute(
-          'data-discount-window',
+          'data-bonus-window',
           'month'
         )
       }
-      await layout(page, '折扣卡片')
-      await card.screenshot({ path: info.outputPath('discount-card-live.png') })
-      await card.locator('[data-discount-configure]').click()
-      await expect(page).toHaveURL(
-        /\/system-settings\/billing\/topup-discount$/
-      )
-      const editor = page.locator('[data-discount-editor]')
+      await layout(page, '加赠卡片')
+      await card.screenshot({ path: info.outputPath('bonus-card-live.png') })
+      await card.locator('[data-bonus-configure]').click()
+      await expect(page).toHaveURL(/\/system-settings\/billing\/topup-bonus$/)
+      const editor = page.locator('[data-bonus-editor]')
       await expect(editor).toBeVisible()
-      await expect(page.locator('[data-discount-status]')).toHaveCount(0)
-      await editor.getByLabel('固定折扣', { exact: true }).fill('1.25')
+      await expect(page.locator('[data-bonus-status]')).toHaveCount(0)
+      await editor.getByLabel('固定加赠', { exact: true }).fill('1.25')
       const updated = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === '/api/option/topup_discount' &&
+          new URL(response.url()).pathname === '/api/option/topup_bonus' &&
           response.request().method() === 'PATCH'
       )
       await editor
@@ -476,18 +473,18 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       const update = await updated
       expect(update.status()).toBe(200)
       expect((await update.json()).success).toBe(true)
-      const reloaded = await page.request.get('/api/option/topup_discount', {
+      const reloaded = await page.request.get('/api/option/topup_bonus', {
         headers,
       })
       expect((await reloaded.json()).data.config.fixed_rate).toBe('0.0125')
       await page.reload()
-      await expect(editor.getByLabel('固定折扣', { exact: true })).toHaveValue(
+      await expect(editor.getByLabel('固定加赠', { exact: true })).toHaveValue(
         '1.25'
       )
       await editor.getByRole('tab', { name: /近 30 日/ }).click()
-      await layout(page, '充值折扣')
+      await layout(page, '充值加赠')
       await editor.screenshot({
-        path: info.outputPath('topup-discounts-live.png'),
+        path: info.outputPath('topup-bonus-live.png'),
       })
     })
   } finally {

@@ -11,11 +11,11 @@ import {
   type SummaryRange,
   type DashboardScope,
 } from '@/api/dashboard'
-import { topupDiscountApi } from '@/api/topupDiscount'
+import { topupBonusApi } from '@/api/topupBonus'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import type { TopupDiscountSelf } from '@/types/topupDiscount'
+import type { TopupBonusSelf } from '@/types/topupBonus'
 
 export interface DashboardStats {
   quota?: string
@@ -63,7 +63,7 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     auth = useAuthStore(),
     app = useAppStore(),
     request = useLatestRequest(),
-    discountRequest = useLatestRequest()
+    topupBonusRequest = useLatestRequest()
   const loading = ref(true),
     error = ref<string | null>(null),
     stats = ref<DashboardStats | null>(null),
@@ -73,17 +73,17 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
   const usageUnavailable = ref(false)
-  const discounts = ref<TopupDiscountSelf | null>(null),
-    discountsLoading = ref(true),
-    discountsError = ref<string | null>(null)
-  // The discount has its own request, so a failed or partial usage summary
+  const topupBonus = ref<TopupBonusSelf | null>(null),
+    topupBonusLoading = ref(true),
+    topupBonusError = ref<string | null>(null)
+  // The bonus has its own request, so a failed or partial usage summary
   // never hides it.
   async function load() {
-    await Promise.all([loadStats(), loadDiscounts()])
+    await Promise.all([loadStats(), loadTopupBonus()])
   }
   function reset() {
     request.cancel()
-    discountRequest.cancel()
+    topupBonusRequest.cancel()
     loading.value = false
     error.value = null
     stats.value = null
@@ -92,32 +92,32 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     tokenTrend.value = []
     recentOutOfRange.value = null
     usageUnavailable.value = false
-    discounts.value = null
-    discountsLoading.value = false
-    discountsError.value = null
+    topupBonus.value = null
+    topupBonusLoading.value = false
+    topupBonusError.value = null
   }
-  async function loadDiscounts() {
-    discountRequest.cancel()
-    discounts.value = null
-    discountsError.value = null
+  async function loadTopupBonus() {
+    topupBonusRequest.cancel()
+    topupBonus.value = null
+    topupBonusError.value = null
     if (toValue(scope) === 'all') {
-      discountsLoading.value = false
+      topupBonusLoading.value = false
       return
     }
-    discountsLoading.value = true
-    const result = await discountRequest.run((signal) =>
-      topupDiscountApi.self(signal)
+    topupBonusLoading.value = true
+    const result = await topupBonusRequest.run((signal) =>
+      topupBonusApi.self(signal)
     )
     if (result.stale) return
-    discountsLoading.value = false
+    topupBonusLoading.value = false
     if (!result.ok) {
-      discountsError.value =
+      topupBonusError.value =
         result.error instanceof Error
           ? result.error.message
           : t('common.failed')
       return
     }
-    discounts.value = result.value
+    topupBonus.value = result.value
   }
   async function loadStats() {
     const selectedScope = toValue(scope)
@@ -205,9 +205,9 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     recentOutOfRange,
     usageUnavailable,
     error,
-    discounts,
-    discountsLoading,
-    discountsError,
+    topupBonus,
+    topupBonusLoading,
+    topupBonusError,
     load,
     reset,
   }

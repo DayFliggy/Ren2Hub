@@ -11,18 +11,18 @@ import {
 } from 'vitest'
 import { api } from '@/api/client'
 import { ApiError } from '@/api/types'
-import { parseTopupDiscountSelf, topupDiscountApi } from '@/api/topupDiscount'
+import { parseTopupBonusSelf, topupBonusApi } from '@/api/topupBonus'
 import { useDashboard } from '@/composables/useDashboard'
 import { dashboardFixture } from '@/api/__tests__/dashboardFixture'
 import i18n, { loadMessageDomain } from '@/i18n'
-import selfResponse from '../../../tests/fixtures/native/topup-discount-self.get.json'
+import selfResponse from '../../../tests/fixtures/native/topup-bonus-self.get.json'
 vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
-// The discount request is replaced; its response parser stays real.
-vi.mock('@/api/topupDiscount', async (original) => {
-  const actual = await original<typeof import('@/api/topupDiscount')>()
+// The bonus request is replaced; its response parser stays real.
+vi.mock('@/api/topupBonus', async (original) => {
+  const actual = await original<typeof import('@/api/topupBonus')>()
   return {
     ...actual,
-    topupDiscountApi: { ...actual.topupDiscountApi, self: vi.fn() },
+    topupBonusApi: { ...actual.topupBonusApi, self: vi.fn() },
   }
 })
 const app = vi.hoisted(() => ({ status: { log_max_range_days: 365 } }))
@@ -50,10 +50,10 @@ function setupDashboard() {
 beforeAll(async () => {
   await loadMessageDomain('console')
 })
-const selfDiscount = parseTopupDiscountSelf(selfResponse.data)
+const selfBonus = parseTopupBonusSelf(selfResponse.data)
 beforeEach(() => {
   vi.mocked(api.get).mockResolvedValue(dashboardFixture())
-  vi.mocked(topupDiscountApi.self).mockResolvedValue(selfDiscount)
+  vi.mocked(topupBonusApi.self).mockResolvedValue(selfBonus)
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -181,22 +181,22 @@ describe('native overview summary', () => {
   })
 })
 
-describe('top-up discount on the overview', () => {
-  it('reads the discount even when the usage summary fails', async () => {
+describe('top-up bonus on the overview', () => {
+  it('reads the bonus even when the usage summary fails', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('summary down'))
     const state = setupDashboard()
     await state.load()
 
     expect(state.error.value).toBe('summary down')
     expect(state.stats.value).toBeNull()
-    // Keep exact factors, components and personal tiers from the server.
-    expect(state.discounts.value).toEqual(selfDiscount)
-    expect(state.discounts.value?.windows).toHaveLength(1)
-    expect(state.discountsLoading.value).toBe(false)
-    expect(state.discountsError.value).toBeNull()
+    // Keep exact rates, components and personal tiers from the server.
+    expect(state.topupBonus.value).toEqual(selfBonus)
+    expect(state.topupBonus.value?.windows).toHaveLength(1)
+    expect(state.topupBonusLoading.value).toBe(false)
+    expect(state.topupBonusError.value).toBeNull()
   })
 
-  it('reads the discount when the 30-day window returns early', async () => {
+  it('reads the bonus when the 30-day window returns early', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(2026, 9, 31, 12))
     app.status.log_max_range_days = 20
@@ -204,45 +204,45 @@ describe('top-up discount on the overview', () => {
     await state.load()
 
     expect(state.recentOutOfRange.value).toBeTruthy()
-    expect(state.discounts.value?.factor).toBe('0.98')
+    expect(state.topupBonus.value?.applied_rate).toBe('0.02')
   })
 
-  it('reports a failed discount request without touching the usage summary', async () => {
-    vi.mocked(topupDiscountApi.self).mockRejectedValue(
-      new ApiError('top-up discount unavailable', { status: 503 })
+  it('reports a failed bonus request without touching the usage summary', async () => {
+    vi.mocked(topupBonusApi.self).mockRejectedValue(
+      new ApiError('top-up bonus unavailable', { status: 503 })
     )
     const state = setupDashboard()
     await state.load()
 
-    expect(state.discounts.value).toBeNull()
-    expect(state.discountsError.value).toBe('top-up discount unavailable')
+    expect(state.topupBonus.value).toBeNull()
+    expect(state.topupBonusError.value).toBe('top-up bonus unavailable')
     expect(state.error.value).toBeNull()
     expect(state.stats.value?.today_quota).toBe('25')
   })
 
-  it('keeps the newer discount when an older response arrives late', async () => {
-    let releaseOld!: (value: typeof selfDiscount) => void
-    vi.mocked(topupDiscountApi.self)
+  it('keeps the newer bonus when an older response arrives late', async () => {
+    let releaseOld!: (value: typeof selfBonus) => void
+    vi.mocked(topupBonusApi.self)
       .mockImplementationOnce(
         () => new Promise((resolve) => (releaseOld = resolve))
       )
       .mockResolvedValueOnce({
-        ...selfDiscount,
+        ...selfBonus,
         status: 'inactive',
-        factor: '0.99',
+        applied_rate: '0.01',
       })
     const state = setupDashboard()
     const older = state.load()
     await state.load()
-    releaseOld({ ...selfDiscount, factor: '0.9' })
+    releaseOld({ ...selfBonus, applied_rate: '0.1' })
     await older
 
-    expect(state.discounts.value).toMatchObject({
+    expect(state.topupBonus.value).toMatchObject({
       status: 'inactive',
-      factor: '0.99',
+      applied_rate: '0.01',
     })
     // The superseded request was cancelled.
-    const [signal] = vi.mocked(topupDiscountApi.self).mock.calls[0]!
+    const [signal] = vi.mocked(topupBonusApi.self).mock.calls[0]!
     expect(signal?.aborted).toBe(true)
   })
 })

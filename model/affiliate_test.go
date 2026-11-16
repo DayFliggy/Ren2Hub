@@ -235,12 +235,12 @@ func TestAffiliateTransferReplayAfterComplianceRevocation(t *testing.T) {
 func TestAffiliateTransferReplayPreservesReversalDebt(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "debt-replay-add")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "debt-replay-add", nil)
 	require.NoError(t, err)
 	first, replayed, err := TransferAffiliateQuota(inviter.Id, "debt-replay-transfer")
 	require.NoError(t, err)
 	require.False(t, replayed)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, "debt-replay-reverse")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, "debt-replay-reverse", nil)
 	require.NoError(t, err)
 	payment := operation_setting.GetPaymentSetting()
 	payment.ComplianceConfirmed = false
@@ -307,30 +307,30 @@ func TestAffiliateTransferOperationIDsAreScopedToOwner(t *testing.T) {
 
 func TestAffiliateAdminAdditionOperationAndCorrectionBoundaries(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "", nil)
 	require.ErrorIs(t, err, ErrAffiliateOperation)
 	// Admin rebate is off by default, and enabling it later cannot reward a replay.
-	result, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "admin-operation-one")
+	result, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "admin-operation-one", nil)
 	require.NoError(t, err)
 	assert.False(t, result.Replayed)
 	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
-	result, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "admin-operation-one")
+	result, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "admin-operation-one", nil)
 	require.NoError(t, err)
 	assert.True(t, result.Replayed)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 501, "admin-operation-one")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 501, "admin-operation-one", nil)
 	require.ErrorIs(t, err, ErrAffiliateOperationConflict)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-operation-two")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-operation-two", nil)
 	require.NoError(t, err)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 100, "admin-operation-three")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 100, "admin-operation-three", nil)
 	require.NoError(t, err)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 2000, "admin-operation-four")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 2000, "admin-operation-four", nil)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	assert.Equal(t, 300, inviter.AffQuota)
 	assert.Equal(t, 2000, invitee.Quota)
 	// Correcting the same operation under another mode is a conflict, not a replay.
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-operation-four")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-operation-four", nil)
 	require.ErrorIs(t, err, ErrAffiliateOperationConflict)
 	// Generic credit (including redemption) must never dispatch referral rewards.
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return creditTopUpQuota(tx, invitee.Id, 500, nil) }))
@@ -342,11 +342,11 @@ func TestAffiliateAdminReversalFIFOTransferredDebtAndFutureOffset(t *testing.T) 
 	db, inviter, invitee := affiliateTestDB(t)
 	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
 	for _, operationID := range []string{"admin-fifo-one", "admin-fifo-two"} {
-		_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, operationID)
+		_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, operationID, nil)
 		require.NoError(t, err)
 	}
 	// The first full reward and half of the second are revoked in FIFO order.
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1500, "admin-fifo-reduction-one")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1500, "admin-fifo-reduction-one", nil)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Equal(t, 100, inviter.AffQuota)
@@ -357,7 +357,7 @@ func TestAffiliateAdminReversalFIFOTransferredDebtAndFutureOffset(t *testing.T) 
 	// Two partial reversals of already-transferred reward must each charge only
 	// the portion not yet reversed, without subtracting the transfer twice.
 	for _, operationID := range []string{"admin-fifo-reduction-two", "admin-fifo-reduction-three"} {
-		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 250, operationID)
+		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 250, operationID, nil)
 		require.NoError(t, err)
 	}
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
@@ -383,7 +383,7 @@ func TestAffiliateAdminReversalFIFOTransferredDebtAndFutureOffset(t *testing.T) 
 	assert.Equal(t, 50, reversals[3].DebtAddedQuota)
 	// No more tracked administrative principal remains: the extra reduction
 	// cannot invent new referral debt, including after a later top-up.
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 600, "admin-fifo-excess-reduction")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 600, "admin-fifo-excess-reduction", nil)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffOffsetDebtQuota)
@@ -395,7 +395,7 @@ func TestAffiliateComplianceGateAndTrackedLegacyBoundary(t *testing.T) {
 	payment := operation_setting.GetPaymentSetting()
 	payment.ComplianceConfirmed = false
 	payment.ComplianceTermsVersion = ""
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "compliance-gated-add")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "compliance-gated-add", nil)
 	require.NoError(t, err, "wallet credit must still settle while referral accrual is recorded as skipped")
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffQuota)
@@ -416,10 +416,10 @@ func TestAffiliateComplianceGateAndTrackedLegacyBoundary(t *testing.T) {
 	legacyReward := AffiliateRecord{UserID: inviter.Id, InviteeID: legacyInvitee.Id, Kind: "accrue", SourceType: "admin_quota", SourceID: fmt.Sprint(legacyOp.ID), SourceKey: "admin_quota:" + fmt.Sprint(legacyOp.ID), BaseQuota: 1000, RateBps: 2000, RewardQuota: 200, ThawedAt: common.GetTimestamp()}
 	require.NoError(t, db.Create(&legacyReward).Error)
 	require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Updates(map[string]any{"aff_quota": 200, "aff_history": 200}).Error)
-	replayed, err := AdjustUserQuotaWithOperation(legacyInvitee.Id, 77, common.RoleRootUser, "add", 1000, "legacy-admin-add")
+	replayed, err := AdjustUserQuotaWithOperation(legacyInvitee.Id, 77, common.RoleRootUser, "add", 1000, "legacy-admin-add", nil)
 	require.NoError(t, err)
 	assert.True(t, replayed.Replayed, "legacy operation rows without mode remain replayable as add operations")
-	_, err = AdjustUserQuotaWithOperation(legacyInvitee.Id, 99, common.RoleRootUser, "subtract", 500, "legacy-admin-correction")
+	_, err = AdjustUserQuotaWithOperation(legacyInvitee.Id, 99, common.RoleRootUser, "subtract", 500, "legacy-admin-correction", nil)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Equal(t, 200, inviter.AffQuota)
@@ -427,7 +427,7 @@ func TestAffiliateComplianceGateAndTrackedLegacyBoundary(t *testing.T) {
 	// Historical transfers have no allocation rows. Only the current legacy
 	// balance may move; past gross accrual must not be treated as available.
 	require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Update("aff_quota", 50).Error)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "post-migration-admin-add")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "post-migration-admin-add", nil)
 	require.NoError(t, err)
 	transfer, _, err := TransferAffiliateQuota(inviter.Id, "post-migration-transfer")
 	require.NoError(t, err)
@@ -441,21 +441,21 @@ func TestAffiliateComplianceGateAndTrackedLegacyBoundary(t *testing.T) {
 func TestAffiliateReversalRestoresOffsetDebtBeforeNewCredit(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "debt-origin-add")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "debt-origin-add", nil)
 	require.NoError(t, err)
 	_, _, err = TransferAffiliateQuota(inviter.Id, "debt-origin-transfer")
 	require.NoError(t, err)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, "debt-origin-reversal")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, "debt-origin-reversal", nil)
 	require.NoError(t, err)
 	// 200 of the next 300 reward offsets existing debt; 100 becomes available.
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1500, "debt-repaying-add")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1500, "debt-repaying-add", nil)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffOffsetDebtQuota)
 	assert.Equal(t, 100, inviter.AffQuota)
 	// Reverse the repayment in two steps and then its credited remainder.
 	for _, tc := range []struct{ value, debt, available int }{{500, 100, 100}, {500, 200, 100}, {500, 200, 0}} {
-		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", tc.value, fmt.Sprintf("debt-repayment-reversal-%d-%d", tc.debt, tc.available))
+		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", tc.value, fmt.Sprintf("debt-repayment-reversal-%d-%d", tc.debt, tc.available), nil)
 		require.NoError(t, err)
 		require.NoError(t, db.First(&inviter, inviter.Id).Error)
 		assert.Equal(t, tc.debt, inviter.AffOffsetDebtQuota)
@@ -561,7 +561,7 @@ func TestAffiliateConcurrentAdminAndTransferOperations(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "same-admin-operation")
+			_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "same-admin-operation", nil)
 			errorsOut <- err
 		}()
 	}
@@ -653,7 +653,7 @@ func TestAffiliateAdminStorageFailureRollsBackEntireAddition(t *testing.T) {
 			tx.AddError(errors.New("referral write failed"))
 		}
 	}))
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-failed-operation")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-failed-operation", nil)
 	require.Error(t, err)
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
@@ -667,7 +667,7 @@ func TestAffiliateAdminStorageFailureRollsBackEntireAddition(t *testing.T) {
 func TestAffiliateAdminReversalStorageFailureRollsBackWalletAndDebt(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
-	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "rollback-origin-add")
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "rollback-origin-add", nil)
 	require.NoError(t, err)
 	_, _, err = TransferAffiliateQuota(inviter.Id, "rollback-origin-transfer")
 	require.NoError(t, err)
@@ -676,7 +676,7 @@ func TestAffiliateAdminReversalStorageFailureRollsBackWalletAndDebt(t *testing.T
 			tx.AddError(errors.New("reversal ledger unavailable"))
 		}
 	}))
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 500, "rollback-failed-reduction")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 500, "rollback-failed-reduction", nil)
 	require.ErrorContains(t, err, "reversal ledger unavailable")
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)

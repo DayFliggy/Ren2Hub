@@ -122,7 +122,7 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 				adminWG.Add(1)
 				go func() {
 					defer adminWG.Done()
-					_, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500000, operationID)
+					_, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500000, operationID, nil)
 					adminResults <- err
 				}()
 			}
@@ -168,19 +168,19 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			// configured dialect, after the tracked reward has left affiliate quota.
 			correctionID := "correction-" + name
 			for attempt := range 2 {
-				adjusted, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "subtract", 250000, correctionID)
+				adjusted, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "subtract", 250000, correctionID, nil)
 				require.NoError(t, err)
 				assert.Equal(t, attempt == 1, adjusted.Replayed)
 			}
 			require.NoError(t, db.First(&inviter, inviter.Id).Error)
 			assert.Equal(t, 50000, inviter.AffOffsetDebtQuota)
-			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 250000, "repayment-"+name)
+			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 250000, "repayment-"+name, nil)
 			require.NoError(t, err)
 			require.NoError(t, db.First(&inviter, inviter.Id).Error)
 			assert.Zero(t, inviter.AffOffsetDebtQuota)
 			assert.Zero(t, inviter.AffQuota)
 			policy.Enabled = false
-			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name)
+			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name, nil)
 			require.NoError(t, err)
 			var skipped AffiliateRecord
 			require.NoError(t, db.Where("user_id = ? AND skip_reason = ?", inviter.Id, "program_disabled").First(&skipped).Error)
@@ -188,7 +188,7 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			assert.Equal(t, 2000, skipped.RateBps)
 			assert.Zero(t, skipped.RewardQuota)
 			policy.Enabled = true
-			replay, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name)
+			replay, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name, nil)
 			require.NoError(t, err)
 			assert.True(t, replay.Replayed)
 			require.NoError(t, db.First(&user, user.Id).Error)

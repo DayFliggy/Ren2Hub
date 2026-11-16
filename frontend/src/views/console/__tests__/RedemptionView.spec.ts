@@ -109,6 +109,7 @@ function nativeRedemptions(count: number, firstId: number) {
     key: `code-${firstId + index}`,
     status: 3,
     quota: 500000,
+    bonus_quota: 0,
     used_user_id: 40 + index,
     created_time: 1,
     redeemed_time: 2,

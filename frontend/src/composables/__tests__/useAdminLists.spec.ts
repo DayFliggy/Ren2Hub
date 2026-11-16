@@ -4,7 +4,10 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/api/console'
-import { useAdminRedemption } from '@/composables/useAdminRedemption'
+import {
+  projectRedemption,
+  useAdminRedemption,
+} from '@/composables/useAdminRedemption'
 import i18n from '@/i18n'
 type AdminRedemptionPage = ReturnType<typeof redemptionPage>
 
@@ -30,6 +33,7 @@ function redemptionPage(marker: number) {
         key: 'code-key',
         status: 1,
         quota: 500000,
+        bonus_quota: 0,
         used_user_id: 0,
         created_time: 1,
         redeemed_time: 0,
@@ -121,5 +125,28 @@ describe('admin list request ordering', () => {
       expect.objectContaining({ p: 1, page_size: 50 }),
       expect.anything()
     )
+  })
+})
+
+describe('native redemption rows', () => {
+  it('keeps the bonus a used code credited and rejects a negative one', () => {
+    const used = {
+      ...redemptionPage(0).items[0],
+      status: 3,
+      bonus_quota: 25000,
+      used_user_id: 7,
+      redeemed_time: 2,
+    }
+    expect(projectRedemption(used)).toMatchObject({
+      status: 'used',
+      quota: '500000',
+      bonus_quota: '25000',
+    })
+    expect(() => projectRedemption({ ...used, bonus_quota: -1 })).toThrow(
+      'Invalid API response'
+    )
+    expect(() =>
+      projectRedemption({ ...used, bonus_quota: undefined })
+    ).toThrow('Invalid API response')
   })
 })

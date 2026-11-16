@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+  bonusChangedFrom,
   checkoutTarget,
   enabledPayMethods,
   parseCreationFailure,
@@ -13,6 +14,8 @@ import {
   type TopupInfo,
   type TopupQuote,
 } from '@/api/topup'
+import { topupBonusApi } from '@/api/topupBonus'
+import type { TopupBonusQuote } from '@/types/topupBonus'
 import { ApiError } from '@/api/types'
 import AmountInput from '@/components/common/AmountInput.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -22,8 +25,7 @@ import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { nativePaymentMessages } from '@/i18n/nativePayment'
-import { rateToPercent } from '@/features/topup-discount/amount'
-import { compareDecimal } from '@/utils/decimal'
+import { rateToPercent } from '@/features/topup-bonus/amount'
 import { addQuota } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
 import { topupInputAmounts, validTopupAmount } from '@/utils/topupAmount'
@@ -97,13 +99,15 @@ const invalidAmount = computed(
     amount.value !== null &&
     !validTopupAmount(amount.value, amounts.value)
 )
-// server is the discounted providers' quote, confirmed back on pay; Stripe and
-// Creem prices are not discounted and carry none.
+// bonus is the server's bonus for this credit and is confirmed back on pay.
+// Locally priced providers answer it inside their quote; Stripe and Creem
+// prices come from the provider, so their bonus comes from the preview.
 const quote = ref<{
   pay_amount: string
   currency: string
-  expected_quota: string | null
-  server: TopupQuote | null
+  principal_quota: string | null
+  bonus: TopupBonusQuote | null
+  localPrice: boolean
 } | null>(null)
 const quoteLoading = ref(false)
 const quoteError = ref('')
@@ -120,20 +124,25 @@ const payLabel = computed(() => {
   if (currency === 'USD') return t('wallet.summaryPayNowUsd')
   return paymentT('nativePayment.due')
 })
-const discount = computed(() => {
-  const server = quote.value?.server
-  if (!server || compareDecimal(server.applied_rate, '0') <= 0) return null
+const creditedQuota = computed(
+  () => quote.value?.bonus?.expected_quota ?? quote.value?.principal_quota
+)
+const bonus = computed(() => {
+  const value = quote.value?.bonus
+  if (!value || BigInt(value.bonus_quota) <= 0n) return null
   return {
-    listPayAmount: server.list_pay_amount,
-    rate: rateToPercent(server.applied_rate),
+    principal: value.principal_quota,
+    quota: value.bonus_quota,
+    rate: rateToPercent(value.applied_rate),
   }
 })
 function serverQuote(value: TopupQuote) {
   return {
     pay_amount: value.pay_amount,
     currency: value.currency,
-    expected_quota: value.expected_quota,
-    server: value,
+    principal_quota: value.principal_quota,
+    bonus: value as TopupBonusQuote,
+    localPrice: true,
   }
 }
 let quoteSequence = 0
@@ -141,10 +150,10 @@ let quoteController: AbortController | null = null
 let configController: AbortController | null = null
 let disposed = false
 const balanceProjection = computed(() => {
-  if (!quote.value?.expected_quota || props.balanceQuota == null)
+  if (!creditedQuota.value || props.balanceQuota == null)
     return { quota: null, invalid: false }
   try {
-    const quota = addQuota(props.balanceQuota, quote.value.expected_quota)
+    const quota = addQuota(props.balanceQuota, creditedQuota.value)
     return { quota, invalid: BigInt(quota) > BigInt(Number.MAX_SAFE_INTEGER) }
   } catch {
     return { quota: null, invalid: true }
@@ -163,7 +172,8 @@ const canSubmit = computed(
     paymentMethods.value.some((item) => item.type === method.value) &&
     (method.value === 'creem'
       ? !!selectedProduct.value
-      : amount.value !== null && !invalidAmount.value && !!quote.value) &&
+      : amount.value !== null && !invalidAmount.value) &&
+    !!quote.value?.bonus &&
     !quoteLoading.value
 )
 function trackOrder(tradeNo: string) {
@@ -176,19 +186,24 @@ async function topup(): Promise<void> {
   paymentError.value = ''
   quoteChanged.value = false
   const selected = method.value
-  const server = quote.value?.server
+  const confirmed = quote.value!
+  // The server rejects any other bonus before an order or session exists.
+  const expectedBonus = {
+    expected_bonus_quota: Number(confirmed.bonus!.bonus_quota),
+  }
   const sequence = quoteSequence
   try {
     const response = await topupApi.pay(
       selected,
       selected === 'creem'
-        ? { product_id: product.value }
+        ? { product_id: product.value, ...expectedBonus }
         : {
             amount: amount.value!,
-            ...(server
+            ...expectedBonus,
+            ...(confirmed.localPrice
               ? {
-                  expected_pay_amount: server.pay_amount,
-                  expected_currency: server.currency,
+                  expected_pay_amount: confirmed.pay_amount,
+                  expected_currency: confirmed.currency,
                 }
               : {}),
             ...(selected === 'waffo' && submethod.value !== ''
@@ -232,12 +247,19 @@ async function topup(): Promise<void> {
     toast.success(t('wallet.callbackNote'))
     emit('done')
   } catch (error) {
-    // No order exists yet: show the new price and wait for another click.
+    // No order exists yet: show the new quote and wait for another click.
     const changed = quoteChangedFrom(error)
-    if (changed) {
+    const changedBonus = bonusChangedFrom(error)
+    if (changed || changedBonus) {
       // A newer quote for changed input wins over this rejection.
       if (!disposed && sequence === quoteSequence) {
-        quote.value = serverQuote(changed)
+        quote.value = changed
+          ? serverQuote(changed)
+          : {
+              ...confirmed,
+              principal_quota: changedBonus!.principal_quota,
+              bonus: changedBonus,
+            }
         quoteChanged.value = true
       }
       return
@@ -265,54 +287,20 @@ async function refreshQuote(): Promise<void> {
   quoteError.value = ''
   quoteChanged.value = false
   quoteLoading.value = false
-  if (method.value === 'creem') {
-    if (selectedProduct.value)
-      quote.value = {
-        pay_amount: String(selectedProduct.value.price),
-        currency: selectedProduct.value.currency,
-        expected_quota: String(selectedProduct.value.quota),
-        server: null,
-      }
-    return
-  }
+  if (!paymentMethods.value.some((item) => item.type === method.value)) return
   if (
-    !paymentMethods.value.some((item) => item.type === method.value) ||
-    amount.value === null ||
-    invalidAmount.value
+    method.value !== 'creem' &&
+    (amount.value === null || invalidAmount.value)
   )
     return
+  if (method.value === 'creem' && !selectedProduct.value) return
   const controller = new AbortController()
   quoteController = controller
   quoteLoading.value = true
-  const currentAmount = amount.value
   try {
-    const result = await topupApi.quote(
-      method.value,
-      currentAmount,
-      controller.signal
-    )
+    const next = await providerQuote(controller.signal)
     if (sequence !== quoteSequence || controller.signal.aborted) return
-    if (result.quote) {
-      quote.value = serverQuote(result.quote)
-      return
-    }
-    // Stripe answers only the payable amount; credit follows the request.
-    const scale = app.status.quota_per_unit
-    const credited =
-      typeof scale === 'number' && Number.isSafeInteger(scale) && scale > 0
-        ? tokens.value
-          ? currentAmount
-          : currentAmount * scale
-        : null
-    quote.value = {
-      pay_amount: result.pay_amount,
-      currency: '',
-      expected_quota:
-        credited !== null && Number.isSafeInteger(credited)
-          ? String(credited)
-          : null,
-      server: null,
-    }
+    quote.value = next
   } catch (error) {
     if (sequence === quoteSequence && !controller.signal.aborted)
       quoteError.value =
@@ -321,6 +309,44 @@ async function refreshQuote(): Promise<void> {
           : t('wallet.quoteFailed')
   } finally {
     if (sequence === quoteSequence) quoteLoading.value = false
+  }
+}
+// The quote of the current input. Stripe answers only the payable amount and
+// Creem prices its products, so their principal is known here and their bonus
+// comes from the preview.
+async function providerQuote(signal: AbortSignal) {
+  const item = selectedProduct.value
+  if (method.value === 'creem' && item) {
+    const principal = String(item.quota)
+    return {
+      pay_amount: String(item.price),
+      currency: item.currency,
+      principal_quota: principal,
+      bonus: await topupBonusApi.preview(principal, signal),
+      localPrice: false,
+    }
+  }
+  const currentAmount = amount.value!
+  const result = await topupApi.quote(method.value, currentAmount, signal)
+  if (result.quote) return serverQuote(result.quote)
+  // Stripe credits the requested units at quota_per_unit.
+  const scale = app.status.quota_per_unit
+  const credited =
+    typeof scale === 'number' && Number.isSafeInteger(scale) && scale > 0
+      ? tokens.value
+        ? currentAmount
+        : currentAmount * scale
+      : null
+  const principal =
+    credited !== null && Number.isSafeInteger(credited) && credited > 0
+      ? String(credited)
+      : null
+  return {
+    pay_amount: result.pay_amount,
+    currency: '',
+    principal_quota: principal,
+    bonus: principal ? await topupBonusApi.preview(principal, signal) : null,
+    localPrice: false,
   }
 }
 async function loadPaymentConfig(): Promise<void> {
@@ -486,41 +512,37 @@ onUnmounted(() => {
       <div
         class="mt-5 sibling-space-y-2 border-t border-[var(--border-subtle)] pt-4"
       >
-        <template v-if="discount">
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-[var(--text-secondary)]">{{
-              t('wallet.summaryListPrice')
-            }}</span>
-            <span class="tabular-nums text-[var(--text-tertiary)] line-through"
-              >{{ quoteSymbol }}{{ discount.listPayAmount }}</span
-            >
-          </div>
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-[var(--text-secondary)]">{{
-              t('wallet.summaryDiscount')
-            }}</span>
-            <span
-              class="font-semibold tabular-nums text-[var(--status-success-text)]"
-              >{{
-                t('wallet.summaryDiscountRate', { rate: discount.rate })
-              }}</span
-            >
-          </div>
-        </template>
         <div class="flex items-center justify-between text-sm">
           <span class="text-[var(--text-secondary)]">{{ payLabel }}</span>
           <span class="font-semibold tabular-nums text-[var(--text-primary)]">
             {{ quote?.pay_amount ? `${quoteSymbol}${quote.pay_amount}` : '—' }}
           </span>
         </div>
+        <template v-if="bonus">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-secondary)]">{{
+              t('wallet.summaryPrincipal')
+            }}</span>
+            <span class="tabular-nums text-[var(--text-primary)]">{{
+              formatQuota(bonus.principal, 3)
+            }}</span>
+          </div>
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-secondary)]">{{
+              t('wallet.summaryBonus', { rate: bonus.rate })
+            }}</span>
+            <span
+              class="font-semibold tabular-nums text-[var(--status-success-text)]"
+              >+{{ formatQuota(bonus.quota, 3) }}</span
+            >
+          </div>
+        </template>
         <div class="flex items-center justify-between text-sm">
           <span class="text-[var(--text-secondary)]">{{
             t('wallet.summaryCredit')
           }}</span>
           <span class="font-semibold tabular-nums text-[var(--text-primary)]">
-            {{
-              quote?.expected_quota ? formatQuota(quote.expected_quota, 3) : '—'
-            }}
+            {{ creditedQuota ? formatQuota(creditedQuota, 3) : '—' }}
           </span>
         </div>
         <div class="flex items-center justify-between gap-3 text-sm">

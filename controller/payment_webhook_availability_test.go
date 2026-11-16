@@ -367,7 +367,7 @@ func useEpayMatrixDatabase(t *testing.T) *gorm.DB {
 		require.NotEmpty(t, dsn)
 	}
 	db := modelManagementDB(t, dialect, dsn)
-	require.NoError(t, db.AutoMigrate(&model.TopUp{}, &model.Log{}, &model.AffiliateRecord{}, &model.TopUpDiscount{}, &model.TopUpDiscountConfigVersion{}, &model.TopUpDiscountUsageHourly{}, &model.SystemTask{}))
+	require.NoError(t, db.AutoMigrate(&model.TopUp{}, &model.Log{}, &model.AffiliateRecord{}, &model.TopUpBonusDecisionRecord{}, &model.TopUpBonusConfigVersion{}, &model.TopUpBonusUsageHourly{}, &model.SystemTask{}))
 	if dialect == "sqlite" {
 		sqlDB, err := db.DB()
 		require.NoError(t, err)

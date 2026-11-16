@@ -56,7 +56,7 @@ for (const role of [1, 10, 100]) {
           '40'
         )
         await expect(page.locator('[data-balance-card]')).toHaveCount(0)
-        await expect(page.locator('[data-discount-card]')).toHaveCount(0)
+        await expect(page.locator('[data-bonus-card]')).toHaveCount(0)
         await expect(page.locator('[data-system-status-card]')).toBeVisible()
         await assertNoHorizontalOverflow(page)
         if (role === 100)

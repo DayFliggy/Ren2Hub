@@ -84,26 +84,26 @@ func TestAffiliateLedgerMigrationAndIdempotencyDatabases(t *testing.T) {
 			assert.Equal(t, 50, inviter.AffQuota)
 			assert.Equal(t, 200, inviter.AffHistoryQuota)
 			assert.Zero(t, inviter.AffOffsetDebtQuota)
-			legacyReplay, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "ledger-legacy-add")
+			legacyReplay, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "ledger-legacy-add", nil)
 			require.NoError(t, err)
 			assert.True(t, legacyReplay.Replayed)
 			for attempt := range 2 {
-				added, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "ledger-new-add")
+				added, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "ledger-new-add", nil)
 				require.NoError(t, err)
 				assert.Equal(t, attempt == 1, added.Replayed)
 			}
-			_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 1000, "ledger-new-add")
+			_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 1000, "ledger-new-add", nil)
 			require.ErrorIs(t, err, ErrAffiliateOperationConflict)
 			transfer, _, err := TransferAffiliateQuota(inviter.Id, "ledger-new-transfer")
 			require.NoError(t, err)
 			assert.Equal(t, 250, transfer.RewardQuota, "legacy available 50 plus new traced reward 200")
 			for index := range 2 {
-				_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 500, fmt.Sprintf("ledger-reverse-%d", index))
+				_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 500, fmt.Sprintf("ledger-reverse-%d", index), nil)
 				require.NoError(t, err)
 			}
 			require.NoError(t, db.First(&inviter, inviter.Id).Error)
 			assert.Equal(t, 200, inviter.AffOffsetDebtQuota)
-			_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 2000, "ledger-repay-override")
+			_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 2000, "ledger-repay-override", nil)
 			require.NoError(t, err)
 			require.NoError(t, db.First(&inviter, inviter.Id).Error)
 			assert.Zero(t, inviter.AffOffsetDebtQuota)
@@ -118,7 +118,7 @@ func TestAffiliateLedgerMigrationAndIdempotencyDatabases(t *testing.T) {
 				for _, operationID := range operationIDs {
 					go func(id string) {
 						<-start
-						adjustment, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 250, id)
+						adjustment, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 250, id, nil)
 						results <- outcome{adjustment, err}
 					}(operationID)
 				}

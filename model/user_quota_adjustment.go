@@ -21,7 +21,9 @@ type UserQuotaAdjustment struct {
 	Username string
 	Before   int
 	After    int
-	Replayed bool
+	// BonusQuota is the top-up bonus included in an addition's After.
+	BonusQuota int
+	Replayed   bool
 }
 
 type AdminQuotaOperation struct {
@@ -34,20 +36,24 @@ type AdminQuotaOperation struct {
 	Value        int    `json:"value" gorm:"type:bigint"`
 	Before       int    `json:"before" gorm:"type:bigint"`
 	After        int    `json:"after" gorm:"type:bigint"`
+	BonusQuota   int    `json:"bonus_quota" gorm:"type:bigint;not null;default:0"`
 	CreatedAt    int64  `json:"created_at"`
 }
 
 // AdjustUserQuota is retained for non-recharge internal corrections.
 func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuotaAdjustment, error) {
-	return adjustUserQuota(userID, 0, operatorRole, mode, value, "")
+	return adjustUserQuota(userID, 0, operatorRole, mode, value, "", nil)
 }
-func AdjustUserQuotaWithOperation(userID, operatorID, operatorRole int, mode string, value int, operationID string) (*UserQuotaAdjustment, error) {
+
+// AdjustUserQuotaWithOperation applies an administrator's operation once. An
+// addition also credits the top-up bonus that bonus decides for value.
+func AdjustUserQuotaWithOperation(userID, operatorID, operatorRole int, mode string, value int, operationID string, bonus TopUpBonusEvaluator) (*UserQuotaAdjustment, error) {
 	if !affiliateOperationPattern.MatchString(operationID) || operatorID <= 0 {
 		return nil, ErrAffiliateOperation
 	}
-	return adjustUserQuota(userID, operatorID, operatorRole, mode, value, operationID)
+	return adjustUserQuota(userID, operatorID, operatorRole, mode, value, operationID, bonus)
 }
-func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value int, operationID string) (*UserQuotaAdjustment, error) {
+func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value int, operationID string, bonus TopUpBonusEvaluator) (*UserQuotaAdjustment, error) {
 	if userID <= 0 || (mode != "add" && mode != "subtract" && mode != "override") {
 		return nil, ErrInvalidUserQuotaAdjustment
 	}
@@ -81,7 +87,7 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 				if operation.UserID != userID || storedMode != mode || operation.Value != value {
 					return ErrAffiliateOperationConflict
 				}
-				adjustment = UserQuotaAdjustment{UserID: userID, Username: user.Username, Before: operation.Before, After: operation.After, Replayed: true}
+				adjustment = UserQuotaAdjustment{UserID: userID, Username: user.Username, Before: operation.Before, After: operation.After, BonusQuota: operation.BonusQuota, Replayed: true}
 				return nil
 			}
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -91,10 +97,17 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 		if user.Quota > common.MaxWalletQuota || user.Quota < -common.MaxWalletQuota {
 			return ErrWalletQuotaLimitExceeded
 		}
+		// Decided only for a new addition, after the replay check above.
+		var grant TopUpBonusGrant
+		if mode == "add" && operatorID > 0 {
+			if grant, err = grantTopUpBonus(bonus, value); err != nil {
+				return err
+			}
+		}
 		quota := decimal.NewFromInt(int64(value))
 		switch mode {
 		case "add":
-			quota = decimal.NewFromInt(int64(user.Quota)).Add(quota)
+			quota = decimal.NewFromInt(int64(user.Quota)).Add(quota).Add(decimal.NewFromInt(int64(grant.BonusQuota)))
 		case "subtract":
 			quota = decimal.NewFromInt(int64(user.Quota)).Sub(quota)
 		}
@@ -114,14 +127,18 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 			}
 		}
 		if operatorID > 0 {
-			operation = AdminQuotaOperation{OperatorID: operatorID, OperationID: operationID, OperationKey: operationKey, UserID: userID, Mode: mode, Value: value, Before: user.Quota, After: after, CreatedAt: common.GetTimestamp()}
+			operation = AdminQuotaOperation{OperatorID: operatorID, OperationID: operationID, OperationKey: operationKey, UserID: userID, Mode: mode, Value: value, Before: user.Quota, After: after, BonusQuota: grant.BonusQuota, CreatedAt: common.GetTimestamp()}
 			if err := tx.Create(&operation).Error; err != nil {
+				return err
+			}
+			if err := insertTopUpBonusDecisionTx(tx, TopUpBonusSourceAdminQuota, operation.ID, userID, &grant); err != nil {
 				return err
 			}
 			delta := after - user.Quota
 			switch {
 			case delta > 0:
-				if err := applyAffiliateRewardTx(tx, &user, "admin_quota", fmt.Sprint(operation.ID), delta); err != nil {
+				// The bonus earns no referral reward; only the principal does.
+				if err := applyAffiliateRewardTx(tx, &user, "admin_quota", fmt.Sprint(operation.ID), delta-grant.BonusQuota); err != nil {
 					return err
 				}
 			case delta < 0:
@@ -130,7 +147,7 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 				}
 			}
 		}
-		adjustment = UserQuotaAdjustment{UserID: user.Id, Username: user.Username, Before: user.Quota, After: after}
+		adjustment = UserQuotaAdjustment{UserID: user.Id, Username: user.Username, Before: user.Quota, After: after, BonusQuota: grant.BonusQuota}
 		return nil
 	})
 	if err != nil {

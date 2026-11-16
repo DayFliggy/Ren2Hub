@@ -118,6 +118,7 @@ export function parseTopUp(value: unknown): AdminOrder {
     email: text('email'),
     amount: amount ? Number(amount) : Number.NaN,
     quota: String(integer('credited_quota')),
+    bonus_quota: String(integer('bonus_quota')),
     type: 'topup',
     currency: text('currency'),
     method: ADMIN_ORDER_METHODS.includes(method) ? method : 'other',

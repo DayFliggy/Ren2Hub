@@ -2,10 +2,13 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -48,9 +51,17 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 		markAuditLogged(c)
 	}()
 
-	adjustment, err := model.AdjustUserQuotaWithOperation(req.Id, c.GetInt("id"), c.GetInt("role"), req.Mode, req.Value, req.OperationID)
+	// Additions earn the top-up bonus of the target user, like a top-up.
+	var bonus model.TopUpBonusEvaluator
+	if req.Mode == "add" {
+		bonus = service.TopUpBonusEvaluator(req.Id, time.Now())
+	}
+	adjustment, err := model.AdjustUserQuotaWithOperation(req.Id, c.GetInt("id"), c.GetInt("role"), req.Mode, req.Value, req.OperationID, bonus)
 	if err != nil {
 		switch {
+		case errors.Is(err, service.ErrTopUpBonusUnavailable):
+			params["failure_reason"] = "bonus_unavailable"
+			common.ApiError(c, common.NewMessage("Top-up bonus is temporarily unavailable, please try again"))
 		case errors.Is(err, model.ErrAffiliateOperationConflict):
 			common.ApiErrorStatus(c, http.StatusConflict, err)
 			return
@@ -83,7 +94,7 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 	if adjustment.Replayed {
 		replayed = true
 		success = true
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"replayed": true, "before": adjustment.Before, "after": adjustment.After}})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"replayed": true, "before": adjustment.Before, "after": adjustment.After, "bonus_quota": adjustment.BonusQuota}})
 		return
 	}
 	params["operation_id"] = req.OperationID
@@ -93,9 +104,14 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 	if req.Mode != "override" {
 		params["quota"] = req.Value
 	}
+	content := auditContentEN(action, params)
+	if adjustment.BonusQuota > 0 {
+		params["bonus_quota"] = adjustment.BonusQuota
+		content += fmt.Sprintf(", including a bonus of %d", adjustment.BonusQuota)
+	}
 	success = true
 	operation := model.AuditOperation{Action: action, Params: params}
 	model.RecordLogWithAdminInfo(adjustment.UserID, model.LogTypeTopup,
-		auditContentEN(action, params), auditOperatorInfo(c), &operation, c)
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"replayed": false, "before": adjustment.Before, "after": adjustment.After}})
+		content, auditOperatorInfo(c), &operation, c)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"replayed": false, "before": adjustment.Before, "after": adjustment.After, "bonus_quota": adjustment.BonusQuota}})
 }

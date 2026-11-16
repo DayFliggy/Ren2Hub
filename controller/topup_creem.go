@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"io"
 	"net/http"
@@ -51,6 +52,7 @@ func verifyCreemSignature(payload string, signature string, secret string) bool 
 type CreemPayRequest struct {
 	ProductId     string `json:"product_id"`
 	PaymentMethod string `json:"payment_method"`
+	service.TopUpBonusExpectation
 }
 
 type CreemProduct struct {
@@ -99,7 +101,8 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 	}
 
 	id := c.GetInt("id")
-	if rejectInvalidCreditedQuota(c, id, decimal.NewFromInt(selectedProduct.Quota)) {
+	bonus := quoteCreditedTopUpBonus(c, decimal.NewFromInt(selectedProduct.Quota))
+	if bonus == nil || !confirmTopUpBonus(c, req.TopUpBonusExpectation, bonus) {
 		return
 	}
 
@@ -125,6 +128,7 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
+	attachTopUpBonus(topUp, bonus)
 	err = topUp.Insert()
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Creem failed to create top-up order user_id=%d trade_no=%s product_id=%s error=%q", id, referenceId, selectedProduct.ProductId, err.Error()))

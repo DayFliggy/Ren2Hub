@@ -124,6 +124,13 @@ it('lets root manage admins and edit, but not disable or delete, another root', 
 it('uses native integer quota adjustment and rejects nonintegral quota', async () => {
   const { wrapper, state } = setup(() => useAdminUsers(mocks.proof))
   await flushPromises()
+  // controller/user_quota.go answers the committed snapshot and its bonus.
+  mocks.post.mockResolvedValueOnce({
+    replayed: false,
+    before: 1000000,
+    after: 500000,
+    bonus_quota: 0,
+  })
   expect(
     await state.adjustQuota(member, '-500000', '', 'quota-operation')
   ).toBe(true)
@@ -138,6 +145,31 @@ it('uses native integer quota adjustment and rejects nonintegral quota', async (
     false
   )
   expect(mocks.post).toHaveBeenCalledTimes(1)
+  wrapper.unmount()
+})
+it('reports the bonus of an addition and rejects a result without one', async () => {
+  const { wrapper, state } = setup(() => useAdminUsers(mocks.proof))
+  await flushPromises()
+  mocks.post.mockResolvedValueOnce({
+    replayed: false,
+    before: 0,
+    after: 550000,
+    bonus_quota: 50000,
+  })
+  expect(await state.adjustQuota(member, '500000', '', 'bonus-operation')).toBe(
+    true
+  )
+  expect(mocks.post).toHaveBeenLastCalledWith('/api/user/manage', {
+    id: 2,
+    action: 'add_quota',
+    operation_id: 'bonus-operation',
+    mode: 'add',
+    value: 500000,
+  })
+  mocks.post.mockResolvedValueOnce({ replayed: false, before: 0, after: 1 })
+  expect(await state.adjustQuota(member, '1', '', 'malformed-operation')).toBe(
+    false
+  )
   wrapper.unmount()
 })
 it('converts redemption amounts using a fractional runtime quota unit', async () => {

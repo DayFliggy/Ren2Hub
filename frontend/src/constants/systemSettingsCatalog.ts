@@ -50,7 +50,7 @@ export interface SystemSettingsSection {
     | 'channel-affinity'
     | 'waffo-pancake'
     | 'gmpay'
-    | 'topup-discount'
+    | 'topup-bonus'
     | 'payment-compliance'
     | 'operations-maintenance'
 }
@@ -299,11 +299,11 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     defaultSection: 'quota',
     sections: [
       {
-        id: 'topup-discount',
-        titleKey: 'systemSettings.sections.topupDiscount',
-        descriptionKey: 'systemSettings.sections.topupDiscountDescription',
+        id: 'topup-bonus',
+        titleKey: 'systemSettings.sections.topupBonus',
+        descriptionKey: 'systemSettings.sections.topupBonusDescription',
         fields: [],
-        integration: 'topup-discount',
+        integration: 'topup-bonus',
       },
       {
         id: 'affiliate',

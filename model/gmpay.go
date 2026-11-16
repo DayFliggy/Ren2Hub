@@ -110,6 +110,11 @@ func CreateGmpayOrder(ctx context.Context, topUp *TopUp, snapshot *GmpayOrder, m
 		merchant.Key == "" || merchant.MerchantID == "" || snapshot.Token == "" || snapshot.Network == "" {
 		return ErrGmpayPaymentMismatch
 	}
+	// The snapshot freezes the full credit. An order that already carries a
+	// credit (a quoted bonus) must agree with it.
+	if topUp.ExpectedQuota != 0 && topUp.ExpectedQuota != snapshot.ExpectedQuota {
+		return ErrGmpayPaymentMismatch
+	}
 	topUp.Currency = snapshot.Currency
 	topUp.PayAmount = decimal.NewFromInt(snapshot.AmountMinor).Div(decimal.NewFromInt(100)).String()
 	topUp.ExpectedQuota = snapshot.ExpectedQuota
@@ -156,7 +161,7 @@ func CreateGmpayOrder(ctx context.Context, topUp *TopUp, snapshot *GmpayOrder, m
 		if err := tx.Create(snapshot).Error; err != nil {
 			return err
 		}
-		return insertTopUpDiscountTx(tx, topUp)
+		return insertTopUpBonusTx(tx, topUp)
 	})
 }
 

@@ -27,8 +27,10 @@ type TopUp struct {
 	ExpectedQuota      int     `json:"expected_quota" gorm:"type:bigint;not null;default:0"`
 	CreditedQuota      int     `json:"credited_quota" gorm:"type:bigint;not null;default:0"`
 	AffiliateBaseQuota int     `json:"affiliate_base_quota" gorm:"type:bigint;not null;default:0"`
-	// Discount is written with the order and never serialized with it.
-	Discount *TopUpDiscount `json:"-" gorm:"-"`
+	// BonusQuota is the frozen top-up bonus included in ExpectedQuota.
+	BonusQuota int `json:"bonus_quota" gorm:"type:bigint;not null;default:0"`
+	// Bonus is the decision written with the order and never serialized with it.
+	Bonus *TopUpBonusGrant `json:"-" gorm:"-"`
 }
 
 const (
@@ -67,7 +69,7 @@ func (topUp *TopUp) Insert() error {
 		if err := tx.Create(topUp).Error; err != nil {
 			return err
 		}
-		return insertTopUpDiscountTx(tx, topUp)
+		return insertTopUpBonusTx(tx, topUp)
 	})
 }
 

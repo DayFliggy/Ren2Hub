@@ -343,21 +343,35 @@ export async function nativeCoreFixture(
           index % 2 === 0 ? 0 : 2
         ),
       })
-    // Top-up discount reads use the bodies generated from the real handlers;
+    // Top-up bonus reads use the bodies generated from the real handlers;
     // specs that save or fail register their own routes.
-    if (path === '/api/user/topup-discount' && method === 'GET')
+    if (path === '/api/user/topup-bonus' && method === 'GET')
       return route.fulfill({
-        json: nativeFixture('topup-discount-self.get.json'),
+        json: nativeFixture('topup-bonus-self.get.json'),
       })
-    if (path === '/api/option/topup_discount' && method === 'GET')
-      return route.fulfill({ json: nativeFixture('topup-discount.get.json') })
-    if (path === '/api/option/topup_discount/status' && method === 'GET')
-      return route.fulfill({
-        json: nativeFixture('topup-discount-status.get.json'),
+    // The preview keeps the generated 5% rate for any principal.
+    if (path === '/api/user/topup-bonus/preview' && method === 'GET') {
+      const principal = Number(url.searchParams.get('principal_quota'))
+      const preview = nativeFixture<{ data: Record<string, unknown> }>(
+        'topup-bonus-preview.get.json'
+      )
+      const bonus = Math.floor(principal * 0.05)
+      return ok({
+        ...preview.data,
+        principal_quota: principal,
+        bonus_quota: bonus,
+        expected_quota: principal + bonus,
       })
-    if (path === '/api/option/topup_discount/estimate' && method === 'POST')
+    }
+    if (path === '/api/option/topup_bonus' && method === 'GET')
+      return route.fulfill({ json: nativeFixture('topup-bonus.get.json') })
+    if (path === '/api/option/topup_bonus/status' && method === 'GET')
       return route.fulfill({
-        json: nativeFixture('topup-discount-estimate.post.json'),
+        json: nativeFixture('topup-bonus-status.get.json'),
+      })
+    if (path === '/api/option/topup_bonus/estimate' && method === 'POST')
+      return route.fulfill({
+        json: nativeFixture('topup-bonus-estimate.post.json'),
       })
     if (path === '/api/data/self/summary')
       return ok(
@@ -507,7 +521,7 @@ export async function nativeCoreFixture(
         ],
       })
     if (path === '/api/user/topup/info') return ok(topup)
-    // Stripe is never discounted and answers a bare payable amount.
+    // Stripe answers a bare payable amount; its bonus comes from the preview.
     if (path === '/api/user/stripe/amount')
       return route.fulfill({ json: { message: 'success', data: '73.00' } })
     if (
@@ -554,6 +568,7 @@ export async function nativeCoreFixture(
             pay_amount: '73',
             expected_quota: 5000000,
             credited_quota: 0,
+            bonus_quota: 0,
             affiliate_base_quota: 5000000,
             trade_no: 'native-order',
             payment_method: 'gmpay:usdt.tron',

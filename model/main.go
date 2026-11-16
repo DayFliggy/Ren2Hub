@@ -387,11 +387,14 @@ func migrateDB() error {
 		&TicketMessage{},
 		&TicketAttachment{},
 		&ChannelUpstreamRatio{},
-		&TopUpDiscountUsageHourly{},
-		&TopUpDiscountConfigVersion{},
-		&TopUpDiscount{},
+		&TopUpBonusUsageHourly{},
+		&TopUpBonusConfigVersion{},
+		&TopUpBonusDecisionRecord{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := migrateTopUpBonusTables(DB); err != nil {
 		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {

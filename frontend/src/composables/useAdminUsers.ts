@@ -1,7 +1,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
-import { parseAdminUserPage } from '@/api/adminUserContracts'
+import {
+  parseAdminUserPage,
+  parseQuotaAdjustmentBonus,
+} from '@/api/adminUserContracts'
 import { hasPendingPublication } from '@/api/publication'
 import { proofOptions, type SecurityOperation } from '@/api/security'
 import {
@@ -11,6 +14,7 @@ import {
   type AdminUserAction,
 } from '@/constants/adminUsers'
 import { useAuthStore } from '@/stores/auth'
+import { formatQuota } from '@/utils/format'
 import { useLatestRequest } from './useLatestRequest'
 import { useToast } from './useToast'
 import type {
@@ -205,15 +209,21 @@ export function useAdminUsers(
   ) {
     const value = Number(delta)
     if (!Number.isSafeInteger(value) || !value) return false
-    return mutate(() =>
-      api.post('/api/user/manage', {
+    return mutate(async () => {
+      const result = await api.post('/api/user/manage', {
         id: user.id,
         action: 'add_quota',
         operation_id: operationId,
         mode: value > 0 ? 'add' : 'subtract',
         value: Math.abs(value),
       })
-    )
+      // Additions earn the user's top-up bonus on top of the entered amount.
+      const bonus = parseQuotaAdjustmentBonus(result)
+      if (BigInt(bonus) > 0n)
+        toast.success(
+          t('users.quotaBonusApplied', { bonus: formatQuota(bonus) })
+        )
+    })
   }
   /**
    * Runs one verified request per user under a single busy lock. Users already

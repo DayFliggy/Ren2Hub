@@ -6,14 +6,14 @@
   "quote": {
     "amount_rate": "0.04",
     "applied_rate": "0.05",
+    "bonus_quota": 2500000,
     "cap_applied": false,
     "currency": "CNY",
-    "expected_quota": 50000000,
-    "factor": "0.95",
+    "expected_quota": 52500000,
     "fixed_rate": "0.01",
-    "list_pay_amount": "730.00",
-    "pay_amount": "693.50",
+    "pay_amount": "730.00",
     "personal_rate": "0",
+    "principal_quota": 50000000,
     "site_rate": "0"
   }
 }

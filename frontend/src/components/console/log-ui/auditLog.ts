@@ -128,6 +128,7 @@ export const AUDIT_LOG_PARAM_LABEL_KEYS: Record<string, string> = {
   role: 'auditLogs.params.role',
   action: 'auditLogs.params.action',
   quota: 'auditLogs.params.quota',
+  bonus_quota: 'auditLogs.params.bonusQuota',
   from: 'auditLogs.params.from',
   to: 'auditLogs.params.to',
   delta: 'auditLogs.params.delta',

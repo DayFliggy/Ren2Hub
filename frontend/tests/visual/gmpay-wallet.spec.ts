@@ -6,7 +6,7 @@ import {
   captureEvidence,
 } from './fixtures'
 
-// The server quote for an undiscounted CNY top-up of amount USD.
+// The server quote for a CNY top-up of amount USD without bonus.
 function quoted(amount: number) {
   const payAmount = (amount * 7.3).toFixed(2)
   const { quote } = nativeFixture<{ quote: Record<string, unknown> }>(
@@ -17,10 +17,10 @@ function quoted(amount: number) {
     data: payAmount,
     quote: {
       ...quote,
+      principal_quota: amount * 500000,
+      bonus_quota: 0,
       expected_quota: amount * 500000,
-      list_pay_amount: payAmount,
       pay_amount: payAmount,
-      factor: '1',
       applied_rate: '0',
       amount_rate: '0',
       fixed_rate: '0',
@@ -134,6 +134,7 @@ for (const [theme, mobile] of [
         amount: 20,
         expected_pay_amount: '146.00',
         expected_currency: 'CNY',
+        expected_bonus_quota: 0,
         payment_method: 'gmpay:usdt.tron',
       })
       await pendingOrder
@@ -158,6 +159,7 @@ for (const [theme, mobile] of [
             pay_amount: '146.00',
             amount: 20,
             credited_quota: 0,
+            bonus_quota: 0,
             payment_provider: 'gmpay',
             payment_method: 'gmpay:usdt.tron',
             status: 'pending',

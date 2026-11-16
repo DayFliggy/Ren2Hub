@@ -32,6 +32,7 @@ interface NativeRedemption {
   key: string
   status: number
   quota: number
+  bonus_quota: number
   used_user_id: number
   created_time: number
   redeemed_time: number
@@ -45,6 +46,7 @@ export function projectRedemption(value: unknown): AdminRedemptionCode {
     'id',
     'status',
     'quota',
+    'bonus_quota',
     'used_user_id',
     'created_time',
     'redeemed_time',
@@ -71,6 +73,7 @@ export function projectRedemption(value: unknown): AdminRedemptionCode {
             : 'unused',
     quota: String(raw.quota),
     amount: quotaToDecimal(raw.quota),
+    bonus_quota: String(raw.bonus_quota),
     redeemer_id: raw.used_user_id,
     created_time: raw.created_time,
     used_time: raw.redeemed_time,

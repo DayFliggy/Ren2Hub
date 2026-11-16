@@ -60,7 +60,7 @@ func newRemixRoute(t *testing.T) *remixRoute {
 	t.Helper()
 	require.NoError(t, appI18n.Init())
 	setupRelayRouterTestDB(t)
-	require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.Log{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.Log{}, &model.TopUpBonusUsageHourly{}, &model.TopUpBonusConfigVersion{}))
 	service.InitHttpClient()
 	previousPrices := ratio_setting.ModelPrice2JSONString()
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"sora-2":0.1}`))

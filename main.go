@@ -360,9 +360,9 @@ func InitResources() error {
 		}
 	}
 	model.InitOptionMap()
-	// Top-up quotes apply the saved discount; never serve without it.
-	if _, err = model.CurrentTopUpDiscountSettings(); err != nil {
-		common.FatalLog(common.LogText("failed to load top-up discount config: %s", err.Error()))
+	// Credits apply the saved top-up bonus; never serve without it.
+	if _, err = model.CurrentTopUpBonusSettings(); err != nil {
+		common.FatalLog(common.LogText("failed to load top-up bonus config: %s", err.Error()))
 	}
 
 	// 清理旧的磁盘缓存文件

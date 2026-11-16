@@ -93,6 +93,13 @@ onMounted(load)
                 : t('orders.notCredited')
             }}
           </p>
+          <p
+            v-if="BigInt(row.bonus_quota) > 0n"
+            class="text-[0.6875rem] text-[var(--status-success-text)]"
+            data-order-bonus
+          >
+            {{ t('orders.bonus', { bonus: formatQuota(row.bonus_quota) }) }}
+          </p>
           <StatusChip :tone="adminOrderStatusTone(row.status)" class="mt-1">
             {{ t(adminOrderStatusLabelKey(row.status)) }}
           </StatusChip>

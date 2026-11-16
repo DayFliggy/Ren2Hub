@@ -51,14 +51,14 @@ func TestAffiliateDeletedInviterDoesNotBlockPaidCredit(t *testing.T) {
 						assert.Equal(t, common.TopUpStatusSuccess, got.Status)
 						assert.Equal(t, quota, got.CreditedQuota)
 					} else {
-						result, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", quota, "deleted-inviter-operation")
+						result, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", quota, "deleted-inviter-operation", nil)
 						require.NoError(t, err)
 						assert.False(t, result.Replayed)
 						var operation AdminQuotaOperation
 						require.NoError(t, db.Where("user_id = ?", invitee.Id).First(&operation).Error)
 						sourceType, sourceID = "admin_quota", fmt.Sprint(operation.ID)
 						replay = func() error {
-							result, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", quota, "deleted-inviter-operation")
+							result, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", quota, "deleted-inviter-operation", nil)
 							if err == nil {
 								assert.True(t, result.Replayed)
 							}
@@ -150,7 +150,7 @@ func TestAffiliateInviterQueryFailureStillRollsBackCredit(t *testing.T) {
 				_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 				require.ErrorIs(t, err, queryFailure)
 			} else {
-				_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500000, "inviter-query-failure")
+				_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500000, "inviter-query-failure", nil)
 				require.ErrorIs(t, err, queryFailure)
 			}
 			require.NoError(t, db.First(&invitee, invitee.Id).Error)

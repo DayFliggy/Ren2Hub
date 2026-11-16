@@ -4,6 +4,40 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 上一批源码冻结目标为 `48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0`（NewAPI `v1.0.0-rc.49`），于 2026-11-10 完成窗口核对；再前一冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`。rc.49 之后的 `8faf1d45e`（React 文案）与 `bd6bb5301`（HOST 监听地址）当时未纳入 rc.49 批次，现已纳入下述固定 main 批次。这不表示冻结 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-16 充值加赠
+
+按用户要求，把 2026-11-10 的充值折扣改为充值加赠，行为见 `docs/billing/TOPUP_BONUS.md`。实付不变，按本金另赠额度；单笔、固定、全站与个人阶梯的合成和封顶规则沿用。用户确认的政策：
+
+- 兑换码和管理员加额跟随同一启用设置。
+- 新名称为 `topup_bonus`，旧配置不保留。
+- 档位比例数值沿用，不做等值换算。
+
+本轮自行评估的取舍：
+
+- 管理员减额的返利冲正保持现状。
+- 兑换码不可变单独提交、不单独发布。
+- 不加赠的纠正只经 API 覆盖额度，不做界面。
+
+上游没有对应功能。原生文件只做接入：
+
+- 四个本地定价渠道：`QuoteTopUp` 改为返回不变的实付和加赠，确认字段增加 `expected_bonus_quota`。
+- Stripe 与 Creem：在 Checkout Session 和本地订单之前确认加赠。
+- `TopUp` 增加 `BonusQuota`；`FreezeTopUpQuota` 校验加赠小于到账合计，并以本金作返利基数。
+- `Redeem` 与 `AdjustUserQuotaWithOperation` 接收预载的加赠求值器，分别在兑换 CAS 与操作号重放检查之后决定加赠。
+- 已使用兑换码不可修改，实现集中在扩展文件 `model/redemption_update.go`。
+- `model/main.go` 在 AutoMigrate 后调用一次性迁移。
+- 路由和 Access Token 目录登记 `/api/user/topup-bonus/preview`。
+
+逻辑放在扩展文件：
+
+- `model/topup_bonus_*.go`：配置、小时用量、决策记录、兑换入账与迁移。
+- `service/topup_bonus*.go`：求值、报价与估算。
+- `controller/topup_bonus*.go`：接口与下单接点。
+
+迁移在 AutoMigrate 后执行：最新折扣配置原样复制为加赠版本 1，校验并加载后删除旧表；小时用量按批逐行相加移入，可中断重跑；删除 `topup_discounts`、`usage_discount_configs`、`usage_discount_hourly`。判断旧表是否存在时直接查询系统目录并传播错误，不用 GORM `HasTable`，因为它把查询失败当作表不存在，会跳过迁移继续启动。候选升级合同同步改为：`top_ups`、`admin_quota_operations`、`redemptions` 新增的 `bonus_quota` 列首次升级时必须全为 0，其余行逐表不变；向折扣版本源注入两版配置、两条小时用量和已用/未用两个兑换码，验证复制、相加迁移、旧表删除、决策表存在且启动不写入，以及重复启动后保持不变。`race_selection.json` 随测试改名，冻结哈希更新，组数与执行数不变。
+
+来源清单用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 的只读 NewAPI 检出>` 重算，计数为 881 `upstream_equal`、281 `adapted`、351 `extension`、45 `removed`。合同 `topup-discount` 替换为 `topup-bonus`；`payment-single-credit` 的依据指向新文档；`candidate_sha` 为空。NATIVE_B388_REVIEW.json 只记录 2026-11-14 回归时的折扣代码，不回改，受影响文件的 review basis 指向本条。
+
 ## 2026-11-14 后端全面回归原生
 
 本批从 Ren2Hub `2382fbdd55a6d76d73d8e5b314c7765c98cd8da6`、根仓库 `792c20ed6eb8c257dbe5c14b4af8990b5c3538ce` 出发，对齐固定 NewAPI `b388140acfd80369ec6243b16869daff1b4051f4`。只保留用户批准的独有功能、明确改造和 Vue 实际对接所必需的最小差异；历史 verified_fix 不再是保留理由。本条替代旧批次面向当前行为的保留规则，历史记录和原始审计不改写。

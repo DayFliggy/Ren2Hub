@@ -1,0 +1,15 @@
+{
+  "data": {
+    "amount_rate": "0.04",
+    "applied_rate": "0.05",
+    "bonus_quota": 2500000,
+    "cap_applied": false,
+    "expected_quota": 52500000,
+    "fixed_rate": "0.01",
+    "personal_rate": "0",
+    "principal_quota": 50000000,
+    "site_rate": "0"
+  },
+  "message": "",
+  "success": true
+}

@@ -324,13 +324,21 @@ export function parseUsageRows(value: unknown): UsageRow[] {
   })
 }
 
-export function parseRedeemedQuota(value: unknown): string {
+/**
+ * controller/user.go TopUp: data is the credited total of the code and
+ * bonus_quota the bonus included in it.
+ */
+export function parseRedemption(value: unknown): {
+  quota: string
+  bonus_quota: string
+} {
   const endpoint = '/api/user/topup'
-  if (typeof value === 'number') return requiredQuota(value, endpoint)
-  if (isRecord(value) && value.quota !== undefined) {
-    return requiredQuota(value.quota, endpoint)
-  }
-  return invalidResponse(endpoint)
+  if (!isRecord(value)) return invalidResponse(endpoint)
+  const quota = requiredQuota(value.data, endpoint)
+  const bonus = requiredQuota(value.bonus_quota, endpoint)
+  if (BigInt(bonus) < 0n || BigInt(bonus) >= BigInt(quota))
+    return invalidResponse(endpoint)
+  return { quota, bonus_quota: bonus }
 }
 
 const LOG_TYPES: Record<number, LogType> = {

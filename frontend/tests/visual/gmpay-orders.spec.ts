@@ -30,6 +30,7 @@ for (const [theme, mobile] of [
       pay_amount: '73.00',
       expected_quota: 5000000,
       credited_quota: 0,
+      bonus_quota: 0,
       affiliate_base_quota: 5000000,
       currency: 'CNY',
       payment_provider: 'gmpay',

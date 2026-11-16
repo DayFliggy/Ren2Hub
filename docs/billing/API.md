@@ -24,7 +24,7 @@
 
 `stats` 的 `daily`、`GET /api/user/affiliate` 的 `monthly_series` 和 `GET /api/data/self/summary` 的日界按 `tz_offset` 划分。参数沿用浏览器 `Date.getTimezoneOffset()` 约定：分钟数，UTC 以西为正，取值 -840 到 840；未传时按 UTC。非整数或超出范围返回 400 和 `message_key: "Invalid timezone offset"`，返利接口在解冻前拒绝。偏移在整个窗口内固定，窗口跨越夏令时切换时，切换后的日期或月份边界按切换前的偏移计算。
 
-支付回调和人工补单通过订单行锁、状态校验与事务保证最多入账一次。该保证不等于所有支付通道都核对回调实付金额：只有 Epay 的充值折扣合同和 GMPay 向统一结算传入 `TopUpReceipt`，按十进制值核对冻结的 `PayAmount` 和 `Currency`；这些路径遇到冻结值缺失或不符时拒绝入账。GMPay 的 CNY 币种来自订单与本地合同，回调本身没有独立的法币或网络字段。Stripe、Creem、Waffo 和 Waffo Pancake 沿用各自原生通知与订单规则，不传入这层金额收据。
+支付回调和人工补单通过订单行锁、状态校验与事务保证最多入账一次。该保证不等于所有支付通道都核对回调实付金额：只有 Epay 的报价合同和 GMPay 向统一结算传入 `TopUpReceipt`，按十进制值核对冻结的 `PayAmount` 和 `Currency`；这些路径遇到冻结值缺失或不符时拒绝入账。GMPay 的 CNY 币种来自订单与本地合同，回调本身没有独立的法币或网络字段。Stripe、Creem、Waffo 和 Waffo Pancake 沿用各自原生通知与订单规则，不传入这层金额收据。
 
 回调响应也遵循各渠道合同，不再提供统一的永久错误 ACK 分类或 `payment.callback_rejected` 审计。Epay 验签或入账失败返回 `fail`；Stripe 保留验签失败 400，并在原生事件处理完成后返回 200，不能据此保证每种入账错误都会触发重试。GMPay 请求格式错误返回 400 `fail`，验签或结算失败返回 200 `fail`，只有成功返回 200 `success`；其余渠道以各自原生实现为准。日志中记录错误不等于持久化的业务审计。GMPay 的有限重试及旧订单处理见 [GMPAY.md](GMPAY.md)。
 

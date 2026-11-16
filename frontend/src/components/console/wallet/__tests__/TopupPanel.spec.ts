@@ -59,20 +59,44 @@ function submit(
     .findAll('button')
     .find((button) => button.text() === i18n.global.t(label))!
 }
-/** An undiscounted server quote for $10, unless patched. */
+/** A server quote for $10 without bonus, unless patched. */
 function quoted(payAmount: string, patch: Record<string, unknown> = {}) {
   const quote = {
     ...quoteResponse.quote,
+    principal_quota: 5000000,
+    bonus_quota: 0,
     expected_quota: 5000000,
-    list_pay_amount: payAmount,
     pay_amount: payAmount,
-    factor: '1',
     applied_rate: '0',
     amount_rate: '0',
     fixed_rate: '0',
     ...patch,
   }
   return { message: 'success', data: quote.pay_amount, quote }
+}
+/** The preview of a provider-priced credit of principal with bonus. */
+function preview(principal: number, bonus: number) {
+  return {
+    ...quoteResponse.quote,
+    principal_quota: principal,
+    bonus_quota: bonus,
+    expected_quota: principal + bonus,
+  }
+}
+/** Answers topup/info with info and the bonus preview with previews. */
+function routeGet(
+  info: Record<string, unknown>,
+  previews: (principal: string) => unknown
+) {
+  return vi
+    .spyOn(api, 'get')
+    .mockImplementation(async (path, params) =>
+      path === '/api/user/topup-bonus/preview'
+        ? (previews(
+            String((params as Record<string, unknown>).principal_quota)
+          ) as never)
+        : (info as never)
+    )
 }
 function payCalls(request: { mock: { calls: unknown[][] } }, path: string) {
   return request.mock.calls.filter(([, called]) => called === path)
@@ -156,29 +180,39 @@ describe('native wallet checkout', () => {
     wrapper.unmount()
   })
 
-  it('shows Creem native quota once and adds it exactly to the account balance', async () => {
+  it('shows the Creem product quota with its previewed bonus and adds both exactly to the balance', async () => {
     configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
-    vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopupInfo,
-      enable_creem_topup: true,
-      creem_products: JSON.stringify([
-        {
-          productId: 'prod_test',
-          name: 'Credits',
-          price: 9,
-          currency: 'USD',
-          quota: 1500000,
-        },
-      ]),
-    })
+    const get = routeGet(
+      {
+        ...nativeTopupInfo,
+        enable_creem_topup: true,
+        creem_products: JSON.stringify([
+          {
+            productId: 'prod_test',
+            name: 'Credits',
+            price: 9,
+            currency: 'USD',
+            quota: 1500000,
+          },
+        ]),
+      },
+      (principal) => preview(Number(principal), 75000)
+    )
     const quote = vi.spyOn(httpTransport, 'request')
     const wrapper = mount(TopupPanel, {
       props: { paymentMethod: 'creem', balanceQuota: '500000' },
       global: { plugins: [i18n] },
     })
     await flushPromises()
+    expect(get).toHaveBeenCalledWith(
+      '/api/user/topup-bonus/preview',
+      { principal_quota: '1500000' },
+      expect.anything()
+    )
     expect(wrapper.text()).toContain(formatQuota(1500000, 3))
-    expect(wrapper.text()).toContain(formatQuota(2000000))
+    expect(wrapper.text()).toContain(`+${formatQuota(75000, 3)}`)
+    expect(wrapper.text()).toContain(formatQuota(1575000, 3))
+    expect(wrapper.text()).toContain(formatQuota(2075000))
     expect(quote).not.toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -211,7 +245,7 @@ describe('native wallet checkout', () => {
     expect(wrapper.text()).toContain('¥73.00')
     expect(wrapper.text()).toContain(formatQuota(5000000, 3))
     expect(wrapper.text()).not.toContain(
-      i18n.global.t('wallet.summaryListPrice')
+      i18n.global.t('wallet.summaryPrincipal')
     )
     await submit(wrapper).trigger('click')
     await flushPromises()
@@ -219,6 +253,7 @@ describe('native wallet checkout', () => {
     expect(request).toHaveBeenLastCalledWith('POST', '/api/user/gmpay/pay', {
       data: {
         amount: 10,
+        expected_bonus_quota: 0,
         expected_pay_amount: '73.00',
         expected_currency: 'CNY',
         payment_method: 'gmpay:usdt.tron',
@@ -329,6 +364,7 @@ describe('native wallet checkout', () => {
     expect(request).toHaveBeenLastCalledWith('POST', '/api/user/waffo/pay', {
       data: {
         amount: 10,
+        expected_bonus_quota: 0,
         expected_pay_amount: '10.00',
         expected_currency: 'EUR',
         pay_method_index: 1,
@@ -339,64 +375,83 @@ describe('native wallet checkout', () => {
     wrapper.unmount()
   })
 
-  it('shows the list price and exact discount percent from the server quote', async () => {
+  it('keeps the price and shows principal, bonus and total credit from the server quote', async () => {
     configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
-    vi.spyOn(httpTransport, 'request').mockResolvedValue({
-      ...quoteResponse,
-      data: '720.87',
-      quote: {
-        ...quoteResponse.quote,
-        applied_rate: '0.0125',
-        pay_amount: '720.87',
-      },
-    } as never)
+    vi.spyOn(httpTransport, 'request').mockResolvedValue(quoteResponse as never)
     const wrapper = await render('alipay')
     const summary = wrapper.text()
-    expect(summary).toContain(i18n.global.t('wallet.summaryListPrice'))
     expect(summary).toContain('¥730.00')
-    expect(summary).toContain(
-      i18n.global.t('wallet.summaryDiscountRate', { rate: '1.25' })
-    )
-    expect(summary).toContain('¥720.87')
-    // Credit is the server's expected quota, not the requested amount.
+    expect(wrapper.find('.line-through').exists()).toBe(false)
+    expect(summary).toContain(i18n.global.t('wallet.summaryPrincipal'))
     expect(summary).toContain(formatQuota(50000000, 3))
+    expect(summary).toContain(
+      i18n.global.t('wallet.summaryBonus', { rate: '5' })
+    )
+    expect(summary).toContain(`+${formatQuota(2500000, 3)}`)
+    // Credit is the server's principal plus bonus, not the requested amount.
+    expect(summary).toContain(formatQuota(52500000, 3))
+    expect(summary).toContain(formatQuota(53000000))
     wrapper.unmount()
   })
 
-  it('sends no price confirmation for the undiscounted Stripe checkout', async () => {
+  it('confirms the previewed Stripe bonus without a price confirmation', async () => {
     const assign = vi.fn()
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://console.example', assign },
       configurable: true,
       writable: true,
     })
-    vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopupInfo,
-      enable_stripe_topup: true,
-      pay_methods: [{ type: 'stripe', name: 'Stripe' }],
-    })
+    routeGet(
+      {
+        ...nativeTopupInfo,
+        enable_stripe_topup: true,
+        pay_methods: [{ type: 'stripe', name: 'Stripe' }],
+      },
+      (principal) => preview(Number(principal), 100000)
+    )
+    let bonusChanged = true
     const request = vi
       .spyOn(httpTransport, 'request')
-      .mockImplementation(async (_method, path) =>
-        path === '/api/user/stripe/amount'
-          ? ({ message: 'success', data: '10.00' } as never)
-          : ({
-              message: 'success',
-              data: { pay_link: 'https://checkout.stripe.example/s' },
-            } as never)
-      )
+      .mockImplementation(async (_method, path) => {
+        if (path === '/api/user/stripe/amount')
+          return { message: 'success', data: '10.00' } as never
+        if (bonusChanged) {
+          bonusChanged = false
+          return {
+            message: 'error',
+            code: 'topup_bonus_changed',
+            data: 'The top-up bonus changed, please confirm the new bonus',
+            bonus: preview(5000000, 150000),
+          } as never
+        }
+        return {
+          message: 'success',
+          data: { pay_link: 'https://checkout.stripe.example/s' },
+        } as never
+      })
     const wrapper = mount(TopupPanel, {
       props: { paymentMethod: 'stripe', balanceQuota: '500000' },
       global: { plugins: [i18n] },
     })
     await flushPromises()
     expect(wrapper.text()).toContain('10.00')
-    expect(wrapper.text()).toContain(formatQuota(5000000, 3))
+    expect(wrapper.text()).toContain(formatQuota(5100000, 3))
     await submit(wrapper, 'wallet.topupNow').trigger('click')
     await flushPromises()
+    expect(assign).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(`+${formatQuota(150000, 3)}`)
+    expect(wrapper.text()).toContain(i18n.global.t('wallet.quoteChanged'))
+    await submit(wrapper, 'wallet.topupNow').trigger('click')
+    await flushPromises()
+    const pays = payCalls(request, '/api/user/stripe/pay')
+    expect(pays).toHaveLength(2)
+    expect(pays[0]![2]).toMatchObject({
+      data: { expected_bonus_quota: 100000 },
+    })
     expect(request).toHaveBeenLastCalledWith('POST', '/api/user/stripe/pay', {
       data: {
         amount: 10,
+        expected_bonus_quota: 150000,
         success_url: 'https://console.example/wallet',
         cancel_url: 'https://console.example/wallet',
         payment_method: 'stripe',
@@ -407,7 +462,7 @@ describe('native wallet checkout', () => {
     wrapper.unmount()
   })
 
-  it('shows a changed price without paying or blocking, then confirms it on the next click', async () => {
+  it('shows a changed quote without paying or blocking, then confirms it on the next click', async () => {
     const assign = vi.fn()
     Object.defineProperty(window, 'location', {
       value: { origin: 'https://console.example', assign },
@@ -434,8 +489,8 @@ describe('native wallet checkout', () => {
     await flushPromises()
     expect(assign).not.toHaveBeenCalled()
     expect(wrapper.emitted('track-order')).toBeUndefined()
-    expect(wrapper.text()).toContain('¥693.50')
     expect(wrapper.text()).toContain('¥730.00')
+    expect(wrapper.text()).toContain(`+${formatQuota(2500000, 3)}`)
     expect(wrapper.text()).toContain(i18n.global.t('wallet.quoteChanged'))
     expect(wrapper.text()).not.toContain(
       i18n.global.t('wallet.creationUncertain')
@@ -446,10 +501,18 @@ describe('native wallet checkout', () => {
     const pays = payCalls(request, '/api/user/gmpay/pay')
     expect(pays).toHaveLength(2)
     expect(pays[0]![2]).toMatchObject({
-      data: { expected_pay_amount: '73.00', expected_currency: 'CNY' },
+      data: {
+        expected_pay_amount: '73.00',
+        expected_currency: 'CNY',
+        expected_bonus_quota: 0,
+      },
     })
     expect(pays[1]![2]).toMatchObject({
-      data: { expected_pay_amount: '693.50', expected_currency: 'CNY' },
+      data: {
+        expected_pay_amount: '730.00',
+        expected_currency: 'CNY',
+        expected_bonus_quota: 2500000,
+      },
     })
     expect(wrapper.emitted('track-order')).toEqual([['GPtest']])
     expect(assign).toHaveBeenCalledWith('https://cashier.example/pay')

@@ -23,6 +23,8 @@ type Redemption struct {
 	UsedUserId   int            `json:"used_user_id"`
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
 	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	// BonusQuota is the top-up bonus credited with the code on top of Quota.
+	BonusQuota int `json:"bonus_quota" gorm:"type:bigint;not null;default:0"`
 }
 
 func GetAllRedemptions(startIdx int, num int, sort RedemptionSort) ([]*Redemption, int64, error) {
@@ -103,12 +105,14 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	return &redemption, err
 }
 
-func Redeem(key string, userId int) (quota int, err error) {
+// Redeem credits a code's quota plus its top-up bonus and returns both the
+// full credit and the bonus part. A nil bonus evaluator grants no bonus.
+func Redeem(key string, userId int, bonus TopUpBonusEvaluator) (quota int, bonusQuota int, err error) {
 	if key == "" {
-		return 0, errors.New("redemption code not provided")
+		return 0, 0, errors.New("redemption code not provided")
 	}
 	if userId == 0 {
-		return 0, errors.New("invalid user id")
+		return 0, 0, errors.New("invalid user id")
 	}
 	redemption := &Redemption{}
 
@@ -144,15 +148,20 @@ func Redeem(key string, userId int) (quota int, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("redemption code already used")
 		}
-		return creditTopUpQuota(tx, userId, redemption.Quota, nil)
+		return creditRedemptionTx(tx, redemption, userId, bonus)
 	})
 	if err != nil {
 		common.SysError(common.LogText("redemption failed: %s", err.Error()))
-		return 0, ErrRedeemFailed
+		return 0, 0, ErrRedeemFailed
 	}
-	syncCreditUserQuotaCache(userId, redemption.Quota, common.LogText("redemption"))
-	RecordLog(userId, LogTypeTopup, common.NewMessage("Topped up {{quota}} with a redemption code, code ID {{id}}", map[string]any{"quota": logger.FormatQuota(redemption.Quota), "id": redemption.Id}))
-	return redemption.Quota, nil
+	credited := redemption.Quota + redemption.BonusQuota
+	syncCreditUserQuotaCache(userId, credited, common.LogText("redemption"))
+	message := common.NewMessage("Topped up {{quota}} with a redemption code, code ID {{id}}", map[string]any{"quota": logger.FormatQuota(credited), "id": redemption.Id})
+	if redemption.BonusQuota > 0 {
+		message = common.NewMessage("Topped up {{quota}} with a redemption code, including a bonus of {{bonus}}, code ID {{id}}", map[string]any{"quota": logger.FormatQuota(credited), "bonus": logger.FormatQuota(redemption.BonusQuota), "id": redemption.Id})
+	}
+	RecordLog(userId, LogTypeTopup, message)
+	return credited, redemption.BonusQuota, nil
 }
 
 func (redemption *Redemption) Insert() error {

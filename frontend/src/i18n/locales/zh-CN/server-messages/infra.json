@@ -16,6 +16,7 @@
   "Size {{size}}": "大小 {{size}}",
   "Task timed out without returning a result": "任务超时，未返回结果",
   "Topped up {{quota}} with a redemption code, code ID {{id}}": "通过兑换码充值 {{quota}}，兑换码ID {{id}}",
+  "Topped up {{quota}} with a redemption code, including a bonus of {{bonus}}, code ID {{id}}": "通过兑换码充值 {{quota}}（含加赠 {{bonus}}），兑换码ID {{id}}",
   "Unsupported language": "不支持的语言",
   "Upstream returned no usage": "上游无计费信息",
   "Upstream returned no usage, so nothing was charged (possibly an upstream timeout)": "上游没有返回计费信息，无法扣费（可能是上游超时）",

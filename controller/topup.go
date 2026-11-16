@@ -356,10 +356,8 @@ func RequestEpay(c *gin.Context) {
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
-	err = attachTopUpQuote(topUp, quote)
-	if err == nil {
-		err = topUp.Insert()
-	}
+	attachTopUpQuote(topUp, quote)
+	err = topUp.Insert()
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Epay failed to create top-up order user_id=%d trade_no=%s payment_method=%s amount=%d error=%q", id, tradeNo, req.PaymentMethod, req.Amount, err.Error()))
 		paymentError(c, common.NewMessage("Failed to create order"))

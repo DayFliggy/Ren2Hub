@@ -8,7 +8,7 @@ import {
   parsePerfMetricsSummary,
   parsePricingModels,
   parsePricingModelsPartial,
-  parseRedeemedQuota,
+  parseRedemption,
   parseTaskArtifactsResult,
   parseTaskLogPage,
   parseTokenPage,
@@ -265,9 +265,21 @@ describe('live API contracts', () => {
     expectInvalidResponse(() => parseUsageRows([{ model_name: 'gpt-4o' }]))
   })
 
-  it('accepts native numeric redeemed quota and rejects old wire strings', () => {
-    expect(parseRedeemedQuota(500000)).toBe('500000')
-    expectInvalidResponse(() => parseRedeemedQuota('500000'))
+  it('reads the credited total and bonus of a redemption envelope', () => {
+    expect(
+      parseRedemption({ success: true, data: 525000, bonus_quota: 25000 })
+    ).toEqual({ quota: '525000', bonus_quota: '25000' })
+    expect(
+      parseRedemption({ success: true, data: 500000, bonus_quota: 0 })
+    ).toEqual({ quota: '500000', bonus_quota: '0' })
+    for (const envelope of [
+      500000,
+      { success: true, data: '500000', bonus_quota: 0 },
+      { success: true, data: 500000 },
+      { success: true, data: 500000, bonus_quota: 500000 },
+      { success: true, data: 500000, bonus_quota: -1 },
+    ])
+      expectInvalidResponse(() => parseRedemption(envelope))
   })
 
   it('parses safe user log DTOs without requiring internal channel fields', () => {

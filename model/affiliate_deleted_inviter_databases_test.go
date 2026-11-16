@@ -87,7 +87,7 @@ func TestAffiliateDeletedInviterDatabases(t *testing.T) {
 							}))
 						}
 						for attempt := range 2 {
-							result, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 250000, "admin-"+name)
+							result, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 250000, "admin-"+name, nil)
 							require.NoError(t, err)
 							assert.Equal(t, attempt == 1, result.Replayed)
 						}

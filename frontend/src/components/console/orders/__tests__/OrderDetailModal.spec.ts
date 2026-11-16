@@ -57,6 +57,7 @@ const order: AdminOrder = {
   email: '',
   amount: 10,
   quota: '0',
+  bonus_quota: '0',
   type: 'topup',
   currency: 'USD',
   method: 'gmpay',

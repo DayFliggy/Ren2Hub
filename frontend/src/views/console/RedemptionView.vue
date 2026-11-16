@@ -58,7 +58,7 @@ import type {
   AdminRedemptionSortBy,
   AdminRedemptionSortOrder,
 } from '@/types/console'
-import { formatTime } from '@/utils/format'
+import { formatQuota, formatTime } from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
@@ -542,6 +542,17 @@ onBeforeUnmount(() => exportController?.abort())
             <span class="text-sm font-medium text-[var(--text-primary)]">
               {{ formatRedemptionValue(row as AdminRedemptionCode) }}
             </span>
+            <span
+              v-if="BigInt((row as AdminRedemptionCode).bonus_quota) > 0n"
+              class="ml-1 text-xs text-[var(--status-success-text)]"
+              data-redemption-bonus
+            >
+              {{
+                t('redemption.bonus', {
+                  bonus: formatQuota((row as AdminRedemptionCode).bonus_quota),
+                })
+              }}
+            </span>
           </template>
 
           <!-- status cell -->
@@ -699,6 +710,16 @@ onBeforeUnmount(() => exportController?.abort())
                 <div class="mt-1 flex items-center gap-2">
                   <span class="text-xs font-medium text-[var(--text-primary)]">
                     {{ formatRedemptionValue(code) }}
+                  </span>
+                  <span
+                    v-if="BigInt(code.bonus_quota) > 0n"
+                    class="text-xs text-[var(--status-success-text)]"
+                  >
+                    {{
+                      t('redemption.bonus', {
+                        bonus: formatQuota(code.bonus_quota),
+                      })
+                    }}
                   </span>
                   <StatusChip
                     :tone="adminRedemptionStatusTone(code.status)"

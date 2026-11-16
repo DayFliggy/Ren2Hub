@@ -124,7 +124,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	require.NoError(t, err)
 	sqlDB, err := database.DB()
 	require.NoError(t, err)
-	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Task{}, &model.Log{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{}))
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Task{}, &model.Log{}, &model.TopUpBonusUsageHourly{}, &model.TopUpBonusConfigVersion{}))
 	model.DB = database
 	model.LOG_DB = database
 	common.MemoryCacheEnabled = false
@@ -310,7 +310,7 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 	previousRedisEnabled := common.RedisEnabled
 	previousDeadline := constant.TaskPluginProtocolTimeoutSeconds
 	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
-	database, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{})
+	database, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}, &model.TopUpBonusUsageHourly{}, &model.TopUpBonusConfigVersion{})
 	model.DB = database
 	model.LOG_DB = database
 	common.SetDatabaseTypes(dialect, dialect)

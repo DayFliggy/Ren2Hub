@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
-import { parseRedeemedQuota } from '@/api/liveContracts'
+import { parseRedemption } from '@/api/liveContracts'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import TextInput from '@/components/common/TextInput.vue'
@@ -34,12 +34,20 @@ async function redeem(): Promise<void> {
   if (!trimmed) return
   submittingRedeem.value = true
   try {
-    const response = await api.post<unknown>('/api/user/topup', {
+    // The bonus sits next to data, so the whole envelope is read.
+    const response = await api.postEnvelope<unknown>('/api/user/topup', {
       key: trimmed,
     })
-    const quota = parseRedeemedQuota(response)
+    const redeemed = parseRedemption(response)
     await auth.fetchSelf()
-    toast.success(`${t('wallet.redeemNow')}: ${formatQuota(quota)}`)
+    toast.success(
+      BigInt(redeemed.bonus_quota) > 0n
+        ? t('wallet.redeemedWithBonus', {
+            quota: formatQuota(redeemed.quota),
+            bonus: formatQuota(redeemed.bonus_quota),
+          })
+        : `${t('wallet.redeemNow')}: ${formatQuota(redeemed.quota)}`
+    )
     code.value = ''
     emit('done')
   } catch (error) {
