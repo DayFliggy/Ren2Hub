@@ -19,16 +19,19 @@ PART_STAGES = {
 PARTS = tuple(PART_STAGES)
 # plugin 阶段复用 billing 初始化的实例凭据；升级演练在 management 阶段回读旧版写入的工单附件。
 IMPLIED = {'plugin': ('billing',), 'upgrade': ('management',)}
-# 这些路径决定已有数据在新版本启动时如何被读取或迁移，改动后必须从现行正式镜像做升级演练：
-# model/ 含 AutoMigrate 与数据迁移；启动时 model.InitOptionMap 经 setting/ 的解析器读取已存配置；
-# main.go 决定启动顺序；go.mod、go.sum、Dockerfile 改变驱动和运行时。
-# 请求期才发生的迁移（如登录时的校验迁移）不在这里，由执行者按模块追加业务部分。
-UPGRADE_PATHS = re.compile(r'(?:model|setting)/(?!.*_test\.go$).+\.go|main\.go|go\.mod|go\.sum|Dockerfile')
+# 不进入服务端程序、也不改变镜像运行时的路径：前端（嵌入的静态资源）、文档、脚本和测试文件。
+# 只改这些时，新版本启动后读取、迁移和改写已有数据的方式不变。
+STARTUP_NEUTRAL = re.compile(r'(?:frontend|docs|scripts|\.github|\.agents)/.*|.*\.md|.*_test\.go|(?:.*/)?testdata/.*')
 
 
 def required_parts(files) -> list[str]:
-    """部署候选的最低范围；其余部分按改动模块由执行者追加，不在这里强制。"""
-    return ['upgrade'] if any(UPGRADE_PATHS.fullmatch(path) for path in files) else []
+    """部署候选的最低范围；其余部分按改动模块由执行者追加，不在这里强制。
+
+    除 STARTUP_NEUTRAL 外的任何改动都必须从现行正式镜像做升级演练。启动时会迁移表结构、解析已存配置、
+    重置内置角色策略、注册 OAuth 提供方并编译已有插件，这些代码分布在 model、setting、service、oauth、
+    controller、common、types 等包；按路径逐个列举会漏，所以按“是否进入服务端程序”划分。
+    """
+    return ['upgrade'] if any(not STARTUP_NEUTRAL.fullmatch(path) for path in files) else []
 
 
 def expand(parts) -> list[str]:

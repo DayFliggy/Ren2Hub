@@ -396,7 +396,7 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
                   skip: tuple[str, ...] = ()) -> tuple[dict, list[str]]:
     """按选择逐层执行；affected 与 targeted 共用。返回各层结果和被 --skip 跳过的层。"""
     go, frontend, visual, databases = selection['go'], selection['frontend'], selection['visual'], selection['databases']
-    # 点名的选择（targeted）里，每个目标都必须实际运行到测试。
+    # 点名的选择（targeted）不接受空运行：Go 按包核对，Vitest 按整批点名的文件核对。
     named = bool(selection.get('named'))
     stages, skipped = {}, []
 

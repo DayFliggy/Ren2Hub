@@ -17,19 +17,27 @@ class ScopeRuleTests(unittest.TestCase):
                      for stage in release_scope.PART_STAGES[part])
         self.assertEqual((*base, 'routing'), candidate.STAGES)
 
-    def test_persistence_and_startup_changes_require_the_upgrade_rehearsal(self):
-        # 启动时 model.InitOptionMap 经 setting/ 的解析器读取已存配置，所以 setting/ 与 model/ 同样需要演练。
-        for path in ('model/topup_bonus_migration.go', 'model/main.go', 'model/option.go', 'model/sub/migrate.go',
+    def test_anything_that_reaches_the_server_binary_requires_the_upgrade_rehearsal(self):
+        # 启动路径上读写已有数据的代码：迁移、已存配置解析及其共享解码、内置角色策略重置、
+        # OAuth 提供方注册、已有插件编译。它们不在同一个包里，规则不能依赖逐个列举。
+        for path in ('model/topup_bonus_migration.go', 'model/main.go', 'model/option.go',
                      'setting/retired_business_options.go', 'setting/ratio_setting/model_ratio.go',
-                     'setting/operation_setting/tools.go', 'setting/config/config.go',
-                     'main.go', 'go.mod', 'go.sum', 'Dockerfile'):
+                     'service/authz/seed.go', 'service/authz/adapter.go', 'types/rw_map.go', 'common/json.go',
+                     'oauth/registry.go', 'controller/task_plugin.go', 'relay/channel/openai/adaptor.go',
+                     'relaykit/dto/a.go', 'tokenkit/image.go', 'main.go', 'go.mod', 'go.sum', 'relaykit/go.mod',
+                     'Dockerfile', '.dockerignore', 'i18n/locales/zh-CN.yaml', 'VERSION', 'a_new_top_level_file'):
             self.assertEqual(release_scope.required_parts([path]), ['upgrade'], path)
-        for path in ('model/topup_test.go', 'setting/ratio_setting/model_ratio_test.go', 'controller/topup.go',
-                     'service/topup_bonus.go', 'service/login_verification.go', 'relaykit/go.mod',
-                     'frontend/src/main.ts', 'docs/billing/TOPUP_BONUS.md', 'scripts/testing/run.py',
-                     'model/fixture.json', 'settings/a.go', 'xmodel/a.go'):
+        for path in ('frontend/src/main.ts', 'frontend/package.json', 'frontend/tests/visual/a.spec.ts',
+                     'docs/billing/TOPUP_BONUS.md', 'AGENTS.md', 'relaykit/README.md', 'scripts/testing/run.py',
+                     'scripts/prepare-frontend-embed.mjs', '.github/workflows/ci.yml', '.agents/skills/a/SKILL.md',
+                     'model/topup_test.go', 'main_test.go', 'relaykit/relayconvert/testdata/a.json',
+                     'testdata/b.json'):
             self.assertEqual(release_scope.required_parts([path]), [], path)
-        self.assertEqual(release_scope.required_parts(['docs/a.md', 'setting/a.go', 'controller/b.go']), ['upgrade'])
+        self.assertEqual(release_scope.required_parts([]), [])
+        self.assertEqual(release_scope.required_parts(['docs/a.md', 'frontend/src/a.vue', 'service/b.go']), ['upgrade'])
+        # 名称相近但不属于免演练的路径。
+        for path in ('frontendx/a.go', 'docs.go', 'scripts.go', 'model/a_test.go.bak', 'service/testdata.go'):
+            self.assertEqual(release_scope.required_parts([path]), ['upgrade'], path)
 
     def test_expand_adds_dependencies_in_execution_order(self):
         self.assertEqual(release_scope.expand(['plugin']), ['billing', 'plugin'])
@@ -74,7 +82,7 @@ class ScopedCandidateTests(unittest.TestCase):
         self.assertEqual(runner.previous_image, 'ren2hub-test:old')
         self.assertEqual(runner.report['scope'], {'requested': ['auto'], 'parts': ['upgrade', 'management'],
                                                   'required': ['upgrade'], 'base_revision': 'c' * 40})
-        runner = self.select(['auto', 'billing'], 'ren2hub-test:old', ['controller/topup.go'])
+        runner = self.select(['auto', 'billing'], 'ren2hub-test:old', ['frontend/src/a.vue', 'docs/a.md'])
         self.assertEqual(runner.stages, ('billing',))
         # 不做升级演练时不启动旧镜像，但仍记录用来求差异的修订。
         self.assertIsNone(runner.previous_image)
