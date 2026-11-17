@@ -28,7 +28,8 @@ func paidReversalTopUp(t *testing.T, db *gorm.DB, userID int, trade string) {
 // The administrator order detail shows the order's referral reward and whether
 // it was reversed; the owner's detail never carries it. The reversal endpoint
 // decodes one strict JSON object, returns the reversal and its effect, and
-// audits a reversal once.
+// audits a reversal once with its operator and every business field; a replay
+// or a failure changes no audit.
 func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 	db := useGmpayControllerDB(t)
 	require.NoError(t, model.LOG_DB.AutoMigrate(&model.AuditLog{}))
@@ -51,9 +52,14 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 	for _, user := range []*model.User{&invitee, &peerInvitee, &loner} {
 		require.NoError(t, db.Create(user).Error)
 	}
-	paidReversalTopUp(t, db, invitee.Id, "reverse-http-order")
-	paidReversalTopUp(t, db, peerInvitee.Id, "reverse-http-peer-order")
+	// The reversed order is paid last, so its id differs from the user ids.
 	paidReversalTopUp(t, db, loner.Id, "reverse-http-loner-order")
+	paidReversalTopUp(t, db, peerInvitee.Id, "reverse-http-peer-order")
+	paidReversalTopUp(t, db, invitee.Id, "reverse-http-order")
+	// 700 of the 2000 reward is gone, so the reversal takes back 1300 and owes
+	// 700: reward, revoked quota and debt all differ.
+	_, _, err := model.DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 700, "reverse-http-deduct")
+	require.NoError(t, err)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -63,6 +69,7 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 			id = invitee.Id
 		}
 		c.Set("id", id)
+		c.Set("username", admin.Username)
 		c.Set("role", common.RoleAdminUser)
 	})
 	router.GET("/detail/:trade_no", GetTopUpDetail)
@@ -84,11 +91,7 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 		require.NoError(t, json.Unmarshal(result["data"], &value))
 		return value
 	}
-	audits := func() int64 {
-		var count int64
-		require.NoError(t, model.LOG_DB.Model(&model.AuditLog{}).Where("action = ?", "topup.affiliate_reverse").Count(&count).Error)
-		return count
-	}
+	audits := func() int64 { return int64(len(operationAudits(t, "topup.affiliate_reverse"))) }
 
 	detail := data(call(http.MethodGet, "/admin/detail/reverse-http-order", ""))
 	assert.JSONEq(t, `{"inviter_id":`+strconv.Itoa(inviter.Id)+`,"reward_quota":2000,"reversed":false}`, string(detail["affiliate"]))
@@ -118,11 +121,12 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 	assert.ElementsMatch(t, []string{"record", "replayed", "reversed_quota", "revoked_quota", "debt_added_quota"}, mapKeys(reversal))
 	assert.JSONEq(t, "false", string(reversal["replayed"]))
 	assert.JSONEq(t, "2000", string(reversal["reversed_quota"]))
-	assert.JSONEq(t, "2000", string(reversal["revoked_quota"]))
-	assert.JSONEq(t, "0", string(reversal["debt_added_quota"]))
+	assert.JSONEq(t, "1300", string(reversal["revoked_quota"]))
+	assert.JSONEq(t, "700", string(reversal["debt_added_quota"]))
 	var record struct {
 		Kind       string `json:"kind"`
 		SourceType string `json:"source_type"`
+		SourceID   string `json:"source_id"`
 		InviteeID  int    `json:"invitee_id"`
 		Credited   int    `json:"credited_quota"`
 	}
@@ -130,17 +134,27 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 	assert.Equal(t, "reversal", record.Kind)
 	assert.Equal(t, "topup_reversal", record.SourceType)
 	assert.Equal(t, invitee.Id, record.InviteeID)
-	assert.Equal(t, 2000, record.Credited)
-	assert.EqualValues(t, 1, audits())
+	assert.Equal(t, 1300, record.Credited)
+	topUpID, err := strconv.Atoi(record.SourceID)
+	require.NoError(t, err)
+	requireDistinctValues(t, admin.Id, inviter.Id, invitee.Id, topUpID, 2000, 1300, 700)
+	recorded := operationAudits(t, "topup.affiliate_reverse")
+	require.Len(t, recorded, 1)
+	assertOperationAudit(t, recorded[0], admin, "topup.affiliate_reverse", "Reversed the referral reward of a top-up order", map[string]any{
+		"trade_no": "reverse-http-order", "topup_id": record.SourceID, "inviter_id": inviter.Id, "invited_user_id": invitee.Id,
+		"reward_quota": 2000, "revoked_quota": 1300, "debt_added_quota": 700,
+	})
 
 	replay := data(call(http.MethodPost, "/admin/affiliate-reversal", `{"trade_no":"reverse-http-order"}`))
 	assert.JSONEq(t, "true", string(replay["replayed"]))
-	assert.JSONEq(t, "2000", string(replay["revoked_quota"]))
-	assert.EqualValues(t, 1, audits(), "a replay is not audited again")
+	assert.JSONEq(t, "1300", string(replay["revoked_quota"]))
+	assert.JSONEq(t, "false", string(call(http.MethodPost, "/admin/affiliate-reversal", `{"trade_no":"reverse-http-peer-order"}`)["success"]))
+	assert.Equal(t, recorded, operationAudits(t, "topup.affiliate_reverse"), "a replay or a failure leaves the audit as it was")
 
 	detail = data(call(http.MethodGet, "/admin/detail/reverse-http-order", ""))
 	assert.JSONEq(t, `{"inviter_id":`+strconv.Itoa(inviter.Id)+`,"reward_quota":2000,"reversed":true}`, string(detail["affiliate"]))
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffQuota)
+	assert.Equal(t, 700, inviter.AffOffsetDebtQuota)
 	assert.Equal(t, 2000, inviter.AffHistoryQuota)
 }

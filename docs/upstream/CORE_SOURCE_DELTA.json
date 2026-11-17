@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 384,
+    "extension": 385,
     "removed": 45
   },
   "files": [
@@ -884,7 +884,7 @@
       "path": "controller/affiliate_deduction_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6f43765b155923086c608ee04555817a652ea06766ab79ba3a620763b1a3976e"
+      "local_sha256": "371dc089f11612314bc97199255d935a167b73104d9e8b27e605c8996c78918f"
     },
     {
       "path": "controller/affiliate_quota_response_test.go",
@@ -902,7 +902,7 @@
       "path": "controller/affiliate_topup_reversal_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4d19e0d7717f3c23c818af0efd22489e3a466774f087885c221f9eba0a968273"
+      "local_sha256": "8eebd54f4eb250bea8f310731f3275fba402a10b4caf75b174e7c5f8c6bcad9a"
     },
     {
       "path": "controller/audit.go",
@@ -4122,7 +4122,7 @@
       "path": "model/affiliate.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8761d21ad88f1c26fd185d14bf9399f3017dad495cecccaa29731423b94a860a",
+      "local_sha256": "93bd11b270a994bb58fdca9a0e48254a8f8d0f965449ef1c9ae152460d5c2572",
       "reasons": [
         "affiliate"
       ],
@@ -4160,7 +4160,7 @@
       "path": "model/affiliate_deduction_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8ca9a4ac831cf4f6866aadf838d643f9a2160ef33e154266826ca13ccdf96894"
+      "local_sha256": "b2c5d9dd9b3ca66e9f083392d1ca35bfe2a14f27fc7cb587e33955693b4da705"
     },
     {
       "path": "model/affiliate_deleted_inviter_databases_test.go",
@@ -4179,6 +4179,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "2f26e64fd308b47ae3dc90eeaf6e13d0fd1ba09fb8719ec82df335589b9940c4"
+    },
+    {
+      "path": "model/affiliate_lock_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "facbcc7b734040c63408b560cd9a97372ed83c8e829102b728925eea5a4c148a"
     },
     {
       "path": "model/affiliate_monthly_series_test.go",
@@ -4214,7 +4220,7 @@
       "path": "model/affiliate_topup_reversal.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8dc4d7b951115dfbc238ece528af910f4d616f28fe842dd5d6c07b350efd1353",
+      "local_sha256": "100f7e2c12ac9da6817d867895e8236877b28b5eb77d5910f59d0301133a9a4f",
       "reasons": [
         "affiliate"
       ],
@@ -4228,13 +4234,13 @@
       "path": "model/affiliate_topup_reversal_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "fe27637e6fd5d3ede0e0959ad57af1205265e1762a4a9212785c71eb4eecba59"
+      "local_sha256": "8348a7d8352d864821d522b089ca9697aca334d2c1959013881d4b3149202be0"
     },
     {
       "path": "model/affiliate_topup_reversal_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5d9c5ae235d3ffcc78fa66e6ffcb4d6dfe2b7e34f823ecd6542b02732d25413e"
+      "local_sha256": "5b5fcc86dc6771538697f5f970e53bb25a5d478cc73a1c1a6b1d150b1f829f40"
     },
     {
       "path": "model/audit_log.go",

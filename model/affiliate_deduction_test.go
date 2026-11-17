@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -243,4 +244,40 @@ func TestDeductAffiliateQuotaRequiresAHigherRole(t *testing.T) {
 	var after User
 	require.NoError(t, db.First(&after, admin.Id).Error)
 	assert.Equal(t, 400, after.AffQuota)
+}
+
+// A failure on writing the deduction record rolls the whole deduction back:
+// the thaw it did and the balance update.
+func TestDeductAffiliateQuotaRollsBackOnFailure(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().FreezeHours = 24
+	order := testAffiliateTopUp(t, invitee.Id, "deduct-rollback", 10000)
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ? AND kind = ?", inviter.Id, "accrue").Update("frozen_until", common.GetTimestamp()-1).Error)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	require.Equal(t, 2000, inviter.AffFrozenQuota)
+	var records int64
+	require.NoError(t, db.Model(&AffiliateRecord{}).Count(&records).Error)
+
+	const name = "test:fail-deduction-record-insert"
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register(name, func(tx *gorm.DB) {
+		if record, ok := tx.Statement.Dest.(*AffiliateRecord); ok && record.Kind == "deduction" {
+			_ = tx.AddError(errors.New("forced deduction record failure"))
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Create().Remove(name) })
+
+	_, _, err = DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 500, "deduct-rollback-op")
+	require.ErrorContains(t, err, "forced deduction record failure")
+	var after User
+	require.NoError(t, db.First(&after, inviter.Id).Error)
+	assert.Equal(t, inviter.AffQuota, after.AffQuota)
+	assert.Equal(t, inviter.AffFrozenQuota, after.AffFrozenQuota)
+	assert.Equal(t, inviter.AffOffsetDebtQuota, after.AffOffsetDebtQuota)
+	var count, thawed int64
+	require.NoError(t, db.Model(&AffiliateRecord{}).Count(&count).Error)
+	assert.Equal(t, records, count)
+	require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ? AND thawed_at > 0", inviter.Id).Count(&thawed).Error)
+	assert.Zero(t, thawed, "the thaw is rolled back too")
 }

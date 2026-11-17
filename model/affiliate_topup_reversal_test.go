@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -345,4 +346,41 @@ func TestReverseTopUpAffiliateRewardKeepsHistoryAndCap(t *testing.T) {
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Equal(t, 3000, inviter.AffHistoryQuota)
 	assert.Equal(t, 1000, inviter.AffQuota)
+}
+
+// A failure on the last write rolls the whole reversal back: the thaw it did,
+// the balances, the debt and the reversal record.
+func TestReverseTopUpAffiliateRewardRollsBackOnFailure(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().FreezeHours = 24
+	require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Update("aff_offset_debt_quota", 500).Error)
+	order, accrual := paidAffiliateTopUp(t, invitee.Id, "reverse-rollback")
+	require.Equal(t, 500, accrual.DebtOffsetQuota)
+	require.NoError(t, db.Model(&AffiliateRecord{}).Where("id = ?", accrual.ID).Update("frozen_until", common.GetTimestamp()-1).Error)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	records := countAffiliateRecords(t, db)
+
+	// The final inviter update is the only update that writes the debt.
+	const name = "test:fail-reversal-inviter-update"
+	require.NoError(t, db.Callback().Update().Before("gorm:update").Register(name, func(tx *gorm.DB) {
+		if values, ok := tx.Statement.Dest.(map[string]any); ok && tx.Statement.Table == "users" {
+			if _, debt := values["aff_offset_debt_quota"]; debt {
+				_ = tx.AddError(errors.New("forced inviter update failure"))
+			}
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Update().Remove(name) })
+
+	_, _, err := ReverseTopUpAffiliateReward(order.TradeNo, common.RoleRootUser)
+	require.ErrorContains(t, err, "forced inviter update failure")
+	var after User
+	require.NoError(t, db.First(&after, inviter.Id).Error)
+	assert.Equal(t, inviter.AffQuota, after.AffQuota)
+	assert.Equal(t, inviter.AffFrozenQuota, after.AffFrozenQuota)
+	assert.Equal(t, inviter.AffOffsetDebtQuota, after.AffOffsetDebtQuota)
+	assert.Equal(t, 1500, after.AffFrozenQuota)
+	assert.Equal(t, records, countAffiliateRecords(t, db))
+	var stored AffiliateRecord
+	require.NoError(t, db.First(&stored, accrual.ID).Error)
+	assert.Zero(t, stored.ThawedAt, "the thaw is rolled back too")
 }

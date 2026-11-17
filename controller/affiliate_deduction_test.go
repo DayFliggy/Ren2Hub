@@ -17,8 +17,8 @@ import (
 
 // The administrator deduction endpoint decodes one strict JSON object, answers
 // a reused operation with another amount with 409, returns the deduction and
-// the balances after it, and audits a deduction once: a replay is not audited
-// again.
+// the balances after it, and audits a deduction once with its operator and
+// every business field; a replay or a failure changes no audit.
 func TestAdminAffiliateDeductionHTTPContractAndAudit(t *testing.T) {
 	db := useGmpayControllerDB(t)
 	require.NoError(t, model.LOG_DB.AutoMigrate(&model.AuditLog{}))
@@ -28,9 +28,18 @@ func TestAdminAffiliateDeductionHTTPContractAndAudit(t *testing.T) {
 	for _, user := range []*model.User{&admin, &target, &peer} {
 		require.NoError(t, db.Create(user).Error)
 	}
+	// Unrelated rows move the new record's id away from the user ids, so an
+	// audit field written from the wrong value cannot match by accident.
+	for i := range 4 {
+		require.NoError(t, db.Create(&model.AffiliateRecord{UserID: peer.Id, Kind: "accrue", SourceType: "topup", SourceID: strconv.Itoa(i), SourceKey: "deduct-http-filler:" + strconv.Itoa(i)}).Error)
+	}
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(func(c *gin.Context) { c.Set("id", admin.Id); c.Set("role", common.RoleAdminUser) })
+	router.Use(func(c *gin.Context) {
+		c.Set("id", admin.Id)
+		c.Set("username", admin.Username)
+		c.Set("role", common.RoleAdminUser)
+	})
 	router.POST("/api/admin/affiliate/users/:id/deduct", DeductAffiliateQuota)
 	deduct := func(userID int, body string) (int, map[string]json.RawMessage) {
 		request := httptest.NewRequest(http.MethodPost, "/api/admin/affiliate/users/"+strconv.Itoa(userID)+"/deduct", bytes.NewBufferString(body))
@@ -41,11 +50,7 @@ func TestAdminAffiliateDeductionHTTPContractAndAudit(t *testing.T) {
 		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result), response.Body.String())
 		return response.Code, result
 	}
-	audits := func() int64 {
-		var count int64
-		require.NoError(t, model.LOG_DB.Model(&model.AuditLog{}).Where("action = ?", "user.affiliate_deduct").Count(&count).Error)
-		return count
-	}
+	audits := func() int64 { return int64(len(operationAudits(t, "user.affiliate_deduct"))) }
 
 	for _, body := range []string{
 		`{"quota":100,"operation_id":"deduct-http-one","note":"x"}`,
@@ -77,6 +82,7 @@ func TestAdminAffiliateDeductionHTTPContractAndAudit(t *testing.T) {
 	assert.JSONEq(t, "600", string(data["available_quota"]))
 	assert.JSONEq(t, "70", string(data["frozen_quota"]))
 	var record struct {
+		ID         int    `json:"id"`
 		Kind       string `json:"kind"`
 		SourceType string `json:"source_type"`
 		SourceID   string `json:"source_id"`
@@ -87,23 +93,72 @@ func TestAdminAffiliateDeductionHTTPContractAndAudit(t *testing.T) {
 	assert.Equal(t, "admin_deduction", record.SourceType)
 	assert.Equal(t, "deduct-http-one", record.SourceID)
 	assert.Equal(t, 400, record.Reward)
-	assert.EqualValues(t, 1, audits())
+	requireDistinctValues(t, admin.Id, target.Id, record.ID, 400, 600)
+	recorded := operationAudits(t, "user.affiliate_deduct")
+	require.Len(t, recorded, 1)
+	assertOperationAudit(t, recorded[0], admin, "user.affiliate_deduct", "Deducted user referral quota", map[string]any{
+		"target_user_id": target.Id, "quota": 400, "operation_id": "deduct-http-one", "record_id": record.ID, "available_after": 600,
+	})
 
 	status, result = deduct(target.Id, `{"quota":400,"operation_id":"deduct-http-one"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.NoError(t, json.Unmarshal(result["data"], &data))
 	assert.JSONEq(t, "true", string(data["replayed"]))
 	assert.JSONEq(t, "600", string(data["available_quota"]))
-	assert.EqualValues(t, 1, audits(), "a replay is not audited again")
 
 	status, result = deduct(target.Id, `{"quota":401,"operation_id":"deduct-http-one"}`)
 	assert.Equal(t, http.StatusConflict, status)
 	assert.JSONEq(t, "false", string(result["success"]))
+	status, result = deduct(peer.Id, `{"quota":100,"operation_id":"deduct-http-peer"}`)
+	assert.JSONEq(t, "false", string(result["success"]))
+	assert.Equal(t, recorded, operationAudits(t, "user.affiliate_deduct"), "a replay or a failure leaves the audit as it was")
 
 	var after model.User
 	require.NoError(t, db.First(&after, target.Id).Error)
 	assert.Equal(t, 600, after.AffQuota)
 	assert.Equal(t, 1000, after.AffHistoryQuota)
+}
+
+// operationAudits returns the audit rows of one action in id order.
+func operationAudits(t *testing.T, action string) []model.AuditLog {
+	t.Helper()
+	var rows []model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action = ?", action).Order("id ASC").Find(&rows).Error)
+	return rows
+}
+
+// assertOperationAudit checks the operator, action, content and every business
+// field of one administrator audit row.
+func assertOperationAudit(t *testing.T, audit model.AuditLog, operator model.User, action, content string, params map[string]any) {
+	t.Helper()
+	assert.Equal(t, operator.Id, audit.UserId)
+	assert.Equal(t, operator.Username, audit.Username)
+	assert.Equal(t, operator.Role, audit.ActorRole)
+	assert.Equal(t, action, audit.Action)
+	assert.Equal(t, content, audit.Content)
+	assert.True(t, audit.Success)
+	require.NotNil(t, audit.Other.Op)
+	assert.Equal(t, action, audit.Other.Op.Action)
+	require.NotNil(t, audit.Other.AdminInfo)
+	assert.Equal(t, operator.Id, audit.Other.AdminInfo.AdminID)
+	assert.Equal(t, operator.Username, audit.Other.AdminInfo.AdminUsername)
+	assert.Equal(t, operator.Role, audit.Other.AdminInfo.AdminRole)
+	want, err := json.Marshal(params)
+	require.NoError(t, err)
+	got, err := json.Marshal(audit.Other.Op.Params)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(want), string(got))
+}
+
+// requireDistinctValues guards test data whose audit fields are compared: a
+// field written from another field's value must not match by coincidence.
+func requireDistinctValues(t *testing.T, values ...int) {
+	t.Helper()
+	seen := map[int]bool{}
+	for _, value := range values {
+		require.False(t, seen[value], "test values must be distinct: %v", values)
+		seen[value] = true
+	}
 }
 
 func mapKeys(values map[string]json.RawMessage) []string {

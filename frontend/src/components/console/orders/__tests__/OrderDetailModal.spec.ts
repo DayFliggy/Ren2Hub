@@ -365,6 +365,68 @@ describe('referral reward reversal', () => {
     wrapper.unmount()
   })
 
+  it('sends one reversal for a repeated confirmation', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ ...paid, affiliate: reward })
+    let finish!: (value: unknown) => void
+    const post = vi.spyOn(api, 'post').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+    const wrapper = render()
+    await flushPromises()
+    await reverseButton(wrapper)!.trigger('click')
+    await confirmReversal(wrapper)
+    await confirmReversal(wrapper)
+    expect(post).toHaveBeenCalledTimes(1)
+    finish({
+      record: {},
+      replayed: false,
+      reversed_quota: 1000000,
+      revoked_quota: 1000000,
+      debt_added_quota: 0,
+    })
+    await flushPromises()
+    expect(section(wrapper).text()).toContain('Reversed')
+    wrapper.unmount()
+  })
+
+  it('does not mark another order when a reversal finishes after switching', async () => {
+    const other = { inviter_id: 13, reward_quota: 250000, reversed: false }
+    vi.spyOn(api, 'get').mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith('/GPother')
+          ? { ...paid, trade_no: 'GPother', affiliate: other }
+          : { ...paid, affiliate: reward }
+      )
+    )
+    let finish!: (value: unknown) => void
+    vi.spyOn(api, 'post').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+    const wrapper = render()
+    await flushPromises()
+    await reverseButton(wrapper)!.trigger('click')
+    await confirmReversal(wrapper)
+    await wrapper.setProps({ order: { ...order, order_no: 'GPother' } })
+    await flushPromises()
+    finish({
+      record: {},
+      replayed: false,
+      reversed_quota: 1000000,
+      revoked_quota: 1000000,
+      debt_added_quota: 0,
+    })
+    await flushPromises()
+    expect(section(wrapper).text()).toContain('Inviter #13 received $0.50')
+    expect(section(wrapper).text()).not.toContain('Reversed')
+    expect(reverseButton(wrapper)).toBeDefined()
+    expect(wrapper.find('[data-order-affiliate-result]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('marks a reversed reward and hides the action from common users', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       ...paid,

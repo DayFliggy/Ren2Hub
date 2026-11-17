@@ -110,6 +110,65 @@ func TestAffiliateTopUpReversalConcurrencyDatabases(t *testing.T) {
 				assert.EqualValues(t, 8, countAffiliateKind(t, db, inviter.Id, "accrue"))
 				assert.EqualValues(t, 4, countAffiliateKind(t, db, inviter.Id, "reversal"))
 			})
+
+			t.Run("reversal and manual deduction", func(t *testing.T) {
+				inviter, invitee := pair(t, "deduct")
+				for round := range 4 {
+					reversed, kept := fmt.Sprintf("rev-deduct-%d", round), fmt.Sprintf("rev-deduct-kept-%d", round)
+					for _, trade := range []string{reversed, kept} {
+						pending(t, invitee.Id, trade)
+						require.NoError(t, settle(trade))
+					}
+					errs := runAffiliateConcurrently(2, func(i int) error {
+						if i == 0 {
+							_, _, err := ReverseTopUpAffiliateReward(reversed, common.RoleRootUser)
+							return err
+						}
+						_, _, err := DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 1500, fmt.Sprintf("rev-deduct-op-%d", round))
+						return err
+					})
+					require.NoError(t, errs[0], "round %d reversal", round)
+					require.NoError(t, errs[1], "round %d deduction", round)
+					// 4000 paid; the reversal takes 2000 and the deduction 1500
+					// in either order, with no debt.
+					require.NoError(t, db.First(&inviter, inviter.Id).Error)
+					assert.Equal(t, 500*(round+1), inviter.AffQuota, "round %d", round)
+					assert.Zero(t, inviter.AffOffsetDebtQuota, "round %d", round)
+				}
+			})
+
+			t.Run("soft-deleted inviter: reversal and administrator subtraction", func(t *testing.T) {
+				inviter, invitee := pair(t, "deleted")
+				const rounds = 6
+				for round := range rounds {
+					trade := fmt.Sprintf("rev-deleted-%d", round)
+					pending(t, invitee.Id, trade)
+					require.NoError(t, settle(trade))
+					_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, fmt.Sprintf("rev-deleted-add-%d", round), nil)
+					require.NoError(t, err)
+				}
+				require.NoError(t, db.First(&inviter, inviter.Id).Error)
+				require.Equal(t, rounds*2200, inviter.AffQuota, "2000 per top-up plus 200 per administrator addition")
+				require.NoError(t, db.Delete(&User{}, inviter.Id).Error)
+				for round := range rounds {
+					errs := runAffiliateConcurrently(2, func(i int) error {
+						if i == 0 {
+							_, _, err := ReverseTopUpAffiliateReward(fmt.Sprintf("rev-deleted-%d", round), common.RoleRootUser)
+							return err
+						}
+						_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, fmt.Sprintf("rev-deleted-sub-%d", round), nil)
+						return err
+					})
+					require.NoError(t, errs[0], "round %d reversal", round)
+					require.NoError(t, errs[1], "round %d administrator subtraction", round)
+				}
+				require.NoError(t, db.Unscoped().First(&inviter, inviter.Id).Error)
+				assert.Zero(t, inviter.AffQuota, "every top-up reward and every tracked reward is taken back")
+				assert.Zero(t, inviter.AffOffsetDebtQuota)
+				require.NoError(t, db.First(&invitee, invitee.Id).Error)
+				assert.Equal(t, rounds*10000, invitee.Quota)
+				assert.EqualValues(t, 2*rounds, countAffiliateKind(t, db, inviter.Id, "reversal"))
+			})
 		})
 	}
 }

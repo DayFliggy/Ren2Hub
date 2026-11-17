@@ -71,10 +71,10 @@ func ReverseTopUpAffiliateReward(tradeNo string, operatorRole int) (*AffiliateRe
 		if accrual.RewardQuota <= 0 {
 			return ErrAffiliateNoReward
 		}
-		// User rows before referral records, in id order, as top-up settlement,
-		// transfers and deductions do. A soft-deleted inviter is still reversible.
-		var users []User
-		if err := lockForUpdate(tx).Unscoped().Where("id IN ?", []int{accrual.InviteeID, accrual.UserID}).Order("id ASC").Find(&users).Error; err != nil {
+		// User rows before referral records, under the shared lock order. A
+		// soft-deleted inviter is still reversible.
+		users, err := lockAffiliateUsersTx(tx, accrual.InviteeID, accrual.UserID)
+		if err != nil {
 			return err
 		}
 		var inviter *User
@@ -90,7 +90,7 @@ func ReverseTopUpAffiliateReward(tradeNo string, operatorRole int) (*AffiliateRe
 			return ErrUserQuotaPermission
 		}
 		reversalKey := topUpAffiliateReversalKey(order.Id)
-		err := lockForUpdate(tx).Where("source_key = ?", reversalKey).First(&result).Error
+		err = lockForUpdate(tx).Where("source_key = ?", reversalKey).First(&result).Error
 		if err == nil {
 			if result.UserID != inviter.Id || result.Kind != "reversal" || result.SourceType != "topup_reversal" || result.RelatedRecordID != accrual.ID {
 				return errors.New("affiliate source conflicts with the recorded decision")

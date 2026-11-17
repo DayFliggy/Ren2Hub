@@ -177,8 +177,19 @@ func InitializeAffiliateUserTx(tx *gorm.DB, user *User, rawCode string) error {
 	return tx.Model(&User{}).Where("id = ?", inviter.Id).UpdateColumn("aff_count", gorm.Expr("aff_count + 1")).Error
 }
 
+// lockAffiliateUsersTx locks the given user rows in ascending id order,
+// soft-deleted rows included. Every referral transaction takes its user locks
+// here before any referral record, so two of them never wait on each other in
+// reverse order, also when an inviter is soft-deleted.
+func lockAffiliateUsersTx(tx *gorm.DB, ids ...int) ([]User, error) {
+	var rows []User
+	err := lockForUpdate(tx).Unscoped().Where("id IN ?", ids).Order("id ASC").Find(&rows).Error
+	return rows, err
+}
+
 // lockAffiliateParticipantsTx orders wallet locks consistently across top-ups,
 // admin additions and transfers, including when two invitees share an inviter.
+// The user itself must not be soft-deleted; its inviter is locked either way.
 func lockAffiliateParticipantsTx(tx *gorm.DB, userID int) (*User, error) {
 	var reference User
 	if err := tx.Select("id", "inviter_id").First(&reference, userID).Error; err != nil {
@@ -188,12 +199,13 @@ func lockAffiliateParticipantsTx(tx *gorm.DB, userID int) (*User, error) {
 	if reference.InviterId > 0 && reference.InviterId != userID {
 		ids = append(ids, reference.InviterId)
 	}
-	var rows []User
-	if err := lockForUpdate(tx).Where("id IN ?", ids).Order("id ASC").Find(&rows).Error; err != nil {
+	rows, err := lockAffiliateUsersTx(tx, ids...)
+	if err != nil {
 		return nil, err
 	}
 	for i := range rows {
-		if rows[i].Id == userID {
+		// Soft-deleted while this transaction waited for the lock.
+		if rows[i].Id == userID && !rows[i].DeletedAt.Valid {
 			return &rows[i], nil
 		}
 	}
