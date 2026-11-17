@@ -48,19 +48,13 @@ func ServeFrontendBrotliFiles(frontendFS static.ServeFileSystem) gin.HandlerFunc
 }
 
 func sendFrontendBrotliFile(c *gin.Context, frontendFS http.FileSystem, file http.File, urlPath string) error {
-	content, writer := file, http.ResponseWriter(brotliBodyWriter{c.Writer})
 	if strings.Contains(c.GetHeader("Range"), ",") {
 		// ServeContent answers several ranges with a multipart/byteranges body,
-		// which is not a brotli stream, so it gets parts of the original file;
-		// preconditions and HEAD are answered the same way.
-		original, err := frontendFS.Open(urlPath)
-		if err != nil {
-			return err
-		}
-		defer original.Close()
-		content, writer = original, c.Writer
+		// which is not a brotli stream. The whole file is a valid answer to any
+		// range request, and preconditions are still checked.
+		c.Request.Header.Del("Range")
 	}
-	info, err := content.Stat()
+	info, err := file.Stat()
 	if err != nil {
 		return err
 	}
@@ -74,7 +68,7 @@ func sendFrontendBrotliFile(c *gin.Context, frontendFS http.FileSystem, file htt
 	header.Set("Content-Type", contentType)
 	// The .br file is the selected representation: ServeContent answers
 	// preconditions, HEAD and ranges for its bytes.
-	http.ServeContent(writer, c.Request, urlPath, info.ModTime(), content)
+	http.ServeContent(brotliBodyWriter{c.Writer}, c.Request, urlPath, info.ModTime(), file)
 	return nil
 }
 

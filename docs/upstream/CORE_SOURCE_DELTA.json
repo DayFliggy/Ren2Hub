@@ -3683,7 +3683,7 @@
       "path": "middleware/frontend_static_brotli.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7f75e4885c673f9e1afc8efecc86f284ced925ee22e7934db2ac8de8f25c69cd",
+      "local_sha256": "8dc32ae8730963bce88880bbb3a1e44c4c0f8d874b431645bc02ffaf97731dc3",
       "reasons": [
         "vue-frontend"
       ],
@@ -3697,7 +3697,7 @@
       "path": "middleware/frontend_static_brotli_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "65a2256668a6876499f6303935af71c738a441ef7dad03edd96f9dca41c61869"
+      "local_sha256": "97c063a26d2c31e412a741b428c1fa64409708fe1348dc4170a99e0301760c17"
     },
     {
       "path": "middleware/frontend_static_test.go",

@@ -3,8 +3,6 @@ package middleware
 import (
 	"bytes"
 	"io"
-	"mime"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,14 +166,14 @@ func TestServeFrontendBrotliFilesHonoursPreconditionsAndRanges(t *testing.T) {
 }
 
 // ServeContent answers several ranges with a multipart/byteranges body that is
-// not a brotli stream, so those requests get parts of the original file, with
-// the same precondition answers, also when gzip is accepted.
-func TestServeFrontendBrotliFilesSendsMultipleRangesFromTheOriginal(t *testing.T) {
+// not a brotli stream, so those requests get the whole brotli file, with the
+// same precondition answers, also when gzip is accepted or identity refused.
+func TestServeFrontendBrotliFilesAnswersMultipleRangesWithTheWholeFile(t *testing.T) {
 	router, files := newBrotliFrontendRouter(t)
-	send := func(header map[string]string) *httptest.ResponseRecorder {
+	send := func(acceptEncoding string, header map[string]string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/static/js/app.js", nil)
-		request.Header.Set("Accept-Encoding", "br, gzip")
+		request.Header.Set("Accept-Encoding", acceptEncoding)
 		request.Header.Set("Range", "bytes=0-9,20-29")
 		for name, value := range header {
 			request.Header.Set(name, value)
@@ -184,29 +182,21 @@ func TestServeFrontendBrotliFilesSendsMultipleRangesFromTheOriginal(t *testing.T
 		return recorder
 	}
 
-	ranged := send(nil)
-	require.Equal(t, http.StatusPartialContent, ranged.Code)
-	assert.Empty(t, ranged.Header().Get("Content-Encoding"))
-	mediaType, params, err := mime.ParseMediaType(ranged.Header().Get("Content-Type"))
-	require.NoError(t, err)
-	require.Equal(t, "multipart/byteranges", mediaType)
-	reader := multipart.NewReader(ranged.Body, params["boundary"])
-	original := files["static/js/app.js"]
-	for _, want := range [][]byte{original[0:10], original[20:30]} {
-		part, err := reader.NextPart()
-		require.NoError(t, err)
-		body, err := io.ReadAll(part)
-		require.NoError(t, err)
-		assert.Equal(t, want, body)
+	for _, acceptEncoding := range []string{"br", "br, gzip", "br, gzip, identity;q=0"} {
+		t.Run(acceptEncoding, func(t *testing.T) {
+			whole := send(acceptEncoding, nil)
+			require.Equal(t, http.StatusOK, whole.Code)
+			assert.Equal(t, "br", whole.Header().Get("Content-Encoding"))
+			assert.Equal(t, "text/javascript; charset=utf-8", whole.Header().Get("Content-Type"))
+			assert.Equal(t, files["static/js/app.js.br"], whole.Body.Bytes())
+
+			failed := send(acceptEncoding, map[string]string{"If-Match": `"another-version"`})
+			assert.Equal(t, http.StatusPreconditionFailed, failed.Code)
+			assert.Empty(t, failed.Header().Get("Content-Encoding"))
+
+			notModified := send(acceptEncoding, map[string]string{"If-None-Match": "*"})
+			assert.Equal(t, http.StatusNotModified, notModified.Code)
+			assert.Empty(t, notModified.Body.Bytes())
+		})
 	}
-	_, err = reader.NextPart()
-	assert.ErrorIs(t, err, io.EOF)
-
-	failed := send(map[string]string{"If-Match": `"another-version"`})
-	assert.Equal(t, http.StatusPreconditionFailed, failed.Code)
-	assert.Empty(t, failed.Header().Get("Content-Encoding"))
-
-	notModified := send(map[string]string{"If-None-Match": "*"})
-	assert.Equal(t, http.StatusNotModified, notModified.Code)
-	assert.Empty(t, notModified.Body.Bytes())
 }
