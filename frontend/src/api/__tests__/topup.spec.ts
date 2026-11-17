@@ -294,6 +294,24 @@ describe('native payment contracts', () => {
     expect(() => parseGmpayConfig({ ...value, assets: '[]' })).toThrow()
     expect(() => parseGmpayConfig({ ...value, has_secret: 'true' })).toThrow()
   })
+  it('requires the backup payment list with a URL on every entry', () => {
+    const links = [
+      { name: '', url: 'https://codes.example.com', icon: '' },
+      { name: 'Shop', url: 'https://shop.example.com', icon: 'telegram' },
+    ]
+    expect(
+      parseTopupInfo({ ...nativeTopupInfo, backup_payment_links: links })
+        .backup_payment_links
+    ).toEqual(links)
+    const { backup_payment_links: _omitted, ...missing } = nativeTopupInfo
+    expect(() => parseTopupInfo(missing)).toThrow()
+    expect(() =>
+      parseTopupInfo({
+        ...nativeTopupInfo,
+        backup_payment_links: [{ name: 'Shop', url: '', icon: '' }],
+      })
+    ).toThrow()
+  })
   it('keeps token input quantities in whole native recharge units', () => {
     const inputs = topupInputAmounts(
       parseTopupInfo(nativeTopupInfo),

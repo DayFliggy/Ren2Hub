@@ -1,50 +1,39 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const props = withDefaults(
-  defineProps<{
-    modelValue?: string
-    methods?: Array<{ value: string; label: string }>
-  }>(),
-  {
-    modelValue: 'epay',
-    methods: undefined,
-  }
-)
+import PaymentMethodIcon from './PaymentMethodIcon.vue'
+import { choiceClass } from './choiceStyle'
+
+const props = defineProps<{
+  modelValue: string
+  methods: Array<{ value: string; label: string; icon: string }>
+}>()
 
 const emit = defineEmits<{
   'update:modelValue': [method: string]
 }>()
 
 const { t } = useI18n()
-
-const defaultMethods = computed(() => [
-  { value: 'epay', label: t('wallet.payEpay') },
-])
-const methods = computed(() => props.methods ?? defaultMethods.value)
 </script>
 
 <template>
-  <div>
-    <p class="mb-2 text-xs text-[var(--text-tertiary)]">
-      {{ t('wallet.payMethodLabel') }}
-    </p>
-    <div class="flex flex-wrap gap-2">
-      <button
-        v-for="method in methods"
-        :key="method.value"
-        type="button"
-        class="h-11 rounded-xl px-4 text-xs sm:h-9 font-medium transition-all focus-ring"
-        :style="
-          props.modelValue === method.value
-            ? 'background:var(--accent);color:var(--accent-contrast)'
-            : 'background:var(--surface-muted);color:var(--text-secondary)'
-        "
-        @click="emit('update:modelValue', method.value)"
-      >
-        {{ method.label }}
-      </button>
-    </div>
+  <div
+    v-if="methods.length"
+    role="group"
+    :aria-label="t('wallet.payMethodLabel')"
+    class="grid grid-cols-2 gap-2"
+  >
+    <button
+      v-for="method in methods"
+      :key="method.value"
+      type="button"
+      class="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors focus-ring"
+      :class="choiceClass(props.modelValue === method.value)"
+      :aria-pressed="props.modelValue === method.value"
+      @click="emit('update:modelValue', method.value)"
+    >
+      <PaymentMethodIcon :icon="method.icon" :type="method.value" />
+      <span class="min-w-0 truncate">{{ method.label }}</span>
+    </button>
   </div>
 </template>

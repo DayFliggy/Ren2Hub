@@ -102,6 +102,60 @@ function payCalls(request: { mock: { calls: unknown[][] } }, path: string) {
   return request.mock.calls.filter(([, called]) => called === path)
 }
 describe('native wallet checkout', () => {
+  it('lists every backup payment as a new-tab web link and drops other URLs', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...nativeTopupInfo,
+      backup_payment_links: [
+        { name: '', url: 'https://codes.example.com', icon: '' },
+        {
+          name: 'Card shop',
+          url: 'https://shop.example.com/buy',
+          icon: 'taobao',
+        },
+        { name: 'Script', url: 'javascript:alert(1)', icon: '' },
+      ],
+    })
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: 'alipay', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    const links = wrapper.findAll('a')
+    expect(links.map((link) => link.attributes('href'))).toEqual([
+      'https://codes.example.com/',
+      'https://shop.example.com/buy',
+    ])
+    expect(links[0]!.text()).toContain(i18n.global.t('wallet.externalTitle'))
+    expect(links[1]!.text()).toContain('Card shop')
+    for (const link of links) {
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')).toContain('noopener')
+    }
+    wrapper.unmount()
+  })
+
+  it('asks for the payment method before the amount and announces the choice', async () => {
+    const wrapper = await render('alipay')
+    const group = wrapper.get('[role="group"]')
+    const methods = group.findAll('button')
+    const firstPreset = wrapper
+      .findAll('button[aria-pressed]')
+      .find((button) => !group.element.contains(button.element))!
+    expect(
+      group.element.compareDocumentPosition(firstPreset.element) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(methods.map((button) => button.attributes('aria-pressed'))).toEqual([
+      'true',
+      'false',
+    ])
+    await methods[1]!.trigger('click')
+    expect(wrapper.emitted('update:paymentMethod')).toEqual([
+      ['gmpay:usdt.tron'],
+    ])
+    wrapper.unmount()
+  })
+
   it('cancels capability loading on unmount without publishing a late ready state', async () => {
     const onCapabilitiesState = vi.fn()
     const onCapabilities = vi.fn()
@@ -180,7 +234,7 @@ describe('native wallet checkout', () => {
     wrapper.unmount()
   })
 
-  it('shows the Creem product quota with its previewed bonus and adds both exactly to the balance', async () => {
+  it('shows the Creem product quota with its previewed bonus and credits both exactly', async () => {
     configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
     const get = routeGet(
       {
@@ -209,10 +263,12 @@ describe('native wallet checkout', () => {
       { principal_quota: '1500000' },
       expect.anything()
     )
-    expect(wrapper.text()).toContain(formatQuota(1500000, 3))
-    expect(wrapper.text()).toContain(`+${formatQuota(75000, 3)}`)
+    expect(wrapper.text()).toContain(
+      i18n.global.t('wallet.creditBonus', { amount: formatQuota(75000, 3) })
+    )
     expect(wrapper.text()).toContain(formatQuota(1575000, 3))
-    expect(wrapper.text()).toContain(formatQuota(2075000))
+    // The balance after paying is no longer shown.
+    expect(wrapper.text()).not.toContain(formatQuota(2075000))
     expect(quote).not.toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -244,8 +300,9 @@ describe('native wallet checkout', () => {
     const wrapper = await render()
     expect(wrapper.text()).toContain('¥73.00')
     expect(wrapper.text()).toContain(formatQuota(5000000, 3))
+    // No bonus, so no bonus line under the credit.
     expect(wrapper.text()).not.toContain(
-      i18n.global.t('wallet.summaryPrincipal')
+      i18n.global.t('wallet.creditBonus', { amount: formatQuota(0, 3) })
     )
     await submit(wrapper).trigger('click')
     await flushPromises()
@@ -355,9 +412,9 @@ describe('native wallet checkout', () => {
       .findAll('option')
       .map((option) => option.text())
     expect(options.slice(1)).toEqual(['Card', 'Apple Pay'])
-    expect(wrapper.text()).toContain(i18n.global.t('wallet.nativeCurrencyNote'))
     expect(wrapper.text()).toContain('EUR 10.00')
-    expect(wrapper.text()).not.toContain(i18n.global.t('wallet.summaryPayNow'))
+    // The payable label names no currency; the amount carries the quote's.
+    expect(wrapper.text()).not.toContain('CNY')
     await wrapper.get('#topup-submethod').setValue('1')
     await submit(wrapper, 'wallet.topupNow').trigger('click')
     await flushPromises()
@@ -375,22 +432,128 @@ describe('native wallet checkout', () => {
     wrapper.unmount()
   })
 
-  it('keeps the price and shows principal, bonus and total credit from the server quote', async () => {
+  it('keeps the price and shows the credit with its bonus from the server quote', async () => {
     configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
     vi.spyOn(httpTransport, 'request').mockResolvedValue(quoteResponse as never)
     const wrapper = await render('alipay')
     const summary = wrapper.text()
     expect(summary).toContain('¥730.00')
     expect(wrapper.find('.line-through').exists()).toBe(false)
-    expect(summary).toContain(i18n.global.t('wallet.summaryPrincipal'))
-    expect(summary).toContain(formatQuota(50000000, 3))
     expect(summary).toContain(
-      i18n.global.t('wallet.summaryBonus', { rate: '5' })
+      i18n.global.t('wallet.creditBonus', { amount: formatQuota(2500000, 3) })
     )
-    expect(summary).toContain(`+${formatQuota(2500000, 3)}`)
+    // The rate stays on the preset card instead of repeating in the receipt.
+    expect(wrapper.get('dl').text()).not.toContain('5%')
     // Credit is the server's principal plus bonus, not the requested amount.
     expect(summary).toContain(formatQuota(52500000, 3))
-    expect(summary).toContain(formatQuota(53000000))
+    wrapper.unmount()
+  })
+
+  it('marks presets with the server bonus rate, the selected one from its quote', async () => {
+    configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
+    routeGet(
+      { ...nativeTopupInfo, amount_options: [10, 20, 50, 100] },
+      (principal) => {
+        if (principal === '10000000')
+          return { ...preview(10000000, 0), applied_rate: '0' }
+        if (principal === '25000000') return Promise.reject(new Error('down'))
+        return {
+          ...preview(Number(principal), Number(principal) / 50),
+          applied_rate: '0.02',
+        }
+      }
+    )
+    // The $10 quote carries a 5% bonus, so its card shows 5% rather than the preview.
+    vi.spyOn(httpTransport, 'request').mockResolvedValue(quoteResponse as never)
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: 'alipay', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    const rates = wrapper
+      .get(
+        `[role="group"][aria-label="${i18n.global.t('wallet.presetAmounts')}"]`
+      )
+      .findAll('button')
+      .map((button) => button.find('span[aria-hidden="true"]'))
+      .map((rate) => (rate.exists() ? rate.text() : null))
+    expect(rates).toEqual(['+5%', null, null, '+2%'])
+    // The balance after paying is no longer shown.
+    expect(wrapper.text()).not.toContain(formatQuota(53000000))
+    wrapper.unmount()
+  })
+
+  it('previews token presets at their own quota and never blocks paying when previews fail', async () => {
+    app.status.quota_display_type = 'TOKENS'
+    const get = routeGet({ ...nativeTopupInfo, amount_options: [10] }, () =>
+      Promise.reject(new Error('down'))
+    )
+    vi.spyOn(httpTransport, 'request').mockResolvedValue(
+      quoted('73.00') as never
+    )
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: 'alipay', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    // Ten native units are already 5,000,000 tokens; they are not scaled again.
+    expect(get).toHaveBeenCalledWith(
+      '/api/user/topup-bonus/preview',
+      { principal_quota: '5000000' },
+      expect.anything()
+    )
+    expect(
+      submit(wrapper, 'wallet.topupNow').attributes('disabled')
+    ).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('keeps the newest preset rates when an older preview round answers late', async () => {
+    configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
+    const pending: Array<{
+      principal: string
+      resolve: (rate: string) => void
+    }> = []
+    routeGet(
+      {
+        ...nativeTopupInfo,
+        amount_options: [10, 20],
+        pay_methods: [
+          { type: 'alipay', name: 'Alipay' },
+          { type: 'gmpay:usdt.tron', name: 'USDT Tron', min_topup: '20' },
+        ],
+      },
+      (principal) =>
+        new Promise((resolve) =>
+          pending.push({
+            principal,
+            resolve: (rate) =>
+              resolve({
+                ...preview(Number(principal), Number(principal) / 50),
+                applied_rate: rate,
+              }),
+          })
+        )
+    )
+    vi.spyOn(httpTransport, 'request').mockReturnValue(new Promise(() => {}))
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: 'alipay', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    const firstRound = pending.splice(0)
+    await wrapper.setProps({ paymentMethod: 'gmpay:usdt.tron' })
+    await flushPromises()
+    for (const call of pending) call.resolve('0.02')
+    for (const call of firstRound) call.resolve('0.05')
+    await flushPromises()
+    const rates = wrapper
+      .get(
+        `[role="group"][aria-label="${i18n.global.t('wallet.presetAmounts')}"]`
+      )
+      .findAll('span[aria-hidden="true"]')
+      .map((rate) => rate.text())
+    expect(rates).toEqual(['+2%'])
     wrapper.unmount()
   })
 

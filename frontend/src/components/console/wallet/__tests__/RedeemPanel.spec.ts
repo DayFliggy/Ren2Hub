@@ -1,11 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/api/console'
 import RedeemPanel from '@/components/console/wallet/RedeemPanel.vue'
 import { useToast } from '@/composables/useToast'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
+import { formatQuota } from '@/utils/format'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
@@ -33,6 +35,34 @@ describe('RedeemPanel', () => {
       'Enter redeem code'
     )
 
+    wrapper.unmount()
+  })
+
+  it('confirms the credited quota rather than repeating the button label', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    vi.spyOn(useAuthStore(), 'fetchSelf').mockResolvedValue(true)
+    // The bonus sits beside data in the real envelope.
+    vi.spyOn(api, 'postEnvelope').mockResolvedValue({
+      success: true,
+      message: '',
+      data: 5000000,
+      bonus_quota: 0,
+    } as never)
+    // Attached, so clicking the submit button submits the form as in a browser.
+    const wrapper = mount(RedeemPanel, {
+      attachTo: document.body,
+      global: { plugins: [pinia, i18n] },
+    })
+
+    await wrapper.get('input').setValue('CODE-1')
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(useToast().toasts.map((toast) => toast.message)).toEqual([
+      `Redeemed: ${formatQuota(5000000)} credited`,
+    ])
+    expect(wrapper.emitted('done')).toHaveLength(1)
     wrapper.unmount()
   })
 })

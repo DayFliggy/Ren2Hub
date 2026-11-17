@@ -76,7 +76,7 @@ it('uses a compact empty state without an empty pagination area', () => {
   })
   const empty = wrapper.get('[data-invite-records-empty]')
   expect(empty.classes()).toContain('py-3')
-  expect(empty.text()).toBe('No invite reward records yet')
+  expect(empty.text()).toBe('No reward records yet')
   expect(wrapper.find('nav').exists()).toBe(false)
   wrapper.unmount()
 })

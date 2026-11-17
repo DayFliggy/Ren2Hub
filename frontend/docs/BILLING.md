@@ -15,7 +15,7 @@
 | 操作             | 原生接口与字段                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------------- |
 | 当前钱包         | `GET /api/user/self`：`quota`、`used_quota`、`request_count`                                            |
-| 用量概览         | `GET /api/data/self/summary`：服务端范围聚合；不伪造增幅；本月超出日志范围时钱包显示 —                  |
+| 用量概览         | `GET /api/data/self/summary`：服务端范围聚合；不伪造增幅；钱包页不读取                                  |
 | Token 列表及编辑 | `GET/POST/PUT /api/token/`：`remain_quota`、`used_quota`、`unlimited_quota`，以及模型、IP、有效期等限制 |
 | 管理员增减额度   | `POST /api/user/manage`：`id`、`action: "add_quota"`、`mode`、数值 `value`、`operation_id`              |
 | 兑换码创建       | `POST /api/redemption/`：`name`、数值 `quota`、`count`、`expired_time`                                  |
@@ -32,6 +32,8 @@
 ## 在线充值与 GMPay
 
 先读取 `GET /api/user/topup/info` 的开关、`pay_methods`、最低充值额和预设金额，只显示服务端启用的方法。选中方式的最低额取全局或渠道最低额与该方式 `min_topup` 中的较大值；`min_topup` 缺失、空串或 `"0"` 表示该方式没有额外下限，其他非整数值视为无效响应。方式级下限只在控制台生效，服务端与上游一样只校验全局或渠道最低额。EPay 与 GMPay 均通过 `POST /api/user/amount` 获取原生金额。`amount` 为整数，GMPay 方法必须保留完整标识，例如 `gmpay:usdt.tron`。
+
+备用支付读取同一接口的 `backup_payment_links`：数组必填，每项 `name` 为字符串（原生 `TopUpLink` 一项为空，显示为“外部充值”），`url` 不能为空，`icon` 为字符串（可为空）；前端只渲染通过 `safeExternalUrl` 的 http(s) 链接，在新标签页打开。支付合规未确认时后端返回空数组。
 
 普通金额展示模式按原生充值单位提交；TOKENS 模式按 `quota_per_unit` 换算最低额和预设值，并限制为完整充值单位，避免付款数额与原生截断后的到账 quota 不一致。报价是当前配置的计算结果，带实付和按本金另赠的额度（充值加赠）。下单时把用户看到的 `expected_pay_amount`、`expected_currency` 和 `expected_bonus_quota` 一并提交，服务端重新计算，价格或加赠不一致时返回 `topup_quote_changed` 或 `topup_bonus_changed` 并附新的报价，页面展示后等用户再次确认；Stripe 和 Creem 先用 `GET /api/user/topup-bonus/preview` 取加赠。规则见[充值加赠](../../docs/billing/TOPUP_BONUS.md#在线充值的报价与确认)。请求不携带账户版本或 `amount_unit`。
 

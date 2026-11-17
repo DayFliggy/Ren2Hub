@@ -18,6 +18,7 @@ export const nativeTopupInfo = {
   waffo_pancake_min_topup: 1,
   amount_options: [10, 20],
   topup_link: '',
+  backup_payment_links: [],
 }
 export const nativeTopUp = {
   id: 1,

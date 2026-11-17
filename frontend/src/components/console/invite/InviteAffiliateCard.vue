@@ -26,11 +26,11 @@ const { t } = useI18n()
 
 <template>
   <section
-    class="pencil-surface sketch-card min-w-0 border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6"
+    class="pencil-surface sketch-card flex min-w-0 flex-col border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6"
     data-handdrawn="surface"
   >
     <span
-      class="inline-flex items-center rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[0.6875rem] font-bold uppercase text-[var(--accent-text)]"
+      class="inline-flex items-center self-start rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[0.6875rem] font-bold uppercase text-[var(--accent-text)]"
     >
       {{ t('invite.affiliateTag') }}
     </span>
@@ -46,11 +46,6 @@ const { t } = useI18n()
       </span>
     </h2>
     <p
-      class="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--text-tertiary)]"
-    >
-      {{ t('invite.affiliateSubheadline') }}
-    </p>
-    <p
       v-if="notice"
       role="status"
       class="mt-3 text-sm text-[var(--status-warning-text)]"
@@ -58,7 +53,7 @@ const { t } = useI18n()
       {{ notice }}
     </p>
 
-    <div class="mt-6 grid gap-4 md:grid-cols-2">
+    <div class="mt-6 mb-5 grid gap-4 md:grid-cols-2">
       <div class="min-w-0">
         <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.inviteCode') }}
@@ -97,7 +92,7 @@ const { t } = useI18n()
     </div>
 
     <div
-      class="mt-5 flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-4"
+      class="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-4"
     >
       <span class="mr-1 text-xs text-[var(--text-tertiary)]">
         {{ t('invite.shareLabel') }}
@@ -143,9 +138,6 @@ const { t } = useI18n()
       >
         <Mail :size="16" />
       </IconButton>
-      <p class="ml-auto text-xs text-[var(--text-tertiary)]">
-        {{ t('invite.affiliateDisclaimer') }}
-      </p>
     </div>
   </section>
 </template>

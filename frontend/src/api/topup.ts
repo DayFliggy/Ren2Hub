@@ -18,6 +18,8 @@ export interface PayMethod {
   name: string
   /** Method minimum in recharge units; 0 adds none to the provider minimum. */
   min_topup: number
+  /** Optional https image or built-in icon identifier; empty when unset. */
+  icon: string
 }
 export interface CreemProduct {
   productId: string
@@ -48,6 +50,14 @@ export interface TopupInfo {
   waffo_pancake_min_topup: number
   amount_options: number[]
   topup_link: string
+  /** External pages, TopUpLink first without a name; empty before compliance. */
+  backup_payment_links: BackupPaymentLink[]
+}
+export interface BackupPaymentLink {
+  name: string
+  url: string
+  /** Optional https image or built-in icon identifier; empty when unset. */
+  icon: string
 }
 export interface GmpayAsset {
   name: string
@@ -134,6 +144,7 @@ export function parseTopupInfo(value: unknown): TopupInfo {
       type: requiredString(raw.type, endpoint, false),
       name: requiredString(raw.name, endpoint, false),
       min_topup: methodMinimum(raw.min_topup, endpoint),
+      icon: raw.icon === undefined ? '' : requiredString(raw.icon, endpoint),
     }
   })
   result.amount_options = value.amount_options.map((n) => {
@@ -157,6 +168,15 @@ export function parseTopupInfo(value: unknown): TopupInfo {
         : invalidResponse(endpoint)
   result.creem_products = requiredString(value.creem_products, endpoint)
   result.topup_link = requiredString(value.topup_link, endpoint)
+  if (!Array.isArray(value.backup_payment_links)) invalidResponse(endpoint)
+  result.backup_payment_links = value.backup_payment_links.map((raw) => {
+    if (!isRecord(raw)) invalidResponse(endpoint)
+    return {
+      name: requiredString(raw.name, endpoint),
+      url: requiredString(raw.url, endpoint, false),
+      icon: requiredString(raw.icon, endpoint),
+    }
+  })
   return result
 }
 
@@ -269,7 +289,7 @@ export function enabledPayMethods(info: TopupInfo): PayMethod[] {
       : info[`enable_${provider}_topup` as keyof TopupInfo] === true
   })
   if (info.enable_creem_topup && !methods.some((m) => m.type === 'creem'))
-    methods.push({ type: 'creem', name: 'Creem', min_topup: 0 })
+    methods.push({ type: 'creem', name: 'Creem', min_topup: 0, icon: '' })
   return methods
 }
 export async function paymentRequest<T>(

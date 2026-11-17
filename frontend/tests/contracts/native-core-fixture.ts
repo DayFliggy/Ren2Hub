@@ -237,6 +237,7 @@ export async function nativeCoreFixture(
     waffo_pancake_min_topup: 1,
     amount_options: [10, 20],
     topup_link: '',
+    backup_payment_links: [],
   }
   const emptyPage = { page: 1, page_size: 20, total: 0, items: [] }
   await page.route('**/payment-fixture', (route) =>

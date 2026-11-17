@@ -54,7 +54,6 @@ const {
 } = useInvite()
 
 const howSteps = [1, 2, 3, 4]
-const faqs = [1, 2, 3, 4]
 
 onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
 </script>
@@ -101,31 +100,14 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
       </ConsoleCard>
 
       <ConsoleCard>
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0">
-            <p class="text-xs text-[var(--text-tertiary)]">
-              {{ t('invite.transferable') }}
-            </p>
-            <p class="display-number mt-1.5 text-2xl text-[var(--accent-text)]">
-              {{ info ? formatQuota(info.transferable) : '--' }}
-            </p>
-          </div>
-          <ConsoleButton
-            size="sm"
-            :disabled="!canTransfer"
-            @click="transferOpen = true"
-          >
-            {{ t('invite.transfer') }}
-          </ConsoleButton>
-        </div>
+        <p class="text-xs text-[var(--text-tertiary)]">
+          {{ t('invite.transferable') }}
+        </p>
+        <p class="display-number mt-1.5 text-2xl text-[var(--accent-text)]">
+          {{ info ? formatQuota(info.transferable) : '--' }}
+        </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.transferableHint') }}
-        </p>
-        <p
-          v-if="info?.transfer_enabled === false"
-          class="mt-1 text-xs text-[var(--text-tertiary)]"
-        >
-          {{ t('invite.skipReasons.compliance_unconfirmed') }}
         </p>
       </ConsoleCard>
 
@@ -173,11 +155,11 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
         @share-email="shareEmail"
       />
 
-      <!-- Wrapper contributes no intrinsic height on desktop (its child is
-           absolute), so the affiliate card alone drives the row height — no
-           blank space there. The invitee card fills that height and its list
-           scrolls. On mobile (no lg:) it's static and fully expands. -->
-      <div class="lg:relative">
+      <!-- On desktop the invitee card is absolute, so the row takes the
+           affiliate card's height, with a floor that keeps several invitees
+           in view; the invitee list scrolls. On mobile (no lg:) it's static
+           and fully expands. -->
+      <div class="lg:relative lg:min-h-[22rem]">
         <section
           class="flex flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:absolute lg:inset-0"
         >
@@ -281,12 +263,6 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
               >{{ t('common.nextPage') }}</ConsoleButton
             >
           </div>
-
-          <p
-            class="shrink-0 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-tertiary)]"
-          >
-            {{ t('invite.inviteesNote') }}
-          </p>
         </section>
       </div>
     </div>
@@ -299,11 +275,8 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
       <InviteRewardCard
         v-if="info"
         :transferable="info.transferable"
-        :frozen="info.frozen_reward"
-        :reward-total="info.reward_total"
         :outstanding-offset="info.outstanding_offset"
         :transfer-enabled="info.transfer_enabled"
-        :invited="info.invited"
         :readonly="readOnly"
         @transfer="transferOpen = true"
       />
@@ -348,45 +321,6 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
       </div>
     </section>
 
-    <!-- faq -->
-    <section class="mt-8">
-      <h3 class="mb-4 text-lg font-bold text-[var(--text-primary)]">
-        {{ t('invite.faqTitle') }}
-      </h3>
-      <div class="sibling-space-y-3">
-        <details
-          v-for="n in faqs"
-          :key="n"
-          class="group rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-5"
-        >
-          <summary
-            class="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-medium text-[var(--text-primary)]"
-          >
-            {{ t(`invite.faqQ${n}`) }}
-            <svg
-              class="shrink-0 text-[var(--text-tertiary)] transition-transform group-open:rotate-180"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </summary>
-          <p class="pb-4 text-sm leading-relaxed text-[var(--text-tertiary)]">
-            {{
-              t(`invite.faqA${n}`, {
-                reward: `${info?.effective_rate_percent ?? 0}%`,
-              })
-            }}
-          </p>
-        </details>
-      </div>
-    </section>
-
     <!-- transfer modal -->
     <ConsoleModal
       :open="transferOpen"
@@ -395,17 +329,14 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
       size="sm"
       @close="transferOpen = false"
     >
-      <div class="sibling-space-y-3">
-        <p
-          class="rounded-lg bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-secondary)]"
-        >
-          {{ t('invite.transferHint') }}
-        </p>
-        <p class="text-xs text-[var(--text-tertiary)]">
-          {{ t('invite.transferable') }}:
-          {{ formatQuota(info?.transferable ?? 0) }}
-        </p>
-      </div>
+      <p
+        class="flex items-baseline justify-between gap-3 rounded-lg bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-secondary)]"
+      >
+        <span>{{ t('invite.transferable') }}</span>
+        <span class="display-number text-xl text-[var(--accent-text)]">{{
+          formatQuota(info?.transferable ?? 0)
+        }}</span>
+      </p>
       <template #footer>
         <ConsoleButton
           size="lg"

@@ -118,7 +118,7 @@ for (const [theme, mobile] of [
     await expect(
       page.getByText('¥73.00', { exact: true }).first()
     ).toBeVisible()
-    await expect(page.getByText('到账 USD 额度', { exact: true })).toBeVisible()
+    await expect(page.getByText('到账额度', { exact: true })).toBeVisible()
     await expect(pay).toBeEnabled()
     await pay.focus()
     await expect(pay).toBeFocused()

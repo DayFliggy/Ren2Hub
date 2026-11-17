@@ -28,7 +28,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | 路由与并发     | 无业务分组；每 Token 自动或有序手动路由；渠道倍率和 Key 倍率上限；用户与渠道无等待并发；原任务续作固定原渠道；共享端点上普通渠道与插件渠道竞争；六个批量渠道写入口和路由保存按 ID 升序加锁，渠道与能力同事务，零值照写 | [统一路由](../routing/UNIFIED_ROUTING.md)                                                                          |
 | 钱包与计价     | 发送前强制估算预扣；模型基础价乘渠道倍率一次；无模型默认价格和内置表达式，工具单价、音频倍率表、Gemini 音频输入固定价沿用上游                                                                                          | [实现](../billing/IMPLEMENTATION.md)、[定价](../billing/PRICING.md)                                                |
-| 充值与支付     | 充值加赠；回调和人工补单最多入账一次；GMPay 核验；返利以本金为基数；已使用的兑换码不可修改                                                                                                                             | [充值加赠](../billing/TOPUP_BONUS.md)、下文“充值加赠接点”                                                          |
+| 充值与支付     | 充值加赠；备用支付链接；回调和人工补单最多入账一次；GMPay 核验；返利以本金为基数；已使用的兑换码不可修改                                                                                                               | [充值加赠](../billing/TOPUP_BONUS.md)、下文“充值加赠接点”                                                          |
 | 鉴权缓存与流式 | 上游 #8200 的缓存签名加入本地 `MaxConcurrency`；流式只保留取消时 ClientGone 优先、写入预算和首输出观测                                                                                                                 | `NATIVE_B388_REVIEW.json`                                                                                          |
 | 插件           | 内置任务插件源码与上游一致；通用提供商插件开放；请求处理只有全局、渠道、模型作用域；已退役的 API 前缀在插件分发前返回 404                                                                                              | [插件入口](../plugin-api/README.md)                                                                                |
 | 原生计数       | Claude 和 Gemini 的 token 计数走独立真实转发，不进入生成或估算回退                                                                                                                                                     | 合同 `native-count`                                                                                                |
@@ -52,6 +52,13 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - `Redeem` 和 `AdjustUserQuotaWithOperation` 接收预载的加赠求值器，分别在兑换 CAS 和操作号重放检查之后决定加赠。
 - `model/main.go` 在 AutoMigrate 之后调用一次性迁移，查旧表时直接读系统目录并传播错误；配置加载或迁移失败阻止启动。
 - 路由和 Access Token 目录登记 `/api/user/topup-bonus/preview`；`model/user.go` 的两个 used_quota 函数各调用一次 `RecordTopUpBonusUsage`。
+
+### 备用支付接点
+
+上游只有单个 `TopUpLink`。管理员在 `backup_payment_setting.links` 维护最多 10 个“名称 + http(s) 链接 + 可选图标”，逻辑在扩展文件 `setting/operation_setting/backup_payment_setting.go`，原生文件只做接入：
+
+- `model/option.go` 的 `validateOptionValue` 在保存前调用 `ValidateBackupPaymentLinks`。
+- `controller/topup.go` 的 `GetTopUpInfo` 增加 `backup_payment_links`：`TopUpLink` 不带名称排第一，其后是配置项；与在线支付方式一样，支付合规未确认时为空数组。`topup_link` 字段保持上游原样。
 
 ## 与上游相同、未在本地修复的已知问题
 
@@ -98,4 +105,4 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 本地差异只写模块级结论和依据链接；行为细节写进对应的专题文档，逐段裁定写进审查清单。
 - 不修的已知问题和等待上游的项各只登记一处，解决后删除；没有在现行源码上核对的条目照实标明。
 - 发布记录只保留最近一次，写明提交、镜像、实际运行的门禁范围、候选结果和没有运行的项。
-- `CORE_SOURCE_DELTA.json` 用小节锚点（`#现行本地差异`、`#充值加赠接点`）引用本文，改标题时同步改引用。
+- `CORE_SOURCE_DELTA.json` 用小节锚点（`#现行本地差异`、`#充值加赠接点`、`#备用支付接点`）引用本文，改标题时同步改引用。

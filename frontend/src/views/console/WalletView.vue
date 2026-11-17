@@ -5,46 +5,25 @@ import { useRoute } from 'vue-router'
 
 import { ApiError } from '@/api/types'
 import { api } from '@/api/console'
-import {
-  currentMonthRange,
-  getUsageSummary,
-  logRangeLimit,
-  summaryFits,
-} from '@/api/dashboard'
 import { parseTopUpDetail } from '@/api/adminOrders'
 import { rememberedGmpayOrder, type TopupInfo } from '@/api/topup'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import PageHero from '@/components/console/PageHero.vue'
-import StatTileGrid from '@/components/common/StatTileGrid.vue'
-import FlowChart from '@/components/console/wallet/FlowChart.vue'
 import RedeemPanel from '@/components/console/wallet/RedeemPanel.vue'
 import TopupPanel from '@/components/console/wallet/TopupPanel.vue'
 import TopupRecords from '@/components/console/wallet/TopupRecords.vue'
-import type { FlowPoint } from '@/composables/useDashboard'
 import { useBalanceVisibility } from '@/composables/useDashboard'
-import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
-import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { sumQuota } from '@/utils/quota'
-import { formatNumber, formatQuota, formatQuotaParts } from '@/utils/format'
-
-interface WalletStats {
-  /** Null when the month to date exceeds log_max_range_days. */
-  month: { quota: string; requests: number } | null
-}
+import { formatQuotaParts } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
 const toast = useToast()
-const app = useAppStore()
 const auth = useAuthStore()
 const { hidden, toggle } = useBalanceVisibility()
 
-const stats = ref<WalletStats | null>(null)
-const flow = ref<FlowPoint[]>([])
-const todayConsume = ref('0')
 const refreshKey = ref(0)
 const paymentMethod = ref('epay')
 const capabilities = ref<TopupInfo | null>(null)
@@ -58,8 +37,6 @@ const trackedPayment = ref<ReturnType<typeof parseTopUpDetail> | null>(null)
 const paymentStatusError = ref('')
 const paymentStatusLoading = ref(false)
 let statusController: AbortController | null = null
-const loading = ref(false)
-const statsRequest = useLatestRequest()
 
 const activePanel = computed<'topup' | 'redeem'>(() =>
   route.query.panel === 'redeem' ? 'redeem' : 'topup'
@@ -71,91 +48,11 @@ const balanceQuota = computed(() =>
 const balance = computed(() =>
   balanceQuota.value === null ? null : formatQuotaParts(balanceQuota.value, 2)
 )
-const dayCount = computed(() => flow.value.length || 30)
-
-const statCards = computed(() => {
-  const current = stats.value
-  if (!current) return []
-  const average = flow.value.length
-    ? (
-        BigInt(sumQuota(flow.value.map((point) => point.consume))) /
-        BigInt(flow.value.length)
-      ).toString()
-    : '0'
-  const { month } = current
-  const outOfRange = t('wallet.statMonthOutOfRange')
-  return [
-    {
-      label: t('wallet.statMonthConsume'),
-      value: month ? formatQuota(month.quota) : '—',
-      sub: month ? t('wallet.statMonthConsumeSub') : outOfRange,
-    },
-    {
-      label: t('wallet.statDailyAvg'),
-      value: month ? formatQuota(average) : '—',
-      sub: month
-        ? t('wallet.statDailyAvgSub', { days: dayCount.value })
-        : outOfRange,
-    },
-    {
-      label: t('wallet.statTodayConsume'),
-      value: formatQuota(todayConsume.value),
-      sub: t('wallet.statTodayConsumeSub'),
-    },
-    {
-      label: t('wallet.statMonthRequests'),
-      value: month ? formatNumber(month.requests) : '—',
-      sub: month ? t('wallet.statMonthRequestsSub') : outOfRange,
-    },
-  ]
-})
-
-async function loadStats(): Promise<void> {
-  loading.value = true
-  stats.value = null
-  flow.value = []
-  const result = await statsRequest.run((signal) => {
-    // A month past the log limit is skipped; today always fits.
-    const monthRange = currentMonthRange()
-    const limit = logRangeLimit(app.status)
-    return Promise.all([
-      summaryFits(monthRange, limit, false)
-        ? getUsageSummary(monthRange, false, signal)
-        : null,
-      getUsageSummary({ range: 'today' }, false, signal),
-    ])
-  })
-  if (result.stale) return
-  loading.value = false
-  if (!result.ok) {
-    toast.error(
-      result.error instanceof ApiError
-        ? result.error.message
-        : String(result.error)
-    )
-    return
-  }
-  const [month, today] = result.value
-  if (month?.meta.available === false || !today.meta.available) {
-    stats.value = null
-    toast.error(t('dashboard.stats.unavailable'))
-    return
-  }
-  todayConsume.value = today.kpi.totalQuota
-  flow.value = month?.flow ?? []
-  stats.value = {
-    month: month && {
-      quota: month.kpi.totalQuota,
-      requests: month.kpi.totalRequests,
-    },
-  }
-}
 
 async function handlePaymentDone(): Promise<void> {
   refreshKey.value += 1
   try {
     await auth.fetchSelf()
-    await loadStats()
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : t('common.failed'))
   }
@@ -190,7 +87,6 @@ async function trackPayment(tradeNo: string): Promise<void> {
   }
 }
 onMounted(() => {
-  void loadStats()
   const returned =
     route.query.trade_no ?? route.query.out_trade_no ?? route.query.order_id
   const tradeNo =
@@ -212,7 +108,7 @@ onBeforeUnmount(() => statusController?.abort())
       :crumbs="[t('wallet.breadcrumb.0'), t('wallet.breadcrumb.1')]"
     >
       <template #actions>
-        <div class="flex items-center gap-3" :aria-busy="loading">
+        <div class="flex items-center gap-3">
           <p class="font-mono tracking-tight text-[var(--text-primary)]">
             <span
               v-if="balance?.prefix"
@@ -260,8 +156,6 @@ onBeforeUnmount(() => statusController?.abort())
       </template>
     </PageHero>
 
-    <StatTileGrid class="mb-6" :tiles="statCards" :columns="4" />
-
     <ConsoleCard
       v-if="trackedTradeNo"
       class="mb-6"
@@ -304,11 +198,7 @@ onBeforeUnmount(() => statusController?.abort())
       </ConsoleButton>
     </ConsoleCard>
 
-    <div
-      class="mb-6 grid gap-6"
-      :class="{ 'xl:grid-cols-[1fr_23.75rem]': redemptionEnabled }"
-      :aria-busy="capabilitiesState === 'idle'"
-    >
+    <div class="sibling-space-y-6">
       <TopupPanel
         v-model:payment-method="paymentMethod"
         :balance-quota="balanceQuota"
@@ -323,10 +213,6 @@ onBeforeUnmount(() => statusController?.abort())
         :refresh-key="refreshKey"
         @done="handlePaymentDone"
       />
-    </div>
-
-    <div class="sibling-space-y-6">
-      <FlowChart v-if="stats?.month" :flow="flow" />
       <TopupRecords :refresh-key="refreshKey" />
     </div>
   </div>

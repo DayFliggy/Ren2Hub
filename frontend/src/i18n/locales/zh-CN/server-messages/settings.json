@@ -1,4 +1,5 @@
 {
+  "A backup payment icon cannot exceed 256 characters": "备用支付图标不能超过 256 个字符",
   "A token ID is required for correlation queries.": "关联查询需要提供令牌 ID。",
   "API info #{{index}} URL cannot exceed 500 characters": "第{{index}}个API信息的URL长度不能超过500字符",
   "API info #{{index}} contains disallowed content": "第{{index}}个API信息包含不允许的内容",
@@ -23,6 +24,8 @@
   "Announcement #{{index}} publish date cannot be empty": "第{{index}}个公告的发布日期不能为空",
   "Announcements cannot exceed 100 entries": "系统公告数量不能超过100个",
   "At least one valid administrator or root user invite code is required": "至少需要一个有效的管理员或根用户邀请码",
+  "At most 10 backup payment links are allowed": "备用支付链接最多 10 个",
+  "Backup payment links must be a JSON array": "备用支付链接必须是 JSON 数组",
   "Cannot enable OIDC login. Enter all OIDC endpoint settings first.": "无法启用 OIDC 登录，请先填入完整的 OIDC 端点配置",
   "Cannot enable OIDC login. Enter the OIDC Client ID and Client Secret first.": "无法启用 OIDC 登录，请先填入 OIDC Client Id 以及 OIDC Client Secret！",
   "Cannot enable Telegram OAuth. Enter the Telegram Bot Token first.": "无法启用 Telegram OAuth，请先填入 Telegram Bot Token！",
@@ -39,6 +42,8 @@
   "Compliance confirmation fields cannot be changed through the general settings API": "合规确认字段不允许通过通用设置接口修改",
   "Diagnostic data unavailable.": "诊断数据不可用。",
   "Diagnostic storage unavailable.": "诊断存储不可用。",
+  "Each backup payment link must be an http or https URL": "每个备用支付链接必须是 http 或 https 地址",
+  "Each backup payment link needs a name of at most 32 characters": "每个备用支付链接都需要填写名称，最多 32 个字符",
   "Each overwrite item must include a model name and fields": "覆盖项必须包含模型名称和字段",
   "Email sending method must be SMTP or Resend": "邮件发送方式只能是 SMTP 或 Resend",
   "Exchange rate must be greater than 0": "汇率必须大于 0",

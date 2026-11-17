@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 357,
+    "extension": 361,
     "removed": 45
   },
   "files": [
@@ -2822,9 +2822,10 @@
       "path": "controller/topup.go",
       "status": "adapted",
       "upstream_sha256": "9783bd086179f2432194eb02ce457bd54efb6f4590e4d4cc471483e0879b8a23",
-      "local_sha256": "acaa5bb5cae026bb1f651ac9427dd39a1ff7cd1836b3133562a50d9ea4f2fd2f",
+      "local_sha256": "02da3699d8822376759b7127f30fa79414fa6a8ae8b4a900c5e2035d2418d5a8",
       "reasons": [
         "affiliate",
+        "backup-payment-links",
         "gmpay",
         "group-removal",
         "payment-single-credit",
@@ -2832,7 +2833,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）；2026-11-17 备用支付接点见 SYNC_LEDGER.md#备用支付接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2849,6 +2850,12 @@
           "controller/topup.go#9"
         ]
       }
+    },
+    {
+      "path": "controller/topup_backup_payment_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6c191ec2fb624bcf49079dda8267deb41a35434cb651f804f5868baff9471c1d"
     },
     {
       "path": "controller/topup_bonus.go",
@@ -5005,15 +5012,16 @@
       "path": "model/option.go",
       "status": "adapted",
       "upstream_sha256": "918b344f1c4810e5b5467669fad3b4886455102b07ac881aeae3b57e6b7fcd39",
-      "local_sha256": "f0672a30631eb5c0a4a303b0e192b51f09a4e8977514f3a16e1417f17c5d527c",
+      "local_sha256": "ff6f5aa5dcb394c607c2e532323e9c431be63d7c0c9fac5b571543de38938109",
       "reasons": [
         "affiliate",
+        "backup-payment-links",
         "group-removal",
         "retired"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/option.go#1, model/option.go#10, model/option.go#11, model/option.go#12, model/option.go#13, model/option.go#14, model/option.go#15, model/option.go#16, model/option.go#17, model/option.go#18, model/option.go#2, model/option.go#3, model/option.go#4, model/option.go#5, model/option.go#6, model/option.go#7, model/option.go#8",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/option.go#1, model/option.go#10, model/option.go#11, model/option.go#12, model/option.go#13, model/option.go#14, model/option.go#15, model/option.go#16, model/option.go#17, model/option.go#18, model/option.go#2, model/option.go#3, model/option.go#4, model/option.go#5, model/option.go#6, model/option.go#7, model/option.go#8；2026-11-17 备用支付接点见 SYNC_LEDGER.md#备用支付接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5042,6 +5050,12 @@
       "status": "adapted",
       "upstream_sha256": "1842c1f6ce0a35151ddfbfcacb413c1e162818f113346fc008ff2606ecc4eb1f",
       "local_sha256": "3986d5d41c9b076e2a3e4f0b548ef94c50860bf9ec9fa0cf19655fe31df7dcbd"
+    },
+    {
+      "path": "model/option_backup_payment_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "94ba0e94ee5dc7bf32702df5a346d47ae84246d2f36bca387b7d1b691593b4d9"
     },
     {
       "path": "model/option_failure_test.go",
@@ -13509,6 +13523,26 @@
       "local_sha256": "f9f636053827b7214e267b5dcae4c3a8fb945fa422e4bdacfdbecf97e2b06328"
     },
     {
+      "path": "setting/operation_setting/backup_payment_setting.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ec8949f0a466dd46ff919e51089053dd970cbdec32e79cac6e24c7dc483e5e54",
+      "reasons": [
+        "backup-payment-links"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 备用支付扩展文件，见 SYNC_LEDGER.md#备用支付接点；不改上游 TopUpLink 行为",
+        "method": "本轮实现逐文件审查；钱包交互经 Gemini 4 Argon 交叉设计"
+      }
+    },
+    {
+      "path": "setting/operation_setting/backup_payment_setting_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "75375e0732586275862a457c332eaf2ce65e1af236566a1654011e15cf91e244"
+    },
+    {
       "path": "setting/operation_setting/channel_affinity_setting.go",
       "status": "adapted",
       "upstream_sha256": "6fa7bd83f3e8e73bd0670fbb13915d4fe02852ef062637c95a9d088d0bee7199",
@@ -14212,6 +14246,11 @@
     "topup-bonus": {
       "basis": "独有充值加赠：单笔入账、固定、全站与个人用量阶梯合成一次加赠比例，实付不变，按本金另赠额度；覆盖六个在线充值渠道、兑换码与管理员加额；订单 ExpectedQuota 冻结本金加赠合计、返利基数为本金；小时统计、配置、决策记录与一次性迁移放在扩展文件；调用计价与上游一致。",
       "authority": "SYNC_LEDGER.md#充值加赠接点",
+      "kind": "approved_contract"
+    },
+    "backup-payment-links": {
+      "basis": "钱包备用支付：原生 TopUpLink 之外由管理员维护最多 10 个名称加 http(s) 链接，保存时校验；/api/user/topup/info 返回合并列表，支付合规未确认时为空；逻辑在扩展文件。",
+      "authority": "SYNC_LEDGER.md#备用支付接点",
       "kind": "approved_contract"
     }
   },

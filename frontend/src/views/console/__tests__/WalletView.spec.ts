@@ -9,7 +9,6 @@ import {
   vi,
 } from 'vitest'
 import { api } from '@/api/console'
-import { getUsageSummary } from '@/api/dashboard'
 import {
   nativeTopUpDetail,
   nativeGmpayEvidence,
@@ -22,22 +21,11 @@ import { configureQuotaDisplay, formatQuota } from '@/utils/format'
 const state = vi.hoisted(() => ({
   route: { query: {} as Record<string, string> },
   auth: { user: { id: 7, quota: 500000 as number | null }, fetchSelf: vi.fn() },
-  app: { status: { log_max_range_days: 365 } },
 }))
 vi.mock('vue-router', () => ({ useRoute: () => state.route }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => state.auth }))
-vi.mock('@/stores/app', () => ({ useAppStore: () => state.app }))
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
-}))
-vi.mock('@/api/dashboard', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/api/dashboard')>()),
-  getUsageSummary: vi.fn(async () => ({
-    kpi: { totalQuota: '0', totalRequests: 0 },
-    flow: [],
-    comparison: { quotaDelta: null, requestsDelta: null },
-    meta: { available: true },
-  })),
 }))
 beforeAll(async () => {
   await loadMessageDomain('console')
@@ -49,7 +37,6 @@ beforeEach(() => {
   state.auth.user.id = 7
   state.auth.user.quota = 500000
   state.auth.fetchSelf.mockResolvedValue(undefined)
-  state.app.status.log_max_range_days = 365
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -62,11 +49,9 @@ async function render() {
       plugins: [i18n],
       stubs: {
         PageHero: { template: '<div><slot name="actions" /></div>' },
-        StatTileGrid: true,
         TopupPanel: true,
         RedeemPanel: true,
         TopupRecords: true,
-        FlowChart: true,
       },
     },
   })
@@ -131,25 +116,6 @@ describe('wallet payment return', () => {
 describe('wallet balance header', () => {
   const headerText = (wrapper: Awaited<ReturnType<typeof render>>) =>
     wrapper.get('p.font-mono').text().replace(/\s+/g, '')
-  it.each(['disabled', 'failed'])(
-    'keeps the account balance when statistics are %s',
-    async (state) => {
-      const get = vi.mocked(getUsageSummary)
-      if (state === 'failed')
-        get.mockRejectedValueOnce(new Error('Unavailable'))
-      else get.mockResolvedValueOnce({ meta: { available: false } } as never)
-      const wrapper = await render()
-      expect(headerText(wrapper)).toBe(formatQuota(500000))
-      expect(
-        wrapper.findComponent({ name: 'TopupPanel' }).props('balanceQuota')
-      ).toBe('500000')
-      expect(wrapper.findComponent({ name: 'FlowChart' }).exists()).toBe(false)
-      expect(
-        wrapper.findComponent({ name: 'StatTileGrid' }).props('tiles')
-      ).toEqual([])
-      wrapper.unmount()
-    }
-  )
   it('distinguishes unknown balance from a true zero', async () => {
     state.auth.user.quota = null
     const unknown = await render()
@@ -178,69 +144,23 @@ describe('wallet balance header', () => {
     wrapper.unmount()
   })
 })
-describe('wallet month statistics', () => {
-  afterEach(() => vi.useRealTimers())
-  const tiles = (wrapper: Awaited<ReturnType<typeof render>>) =>
-    wrapper.findComponent({ name: 'StatTileGrid' }).props('tiles') as {
-      value: string
-      sub: string
-    }[]
-  it('asks for the month to date without a comparison', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date(2026, 9, 31, 12))
-    const wrapper = await render()
-    expect(getUsageSummary).toHaveBeenCalledWith(
-      { range: 'custom', start: '2026-10-01', end: '2026-10-31' },
-      false,
-      expect.any(AbortSignal)
-    )
-    expect(getUsageSummary).toHaveBeenCalledWith(
-      { range: 'today' },
-      false,
-      expect.any(AbortSignal)
-    )
-    wrapper.unmount()
-  })
-  it('marks month figures out of range when the month exceeds the log limit', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date(2026, 9, 31, 12))
-    state.app.status.log_max_range_days = 30
-    const wrapper = await render()
-    expect(getUsageSummary).toHaveBeenCalledOnce()
-    expect(getUsageSummary).toHaveBeenCalledWith(
-      { range: 'today' },
-      false,
-      expect.any(AbortSignal)
-    )
-    const [month, average, today, requests] = tiles(wrapper)
-    for (const tile of [month!, average!, requests!]) {
-      expect(tile).toMatchObject({
-        value: '—',
-        sub: 'This month exceeds the log query limit',
-      })
-    }
-    expect(today!.value).not.toBe('—')
-    wrapper.unmount()
-  })
-})
-
 describe('wallet payment capabilities layout', () => {
-  it('keeps one column while capabilities load or fail, then reveals only enabled redemption', async () => {
+  it('places redemption between top-up and records only once the server enables it', async () => {
     const wrapper = await render()
     const panel = wrapper.findComponent({ name: 'TopupPanel' })
-    const region = () => panel.element.parentElement!
-    expect(region().getAttribute('aria-busy')).toBe('true')
-    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
-      false
-    )
+    const order = () =>
+      Array.from((panel.element as Element).parentElement!.children).map(
+        (element) => element.tagName.toLowerCase()
+      )
     expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(false)
 
+    panel.vm.$emit('capabilities', {
+      ...nativeTopupInfo,
+      enable_redemption: true,
+    })
     panel.vm.$emit('capabilities-state', 'failed')
     await flushPromises()
-    expect(region().getAttribute('aria-busy')).toBe('false')
-    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
-      false
-    )
+    expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(false)
 
     panel.vm.$emit('capabilities', {
       ...nativeTopupInfo,
@@ -248,9 +168,6 @@ describe('wallet payment capabilities layout', () => {
     })
     panel.vm.$emit('capabilities-state', 'ready')
     await flushPromises()
-    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
-      false
-    )
     expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(false)
 
     panel.vm.$emit('capabilities', {
@@ -258,10 +175,11 @@ describe('wallet payment capabilities layout', () => {
       enable_redemption: true,
     })
     await flushPromises()
-    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
-      true
-    )
-    expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(true)
+    expect(order()).toEqual([
+      'topup-panel-stub',
+      'redeem-panel-stub',
+      'topup-records-stub',
+    ])
     wrapper.unmount()
   })
 })

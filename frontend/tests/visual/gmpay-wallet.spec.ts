@@ -109,6 +109,7 @@ for (const [theme, mobile] of [
             waffo_pay_methods: null,
             creem_products: '[]',
             topup_link: '',
+            backup_payment_links: [],
           },
         },
       })
@@ -184,22 +185,20 @@ for (const [theme, mobile] of [
       name: '前往收银台支付',
       exact: true,
     })
-    await expect(page.getByText('实际支付 CNY', { exact: true })).toBeVisible()
+    // An unselected preset also reads its bonus rate, so match the amount only.
+    const tenDollarPreset = page.getByRole('button', { name: /^\$10(?!\d)/ })
+    await expect(page.getByText('实际支付', { exact: true })).toBeVisible()
     await expect(submit).toBeEnabled()
-    await expect(
-      page.getByRole('button', { name: '$10', exact: true })
-    ).toBeVisible()
+    await expect(tenDollarPreset).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Alipay', exact: true })
     ).toHaveCount(0)
     epayEnabled = true
     await page.reload()
     await page.getByRole('button', { name: 'Alipay', exact: true }).click()
-    await expect(
-      page.getByRole('button', { name: '$10', exact: true })
-    ).toHaveCount(0)
+    await expect(tenDollarPreset).toHaveCount(0)
     await page.getByRole('button', { name: 'USDT · Tron', exact: true }).click()
-    await page.getByRole('button', { name: '$10', exact: true }).click()
+    await tenDollarPreset.click()
     await expect(submit).toBeEnabled()
     await submit.focus()
     await expect(submit).toBeFocused()
@@ -224,9 +223,7 @@ for (const [theme, mobile] of [
     await expect(
       page.getByRole('button', { name: 'Alipay', exact: true })
     ).toBeDisabled()
-    await expect(
-      page.getByRole('button', { name: '$10', exact: true })
-    ).toBeDisabled()
+    await expect(tenDollarPreset).toBeDisabled()
     await expect(submit).toBeDisabled()
     expect(orderWrites).toBe(1)
     releaseOrder()

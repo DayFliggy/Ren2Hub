@@ -55,7 +55,7 @@
   "Waffo Pancake credentials are not configured": "Waffo Pancake 凭证未配置",
   "Waffo payment is not enabled": "Waffo 支付未启用",
   "gmpay order snapshot is missing": "GMPay 订单快照缺失，无法自动补单，请人工核对支付记录",
-  "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.": "支付、兑换码、订阅及邀请返利功能尚未启用，管理员需先确认合规条款。",
+  "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.": "支付、兑换码、订阅及股东计划尚未启用，管理员需先确认合规条款。",
   "Top-up order not found": "充值订单不存在",
   "Failed to read the payment order": "读取支付订单失败",
   "Redemption quota must be positive": "兑换额度必须大于 0",

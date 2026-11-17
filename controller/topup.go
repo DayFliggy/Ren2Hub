@@ -133,6 +133,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"topup_link":              common.TopUpLink,
+		"backup_payment_links":    operation_setting.WalletBackupPaymentLinks(complianceConfirmed, common.TopUpLink),
 	}
 	common.ApiSuccess(c, data)
 }

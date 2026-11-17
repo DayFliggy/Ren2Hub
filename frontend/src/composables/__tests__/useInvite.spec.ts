@@ -212,7 +212,7 @@ describe('invite sharing follows the native registration switches', () => {
       name: 'program paused',
       data: { ...info, policy: { enabled: false, freeze_hours: 0 } },
       notice:
-        'The referral program is paused, so new users cannot register with an invite right now.',
+        'The shareholder program is paused, so new users cannot register with an invite right now.',
     },
     {
       name: 'code disabled',

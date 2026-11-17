@@ -119,7 +119,7 @@ useEChart(
       {{ t('invite.people', { count: totalNew }) }}
     </p>
     <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-      {{ t('invite.chartSubtitle') }}
+      {{ t('invite.chartSubtitle', { count: series.length }) }}
     </p>
     <div
       ref="el"

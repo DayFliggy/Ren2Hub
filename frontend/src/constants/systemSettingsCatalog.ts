@@ -366,7 +366,13 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             ),
             descriptionKey: fieldKey('preConsumeMultiplierHint'),
           },
-          url('TopUpLink', 'topUpLink'),
+          url('TopUpLink', 'topUpLink', 'topUpLinkHint'),
+          json(
+            'backup_payment_setting.links',
+            'backupPaymentLinks',
+            '[]',
+            'backupPaymentLinksHint'
+          ),
           number('USDExchangeRate', 'usdExchangeRate', 1),
           toggle('DisplayInCurrencyEnabled', 'displayInCurrency', true),
           toggle('DisplayTokenStatEnabled', 'displayTokenStat'),

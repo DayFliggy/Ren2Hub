@@ -37,7 +37,8 @@ describe('TopupRecords', () => {
       { signal: expect.any(AbortSignal) }
     )
     expect(wrapper.text()).toContain('Pending')
-    expect(wrapper.text()).toContain('Not credited')
+    // The status already says the order is unpaid; no second "not credited".
+    expect(wrapper.text()).not.toContain('Not credited')
     expect(wrapper.text()).not.toContain('Check payment result')
     expect(post).not.toHaveBeenCalled()
 

@@ -9,9 +9,6 @@ import { formatQuota } from '@/utils/format'
 
 const props = defineProps<{
   transferable: string
-  frozen: string
-  rewardTotal: string
-  invited: number
   outstandingOffset?: string
   transferEnabled?: boolean
   readonly?: boolean
@@ -37,12 +34,8 @@ const canTransfer = computed(
 </script>
 
 <template>
-  <ConsoleCard :title="t('invite.rewardBalanceTitle')">
-    <p class="text-xs leading-relaxed text-[var(--text-tertiary)]">
-      {{ t('invite.rewardBalanceSubtitle', { count: invited }) }}
-    </p>
-
-    <p class="display-number mt-4 text-3xl text-[var(--accent-text)]">
+  <ConsoleCard :title="t('invite.rewardBalanceTitle')" stretch>
+    <p class="display-number text-3xl text-[var(--accent-text)]">
       {{ formatQuota(transferable) }}
     </p>
 
@@ -53,14 +46,6 @@ const canTransfer = computed(
         </dt>
         <dd class="font-medium text-[var(--text-primary)]">
           {{ formatQuota(currentBalance) }}
-        </dd>
-      </div>
-      <div class="flex items-center justify-between">
-        <dt class="text-[var(--text-tertiary)]">
-          {{ t('invite.frozenReward') }}
-        </dt>
-        <dd class="font-medium text-[var(--text-primary)]">
-          {{ formatQuota(frozen) }}
         </dd>
       </div>
       <div
@@ -92,29 +77,22 @@ const canTransfer = computed(
       {{ t('invite.outstandingOffsetHint') }}
     </p>
 
-    <ConsoleButton
-      class="mt-5"
-      block
-      :variant="canTransfer ? 'primary' : 'secondary'"
-      :disabled="!canTransfer"
-      @click="emit('transfer')"
-    >
-      {{ t('invite.transfer') }}
-    </ConsoleButton>
-    <p
-      v-if="transferEnabled === false"
-      class="mt-2 text-xs text-[var(--text-tertiary)]"
-    >
-      {{ t('invite.skipReasons.compliance_unconfirmed') }}
-    </p>
-
-    <p
-      class="mt-4 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4 text-xs text-[var(--text-tertiary)]"
-    >
-      <span>{{ t('invite.rewardHistoryTotal') }}</span>
-      <span class="font-medium text-[var(--text-secondary)]">
-        {{ formatQuota(rewardTotal) }}
-      </span>
-    </p>
+    <!-- Beside the taller chart the action settles at the bottom of the card. -->
+    <div class="mt-auto pt-5">
+      <ConsoleButton
+        block
+        :variant="canTransfer ? 'primary' : 'secondary'"
+        :disabled="!canTransfer"
+        @click="emit('transfer')"
+      >
+        {{ t('invite.transfer') }}
+      </ConsoleButton>
+      <p
+        v-if="transferEnabled === false"
+        class="mt-2 text-xs text-[var(--text-tertiary)]"
+      >
+        {{ t('invite.skipReasons.compliance_unconfirmed') }}
+      </p>
+    </div>
   </ConsoleCard>
 </template>

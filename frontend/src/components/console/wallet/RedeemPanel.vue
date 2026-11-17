@@ -46,7 +46,7 @@ async function redeem(): Promise<void> {
             quota: formatQuota(redeemed.quota),
             bonus: formatQuota(redeemed.bonus_quota),
           })
-        : `${t('wallet.redeemNow')}: ${formatQuota(redeemed.quota)}`
+        : t('wallet.redeemed', { quota: formatQuota(redeemed.quota) })
     )
     code.value = ''
     emit('done')
@@ -75,11 +75,14 @@ onBeforeUnmount(() => {
 
 <template>
   <ConsoleCard>
-    <div class="flex items-center justify-between gap-2">
-      <h3 class="text-sm font-semibold text-[var(--text-primary)]">
-        {{ t('wallet.redeemTitle') }}
-      </h3>
-      <div>
+    <form
+      class="flex flex-col gap-4 md:flex-row md:items-center"
+      @submit.prevent="redeem"
+    >
+      <div class="flex shrink-0 items-center gap-2">
+        <h2 class="text-sm font-semibold text-[var(--text-primary)]">
+          {{ t('wallet.redeemTitle') }}
+        </h2>
         <span
           class="rounded-md px-2 py-0.5 text-xs font-medium"
           style="background: var(--accent-soft); color: var(--accent-text)"
@@ -87,23 +90,22 @@ onBeforeUnmount(() => {
           {{ t('wallet.redeemLimitOnce') }}
         </span>
       </div>
-    </div>
-
-    <div class="mt-5 sibling-space-y-3">
       <TextInput
         id="redeem-input"
         v-model="code"
+        class="min-w-0 md:flex-1"
+        :aria-label="t('wallet.redeemTitle')"
         :placeholder="t('wallet.redeemPlaceholder')"
       />
       <ConsoleButton
-        block
+        type="submit"
+        class="w-full md:w-auto md:shrink-0"
         variant="secondary"
         :loading="submittingRedeem"
         :disabled="!code.trim()"
-        @click="redeem"
       >
         → {{ t('wallet.redeemNow') }}
       </ConsoleButton>
-    </div>
+    </form>
   </ConsoleCard>
 </template>
