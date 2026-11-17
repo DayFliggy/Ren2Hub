@@ -6,10 +6,12 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/router"
+	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -99,6 +101,31 @@ func TestProductionEmbeddedModelPagesAndFiles(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		require.Contains(t, response.Header.Get("Content-Type"), "image/svg+xml")
 		require.Equal(t, want, body)
+	})
+
+	t.Run("build files are sent from their embedded brotli siblings", func(t *testing.T) {
+		siblings, err := fs.Glob(frontendBuildFS, "frontend/embed-dist/assets/*.js.br")
+		require.NoError(t, err)
+		require.NotEmpty(t, siblings, "prepare-frontend-embed writes .br siblings")
+		precompressed, err := frontendBuildFS.ReadFile(siblings[0])
+		require.NoError(t, err)
+		original := strings.TrimSuffix(siblings[0], ".br")
+		want, err := frontendBuildFS.ReadFile(original)
+		require.NoError(t, err)
+		request, err := http.NewRequest(http.MethodGet, server.URL+strings.TrimPrefix(original, "frontend/embed-dist"), nil)
+		require.NoError(t, err)
+		request.Header.Set("Accept-Encoding", "br")
+		response, err := client.Do(request)
+		require.NoError(t, err)
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		require.Equal(t, "br", response.Header.Get("Content-Encoding"))
+		require.Equal(t, precompressed, body)
+		decoded, err := io.ReadAll(brotli.NewReader(bytes.NewReader(body)))
+		require.NoError(t, err)
+		require.Equal(t, want, decoded)
 	})
 
 	for _, path := range []string{"/api/models", "/v1/models"} {

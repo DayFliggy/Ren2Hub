@@ -104,6 +104,8 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 		} else if scope, adminRoute := adminScopes[key]; adminRoute {
 			assert.Equal(t, "scope", rule.Kind(), key)
 			assert.Equal(t, scope, rule.Scope(), key)
+		} else if key == "GET /api/pricing/count" {
+			assert.Equal(t, "any", rule.Kind(), "same rule as GET /api/pricing")
 		} else {
 			assert.Equal(t, "session", rule.Kind())
 		}

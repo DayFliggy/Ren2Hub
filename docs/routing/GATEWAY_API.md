@@ -23,6 +23,7 @@
 | `POST /api/channel/priority/reorder` | NewAPI 版本校验、预览及事务更新；revision 冲突、移动无效或越界时返回 HTTP 200 加 `success:false` |
 | `GET /api/channel/labs` | 全平台厂商分类聚合；分类不控制选路 |
 | `GET /api/home/metrics` | 消费日志请求计数及 24 个明确时间区间，共享短缓存 |
+| `GET /api/pricing/count` | `{models}` 为原生 `/api/pricing` 列出的模型数，供游客首页显示；门控与 `/api/pricing` 相同（`HeaderNavModuleAuth("pricing")`），PAT 规则同为不限 scope |
 | `GET /api/data/self/summary` | 本人区间、对比、模型/Token 分布；计数、token、额度和缓存读写来自 `quota_data`，`hourly` 是按小时升序、不缺小时的序列 |
 | `GET /api/performance/routing` | Root 读取当前用户/渠道占用与近期真实尝试观察 |
 | `GET /api/performance/quality?hours=24` | Root，PAT scope `ops:read`；全站跨模型按小时汇总 `perf_metrics`，`hours` 取 1–720 |

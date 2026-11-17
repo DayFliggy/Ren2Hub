@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 351,
+    "extension": 357,
     "removed": 45
   },
   "files": [
@@ -1478,7 +1478,7 @@
       "path": "controller/home_metrics.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "93e0645a6f9fc64c418a58f3b34a8b19799eee328348d235cbdff3d9afa7eefd",
+      "local_sha256": "cef75a587a806222355f9755490db6eace06e9299b1026a2e3eadd4027b76209",
       "reasons": [
         "catalog-stats"
       ],
@@ -3437,7 +3437,7 @@
       "path": "main_web_assets_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "18ca3a5b40bdd3c63babb6fbcffa9ceb4f00e1aa5c02dd9ad0a67d78b7ca3c90"
+      "local_sha256": "23f381645c02df135b3814ce13f2b358076c9a4af35141e44a890757528bcd27"
     },
     {
       "path": "middleware/access_token_aff_transfer_test.go",
@@ -3455,7 +3455,7 @@
       "path": "middleware/access_token_extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8c39d0c1f0b23fe5843d23301e9c44cdc4b76751d91090b42514e6d74830da76",
+      "local_sha256": "d17e95a4f19b4075d079872878a25cc429b6c55be2208a2add6c90975de6cca8",
       "reasons": [
         "ticket",
         "token-routing"
@@ -3671,6 +3671,26 @@
       "status": "upstream_equal",
       "upstream_sha256": "10bd5d82fcd8c1359eda6c418ef3f5aebd4b31e806c2c4b51c6957c22600d23e",
       "local_sha256": "10bd5d82fcd8c1359eda6c418ef3f5aebd4b31e806c2c4b51c6957c22600d23e"
+    },
+    {
+      "path": "middleware/frontend_static_brotli.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f7cf5120e8e793bf0937c35bdaaeb8d9a931f0de766e7285b5565464d9fa1ea4",
+      "reasons": [
+        "vue-frontend"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "Vue 构建文件的 brotli 扩展，接点见 SYNC_LEDGER.md#现行本地差异；原生 ServeFrontendFiles 不改",
+        "method": "本轮实现逐文件审查"
+      }
+    },
+    {
+      "path": "middleware/frontend_static_brotli_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "89f1b4d5c10725b9af6e0dfbbf50fab096e34a6c66bbac1556086303e1cacfc7"
     },
     {
       "path": "middleware/frontend_static_test.go",
@@ -10792,7 +10812,7 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6f218e3749d37028c06ff70c48331632bdfc4cb820dd72e6870d7081c76f9ad7",
+      "local_sha256": "99d0e54db5fd92fc12676ecb3d0638f5f7e66e3e0a902c5210f9acf2b74f9477",
       "reasons": [
         "ticket",
         "token-routing"
@@ -10811,7 +10831,21 @@
       "path": "router/extensions_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7aa4093ad8752b6742e4697705e6e4c9a5a9b985c3f3caa556f293df27edb366"
+      "local_sha256": "a9b65f6cb1b293f5f4564558cbc2726d24874efb93d7f5abaf89f6b1ec57cec1"
+    },
+    {
+      "path": "router/frontend/embed-dist/brotli-probe.js",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e0f603bb3c3e5c5c1c40747652e80e2f024f3798c803ba45ed80785f6659fb16",
+      "test_fixture_for": "router/web_brotli_test.go"
+    },
+    {
+      "path": "router/frontend/embed-dist/brotli-probe.js.br",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "79e93c4ddacbd4d56eb4da34f10fd84d4b23a030d3b6bfad860d9d069d56c86c",
+      "test_fixture_for": "router/web_brotli_test.go"
     },
     {
       "path": "router/frontend/embed-dist/probe.txt",
@@ -10879,6 +10913,12 @@
       "status": "adapted",
       "upstream_sha256": "6533fb2856125a3c2b4ec6cb705f26755c8d5be618bd255fc438f91e2dca3569",
       "local_sha256": "fbfaa397c207e4bb5f5ac7e51f95fbf40ccdde712a32103be0529906e1a7e122"
+    },
+    {
+      "path": "router/pricing_count_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "22520d36bbf3413adf928afbd6d3a0a1ec37e795ea45015568fbf8b992a56f0c"
     },
     {
       "path": "router/provider_plugin_gaps_test.go",
@@ -11015,20 +11055,26 @@
       "path": "router/web-router.go",
       "status": "adapted",
       "upstream_sha256": "7d6422d43387f9cf251699aab452076b3e979127430b6227b4e6f0f84d100416",
-      "local_sha256": "082f8c3c7975ec4a5882253c93763b6b0e16b1a2039620d609dc49669e5757a3",
+      "local_sha256": "67c6f2fde6cf14c6828fb1555dc66d5e4e6fda4cf5bc990f3ae39349359c9d66",
       "reasons": [
         "retired",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/web-router.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/web-router.go#1；ServeFrontendBrotliFiles 接点见 SYNC_LEDGER.md#现行本地差异",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "router/web-router.go#1"
         ]
       }
+    },
+    {
+      "path": "router/web_brotli_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4125ff7a6b5d745c4391e187073ef94c57e6ff2dd43b6646c1ea6592a83a0f0d"
     },
     {
       "path": "service/access_token_scope.go",

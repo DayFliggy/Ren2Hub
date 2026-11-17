@@ -1,6 +1,7 @@
-import { cp, readFile, rm, stat } from 'node:fs/promises'
-import { dirname, resolve, sep } from 'node:path'
+import { cp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { brotliCompressSync, constants } from 'node:zlib'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const source = resolve(projectRoot, 'frontend/dist')
@@ -43,4 +44,23 @@ for (const entry of Object.values(manifest)) {
 
 await rm(destination, { recursive: true, force: true })
 await cp(source, destination, { recursive: true })
-console.log('Vue production assets prepared for Go embed')
+
+// middleware.ServeFrontendBrotliFiles sends <file>.br to clients that accept
+// br, so text files are compressed once here instead of in the server.
+const brotliExtensions = new Set(['.js', '.mjs', '.css', '.svg', '.json', '.webmanifest', '.txt'])
+let brotliFiles = 0
+for (const entry of await readdir(destination, { recursive: true, withFileTypes: true })) {
+  if (!entry.isFile() || !brotliExtensions.has(extname(entry.name))) continue
+  const file = resolve(entry.parentPath, entry.name)
+  const raw = await readFile(file)
+  const compressed = brotliCompressSync(raw, {
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: 11,
+      [constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+    },
+  })
+  if (compressed.length >= raw.length) continue
+  await writeFile(`${file}.br`, compressed)
+  brotliFiles++
+}
+console.log(`Vue production assets prepared for Go embed (${brotliFiles} brotli files)`)

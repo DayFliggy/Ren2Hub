@@ -48,7 +48,7 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 
 构建顺序为 `frontend/dist` → `scripts/prepare-frontend-embed.mjs` → `frontend/embed-dist` → Go 二进制。`main.go` 使用 `//go:embed all:frontend/embed-dist`，确保下划线开头的 Vite chunk 也被嵌入。
 
-`prepare-frontend-embed.mjs` 校验完整 manifest 依赖和文件，`TestProductionEmbeddedAssetGraph` 检查最终 Go 嵌入资源，Docker 冷构建执行该测试。只检查 index 或入口 JS 的 HTTP 200 不足以验证页面可用；还需检查懒加载模块、字体和页面交互。初次导航不显示全屏加载提示，初始化检查完成后显示页面；导航失败会显示错误和重试入口。
+`prepare-frontend-embed.mjs` 校验完整 manifest 依赖和文件，并给 js、css、svg 等文本文件写入更小的 `<文件>.br`（brotli 质量 11），客户端接受 `br` 时 Go 直接发送它，不在运行时压缩；`TestProductionEmbeddedAssetGraph` 检查最终 Go 嵌入资源，Docker 冷构建执行该测试。只检查 index 或入口 JS 的 HTTP 200 不足以验证页面可用；还需检查懒加载模块、字体和页面交互。初次导航不显示全屏加载提示，初始化检查完成后显示页面；导航失败会显示错误和重试入口。
 
 浏览器验收使用[本地统一方案](../docs/testing/LOCAL_TESTING.md)，每轮创建真实后端和独立空库，禁止复用已有服务。
 

@@ -18,7 +18,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 上游 `payment_setting.amount_discount`。
 - 上游 #8247：本地已在 `InsertWithTx` 的同一事务里写入 OAuth 邀请人。
 
-来源清单 `CORE_SOURCE_DELTA.json` 按文件登记状态、哈希、合同理由和审查依据，现为 881 `upstream_equal`、281 `adapted`、351 `extension`、45 `removed`。改动核心目录后用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 对象的只读 NewAPI 检出>` 重算；`--check-local` 只核对本地哈希，不需要上游检出。
+来源清单 `CORE_SOURCE_DELTA.json` 按文件登记状态、哈希、合同理由和审查依据，现为 881 `upstream_equal`、281 `adapted`、357 `extension`、45 `removed`。改动核心目录后用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 对象的只读 NewAPI 检出>` 重算；`--check-local` 只核对本地哈希，不需要上游检出。
 
 ## 现行本地差异
 
@@ -41,6 +41,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 上游 `ada15c050`（保留人工禁用）的守卫在扩展文件 `model/channel_status.go`。
 - 带 `no-builtin-prices` 理由的文件（如 `setting/ratio_setting/model_ratio.go`、`relay/helper/price.go`、`service/text_quota.go`）逐提交手工合并：丢弃模型默认价格和内置表达式的增删，只吸收计费维度和计算逻辑。`setting/operation_setting/tools.go` 与上游一致，照常吸收。
 - 退役前缀在 `router/web-router.go` 的 `retiredAPIPrefixes`，上游在这些前缀下新增路由时不注册。
+- `router/web-router.go` 在原生 `ServeFrontendFiles` 之前挂 `ServeFrontendBrotliFiles`（扩展文件 `middleware/frontend_static_brotli.go`）：`scripts/prepare-frontend-embed.mjs` 构建时给 js、mjs、css、svg、json、webmanifest、txt 写入更小的 `<文件>.br`（质量 11）并一同嵌入；请求接受 `br`（合法 q 值大于 0）且该文件存在时由 `http.ServeContent` 原样发送，条件请求、HEAD 和 Range 按该文件应答，服务端不压缩，其余请求照原生走 gzip 或原文件。上游改 `ServeFrontendFiles` 的路径判断、响应头或缓存时对照这里。
 
 ### 充值加赠接点
 

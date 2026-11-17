@@ -10,7 +10,9 @@ import sys
 
 # 本轮已审计的 NewAPI 核心版本；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
 UPSTREAM_SHA = 'b388140acfd80369ec6243b16869daff1b4051f4'
-TEST_ASSETS = {'router/frontend/embed-dist/probe.txt': 'router/native_restored_web_test.go'}
+TEST_ASSETS = {'router/frontend/embed-dist/probe.txt': 'router/native_restored_web_test.go',
+               'router/frontend/embed-dist/brotli-probe.js': 'router/web_brotli_test.go',
+               'router/frontend/embed-dist/brotli-probe.js.br': 'router/web_brotli_test.go'}
 
 
 def git(*args, repository=None):
