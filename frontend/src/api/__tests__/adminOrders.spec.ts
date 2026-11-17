@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { api } from '../client'
 import {
   parseTopUp,
   parseTopUpDetail,
   parseTopUpRanking,
   parseTopUpStatistics,
+  reverseTopUpAffiliateReward,
 } from '../adminOrders'
 import { nativeTopUp, nativeGmpayEvidence } from './topupFixtures'
 
@@ -71,6 +73,30 @@ describe('native order contracts', () => {
         'GPother'
       )
     ).toThrow()
+  })
+  it('reads the referral reward only where the administrator detail sends one', () => {
+    const base = { ...nativeTopUp, user_deleted: false }
+    // The owner's own detail has no field; an order without a reward has null.
+    expect(parseTopUpDetail(base, 'GPtest').affiliate).toBeNull()
+    expect(
+      parseTopUpDetail({ ...base, affiliate: null }, 'GPtest').affiliate
+    ).toBeNull()
+    expect(
+      parseTopUpDetail(
+        {
+          ...base,
+          affiliate: { inviter_id: 12, reward_quota: 200000, reversed: false },
+        },
+        'GPtest'
+      ).affiliate
+    ).toEqual({ inviter_id: 12, reward_quota: '200000', reversed: false })
+    for (const affiliate of [
+      { inviter_id: 0, reward_quota: 200000, reversed: false },
+      { inviter_id: 12, reward_quota: 0, reversed: false },
+      { inviter_id: 12, reward_quota: 200000 },
+      'paid',
+    ])
+      expect(() => parseTopUpDetail({ ...base, affiliate }, 'GPtest')).toThrow()
   })
   it('keeps the order of a hard-deleted owner and requires the deleted flag', () => {
     // model.GetTopUpDetail keeps user_id and leaves the names empty.
@@ -171,5 +197,35 @@ describe('native order contracts', () => {
         ],
       })
     ).toThrow()
+  })
+})
+
+describe('referral reward reversal', () => {
+  afterEach(() => vi.restoreAllMocks())
+  it('posts the order number and reads how the reward was taken back', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce({
+        record: { id: 9, kind: 'reversal' },
+        replayed: false,
+        reversed_quota: 200000,
+        revoked_quota: 150000,
+        debt_added_quota: 50000,
+      })
+      .mockResolvedValueOnce({ replayed: true, reversed_quota: 200000 })
+    expect(await reverseTopUpAffiliateReward('GPtest')).toEqual({
+      replayed: false,
+      reversed_quota: '200000',
+      revoked_quota: '150000',
+      debt_added_quota: '50000',
+    })
+    expect(post).toHaveBeenCalledWith(
+      '/api/user/topup/admin/affiliate-reversal',
+      { trade_no: 'GPtest' }
+    )
+    // A success must say where the reward went.
+    await expect(reverseTopUpAffiliateReward('GPtest')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
   })
 })

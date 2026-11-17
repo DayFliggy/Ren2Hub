@@ -57,10 +57,12 @@ func GetTopUpDetail(c *gin.Context) {
 }
 
 // adminTopUpDetail adds the frozen bonus decision, which may carry shadow
-// rates and reasons, so it is never part of the owner's detail.
+// rates and reasons, and the referral reward the order paid; neither is part
+// of the owner's detail.
 type adminTopUpDetail struct {
 	*model.TopUpDetail
-	Bonus *model.TopUpBonusDecisionRecord `json:"bonus"`
+	Bonus     *model.TopUpBonusDecisionRecord `json:"bonus"`
+	Affiliate *model.TopUpAffiliateReward     `json:"affiliate"`
 }
 
 func GetAdminTopUpDetail(c *gin.Context) {
@@ -74,7 +76,12 @@ func GetAdminTopUpDetail(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, adminTopUpDetail{TopUpDetail: result, Bonus: bonus})
+	affiliate, err := model.GetTopUpAffiliateReward(result.Id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, adminTopUpDetail{TopUpDetail: result, Bonus: bonus, Affiliate: affiliate})
 }
 func GetTopUpStatistics(c *gin.Context) {
 	filter, err := topUpRequestFilter(c, 0)

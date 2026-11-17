@@ -84,12 +84,14 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 		})
 	}
 	adminScopes := map[string]string{
-		"GET /api/admin/affiliate/records":           "user:read",
-		"GET /api/admin/affiliate/users/:id":         "user:read",
-		"PUT /api/admin/affiliate/users/:id":         "user:write",
-		"GET /api/user/topup/stats":                  "billing:read",
-		"GET /api/user/topup/ranking":                "billing:read",
-		"GET /api/user/topup/admin/detail/:trade_no": "billing:read",
+		"GET /api/admin/affiliate/records":              "user:read",
+		"GET /api/admin/affiliate/users/:id":            "user:read",
+		"PUT /api/admin/affiliate/users/:id":            "user:write",
+		"POST /api/admin/affiliate/users/:id/deduct":    "user:write",
+		"GET /api/user/topup/stats":                     "billing:read",
+		"GET /api/user/topup/ranking":                   "billing:read",
+		"GET /api/user/topup/admin/detail/:trade_no":    "billing:read",
+		"POST /api/user/topup/admin/affiliate-reversal": "billing:write",
 	}
 	for _, route := range engine.Routes() {
 		if strings.HasSuffix(route.Path, "/notify") {

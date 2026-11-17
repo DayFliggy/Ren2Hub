@@ -46,9 +46,19 @@ it('shows reversals as reductions and separates credited rewards from debt offse
       reward_quota: '0',
       skip_reason: 'compliance_unconfirmed',
     },
+    {
+      ...common,
+      id: 4,
+      invitee_id: 0,
+      kind: 'deduction',
+      source_type: 'admin_deduction',
+      reward_quota: '1500000',
+      credited_quota: '0',
+      debt_offset_quota: '0',
+    },
   ]
   const wrapper = mount(InviteRecordsCard, {
-    props: { records: rows, page: 1, total: 3, loading: false, error: '' },
+    props: { records: rows, page: 1, total: 4, loading: false, error: '' },
     global: { plugins: [i18n] },
   })
   expect(wrapper.get('[data-record-kind="reversal"]').text()).toContain(
@@ -67,6 +77,13 @@ it('shows reversals as reductions and separates credited rewards from debt offse
     'Applied to pending offset: $1.00'
   )
   expect(wrapper.text()).toContain('Payment compliance has not been confirmed')
+  const deduction = wrapper.get('[data-record-kind="deduction"]')
+  expect(deduction.text()).toContain('Deducted by administrator')
+  expect(deduction.text()).toContain('−$3.00')
+  // A deduction names no invitee and has no credited or revoked breakdown.
+  expect(deduction.text()).not.toContain('Invited user')
+  expect(deduction.text()).not.toContain('Credited')
+  expect(deduction.text()).not.toContain('Revoked')
   wrapper.unmount()
 })
 it('uses a compact empty state without an empty pagination area', () => {

@@ -43,6 +43,7 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	affiliateAdmin.GET("/records", controller.GetAffiliateRecords)
 	affiliateAdmin.GET("/users/:id", controller.GetAffiliateUserPolicy)
 	affiliateAdmin.PUT("/users/:id", controller.UpdateAffiliateUserPolicy)
+	affiliateAdmin.POST("/users/:id/deduct", controller.DeductAffiliateQuota)
 	systemStatus := api.Group("/user/system-status", middleware.UserAuth(), middleware.DisableCache())
 	handleSessionRoute(systemStatus, http.MethodGet, "", middleware.DashboardStatusRateLimit(), controller.GetDashboardSystemStatus)
 	orders := api.Group("/user/topup", middleware.UserAuth(), middleware.DisableCache())
@@ -50,6 +51,7 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	orders.GET("/stats", middleware.AdminAuth(), controller.GetTopUpStatistics)
 	orders.GET("/ranking", middleware.AdminAuth(), controller.GetTopUpRanking)
 	orders.GET("/admin/detail/:trade_no", middleware.AdminAuth(), controller.GetAdminTopUpDetail)
+	orders.POST("/admin/affiliate-reversal", middleware.AdminAuth(), controller.ReverseTopUpAffiliateReward)
 
 	pay := api.Group("/user/gmpay", middleware.UserAuth())
 	handleSessionRoute(pay, http.MethodPost, "/pay", middleware.CriticalRateLimit(), controller.GmpayPay)

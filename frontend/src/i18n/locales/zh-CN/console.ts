@@ -1799,6 +1799,16 @@ export default {
     summaryUnavailableHint: '当前服务暂未提供该项统计。',
     currency: '币种',
     title: '充值订单',
+    affiliate: {
+      title: '邀请返利',
+      reward: '邀请人 #{id} 获得 {amount}',
+      reversed: '已回收',
+      reverse: '回收返利',
+      hint: '订单被退款或被支付平台撤回后，可以回收这笔返利。',
+      confirm:
+        '回收后不能撤销。冻结中或还没转出的返利直接收回，已转入余额的部分记为待抵扣，从邀请人以后的返利里扣。受邀用户的额度不变，需要时请另行扣减。',
+      result: '收回未转出返利 {revoked}，新增待抵扣 {debt}',
+    },
     gmpay: {
       title: 'GMPay 订单证据',
       loading: '正在读取网关证据…',
@@ -2235,6 +2245,8 @@ export default {
       userInviterBonus: '发放邀请人奖励',
       affiliateCodeReset: '重置邀请码',
       affiliateUserUpdate: '调整用户邀请返利配置',
+      userAffiliateDeduct: '扣减用户 #{target_user_id} 的可用返利 {quota}',
+      topupAffiliateReverse: '回收订单 {trade_no} 的邀请返利',
       gatewayConfigUpdate: '更新网关全局配置',
       gatewayUserUpdate: '更新用户网关配置',
       optionUpdate: '更新系统配置 {key}',
@@ -2559,6 +2571,7 @@ export default {
       accrue: '返利入账',
       transfer: '转入账户余额',
       reversal: '返利冲销',
+      deduction: '管理员扣减',
     },
     recordInvitee: '受邀用户 #{id}',
     recordCredited: '实际入账：{amount}',

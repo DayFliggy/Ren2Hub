@@ -1872,6 +1872,17 @@ export default {
     summaryUnavailableHint: 'This statistic is currently unavailable.',
     currency: 'Currency',
     title: 'Top-up orders',
+    affiliate: {
+      title: 'Referral reward',
+      reward: 'Inviter #{id} received {amount}',
+      reversed: 'Reversed',
+      reverse: 'Reverse reward',
+      hint: 'After the order is refunded or charged back, this reward can be reversed.',
+      confirm:
+        "This cannot be undone. Reward that is still frozen or not yet transferred is taken back; the part already moved to the balance becomes a pending offset against the inviter's future rewards. The invited user's quota is unchanged; deduct it separately if needed.",
+      result:
+        'Revoked {revoked} from untransferred rewards; added {debt} to the pending offset',
+    },
     gmpay: {
       title: 'GMPay order evidence',
       loading: 'Loading gateway evidence…',
@@ -2313,6 +2324,9 @@ export default {
       userInviterBonus: 'Granted inviter bonus',
       affiliateCodeReset: 'Reset the affiliate code',
       affiliateUserUpdate: 'Updated user affiliate settings',
+      userAffiliateDeduct:
+        'Deducted {quota} available rebate from user #{target_user_id}',
+      topupAffiliateReverse: 'Reversed the referral reward of order {trade_no}',
       gatewayConfigUpdate: 'Updated gateway configuration',
       gatewayUserUpdate: 'Updated user gateway configuration',
       optionUpdate: 'Updated system setting {key}',
@@ -2665,6 +2679,7 @@ export default {
       accrue: 'Reward accrued',
       transfer: 'Transferred to balance',
       reversal: 'Reward reversal',
+      deduction: 'Deducted by administrator',
     },
     recordInvitee: 'Invited user #{id}',
     recordCredited: 'Credited: {amount}',

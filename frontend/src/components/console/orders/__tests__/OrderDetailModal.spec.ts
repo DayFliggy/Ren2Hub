@@ -287,3 +287,101 @@ describe('GMPay order details', () => {
     wrapper.unmount()
   })
 })
+
+describe('referral reward reversal', () => {
+  const paid = {
+    ...nativeTopUpDetail,
+    status: 'success',
+    credited_quota: 5000000,
+    complete_time: 2,
+  }
+  const reward = { inviter_id: 12, reward_quota: 1000000, reversed: false }
+  function section(wrapper: ReturnType<typeof render>) {
+    return wrapper.find('[data-order-affiliate]')
+  }
+  function reverseButton(wrapper: ReturnType<typeof render>) {
+    return wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Reverse reward')
+  }
+  // Both confirmation dialogs are in the stubbed tree; pick this one by name.
+  async function confirmReversal(wrapper: ReturnType<typeof render>) {
+    await wrapper
+      .get('[aria-label="Reverse reward"]')
+      .findAll('button')
+      .find((button) => button.text() === 'Confirm')!
+      .trigger('click')
+    await flushPromises()
+  }
+
+  it('shows the reward only for an order that paid one', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ ...paid, affiliate: null })
+    const wrapper = render()
+    await flushPromises()
+    expect(section(wrapper).exists()).toBe(false)
+    expect(reverseButton(wrapper)).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('reverses after confirmation and reports where the reward went', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ ...paid, affiliate: reward })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      record: {},
+      replayed: false,
+      reversed_quota: 1000000,
+      revoked_quota: 750000,
+      debt_added_quota: 250000,
+    })
+    const wrapper = render()
+    await flushPromises()
+    expect(section(wrapper).text()).toContain('Inviter #12 received $2.00')
+    await reverseButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(post).not.toHaveBeenCalled()
+    await confirmReversal(wrapper)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith(
+      '/api/user/topup/admin/affiliate-reversal',
+      { trade_no: 'GPtest' }
+    )
+    expect(reverseButton(wrapper)).toBeUndefined()
+    expect(section(wrapper).text()).toContain('Reversed')
+    expect(wrapper.get('[data-order-affiliate-result]').text()).toBe(
+      'Revoked $1.50 from untransferred rewards; added $0.50 to the pending offset'
+    )
+    wrapper.unmount()
+  })
+
+  it('keeps the action and shows the server message when the reversal fails', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ ...paid, affiliate: reward })
+    vi.spyOn(api, 'post').mockRejectedValue(new Error('permission denied'))
+    const wrapper = render()
+    await flushPromises()
+    await reverseButton(wrapper)!.trigger('click')
+    await confirmReversal(wrapper)
+    expect(wrapper.get('[role="alert"]').text()).toBe('permission denied')
+    expect(reverseButton(wrapper)).toBeDefined()
+    expect(wrapper.find('[data-order-affiliate-result]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('marks a reversed reward and hides the action from common users', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...paid,
+      affiliate: { ...reward, reversed: true },
+    })
+    const reversed = render()
+    await flushPromises()
+    expect(section(reversed).text()).toContain('Reversed')
+    expect(reverseButton(reversed)).toBeUndefined()
+    reversed.unmount()
+
+    signIn(1)
+    vi.spyOn(api, 'get').mockResolvedValue({ ...paid, affiliate: reward })
+    const common = render()
+    await flushPromises()
+    expect(section(common).exists()).toBe(true)
+    expect(reverseButton(common)).toBeUndefined()
+    common.unmount()
+  })
+})

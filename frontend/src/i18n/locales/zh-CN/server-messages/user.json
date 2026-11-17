@@ -120,6 +120,7 @@
   "invalid personal access token name, scopes or expiry": "个人访问令牌的名称、作用域或有效期无效",
   "invitation code is invalid or disabled": "邀请码无效或已停用",
   "no available referral quota": "没有可用的返利额度",
+  "this order has no referral reward to reverse": "该订单没有可回收的返利",
   "operation_id was already used for a different request": "该 operation_id 已用于另一笔不同的请求",
   "operation_id, expected_version and reason are required": "operation_id、expected_version 和 reason 为必填项",
   "personal access token is invalid": "个人访问令牌无效",

@@ -93,7 +93,8 @@ function parseAffiliateRecord(
   if (
     row.kind !== 'accrue' &&
     row.kind !== 'transfer' &&
-    row.kind !== 'reversal'
+    row.kind !== 'reversal' &&
+    row.kind !== 'deduction'
   )
     invalidResponse(endpoint)
   return {

@@ -2,7 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
-import { parseTopUpDetail } from '@/api/adminOrders'
+import {
+  parseTopUpDetail,
+  reverseTopUpAffiliateReward,
+  type TopUpAffiliateReversal,
+} from '@/api/adminOrders'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -47,12 +51,19 @@ const canComplete = computed(
     displayOrder.value?.status === 'pending' &&
     completedOrder.value !== displayOrder.value.order_no
 )
+const confirmReverse = ref(false),
+  reversing = ref(false),
+  reverseError = ref('')
+const reversal = ref<TopUpAffiliateReversal | null>(null)
 watch(
   () => props.order?.order_no,
   () => {
     confirmComplete.value = false
     completeError.value = ''
     completedOrder.value = ''
+    confirmReverse.value = false
+    reverseError.value = ''
+    reversal.value = null
   }
 )
 async function complete() {
@@ -78,6 +89,34 @@ async function complete() {
 }
 const detail = ref<ReturnType<typeof parseTopUpDetail> | null>(null)
 const evidence = computed(() => detail.value?.evidence ?? null)
+const affiliate = computed(() => detail.value?.affiliate ?? null)
+const canReverse = computed(
+  () => auth.isAdmin && affiliate.value !== null && !affiliate.value.reversed
+)
+async function reverseReward() {
+  if (!canReverse.value || reversing.value || !props.order) return
+  const tradeNo = props.order.order_no
+  reversing.value = true
+  reverseError.value = ''
+  try {
+    const result = await reverseTopUpAffiliateReward(tradeNo)
+    if (props.order?.order_no === tradeNo && detail.value?.affiliate) {
+      // The server confirmed the reversal; no second request is needed.
+      detail.value = {
+        ...detail.value,
+        affiliate: { ...detail.value.affiliate, reversed: true },
+      }
+      reversal.value = result
+      confirmReverse.value = false
+    }
+  } catch (error) {
+    if (props.order?.order_no === tradeNo)
+      reverseError.value =
+        error instanceof Error ? error.message : String(error)
+  } finally {
+    reversing.value = false
+  }
+}
 const displayOrder = computed(() =>
   props.order && detail.value
     ? { ...props.order, ...detail.value.state }
@@ -304,6 +343,58 @@ function paymentRailLabel(method: string): string {
     </dl>
 
     <section
+      v-if="affiliate"
+      class="mt-6 border-t border-[var(--border-subtle)] pt-5"
+      data-order-affiliate
+    >
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h4 class="text-sm font-semibold text-[var(--text-primary)]">
+            {{ t('orders.affiliate.title') }}
+          </h4>
+          <p class="mt-1 text-sm tabular-nums text-[var(--text-secondary)]">
+            {{
+              t('orders.affiliate.reward', {
+                id: affiliate.inviter_id,
+                amount: formatQuota(affiliate.reward_quota),
+              })
+            }}
+          </p>
+        </div>
+        <StatusChip v-if="affiliate.reversed" tone="neutral">
+          {{ t('orders.affiliate.reversed') }}
+        </StatusChip>
+        <ConsoleButton
+          v-else-if="canReverse"
+          variant="danger"
+          size="sm"
+          @click="confirmReverse = true"
+        >
+          {{ t('orders.affiliate.reverse') }}
+        </ConsoleButton>
+      </div>
+      <p
+        v-if="reversal"
+        role="status"
+        class="mt-2 text-xs tabular-nums text-[var(--text-secondary)]"
+        data-order-affiliate-result
+      >
+        {{
+          t('orders.affiliate.result', {
+            revoked: formatQuota(reversal.revoked_quota),
+            debt: formatQuota(reversal.debt_added_quota),
+          })
+        }}
+      </p>
+      <p
+        v-else-if="canReverse"
+        class="mt-2 text-xs text-[var(--text-tertiary)]"
+      >
+        {{ t('orders.affiliate.hint') }}
+      </p>
+    </section>
+
+    <section
       v-if="order?.method === 'gmpay'"
       class="mt-6 border-t border-[var(--border-subtle)] pt-5"
     >
@@ -393,6 +484,22 @@ function paymentRailLabel(method: string): string {
       class="mt-3 text-sm text-[var(--status-danger-text)]"
     >
       {{ completeError }}
+    </p>
+  </ConfirmDialog>
+  <ConfirmDialog
+    :open="confirmReverse"
+    :title="t('orders.affiliate.reverse')"
+    :message="t('orders.affiliate.confirm')"
+    :loading="reversing"
+    @confirm="reverseReward"
+    @cancel="confirmReverse = false"
+  >
+    <p
+      v-if="reverseError"
+      role="alert"
+      class="mt-3 text-sm text-[var(--status-danger-text)]"
+    >
+      {{ reverseError }}
     </p>
   </ConfirmDialog>
 </template>

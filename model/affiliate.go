@@ -520,17 +520,24 @@ func TransferAffiliateQuota(userID int, operationID string) (*AffiliateRecord, b
 	return &result, replay, err
 }
 
-func appendAffiliateTransferAllocationsTx(tx *gorm.DB, user *User, transferID int, operationID string, amount int) error {
+// affiliateTrackedAccrual is the available part of one thawed reversible
+// accrual that is still attributed to it.
+type affiliateTrackedAccrual struct {
+	record AffiliateRecord
+	amount int
+}
+
+// trackedAffiliateAvailableTx returns the available referral quota still
+// attributed to thawed reversible (administrator-addition) accruals, one entry
+// per accrual, and its total. The rest of user.AffQuota (top-up rewards and
+// legacy balances) is fungible and not attributed to any accrual.
+func trackedAffiliateAvailableTx(tx *gorm.DB, user *User) ([]affiliateTrackedAccrual, int, error) {
 	var accruals []AffiliateRecord
 	if err := lockForUpdate(tx).Where("user_id = ? AND kind = ? AND reversible = ?", user.Id, "accrue", true).Order("id ASC").Find(&accruals).Error; err != nil {
-		return err
+		return nil, 0, err
 	}
-	type allocation struct {
-		record AffiliateRecord
-		amount int
-	}
-	allocations := make([]allocation, 0, len(accruals))
-	trackedAvailable := 0
+	tracked := make([]affiliateTrackedAccrual, 0, len(accruals))
+	total := 0
 	for _, accrual := range accruals {
 		if accrual.FrozenUntil > 0 && accrual.ThawedAt == 0 {
 			continue
@@ -538,24 +545,32 @@ func appendAffiliateTransferAllocationsTx(tx *gorm.DB, user *User, transferID in
 		credited := creditedAffiliateQuota(accrual)
 		reversed, err := sumAffiliateRelatedQuota(tx, accrual.ID, "reversal", "credited_quota")
 		if err != nil {
-			return err
+			return nil, 0, err
 		}
 		transferred, err := sumAffiliateRelatedQuota(tx, accrual.ID, "transfer_allocation", "reward_quota")
 		if err != nil {
-			return err
+			return nil, 0, err
 		}
 		remaining := credited - reversed - transferred
 		if remaining < 0 {
-			return errors.New("affiliate accrual balance is inconsistent with ledger")
+			return nil, 0, errors.New("affiliate accrual balance is inconsistent with ledger")
 		}
 		if remaining == 0 {
 			continue
 		}
-		trackedAvailable += remaining
-		allocations = append(allocations, allocation{record: accrual, amount: remaining})
+		total += remaining
+		tracked = append(tracked, affiliateTrackedAccrual{record: accrual, amount: remaining})
 	}
-	if trackedAvailable > user.AffQuota {
-		return errors.New("affiliate available balance is below its ledger allocations")
+	if total > user.AffQuota {
+		return nil, 0, errors.New("affiliate available balance is below its ledger allocations")
+	}
+	return tracked, total, nil
+}
+
+func appendAffiliateTransferAllocationsTx(tx *gorm.DB, user *User, transferID int, operationID string, amount int) error {
+	allocations, trackedAvailable, err := trackedAffiliateAvailableTx(tx, user)
+	if err != nil {
+		return err
 	}
 	remainingTransfer := amount
 	// Legacy balances and non-admin/unattributed rewards are fungible. Consume

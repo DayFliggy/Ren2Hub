@@ -16,10 +16,63 @@ import {
   requiredString,
 } from './contracts'
 
+/** The referral reward one top-up paid to the payer's inviter. */
+export interface TopUpAffiliateReward {
+  inviter_id: number
+  reward_quota: string
+  reversed: boolean
+}
+
+export interface TopUpAffiliateReversal {
+  replayed: boolean
+  reversed_quota: string
+  revoked_quota: string
+  debt_added_quota: string
+}
+
+function parseTopUpAffiliateReward(
+  value: unknown,
+  endpoint: string
+): TopUpAffiliateReward | null {
+  // Only the administrator detail carries the field, and an order that paid
+  // no reward has null.
+  if (value === undefined || value === null) return null
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const inviter = requiredStrictInteger(value.inviter_id, endpoint)
+  const reward = requiredQuota(value.reward_quota, endpoint)
+  if (inviter < 1 || BigInt(reward) <= 0n) invalidResponse(endpoint)
+  return {
+    inviter_id: inviter,
+    reward_quota: reward,
+    reversed: requiredBoolean(value.reversed, endpoint),
+  }
+}
+
+/** Takes back the reward of one order; a repeat replays the first result. */
+export async function reverseTopUpAffiliateReward(
+  tradeNo: string
+): Promise<TopUpAffiliateReversal> {
+  const endpoint = '/api/user/topup/admin/affiliate-reversal'
+  const data = await api.post<unknown>(endpoint, { trade_no: tradeNo })
+  if (!isRecord(data)) invalidResponse(endpoint)
+  const amount = (key: string) => {
+    const parsed = requiredQuota(data[key], endpoint)
+    if (BigInt(parsed) < 0n) invalidResponse(endpoint)
+    return parsed
+  }
+  return {
+    replayed: requiredBoolean(data.replayed, endpoint),
+    reversed_quota: amount('reversed_quota'),
+    revoked_quota: amount('revoked_quota'),
+    debt_added_quota: amount('debt_added_quota'),
+  }
+}
+
 export function parseTopUpDetail(
   value: unknown,
   orderNo: string
 ): {
+  affiliate: TopUpAffiliateReward | null
   evidence: GmpayOrderEvidence | null
   state: AdminOrder
   userDeleted: boolean
@@ -33,6 +86,7 @@ export function parseTopUpDetail(
       ? parseGmpayOrderEvidence(projected, orderNo)
       : null
   return {
+    affiliate: parseTopUpAffiliateReward(value.affiliate, endpoint),
     evidence,
     state: native,
     // A deleted owner keeps the stored user_id; a hard delete also blanks the names.

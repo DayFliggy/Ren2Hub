@@ -204,7 +204,7 @@ func ListAffiliateRecords(userID int, kind string, page *common.PageInfo) ([]Aff
 		query = query.Where("user_id = ?", userID)
 	}
 	if kind != "" {
-		if kind != "accrue" && kind != "transfer" && kind != "reversal" {
+		if kind != "accrue" && kind != "transfer" && kind != "reversal" && kind != "deduction" {
 			return nil, 0, common.NewMessage("invalid referral record kind")
 		}
 		query = query.Where("kind = ?", kind)

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 376,
+    "extension": 384,
     "removed": 45
   },
   "files": [
@@ -866,7 +866,7 @@
       "path": "controller/affiliate.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "516bcb8f8657fd90c850e7bfb95605027c31460ac4cf6a532ab75d6a34d958f2",
+      "local_sha256": "884daa2a72900baf6249a3608f49471364bad99510eebf5b6585e3f44a39e156",
       "reasons": [
         "affiliate"
       ],
@@ -881,6 +881,12 @@
       }
     },
     {
+      "path": "controller/affiliate_deduction_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6f43765b155923086c608ee04555817a652ea06766ab79ba3a620763b1a3976e"
+    },
+    {
       "path": "controller/affiliate_quota_response_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -891,6 +897,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "03e55d249be222a2847e4944b70c3377525cb2ee5172f61d4b239806254802bd"
+    },
+    {
+      "path": "controller/affiliate_topup_reversal_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4d19e0d7717f3c23c818af0efd22489e3a466774f087885c221f9eba0a968273"
     },
     {
       "path": "controller/audit.go",
@@ -3001,7 +3013,7 @@
       "path": "controller/topup_query.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0b6bd458c888099d2e21fb0bbe46ee94d0c46b64c3992a7080d32d8a72c66706",
+      "local_sha256": "19eda34b1757e42042eec93977c49b6ea61067320ea91dc4df5964cf51255576",
       "reasons": [
         "affiliate",
         "gmpay",
@@ -3553,7 +3565,7 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "93645286579fe496b594c7b0e528f77dedc5bec4d1f2eaa18edae46cdcf8d6f0",
-      "local_sha256": "5c0c67697e85a60f719e5da729e11a3a4e9aca087ebe32aaa704cab739560dbc",
+      "local_sha256": "a4e690c0fbfe52df220189e379f7277bf6c41ae7784892d56922d536a2066ca0",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -4110,7 +4122,7 @@
       "path": "model/affiliate.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3545377ef1b23bbd45d1f842f192e59a84db2255ff714aee3e5b7495ae60a732",
+      "local_sha256": "8761d21ad88f1c26fd185d14bf9399f3017dad495cecccaa29731423b94a860a",
       "reasons": [
         "affiliate"
       ],
@@ -4123,6 +4135,32 @@
           "model/affiliate.go#1"
         ]
       }
+    },
+    {
+      "path": "model/affiliate_deduction.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "468ba3796555ab5f472666673b2f28a41c082495430654cdb131a3473d5fe5bc",
+      "reasons": [
+        "affiliate"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 用户决定：充值返利在拒付或退款后不自动回收，管理员手工扣减未归因的可用返利，见 docs/billing/API.md 的返利扣减；归因计算与划转共用 model/affiliate.go 的 trackedAffiliateAvailableTx",
+        "method": "本轮实现逐文件审查；计划 PLAN-F5 由主会话定稿"
+      }
+    },
+    {
+      "path": "model/affiliate_deduction_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fed49d3d24f9b7db21bee07994b00f78b5db36485f47fb8ad719b627c2c5a5e8"
+    },
+    {
+      "path": "model/affiliate_deduction_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8ca9a4ac831cf4f6866aadf838d643f9a2160ef33e154266826ca13ccdf96894"
     },
     {
       "path": "model/affiliate_deleted_inviter_databases_test.go",
@@ -4152,7 +4190,7 @@
       "path": "model/affiliate_query.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c60f0e6efec26a6b67522c81e4a49d00fb9f6eefab4504d185fc5f8bcf8e2f3e",
+      "local_sha256": "4d4abc80432b98a43dd08005a7a4882a933156e990e4f7d19801f74875374284",
       "reasons": [
         "affiliate"
       ],
@@ -4171,6 +4209,32 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "58c78ee19344871e7d46fda820fd683115cdaec4aab6b21fb5193b49d5b53723"
+    },
+    {
+      "path": "model/affiliate_topup_reversal.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8dc4d7b951115dfbc238ece528af910f4d616f28fe842dd5d6c07b350efd1353",
+      "reasons": [
+        "affiliate"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 用户决定：拒付按订单回收返利，管理员在订单详情执行，见 docs/billing/API.md 的回收返利；记账口径与 model/affiliate.go 的 reverseAdminAffiliateRewardsTx 一致",
+        "method": "本轮实现逐文件审查；计划 PLAN-F5B 由主会话定稿"
+      }
+    },
+    {
+      "path": "model/affiliate_topup_reversal_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fe27637e6fd5d3ede0e0959ad57af1205265e1762a4a9212785c71eb4eecba59"
+    },
+    {
+      "path": "model/affiliate_topup_reversal_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5d9c5ae235d3ffcc78fa66e6ffcb4d6dfe2b7e34f823ecd6542b02732d25413e"
     },
     {
       "path": "model/audit_log.go",
@@ -10897,8 +10961,9 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8d74387f9ad04d401e8872ca1d8137cdf029a692cb496ef47e198db3b046c7b9",
+      "local_sha256": "2879a0b1ec2dc6c84d42879be97e1a9e7f3c2a91b76eb02b4296988f3035510c",
       "reasons": [
+        "affiliate",
         "ticket",
         "token-routing"
       ],
@@ -10916,7 +10981,7 @@
       "path": "router/extensions_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a9b65f6cb1b293f5f4564558cbc2726d24874efb93d7f5abaf89f6b1ec57cec1"
+      "local_sha256": "02905dd7ef26eb4d449dfc9ab502f423b46c2039cbe4b209d7a3dfd72a179e0b"
     },
     {
       "path": "router/frontend/embed-dist/brotli-probe.js",

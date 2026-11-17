@@ -132,7 +132,7 @@ async function submit() {
             inputmode="decimal"
             name="admin-user-quota-amount"
             :aria-label="t('users.quotaAmount')"
-            class="user-quota-number pl-8 focus-ring"
+            class="user-quota-number focus-ring"
           />
         </div>
       </FormField>
@@ -205,7 +205,8 @@ async function submit() {
   border: 1px solid var(--border-subtle);
   border-radius: 0.75rem;
   background: var(--surface-solid);
-  padding: 0 1rem;
+  /* Left room for the currency sign; a padding utility cannot override this rule. */
+  padding: 0 1rem 0 2rem;
   color: var(--text-primary);
   font-size: 0.875rem;
   font-weight: 600;
