@@ -3683,7 +3683,7 @@
       "path": "middleware/frontend_static_brotli.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c350ab2e7f55bb1ae3666c11899f026763d48d62fb9159a201ab6945bf242edb",
+      "local_sha256": "7f75e4885c673f9e1afc8efecc86f284ced925ee22e7934db2ac8de8f25c69cd",
       "reasons": [
         "vue-frontend"
       ],
@@ -3697,7 +3697,7 @@
       "path": "middleware/frontend_static_brotli_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "dfc906da32cdb2f11618d3149afe64d93a5ecdbe98764437d47cdaee395fa12d"
+      "local_sha256": "65a2256668a6876499f6303935af71c738a441ef7dad03edd96f9dca41c61869"
     },
     {
       "path": "middleware/frontend_static_test.go",
@@ -5012,7 +5012,7 @@
       "path": "model/option.go",
       "status": "adapted",
       "upstream_sha256": "918b344f1c4810e5b5467669fad3b4886455102b07ac881aeae3b57e6b7fcd39",
-      "local_sha256": "ff6f5aa5dcb394c607c2e532323e9c431be63d7c0c9fac5b571543de38938109",
+      "local_sha256": "dbc670c9c1c8b647ab9d270b7c1b60e4bde3a9e417b09d1b8d6cf19e3dcc7733",
       "reasons": [
         "affiliate",
         "backup-payment-links",
@@ -5055,7 +5055,7 @@
       "path": "model/option_backup_payment_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b09c8bf6561e0f7ddc02b43b03ea7c6e113823a33e9132a7cdf130fe263f133e"
+      "local_sha256": "21d30a48c8211993802fa11573d4cee29e5b785f4220dc3c0eafd57d2d4194e9"
     },
     {
       "path": "model/option_failure_test.go",
@@ -13526,7 +13526,7 @@
       "path": "setting/operation_setting/backup_payment_setting.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "452464624df4aacf4910a28bdebf29b6d46101cdc4ac42f8ce48e1486ab8ec61",
+      "local_sha256": "1445cb92703f37b20c52273364fb51744ac2b20348428d1eebf79d6d2e78bd96",
       "reasons": [
         "backup-payment-links"
       ],
@@ -13540,7 +13540,7 @@
       "path": "setting/operation_setting/backup_payment_setting_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a5a9b62739996b619a762c1dcd7299677368285ac6820fb59f0e1771a51a79ff"
+      "local_sha256": "0b396b027b1745879c63c6938a6e7b68b58cd6ce2bbc8b21c58655eb8c94e86b"
     },
     {
       "path": "setting/operation_setting/channel_affinity_setting.go",

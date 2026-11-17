@@ -24,7 +24,8 @@ func TestValidateOptionValueChecksBackupPaymentLinks(t *testing.T) {
 }
 
 // The links are a JSON array kept in the options table; after a restart only
-// the stored row can bring them back, and a rejected value must never be stored.
+// the stored row can bring them back, a rejected value must never be stored,
+// and a stored row that is not a valid list must not replace them.
 func TestBackupPaymentLinksOptionDatabaseRoundTrip(t *testing.T) {
 	key := operation_setting.BackupPaymentLinksOptionKey
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
@@ -38,6 +39,11 @@ func TestBackupPaymentLinksOptionDatabaseRoundTrip(t *testing.T) {
 
 			require.NoError(t, updateOptionMap(key, "[]"))
 			require.Empty(t, operation_setting.WalletBackupPaymentLinks(true, ""))
+			require.NoError(t, LoadOptionsFromDatabase())
+			require.Equal(t, saved, operation_setting.WalletBackupPaymentLinks(true, ""))
+
+			// A row written around the save checks is dropped on the next sync.
+			require.NoError(t, DB.Save(&Option{Key: key, Value: `[{"name":"Truncated"`}).Error)
 			require.NoError(t, LoadOptionsFromDatabase())
 			require.Equal(t, saved, operation_setting.WalletBackupPaymentLinks(true, ""))
 		})

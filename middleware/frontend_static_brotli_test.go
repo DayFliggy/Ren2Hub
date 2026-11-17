@@ -168,21 +168,29 @@ func TestServeFrontendBrotliFilesHonoursPreconditionsAndRanges(t *testing.T) {
 }
 
 // ServeContent answers several ranges with a multipart/byteranges body that is
-// not a brotli stream, so those requests get parts of the original file.
+// not a brotli stream, so those requests get parts of the original file, with
+// the same precondition answers, also when gzip is accepted.
 func TestServeFrontendBrotliFilesSendsMultipleRangesFromTheOriginal(t *testing.T) {
 	router, files := newBrotliFrontendRouter(t)
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/static/js/app.js", nil)
-	request.Header.Set("Accept-Encoding", "br")
-	request.Header.Set("Range", "bytes=0-9,20-29")
-	router.ServeHTTP(recorder, request)
+	send := func(header map[string]string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/static/js/app.js", nil)
+		request.Header.Set("Accept-Encoding", "br, gzip")
+		request.Header.Set("Range", "bytes=0-9,20-29")
+		for name, value := range header {
+			request.Header.Set(name, value)
+		}
+		router.ServeHTTP(recorder, request)
+		return recorder
+	}
 
-	require.Equal(t, http.StatusPartialContent, recorder.Code)
-	assert.Empty(t, recorder.Header().Get("Content-Encoding"))
-	mediaType, params, err := mime.ParseMediaType(recorder.Header().Get("Content-Type"))
+	ranged := send(nil)
+	require.Equal(t, http.StatusPartialContent, ranged.Code)
+	assert.Empty(t, ranged.Header().Get("Content-Encoding"))
+	mediaType, params, err := mime.ParseMediaType(ranged.Header().Get("Content-Type"))
 	require.NoError(t, err)
 	require.Equal(t, "multipart/byteranges", mediaType)
-	reader := multipart.NewReader(recorder.Body, params["boundary"])
+	reader := multipart.NewReader(ranged.Body, params["boundary"])
 	original := files["static/js/app.js"]
 	for _, want := range [][]byte{original[0:10], original[20:30]} {
 		part, err := reader.NextPart()
@@ -193,4 +201,12 @@ func TestServeFrontendBrotliFilesSendsMultipleRangesFromTheOriginal(t *testing.T
 	}
 	_, err = reader.NextPart()
 	assert.ErrorIs(t, err, io.EOF)
+
+	failed := send(map[string]string{"If-Match": `"another-version"`})
+	assert.Equal(t, http.StatusPreconditionFailed, failed.Code)
+	assert.Empty(t, failed.Header().Get("Content-Encoding"))
+
+	notModified := send(map[string]string{"If-None-Match": "*"})
+	assert.Equal(t, http.StatusNotModified, notModified.Code)
+	assert.Empty(t, notModified.Body.Bytes())
 }

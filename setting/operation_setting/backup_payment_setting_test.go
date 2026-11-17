@@ -1,12 +1,13 @@
 package operation_setting
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/gin-gonic/gin"
 )
 
 func TestValidateBackupPaymentLinks(t *testing.T) {
@@ -71,16 +72,30 @@ func TestBackupPaymentLinksReplaceTheWholeList(t *testing.T) {
 
 func TestBackupPaymentLinksIgnoreAnInvalidStoredValue(t *testing.T) {
 	useBackupPaymentLinks(t, `[{"name":"Store","url":"https://store.example.com"}]`)
+	var errorLog bytes.Buffer
+	common.LogWriterMu.Lock()
+	previousWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = &errorLog
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultErrorWriter = previousWriter
+		common.LogWriterMu.Unlock()
+	})
 	for _, stored := range []string{
 		`[{"name":"Stored","url":"javascript:alert(1)"}]`,
 		`[{"name":"","url":"https://store.example.com"}]`,
 		"[" + strings.TrimSuffix(strings.Repeat(`{"name":"Shop","url":"https://shop.example.com"},`, 11), ",") + "]",
+		`[{"name":"Truncated"`,
 	} {
-		// The loader path that applies values read from the options table.
-		applyBackupPaymentLinks(t, stored)
+		errorLog.Reset()
+		LoadBackupPaymentLinks(stored)
 		want := []BackupPaymentLink{{Name: "Store", URL: "https://store.example.com"}}
 		if got := WalletBackupPaymentLinks(true, ""); !slices.Equal(got, want) {
 			t.Fatalf("stored %s must not replace the valid list, got %+v", stored, got)
+		}
+		if !strings.Contains(errorLog.String(), "ignoring invalid "+BackupPaymentLinksOptionKey) {
+			t.Fatalf("stored %s was dropped without an error log", stored)
 		}
 	}
 }
@@ -95,10 +110,7 @@ func TestWalletBackupPaymentLinksConcurrentReplace(t *testing.T) {
 	go func() {
 		defer close(done)
 		for i := range 200 {
-			if err := config.UpdateConfigFromMap(&backupPaymentSetting, map[string]string{"links": []string{second, first}[i%2]}); err != nil {
-				t.Error(err)
-				return
-			}
+			LoadBackupPaymentLinks([]string{second, first}[i%2])
 		}
 	}()
 	wantFirst := []BackupPaymentLink{{Name: "A", URL: "https://a.example", Icon: "telegram"}}
@@ -124,7 +136,5 @@ func useBackupPaymentLinks(t *testing.T, value string) {
 
 func applyBackupPaymentLinks(t *testing.T, value string) {
 	t.Helper()
-	if err := config.UpdateConfigFromMap(&backupPaymentSetting, map[string]string{"links": value}); err != nil {
-		t.Fatal(err)
-	}
+	LoadBackupPaymentLinks(value)
 }

@@ -41,7 +41,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 上游 `ada15c050`（保留人工禁用）的守卫在扩展文件 `model/channel_status.go`。
 - 带 `no-builtin-prices` 理由的文件（如 `setting/ratio_setting/model_ratio.go`、`relay/helper/price.go`、`service/text_quota.go`）逐提交手工合并：丢弃模型默认价格和内置表达式的增删，只吸收计费维度和计算逻辑。`setting/operation_setting/tools.go` 与上游一致，照常吸收。
 - 退役前缀在 `router/web-router.go` 的 `retiredAPIPrefixes`，上游在这些前缀下新增路由时不注册。
-- `router/web-router.go` 在原生 `ServeFrontendFiles` 之前挂 `ServeFrontendBrotliFiles`（扩展文件 `middleware/frontend_static_brotli.go`）：`scripts/prepare-frontend-embed.mjs` 构建时给 js、mjs、css、svg、json、webmanifest、txt 写入更小的 `<文件>.br`（质量 11）并一同嵌入；请求接受 `br`（合法 q 值大于 0）且该文件存在时由 `http.ServeContent` 原样发送，条件请求、HEAD 和单段 Range 按该文件应答，多段 Range 交给原生路径按原文件应答，服务端不压缩，其余请求照原生走 gzip 或原文件。上游改 `ServeFrontendFiles` 的路径判断、响应头或缓存时对照这里。
+- `router/web-router.go` 在原生 `ServeFrontendFiles` 之前挂 `ServeFrontendBrotliFiles`（扩展文件 `middleware/frontend_static_brotli.go`）：`scripts/prepare-frontend-embed.mjs` 构建时给 js、mjs、css、svg、json、webmanifest、txt 写入更小的 `<文件>.br`（质量 11）并一同嵌入；请求接受 `br`（合法 q 值大于 0）且该文件存在时由 `http.ServeContent` 原样发送，条件请求、HEAD 和单段 Range 按该文件应答；多段 Range 的 multipart 正文不是 brotli 流，同一处理改用原文件由 `http.ServeContent` 应答（不带 `Content-Encoding`），条件请求照常；服务端不压缩，其余请求照原生走 gzip 或原文件。上游改 `ServeFrontendFiles` 的路径判断、响应头或缓存时对照这里。
 
 ### 充值加赠接点
 
@@ -57,7 +57,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 上游只有单个 `TopUpLink`。管理员在 `backup_payment_setting.links` 维护最多 10 个“名称 + http(s) 链接 + 可选图标”，逻辑在扩展文件 `setting/operation_setting/backup_payment_setting.go`，原生文件只做接入：
 
-- `model/option.go` 的 `validateOptionValue` 在保存前调用 `ValidateBackupPaymentLinks`。从数据库加载走原生通用配置加载器，扩展里的 `BackupPaymentLinks.UnmarshalJSON` 用同一套校验整体替换列表，钱包读取整体替换的快照；原生加载器原地解码切片会保留被省略的字段，所以不要把该字段改回普通切片。
+- `model/option.go` 的 `validateOptionValue` 在保存前调用 `ValidateBackupPaymentLinks`；`handleConfigUpdate` 像上游处理 `ToolPriceOptionKey` 一样把该键交给 `LoadBackupPaymentLinks`，不走通用配置加载器（它原地解码切片会保留被省略的字段，且静默丢弃解码错误）。`LoadBackupPaymentLinks` 用同一套校验整体替换钱包读取的快照，不合规的已存值记错误日志并保留上一份有效列表。
 - `controller/topup.go` 的 `GetTopUpInfo` 增加 `backup_payment_links`：`TopUpLink` 不带名称排第一（不是 http/https 链接时不列出），其后是配置项；与在线支付方式一样，支付合规未确认时为空数组。`topup_link` 字段保持上游原样。
 
 ## 与上游相同、未在本地修复的已知问题

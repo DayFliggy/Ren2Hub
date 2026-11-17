@@ -2,7 +2,6 @@ package operation_setting
 
 import (
 	"net/url"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"unicode/utf8"
@@ -20,13 +19,8 @@ type BackupPaymentLink struct {
 	Icon string `json:"icon"`
 }
 
-// BackupPaymentLinks is the saved list. The shared config loader applies a
-// stored value with json.Unmarshal into this field, which on a plain slice
-// would reuse the old elements and keep an icon the new list omits.
-type BackupPaymentLinks []BackupPaymentLink
-
 type BackupPaymentSetting struct {
-	Links BackupPaymentLinks `json:"links"`
+	Links []BackupPaymentLink `json:"links"`
 }
 
 const (
@@ -36,10 +30,14 @@ const (
 	maxBackupPaymentIconBytes   = 256
 )
 
-var backupPaymentSetting = BackupPaymentSetting{Links: BackupPaymentLinks{}}
+// backupPaymentSetting is registered only so the option map starts with the
+// default empty list. Saved values never reach it: model/option.go hands the
+// key to LoadBackupPaymentLinks, as upstream does for tool prices, because the
+// shared loader would decode into the old elements and drop errors silently.
+var backupPaymentSetting = BackupPaymentSetting{Links: []BackupPaymentLink{}}
 
 // walletBackupPaymentLinks is what wallet requests read. It is replaced as a
-// whole when a valid list is applied and never edited in place.
+// whole when a valid list is loaded and never edited in place.
 var walletBackupPaymentLinks atomic.Pointer[[]BackupPaymentLink]
 
 func init() {
@@ -47,19 +45,16 @@ func init() {
 	config.GlobalConfig.Register("backup_payment_setting", &backupPaymentSetting)
 }
 
-// UnmarshalJSON applies a stored list with the same checks as a save. A value
-// that never passed them (imported, or written by an older version) is logged
-// and dropped, and the previous valid list stays in effect.
-func (l *BackupPaymentLinks) UnmarshalJSON(data []byte) error {
-	links, err := parseBackupPaymentLinks(data)
+// LoadBackupPaymentLinks applies a saved or synced value with the same checks
+// as a save. A value that fails them (imported, or written by an older
+// version) is logged and dropped, and the previous valid list stays in effect.
+func LoadBackupPaymentLinks(value string) {
+	links, err := parseBackupPaymentLinks([]byte(value))
 	if err != nil {
 		common.SysError(common.LogText("ignoring invalid %s: %s", BackupPaymentLinksOptionKey, err.Error()))
-		return err
+		return
 	}
-	*l = links
-	snapshot := slices.Clone(links)
-	walletBackupPaymentLinks.Store(&snapshot)
-	return nil
+	walletBackupPaymentLinks.Store(&links)
 }
 
 // ValidateBackupPaymentLinks checks an administrator's list before it is saved.
