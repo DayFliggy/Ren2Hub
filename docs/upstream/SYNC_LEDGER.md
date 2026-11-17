@@ -90,11 +90,12 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 最近一次正式发布
 
-2026-11-17 10:10 UTC，从 `0780f4573` 普通升级，回退目标也是它。内容：Vue 控制台的页面切换与预取、首页性能三批（brotli 静态文件、`/api/pricing/count`）、模型/日志/令牌/工单文案精简、钱包与邀请页重做和备用支付链接（`backup_payment_setting.links`），以及 Codex gpt-6-astra 四轮交叉审计的修复。没有表结构变化，public 表仍是 46 张；生产没有备用支付配置，钱包只列出原生 `TopUpLink`（若为 http/https）。
+2026-11-17 17:32 UTC，从 `96b70e3ab` 普通升级，回退目标也是它。内容：独有功能审计的修复（GMPay 空链上交易号的父订单回调、原生计数脱离路由健康、工单附件预算、加赠窗口只统计同步结算、备用支付链接校验），管理员按订单回收邀请返利，以及删除仪表盘的联系悬浮按钮。没有表结构变化，public 表仍是 46 张。
 
-- 应用提交 `96b70e3abc9466ea212ae7bbb705a3e5ffbc136b`，根提交 `644a585e0ee7b2aac84ad5d440131c8801948932`，镜像 `sha256:84f6db77c0ee5c362021271c44972a80845faf3dc59d354cc9097fe38ebb7299`。
-- 本地门禁按改动定向运行：registry、Go 点名用例、三库 `TestBackupPaymentLinksOptionDatabaseRoundTrip`、Python 236 项、Vitest（改动源码相关 590 例，1 例既有慢用例在满载时超时，单独与基线上均通过）、前端静态检查、28 个视觉 spec 246 例、`run.py build`；新增的并发用例在 golang:1.26.10 容器里单独 `-race` 通过。没有运行全量档位和 routing，没有验证真实支付。
-- 范围候选 `--scope auto`（`upgrade`、`management`）从正式 `0780f4573` 镜像做升级演练，`candidate_success=true`、`deployment_eligible=true`。
+- 应用提交 `d352118b7c3d938b394d65a1c9ca917a2887d6b8`，根提交 `4be1ec0f1e719c8bda913d722dd9925e8fbc7979`，镜像 `sha256:0632d264f512250319da45e985bc73db120035388bce4e473a733d23b6587ef1`。
+- 本地门禁按改动定向运行：registry、Go 点名用例、三库 `TestGmpayAndTicketDatabaseContracts`、`TestAffiliateTopUpReversalConcurrencyDatabases`、`TestFixedPriceBillingDatabaseMatrix`、`TestTaskPollingContractDatabaseMatrix`、`TestDoubaoRelayedImageStreamSettlement`，新增并发路径在 golang:1.26.10 容器里 `-race -count=3`，Python 236 项、Vitest 178 例、前端静态检查、7 个视觉 spec 38 例、镜像构建。没有运行全量档位。
+- 范围候选 `--scope auto,billing`（`upgrade`、`billing`、`management`）从正式 `96b70e3ab` 镜像做升级演练，`candidate_success=true`、`deployment_eligible=true`。
+- routing 同一镜像单独运行，退出 2：必测 30 项通过，其余是发布豁免清单登记的上游缺陷及其阻断，没有新增项，不计为通过。
 
 现场核验、备份和回退边界见工作区的服务器档案（`docs/server/SERVER_PROFILE.md`）。
 
