@@ -152,11 +152,13 @@ class Gateway(http.server.BaseHTTPRequestHandler):
         }})
 
 
-def notification(order, key):
+def notification(order, key, transaction=None):
+    if transaction is None:
+        transaction = "local-transaction-" + order["trade_id"]
     return signed({"pid": order["pid"], "trade_id": order["trade_id"],
                    "order_id": order["order_id"], "amount": order["amount"],
                    "actual_amount": "1.250001", "token": "usdt", "status": "2",
-                   "receive_address": "local-address", "block_transaction_id": "local-transaction-" + order["trade_id"]}, key)
+                   "receive_address": "local-address", "block_transaction_id": transaction}, key)
 
 
 def wallet(experiment):
@@ -274,8 +276,23 @@ def run_gmpay(experiment, server):
         require(value["status"] == "unknown" and value["order_status"] == "pending" and wallet(experiment) == before, "gmpay_unknown_state_lost")
         require(user.request("POST", NOTIFY_PATH, notification(server.orders[trade_no], server.key)) == (200, b"success"), "gmpay_unknown_callback_failed")
         check_settled(experiment, trade_no, before, count, int(value["expected_quota"]))
-        require(not server.failures and len(server.orders) == 3, "gmpay_mock_contract_or_retry_failure")
         experiment.record("gmpay_unknown_outcome_no_retry_late_callback_settles")
+        orders = 3
+        # 付款人在托管收银台改换币种或网络后，网关用父订单发回调，链上交易号为空。
+        # 升级演练里的旧镜像可能早于这项合同，那一阶段不运行。
+        if getattr(experiment.args, "upgrade_attachment_phase", None) != "capture":
+            before, count = wallet(experiment), topup_logs(experiment)
+            data = create()
+            order = server.orders[data["trade_no"]]
+            switched = notification(order, server.key, "")
+            require(user.request("POST", NOTIFY_PATH, switched) == (200, b"success"), "gmpay_switched_callback_rejected")
+            require(user.request("POST", NOTIFY_PATH, switched) == (200, b"success"), "gmpay_switched_replay_rejected")
+            require(user.request("POST", NOTIFY_PATH, notification(order, server.key)) == (200, b"fail"),
+                    "gmpay_switched_receipt_replaced")
+            check_settled(experiment, data["trade_no"], before, count, data["expected_quota"])
+            experiment.record("gmpay_switched_cashier_parent_callback_settles_once")
+            orders = 4
+        require(not server.failures and len(server.orders) == orders, "gmpay_mock_contract_or_retry_failure")
     finally:
         config["enabled"] = False
         config["secret_key"] = ""
