@@ -203,39 +203,4 @@ describe('native affiliate API contracts', () => {
       reset_code: true,
     })
   })
-  it('reads administrator deductions in the record history', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({
-      items: [
-        {
-          id: 4,
-          user_id: 2,
-          invitee_id: 0,
-          kind: 'deduction',
-          skip_reason: '',
-          source_type: 'admin_deduction',
-          source_id: 'deduct-operation',
-          base_quota: 0,
-          rate_bps: 0,
-          reward_quota: 500000,
-          credited_quota: 0,
-          debt_offset_quota: 0,
-          debt_added_quota: 0,
-          frozen_until: 0,
-          thawed_at: 0,
-          created_at: 1,
-          available_after: 1200000,
-          frozen_after: 0,
-          wallet_after: 0,
-        },
-      ],
-      total: 1,
-      page: 1,
-      page_size: 20,
-    })
-    expect((await affiliateApi.records(1, 20)).items[0]).toMatchObject({
-      kind: 'deduction',
-      reward_quota: '500000',
-      available_after: '1200000',
-    })
-  })
 })

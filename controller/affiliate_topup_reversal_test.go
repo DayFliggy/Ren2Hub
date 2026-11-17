@@ -52,14 +52,17 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 	for _, user := range []*model.User{&invitee, &peerInvitee, &loner} {
 		require.NoError(t, db.Create(user).Error)
 	}
-	// The reversed order is paid last, so its id differs from the user ids.
+	// The reversed order is paid third, so its id differs from the user ids.
 	paidReversalTopUp(t, db, loner.Id, "reverse-http-loner-order")
 	paidReversalTopUp(t, db, peerInvitee.Id, "reverse-http-peer-order")
 	paidReversalTopUp(t, db, invitee.Id, "reverse-http-order")
-	// 700 of the 2000 reward is gone, so the reversal takes back 1300 and owes
-	// 700: reward, revoked quota and debt all differ.
-	_, _, err := model.DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 700, "reverse-http-deduct")
+	// The 2000 reward is transferred out and a later order pays 1300, so the
+	// reversal takes back 1300 and owes 700: reward, revoked quota and debt all
+	// differ.
+	_, _, err := model.TransferAffiliateQuota(inviter.Id, "reverse-http-out")
 	require.NoError(t, err)
+	policy.RateBps = 1300
+	paidReversalTopUp(t, db, invitee.Id, "reverse-http-later-order")
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -156,5 +159,55 @@ func TestTopUpAffiliateReversalHTTPContractAndAudit(t *testing.T) {
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffQuota)
 	assert.Equal(t, 700, inviter.AffOffsetDebtQuota)
-	assert.Equal(t, 2000, inviter.AffHistoryQuota)
+	assert.Equal(t, 3300, inviter.AffHistoryQuota, "the reversal leaves the accumulated rewards of both orders")
+}
+
+// operationAudits returns the audit rows of one action in id order.
+func operationAudits(t *testing.T, action string) []model.AuditLog {
+	t.Helper()
+	var rows []model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action = ?", action).Order("id ASC").Find(&rows).Error)
+	return rows
+}
+
+// assertOperationAudit checks the operator, action, content and every business
+// field of one administrator audit row.
+func assertOperationAudit(t *testing.T, audit model.AuditLog, operator model.User, action, content string, params map[string]any) {
+	t.Helper()
+	assert.Equal(t, operator.Id, audit.UserId)
+	assert.Equal(t, operator.Username, audit.Username)
+	assert.Equal(t, operator.Role, audit.ActorRole)
+	assert.Equal(t, action, audit.Action)
+	assert.Equal(t, content, audit.Content)
+	assert.True(t, audit.Success)
+	require.NotNil(t, audit.Other.Op)
+	assert.Equal(t, action, audit.Other.Op.Action)
+	require.NotNil(t, audit.Other.AdminInfo)
+	assert.Equal(t, operator.Id, audit.Other.AdminInfo.AdminID)
+	assert.Equal(t, operator.Username, audit.Other.AdminInfo.AdminUsername)
+	assert.Equal(t, operator.Role, audit.Other.AdminInfo.AdminRole)
+	want, err := json.Marshal(params)
+	require.NoError(t, err)
+	got, err := json.Marshal(audit.Other.Op.Params)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(want), string(got))
+}
+
+// requireDistinctValues guards test data whose audit fields are compared: a
+// field written from another field's value must not match by coincidence.
+func requireDistinctValues(t *testing.T, values ...int) {
+	t.Helper()
+	seen := map[int]bool{}
+	for _, value := range values {
+		require.False(t, seen[value], "test values must be distinct: %v", values)
+		seen[value] = true
+	}
+}
+
+func mapKeys(values map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }

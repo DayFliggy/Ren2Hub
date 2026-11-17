@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 func GetAffiliateInfo(c *gin.Context) {
@@ -114,42 +113,6 @@ func UpdateAffiliateUserPolicy(c *gin.Context) {
 	model.RecordOperationAuditLog(c.GetInt("id"), c.GetInt("role"), "Updated user referral policy", c.ClientIP(), "user.affiliate_update", model.AuditFields{"target_user_id": id, "rate_changed": request.RateBps.Set, "rate_bps": request.RateBps.Value, "enabled": request.Enabled, "code_changed": request.Code != nil || request.ResetCode}, auditOperatorInfo(c), &model.AuditRequestInfo{Method: c.Request.Method, Route: c.FullPath(), Status: http.StatusOK, Success: true}, c)
 	markAuditLogged(c)
 	common.ApiSuccess(c, result)
-}
-
-// DeductAffiliateQuota 由管理员扣减用户未归因的可用返利；同一 operation_id 重放返回首次的结果。
-func DeductAffiliateQuota(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil || id < 1 {
-		common.ApiError(c, common.NewMessage("invalid user id"))
-		return
-	}
-	var request struct {
-		Quota       int    `json:"quota"`
-		OperationID string `json:"operation_id"`
-	}
-	if !decodeAffiliateRequest(c, &request) {
-		return
-	}
-	result, replayed, err := model.DeductAffiliateQuota(id, c.GetInt("role"), request.Quota, request.OperationID)
-	switch {
-	case errors.Is(err, model.ErrAffiliateOperationConflict):
-		common.ApiErrorStatus(c, http.StatusConflict, err)
-		return
-	case errors.Is(err, model.ErrUserQuotaPermission):
-		common.ApiErrorT(c, "No permission to update users of same or higher permission level")
-		return
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		common.ApiErrorT(c, "User does not exist")
-		return
-	case err != nil:
-		common.ApiError(c, err)
-		return
-	}
-	if !replayed {
-		model.RecordOperationAuditLog(c.GetInt("id"), c.GetInt("role"), "Deducted user referral quota", c.ClientIP(), "user.affiliate_deduct", model.AuditFields{"target_user_id": id, "quota": result.RewardQuota, "operation_id": result.SourceID, "record_id": result.ID, "available_after": result.AvailableAfter}, auditOperatorInfo(c), &model.AuditRequestInfo{Method: c.Request.Method, Route: c.FullPath(), Status: http.StatusOK, Success: true}, c)
-	}
-	markAuditLogged(c)
-	common.ApiSuccess(c, gin.H{"record": result, "replayed": replayed, "deducted_quota": result.RewardQuota, "available_quota": result.AvailableAfter, "frozen_quota": result.FrozenAfter})
 }
 
 // ReverseTopUpAffiliateReward 由管理员回收一笔充值订单发出的返利；每个订单只回收一次，重放返回首次的记录。

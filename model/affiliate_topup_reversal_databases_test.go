@@ -2,13 +2,22 @@ package model
 
 import (
 	"fmt"
+	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
 // Order reversals serialize with transfers and with new top-up settlements of
@@ -111,32 +120,6 @@ func TestAffiliateTopUpReversalConcurrencyDatabases(t *testing.T) {
 				assert.EqualValues(t, 4, countAffiliateKind(t, db, inviter.Id, "reversal"))
 			})
 
-			t.Run("reversal and manual deduction", func(t *testing.T) {
-				inviter, invitee := pair(t, "deduct")
-				for round := range 4 {
-					reversed, kept := fmt.Sprintf("rev-deduct-%d", round), fmt.Sprintf("rev-deduct-kept-%d", round)
-					for _, trade := range []string{reversed, kept} {
-						pending(t, invitee.Id, trade)
-						require.NoError(t, settle(trade))
-					}
-					errs := runAffiliateConcurrently(2, func(i int) error {
-						if i == 0 {
-							_, _, err := ReverseTopUpAffiliateReward(reversed, common.RoleRootUser)
-							return err
-						}
-						_, _, err := DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 1500, fmt.Sprintf("rev-deduct-op-%d", round))
-						return err
-					})
-					require.NoError(t, errs[0], "round %d reversal", round)
-					require.NoError(t, errs[1], "round %d deduction", round)
-					// 4000 paid; the reversal takes 2000 and the deduction 1500
-					// in either order, with no debt.
-					require.NoError(t, db.First(&inviter, inviter.Id).Error)
-					assert.Equal(t, 500*(round+1), inviter.AffQuota, "round %d", round)
-					assert.Zero(t, inviter.AffOffsetDebtQuota, "round %d", round)
-				}
-			})
-
 			t.Run("soft-deleted inviter: reversal and administrator subtraction", func(t *testing.T) {
 				inviter, invitee := pair(t, "deleted")
 				const rounds = 6
@@ -178,4 +161,74 @@ func countAffiliateKind(t *testing.T, db *gorm.DB, userID int, kind string) int6
 	var count int64
 	require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ? AND kind = ?", userID, kind).Count(&count).Error)
 	return count
+}
+
+func runAffiliateConcurrently(n int, run func(int) error) []error {
+	errs := make([]error, n)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs[i] = run(i)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	return errs
+}
+
+// openAffiliateLedgerDatabase opens an isolated database of the dialect with
+// the tables the referral ledger, top-up settlement and its logs use.
+func openAffiliateLedgerDatabase(t *testing.T, dialect string) *gorm.DB {
+	t.Helper()
+	var driver gorm.Dialector = sqlite.Open(":memory:")
+	dbType := common.DatabaseTypeSQLite
+	if dialect != "sqlite" {
+		key, fallback := "TEST_MYSQL_DSN", "REN2HUB_EXTENSION_TEST_MYSQL_DSN"
+		if dialect == "postgres" {
+			key, fallback = "TEST_POSTGRES_DSN", "REN2HUB_EXTENSION_TEST_POSTGRES_DSN"
+		}
+		dsn := os.Getenv(key)
+		if dsn == "" {
+			dsn = os.Getenv(fallback)
+		}
+		if dsn == "" {
+			t.Skip(key + " is not configured; isolated database required")
+		}
+		driver, dbType = mysql.Open(dsn), common.DatabaseTypeMySQL
+		if dialect == "postgres" {
+			driver, dbType = postgres.Open(dsn), common.DatabaseTypePostgreSQL
+		}
+	}
+	prefix := fmt.Sprintf("affdb_%d_", time.Now().UnixNano())
+	db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: prefix}, Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	conn, err := db.DB()
+	require.NoError(t, err)
+	if dialect == "sqlite" {
+		conn.SetMaxOpenConns(1)
+	}
+	tables := []any{&User{}, &TopUp{}, &Log{}, &AffiliateRecord{}, &AdminQuotaOperation{}}
+	oldDB, oldLog, oldRedis := DB, LOG_DB, common.RedisEnabled
+	oldType, oldLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	oldPolicy, oldPayment := *operation_setting.GetAffiliateSetting(), *operation_setting.GetPaymentSetting()
+	DB, LOG_DB, common.RedisEnabled = db, db, false
+	common.SetDatabaseTypes(dbType, dbType)
+	initCol()
+	*operation_setting.GetAffiliateSetting() = operation_setting.AffiliateSetting{Enabled: true, RateBps: 2000, AdminRechargeEnabled: true}
+	operation_setting.GetPaymentSetting().ComplianceConfirmed = true
+	operation_setting.GetPaymentSetting().ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	t.Cleanup(func() {
+		DB, LOG_DB, common.RedisEnabled = oldDB, oldLog, oldRedis
+		common.SetDatabaseTypes(oldType, oldLogType)
+		initCol()
+		*operation_setting.GetAffiliateSetting(), *operation_setting.GetPaymentSetting() = oldPolicy, oldPayment
+		assert.NoError(t, db.Migrator().DropTable(tables...))
+		assert.NoError(t, conn.Close())
+	})
+	require.NoError(t, db.AutoMigrate(tables...))
+	return db
 }

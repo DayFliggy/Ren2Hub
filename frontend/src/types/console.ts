@@ -372,7 +372,7 @@ export interface InviteRecord {
   id: number
   user_id: number
   invitee_id: number
-  kind: 'accrue' | 'transfer' | 'reversal' | 'deduction'
+  kind: 'accrue' | 'transfer' | 'reversal'
   skip_reason: string
   source_type: string
   source_id: string

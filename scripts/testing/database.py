@@ -29,7 +29,7 @@ MATRIX_TESTS = {
         "TestTokenRoutingDatabases", "TestTokenRouteChannelMutationLockOrderDatabases",
         "TestAuthCacheIntegrityDatabaseMatrix", "TestGmpayAndTicketDatabaseContracts",
         "TestCoreEmptyDatabaseInitialization", "TestAffiliateLedgerMigrationAndIdempotencyDatabases",
-        "TestAffiliateDeductionConcurrencyDatabases", "TestAffiliateTopUpReversalConcurrencyDatabases",
+        "TestAffiliateTopUpReversalConcurrencyDatabases",
         "TestSystemTaskHistoryDatabaseMatrix", "TestDeleteFinishedSystemTasksDatabaseMatrix",
         "TestJSONColumnDatabaseRoundTrip", "TestTaskPluginGatewayIDConvergesUnderConcurrentCreation", "TestAffiliateDeletedInviterDatabases",
         "TestAffiliateMonthlySeriesDatabases", "TestDeleteDisabledChannelIDsDatabases",

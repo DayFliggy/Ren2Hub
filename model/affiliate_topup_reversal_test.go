@@ -88,7 +88,7 @@ func TestReverseTopUpAffiliateRewardFrozenAndDue(t *testing.T) {
 }
 
 // A thawed top-up reward is taken from the unattributed available balance;
-// whatever was already transferred or deducted becomes debt that the next
+// whatever was already transferred becomes debt that the next
 // reward repays first.
 func TestReverseTopUpAffiliateRewardAvailableTransferredAndPartial(t *testing.T) {
 	t.Run("available", func(t *testing.T) {
@@ -130,12 +130,14 @@ func TestReverseTopUpAffiliateRewardAvailableTransferredAndPartial(t *testing.T)
 		assert.Zero(t, inviter.AffQuota)
 	})
 
-	t.Run("partly deducted", func(t *testing.T) {
+	t.Run("partly transferred", func(t *testing.T) {
 		db, inviter, invitee := affiliateTestDB(t)
 		order, _ := paidAffiliateTopUp(t, invitee.Id, "reverse-partial-one")
-		paidAffiliateTopUp(t, invitee.Id, "reverse-partial-two")
-		_, _, err := DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 3000, "reverse-partial-deduct")
+		_, _, err := TransferAffiliateQuota(inviter.Id, "reverse-partial-out")
 		require.NoError(t, err)
+		// A later order at half the rate leaves 1000 available.
+		operation_setting.GetAffiliateSetting().RateBps = 1000
+		paidAffiliateTopUp(t, invitee.Id, "reverse-partial-two")
 
 		record, _, err := ReverseTopUpAffiliateReward(order.TradeNo, common.RoleRootUser)
 		require.NoError(t, err)
@@ -195,12 +197,14 @@ func TestReverseTopUpAffiliateRewardLeavesTrackedReward(t *testing.T) {
 	t.Run("tracked reward untouched while available", func(t *testing.T) {
 		db, inviter, invitee := affiliateTestDB(t)
 		operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
-		_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "reverse-keep-add", nil)
-		require.NoError(t, err)
 		order, _ := paidAffiliateTopUp(t, invitee.Id, "reverse-keep-topup")
-		_, _, err = DeductAffiliateQuota(inviter.Id, common.RoleRootUser, 1500, "reverse-keep-deduct")
+		_, _, err := TransferAffiliateQuota(inviter.Id, "reverse-keep-out")
 		require.NoError(t, err)
-		// 700 left: 200 tracked and 500 unattributed.
+		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "reverse-keep-add", nil)
+		require.NoError(t, err)
+		operation_setting.GetAffiliateSetting().RateBps = 500
+		paidAffiliateTopUp(t, invitee.Id, "reverse-keep-later")
+		// 700 available: 200 tracked and 500 unattributed.
 		record, _, err := ReverseTopUpAffiliateReward(order.TradeNo, common.RoleRootUser)
 		require.NoError(t, err)
 		assert.Equal(t, 500, record.CreditedQuota)

@@ -46,7 +46,7 @@ func GetTopUpAffiliateReward(topUpID int) (*TopUpAffiliateReward, error) {
 // ReverseTopUpAffiliateReward 回收一笔充值订单发给邀请人的返利，每个订单只回收一次。
 //
 // 冻结中的返利从冻结余额扣回。已解冻的充值返利没有划转归因，只能从未归因的可用返利
-// 扣回，扣不到的部分（已划转或已被手工扣减）记为欠款，由以后的返利抵扣；该返利当初
+// 扣回，扣不到的部分（已划转）记为欠款，由以后的返利抵扣；该返利当初
 // 抵掉的旧欠款加回去。仍归因到管理员加额的返利、累计返利、单人上限、受邀人的钱包和
 // 订单状态都不变；不受活动开关和支付合规开关限制。记录字段的含义与管理员冲回相同。
 func ReverseTopUpAffiliateReward(tradeNo string, operatorRole int) (*AffiliateRecord, bool, error) {

@@ -57,7 +57,6 @@ export const AUDIT_LOG_ACTION_LABEL_KEYS: Record<string, string> = {
   'user.inviter_bonus': 'auditLogs.actions.userInviterBonus',
   'affiliate.code.reset': 'auditLogs.actions.affiliateCodeReset',
   'affiliate.user.update': 'auditLogs.actions.affiliateUserUpdate',
-  'user.affiliate_deduct': 'auditLogs.actions.userAffiliateDeduct',
   'topup.affiliate_reverse': 'auditLogs.actions.topupAffiliateReverse',
   'gateway.config.update': 'auditLogs.actions.gatewayConfigUpdate',
   'gateway.user.update': 'auditLogs.actions.gatewayUserUpdate',

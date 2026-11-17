@@ -43,7 +43,6 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	affiliateAdmin.GET("/records", controller.GetAffiliateRecords)
 	affiliateAdmin.GET("/users/:id", controller.GetAffiliateUserPolicy)
 	affiliateAdmin.PUT("/users/:id", controller.UpdateAffiliateUserPolicy)
-	affiliateAdmin.POST("/users/:id/deduct", controller.DeductAffiliateQuota)
 	systemStatus := api.Group("/user/system-status", middleware.UserAuth(), middleware.DisableCache())
 	handleSessionRoute(systemStatus, http.MethodGet, "", middleware.DashboardStatusRateLimit(), controller.GetDashboardSystemStatus)
 	orders := api.Group("/user/topup", middleware.UserAuth(), middleware.DisableCache())

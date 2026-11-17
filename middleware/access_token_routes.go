@@ -50,7 +50,6 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/admin/affiliate/records":           accessTokenScopeRule("user:read"),
 	"GET /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:read"),
 	"PUT /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:write"),
-	"POST /api/admin/affiliate/users/:id/deduct": accessTokenScopeRule("user:write"),
 	"GET /api/user/topup/stats":                  accessTokenScopeRule("billing:read"),
 	"GET /api/user/topup/ranking":                accessTokenScopeRule("billing:read"),
 	"GET /api/user/topup/admin/detail/:trade_no": accessTokenScopeRule("billing:read"),

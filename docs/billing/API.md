@@ -17,7 +17,6 @@
 | `POST /api/user/affiliate/transfer`、`POST /api/user/aff_transfer` | 带 `operation_id` 的全额幂等转入；拒绝旧金额参数。两条路由都只接受浏览器会话，PAT（含 legacy PAT）返回 403 `AUTH_SESSION_REQUIRED` |
 | `GET /api/user/topup/admin/detail/:trade_no` | 管理员订单详情；`affiliate` 为订单发出的返利 `{inviter_id, reward_quota, reversed}`，没有发出返利时为 `null`。本人的订单详情 `/api/user/topup/detail/:trade_no` 没有这个字段 |
 | `POST /api/user/topup/admin/affiliate-reversal` | 管理员按订单回收返利，见下文“回收返利”；PAT 需要 `billing:write` |
-| `POST /api/admin/affiliate/users/:id/deduct` | 管理员扣减用户未归因的可用返利，见下文“返利扣减”；只有接口，管理界面不提供入口；PAT 需要 `user:write` |
 | `GET /api/pricing` | 原生模型价格投影 |
 | `GET/PATCH /api/option/model_pricing` | 模型配置读取、版本校验保存 |
 | `POST /api/option/model_pricing/{preview,convert}` | 草稿辅助操作，不创建请求预留 |
@@ -40,14 +39,12 @@
 充值订单的返利在拒付（付款成功后被银行或支付平台撤回）或退款后不自动回收。管理员在订单详情执行“回收返利”（`POST /api/user/topup/admin/affiliate-reversal`，请求体只接受 `{"trade_no":"..."}` 一个 JSON 对象，未知字段或多余内容被拒），每个订单只回收一次，按回收时的状态处理这笔返利：
 
 - 仍在冻结：从邀请人的冻结返利扣回，到期后不再解冻出这笔额度。
-- 已解冻：先解冻其他到期的返利，再从未归因的可用返利扣回。充值返利不记划转归因，扣不到的部分（已划转到钱包或已被扣减）记为欠款 `aff_offset_debt_quota`，由以后的返利先行抵扣。
+- 已解冻：先解冻其他到期的返利，再从未归因的可用返利扣回。充值返利不记划转归因，扣不到的部分（已划转到钱包）记为欠款 `aff_offset_debt_quota`，由以后的返利先行抵扣。
 - 这笔返利当初抵掉的旧欠款重新记为欠款。
 
 仍归因到管理员加额的返利不动，它随扣减受邀人额度冲回。回收不改变累计返利、每个受邀人的上限（按毛额累计，回收不释放）、受邀人的钱包和订单状态；受邀人的额度由管理员另行扣减。成功返回 `record`（`kind` 为 `reversal`、`source_type` 为 `topup_reversal` 的返利记录，`credited_quota` 为扣回的额度，`debt_added_quota` 为新增欠款，字段含义与管理员加额冲回的记录相同）、`replayed`、`reversed_quota`（这笔返利的毛额）、`revoked_quota`（扣回的额度）、`debt_added_quota`。再次回收同一订单返回原记录、`replayed: true`，不再改动余额。订单不存在返回 `Top-up order does not exist`；订单未付款、没有邀请人、返利被跳过或邀请人已不存在返回 `this order has no referral reward to reverse`；管理员不能回收同级或更高角色邀请人的返利，Root 不受此限；已软删除的邀请人仍可回收。首次成功写一条审计 `topup.affiliate_reverse`，重放不再写。回收不受返利活动开关和支付合规确认影响。
 
-返利扣减（`POST /api/admin/affiliate/users/:id/deduct`）只有接口，管理界面不提供入口：请求体只接受 `{"quota":正整数,"operation_id":"..."}` 一个 JSON 对象，`operation_id` 为 8–96 位字母、数字、`_` 或 `-`。它同样只扣未归因的可用返利，扣前先解冻到期的冻结返利，未到期的冻结返利不能扣。金额非正或超过钱包上限返回 `referral deduction amount must be a positive quota`，超过可扣部分返回 `amount exceeds the deductible referral quota`；角色限制与回收相同。成功返回 `record`（`kind` 为 `deduction`）、`replayed`、`deducted_quota`、`available_quota`、`frozen_quota`；同一用户的同一 `operation_id` 重放返回原记录，金额不同返回 HTTP 409；首次成功写一条审计 `user.affiliate_deduct`。扣减和回收都从同一部分余额扣，同一笔拒付只用其中一种：对同一笔既扣减又回收会扣两次，第二次记为欠款。
-
-回收和扣减记录出现在管理员和本人的返利记录里，可按 `kind=reversal`、`kind=deduction` 筛选；两者都不改变累计返利、每个受邀人的上限、邀请名单奖励和月度序列。
+回收记录出现在管理员和本人的返利记录里，可按 `kind=reversal` 筛选；回收也不改变邀请名单的奖励显示和月度序列。除按订单回收和随扣减受邀人额度冲回管理员加额的返利外，没有其他扣减邀请人返利的接口。
 
 模型、充值与管理员操作仍须满足原生角色、scope、业务校验及适用的安全验证。GMPay 与个人工单额外限定浏览器会话；管理员工单使用原生 ticket scopes，见[扩展接口](../routing/GATEWAY_API.md)。
 

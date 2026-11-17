@@ -87,7 +87,6 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 		"GET /api/admin/affiliate/records":              "user:read",
 		"GET /api/admin/affiliate/users/:id":            "user:read",
 		"PUT /api/admin/affiliate/users/:id":            "user:write",
-		"POST /api/admin/affiliate/users/:id/deduct":    "user:write",
 		"GET /api/user/topup/stats":                     "billing:read",
 		"GET /api/user/topup/ranking":                   "billing:read",
 		"GET /api/user/topup/admin/detail/:trade_no":    "billing:read",

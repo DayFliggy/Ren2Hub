@@ -2324,8 +2324,6 @@ export default {
       userInviterBonus: 'Granted inviter bonus',
       affiliateCodeReset: 'Reset the affiliate code',
       affiliateUserUpdate: 'Updated user affiliate settings',
-      userAffiliateDeduct:
-        'Deducted {quota} available rebate from user #{target_user_id}',
       topupAffiliateReverse: 'Reversed the referral reward of order {trade_no}',
       gatewayConfigUpdate: 'Updated gateway configuration',
       gatewayUserUpdate: 'Updated user gateway configuration',
@@ -2679,7 +2677,6 @@ export default {
       accrue: 'Reward accrued',
       transfer: 'Transferred to balance',
       reversal: 'Reward reversal',
-      deduction: 'Deducted by administrator',
     },
     recordInvitee: 'Invited user #{id}',
     recordCredited: 'Credited: {amount}',

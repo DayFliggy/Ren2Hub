@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 385,
+    "extension": 381,
     "removed": 45
   },
   "files": [
@@ -866,7 +866,7 @@
       "path": "controller/affiliate.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "884daa2a72900baf6249a3608f49471364bad99510eebf5b6585e3f44a39e156",
+      "local_sha256": "c60146e7b994c5695b31e7cdcf19d1e4e3758f6725247b8268ab190ce8844463",
       "reasons": [
         "affiliate"
       ],
@@ -879,12 +879,6 @@
           "controller/affiliate.go#1"
         ]
       }
-    },
-    {
-      "path": "controller/affiliate_deduction_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "371dc089f11612314bc97199255d935a167b73104d9e8b27e605c8996c78918f"
     },
     {
       "path": "controller/affiliate_quota_response_test.go",
@@ -902,7 +896,7 @@
       "path": "controller/affiliate_topup_reversal_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8eebd54f4eb250bea8f310731f3275fba402a10b4caf75b174e7c5f8c6bcad9a"
+      "local_sha256": "3874ddeaaf7f4b1ab786ac9b004326c8c225331674dec8e56023d688ff1d6c28"
     },
     {
       "path": "controller/audit.go",
@@ -3565,7 +3559,7 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "93645286579fe496b594c7b0e528f77dedc5bec4d1f2eaa18edae46cdcf8d6f0",
-      "local_sha256": "a4e690c0fbfe52df220189e379f7277bf6c41ae7784892d56922d536a2066ca0",
+      "local_sha256": "3ea1eda6dce86ade163283de88299d8f10a0f12e14f395befdd55983d0a20eac",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -4137,32 +4131,6 @@
       }
     },
     {
-      "path": "model/affiliate_deduction.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "468ba3796555ab5f472666673b2f28a41c082495430654cdb131a3473d5fe5bc",
-      "reasons": [
-        "affiliate"
-      ],
-      "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "2026-11-17 用户决定：充值返利在拒付或退款后不自动回收，管理员手工扣减未归因的可用返利，见 docs/billing/API.md 的返利扣减；归因计算与划转共用 model/affiliate.go 的 trackedAffiliateAvailableTx",
-        "method": "本轮实现逐文件审查；计划 PLAN-F5 由主会话定稿"
-      }
-    },
-    {
-      "path": "model/affiliate_deduction_databases_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "fed49d3d24f9b7db21bee07994b00f78b5db36485f47fb8ad719b627c2c5a5e8"
-    },
-    {
-      "path": "model/affiliate_deduction_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "b2c5d9dd9b3ca66e9f083392d1ca35bfe2a14f27fc7cb587e33955693b4da705"
-    },
-    {
       "path": "model/affiliate_deleted_inviter_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -4196,7 +4164,7 @@
       "path": "model/affiliate_query.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4d4abc80432b98a43dd08005a7a4882a933156e990e4f7d19801f74875374284",
+      "local_sha256": "c60f0e6efec26a6b67522c81e4a49d00fb9f6eefab4504d185fc5f8bcf8e2f3e",
       "reasons": [
         "affiliate"
       ],
@@ -4220,7 +4188,7 @@
       "path": "model/affiliate_topup_reversal.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "100f7e2c12ac9da6817d867895e8236877b28b5eb77d5910f59d0301133a9a4f",
+      "local_sha256": "47005d11d8be1d9fc8e844bb13176d2f14df87655ca1f7e72fab8108d5370f52",
       "reasons": [
         "affiliate"
       ],
@@ -4234,13 +4202,13 @@
       "path": "model/affiliate_topup_reversal_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8348a7d8352d864821d522b089ca9697aca334d2c1959013881d4b3149202be0"
+      "local_sha256": "e5ee7d0c5507e8a69ff3a9895606935dad0611854f3a37a26b2e22c97c89efe4"
     },
     {
       "path": "model/affiliate_topup_reversal_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5b5fcc86dc6771538697f5f970e53bb25a5d478cc73a1c1a6b1d150b1f829f40"
+      "local_sha256": "4357fbf988d0153411a619c092d9355748bb9b09f0368341926373a693ebee7c"
     },
     {
       "path": "model/audit_log.go",
@@ -10967,7 +10935,7 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2879a0b1ec2dc6c84d42879be97e1a9e7f3c2a91b76eb02b4296988f3035510c",
+      "local_sha256": "0df5fbcadf94f7bd9105ffd69c90f5906a6126bd381ecf31aa1630741bdf1574",
       "reasons": [
         "affiliate",
         "ticket",
@@ -10987,7 +10955,7 @@
       "path": "router/extensions_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "02905dd7ef26eb4d449dfc9ab502f423b46c2039cbe4b209d7a3dfd72a179e0b"
+      "local_sha256": "a066263094f67d0f07f9e5b9abb1377d195975805b02661258a1c7e62ee14299"
     },
     {
       "path": "router/frontend/embed-dist/brotli-probe.js",

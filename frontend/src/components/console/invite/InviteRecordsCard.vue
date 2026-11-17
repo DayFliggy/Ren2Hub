@@ -23,11 +23,6 @@ function credited(row: AffiliateRecord): string {
     : row.credited_quota
 }
 
-/** Reversals and administrator deductions take rebate away. */
-function reduces(row: AffiliateRecord): boolean {
-  return row.kind === 'reversal' || row.kind === 'deduction'
-}
-
 function skipReason(reason: string): string {
   const key = `invite.skipReasons.${reason}`
   return te(key) ? t(key) : t('invite.skipped')
@@ -72,12 +67,13 @@ function skipReason(reason: string): string {
           <p
             class="font-mono text-sm font-medium"
             :class="
-              reduces(row)
+              row.kind === 'reversal'
                 ? 'text-[var(--status-danger-text)]'
                 : 'text-[var(--text-primary)]'
             "
           >
-            {{ reduces(row) ? '−' : '' }}{{ formatQuota(row.reward_quota) }}
+            {{ row.kind === 'reversal' ? '−' : ''
+            }}{{ formatQuota(row.reward_quota) }}
           </p>
           <template v-if="row.kind === 'accrue' && !row.skip_reason">
             <p>

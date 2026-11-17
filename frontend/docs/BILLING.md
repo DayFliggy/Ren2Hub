@@ -53,6 +53,8 @@ Waffo Pancake 设置的“创建店铺和商品”失败时，原生响应在 `d
 
 详情分别使用 `GET /api/user/topup/detail/:trade_no` 和 `GET /api/user/topup/admin/detail/:trade_no`，两者都带 `user_deleted:boolean`。订单所属用户被删除后详情仍可读取：`user_id` 保持原值，软删除保留用户名和邮箱，硬删除两者为空串；订单详情和管理员工单队列都显示“用户已删除”，硬删除的工单用户以 `#id` 显示。GMPay 详情区分创建时收银台信息与结算后的实际回执，请求网络不能冒充已核验的实际支付网络。管理员通过 `POST /api/user/topup/complete` 提交 `{ trade_no }` 人工补单，受权限与后端事务控制。重复回调、并发回调及回调与补单竞争不得重复入账。
 
+管理员详情另带 `affiliate`：订单发出过返利时为 `{ inviter_id, reward_quota, reversed }`，否则为 `null`；本人的详情没有这个字段。订单详情据此显示“邀请返利”一栏，未回收时提供“回收返利”，确认后以 `POST /api/user/topup/admin/affiliate-reversal` 提交 `{ trade_no }`，并按响应的 `revoked_quota` 和 `debt_added_quota` 显示收回与待抵扣的额度；每个订单只能回收一次，回收不能撤销。规则见[资金 API](../../docs/billing/API.md)。
+
 `GET /api/user/topup/stats` 返回 `currencies`、`methods`、`daily`、时间范围与计数，各币种和各支付方式分别汇总，`paid_amount` 保持十进制字符串。`GET /api/user/topup/ranking` 返回按到账额度排序的前 10 名用户（`user_id`、`username`、`paid_count`、`credited_quota`）。历史记录缺少支付金额或币种时显示未知，并计入 `unknown_amount_count`，不补零、不贴 USD 标签。接口没有提供的统计不凭空生成。
 
 订单统计、返利信息和用量概览请求都由 `viewerTzOffset()`（`src/utils/format.ts`）附带浏览器当前的 `tz_offset`，服务端按访问者所在的日历日和月份分桶。偏移在整个窗口内固定，跨夏令时切换的窗口按请求时的偏移划界。

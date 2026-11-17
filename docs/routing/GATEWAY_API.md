@@ -29,7 +29,7 @@
 | `GET /api/performance/quality?hours=24` | Root，PAT scope `ops:read`；全站跨模型按小时汇总 `perf_metrics`，`hours` 取 1–720 |
 | `GET /api/performance/stats` | 原生字段之外追加 `system_usage`（主机 CPU、内存）和 `db_pool`（`sql.DB.Stats()`） |
 | `/api/user/affiliate` | 本人规则、奖励、records、脱敏 invitees 及幂等全额 transfer |
-| `/api/admin/affiliate` | 返利记录、个人比例/邀请码管理和返利扣减（只有接口）；按订单回收返利在 `/api/user/topup/admin/affiliate-reversal`，见 [API](../billing/API.md)；全局配置使用原生 options |
+| `/api/admin/affiliate` | 返利记录和个人比例/邀请码管理；按订单回收返利在 `/api/user/topup/admin/affiliate-reversal`，见 [API](../billing/API.md)；全局配置使用原生 options |
 
 厂商分类还用于原生定价目录 `supplementVendorID` 的缺失厂商补全；只补展示归属，不改变已有厂商、模型价格、路由或计费。
 
