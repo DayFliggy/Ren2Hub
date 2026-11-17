@@ -5,7 +5,7 @@ GMPay 作为原生钱包的支付入口，复用 NewAPI 充值金额、最低额
 | 接口                                   | 合同                                                            |
 | -------------------------------------- | --------------------------------------------------------------- |
 | `GET /api/option/gmpay/config`         | Root 浏览器会话；返回地址、商户ID、`has_secret`、资产及启用状态 |
-| `POST /api/option/gmpay/save`          | 同上；整体保存配置，空 `secret_key` 保留已存密钥                |
+| `POST /api/option/gmpay/save`          | 同上；整体保存配置，`secret_key` 去首尾空白，为空时保留已存密钥 |
 | `POST /api/option/gmpay/probe`         | `{pay_address}`；只探测公开资产目录，不验证商户凭据或创建订单   |
 | `POST /api/user/gmpay/pay`             | 用户浏览器会话；`{amount,payment_method:"gmpay:usdt.tron"}`     |
 | `GET /api/user/gmpay/orders/:trade_no` | 本人浏览器会话；原生订单与公开支付快照                          |
@@ -13,7 +13,7 @@ GMPay 作为原生钱包的支付入口，复用 NewAPI 充值金额、最低额
 
 GET notify 已退役：epusdt 只对创建时声明 `payment_type=Epay` 的订单发 GET 查询串回调，本站创建订单不传该字段，回调固定为 POST JSON + HMAC。配置资产为 `{name,token,network,icon?,color?}`。`GET /api/user/topup/info` 增加 `enable_gmpay_topup` 和 `gmpay:token.network` 方式。下单成功返回 `{message:"success",url,data:{trade_no,payment_method,currency:"CNY",pay_amount,expected_quota,token,network}}`；与通用 success envelope 不同。
 
-在远端创建前，同一事务保存原生订单、应到账整数额度、CNY 分额及不可变商户版本。仅向网关发送一次创建请求，网络或响应不明保存为 `unknown`。回调按订单绑定的商户版本验签，校验订单、交易号、token、精确金额和成功状态。回调不包含网络或法币字段，不能宣称独立确认了最终支付网络；快照记录请求选定的资产。
+在远端创建前，同一事务保存原生订单、应到账整数额度、CNY 分额及不可变商户版本。仅向网关发送一次创建请求，网络或响应不明保存为 `unknown`。回调按订单绑定的商户版本验签，校验订单号、商户号、网关交易号、token、精确金额和成功状态。网关交易号 `trade_id` 始终必填，以 `(receipt_scope, gateway_trade_no)` 唯一索引保证一张网关收据只结算一张本地订单。链上交易号 `block_transaction_id` 可以为空：付款人在托管收银台改换币种或网络时，epusdt 为子订单收款，再用父订单字段发回调，其中链上交易号为空，`token`、`actual_amount`、`receive_address` 是下单时选定的那一组，不是最终到账的链上证据。首次结算记录回调的币种数量、收款地址和链上交易号（可能为空）；之后的回调必须与之完全一致，空与非空互换也被拒绝。本站验证的是网关签名、冻结的 CNY 金额和收据一致性，链上到账由网关负责。回调不包含网络或法币字段，不能宣称独立确认了最终支付网络；快照记录请求选定的资产。公开资产目录探测与解析共用 16 KiB 上限。
 
 回调与 `POST /api/user/topup/complete` 共同使用原生钱包事务及订单状态检查，最多入账一次，不添加第二资金账本。回调金额与订单冻结的 CNY 应付值不一致时拒绝入账，控制器记录分类日志，不宣称另有统一的拒绝业务审计。请求格式解析错误返回 400 `fail`；验签或结算失败返回 200 `fail`；成功返回 200 `success`。epusdt 只把 200 + `ok`/`success` 当作完成，其余按有限次数重试。
 

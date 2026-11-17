@@ -179,7 +179,21 @@ func TestNativeCountUpstreamErrorsNeverEstimate(t *testing.T) {
 			require.NotContains(t, result.Body.String(), `"totalTokens":0`)
 			require.Zero(t, service.ChannelInFlight(ch.Id))
 			if tc.status >= 400 && strings.HasPrefix(tc.body, "{") {
-				require.JSONEq(t, tc.body, result.Body.String())
+				// The provider message is kept in the generation path's error
+				// shape; masking is covered by the dedicated error test.
+				var payload struct {
+					Error struct {
+						Message string `json:"message"`
+					} `json:"error"`
+				}
+				require.NoError(t, common.Unmarshal(result.Body.Bytes(), &payload))
+				var upstreamPayload struct {
+					Error struct {
+						Message string `json:"message"`
+					} `json:"error"`
+				}
+				require.NoError(t, common.Unmarshal([]byte(tc.body), &upstreamPayload))
+				require.Equal(t, upstreamPayload.Error.Message, payload.Error.Message)
 				require.Equal(t, "9", result.Header().Get("Retry-After"))
 			}
 			var after model.User

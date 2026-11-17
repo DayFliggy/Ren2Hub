@@ -43,8 +43,9 @@ func TestUserRouteViewsHideRuntimeOccupancy(t *testing.T) {
 	require.Equal(t, "channel_concurrency_full", preview.Entries[0].Reason)
 }
 
-// 路由审计 B2：预览先判渠道是否服务所查模型，再判可用性和倍率。与该模型无关的渠道不出现在
-// 自动预览里，也不因禁用或超倍率暴露名称；服务该模型但不可选的渠道仍带原因显示。
+// 路由审计 B2：预览先判渠道是否服务所查模型，再判可用性和倍率。与该模型无关的渠道和被禁用的
+// 渠道不出现在自动预览里（与模型目录一致），启用但超倍率等不可选的渠道仍带原因显示。手动列表
+// 保留指向被禁用渠道的条目和原因，但不返回它的名称和倍率。
 func TestRoutePreviewListsOnlyChannelsServingTheModel(t *testing.T) {
 	db := setupRouteTest(t)
 	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", 7).Updates(map[string]any{"model_limits_enabled": true, "model_limits": "allowed-model"}).Error)
@@ -73,7 +74,12 @@ func TestRoutePreviewListsOnlyChannelsServingTheModel(t *testing.T) {
 		}
 		return got
 	}
-	require.Equal(t, map[int]string{11: "eligible", 22: "channel_ratio_exceeded", 33: routeReasonChannelUnavailable}, reasons())
+	require.Equal(t, map[int]string{11: "eligible", 22: "channel_ratio_exceeded"}, reasons())
+	catalog, err := CatalogRouteChannels(context.Background(), 17, 7)
+	require.NoError(t, err)
+	for _, channel := range catalog {
+		require.NotEqual(t, 33, channel.ID, "the disabled channel is not in the catalog either")
+	}
 	c := routeTestContext(t)
 	scope, err := loadRouteScope(c.Request.Context(), 7)
 	require.NoError(t, err)
@@ -97,6 +103,15 @@ func TestRoutePreviewListsOnlyChannelsServingTheModel(t *testing.T) {
 		got = append(got, [2]any{entry.ChannelID, entry.Reason})
 	}
 	require.Equal(t, [][2]any{{88, "model_unavailable"}, {33, routeReasonChannelUnavailable}, {22, "channel_ratio_exceeded"}, {11, "eligible"}}, got)
+	disabled := preview.Entries[1]
+	require.False(t, disabled.Eligible)
+	require.Empty(t, disabled.Name)
+	require.Empty(t, disabled.ChannelRatio)
+	encoded, err := common.Marshal(disabled)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"channel_id":33,"eligible":false,"reason":"channel_unavailable","channel_ratio":""}`, string(encoded))
+	require.NotEmpty(t, preview.Entries[2].Name, "an enabled channel keeps its name")
+	require.Equal(t, "2", preview.Entries[2].ChannelRatio)
 }
 
 // B10: the preview orders with the requested stream bucket and states that

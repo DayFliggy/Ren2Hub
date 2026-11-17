@@ -31,7 +31,7 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	handlePermissionRoute(admin, http.MethodGet, "/agents", authz.TicketManage, controller.ListAdminTicketAgents)
 	handlePermissionRoute(admin, http.MethodGet, "/attachments/:attachment_id", authz.TicketRead, controller.DownloadAdminTicketAttachment)
 	handlePermissionRoute(admin, http.MethodGet, "/:id", authz.TicketRead, controller.GetAdminTicket)
-	handlePermissionRoute(admin, http.MethodPost, "/:id/messages", authz.TicketReply, middleware.CriticalRateLimit(), controller.AddAdminTicketMessage)
+	handlePermissionRoute(admin, http.MethodPost, "/:id/messages", authz.TicketReply, middleware.UserCriticalRateLimit("ticket-admin"), controller.AddAdminTicketMessage)
 	handlePermissionRoute(admin, http.MethodPatch, "/:id/status", authz.TicketManage, controller.UpdateAdminTicketStatus)
 	handlePermissionRoute(admin, http.MethodPatch, "/:id/assignee", authz.TicketManage, controller.AssignAdminTicket)
 	affiliate := api.Group("/user/affiliate", middleware.UserAuth(), middleware.DisableCache())

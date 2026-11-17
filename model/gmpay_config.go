@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting"
@@ -21,6 +22,9 @@ func SaveGmpayConfig(ctx context.Context, config setting.GmpayConfig) error {
 		if err := lockForUpdate(tx).Where(&Option{Key: setting.GmpayConfigKey}).First(&option).Error; err != nil {
 			return err
 		}
+		// Surrounding whitespace is never part of a secret, and a blank
+		// submission keeps the stored secret like an empty one.
+		config.SecretKey = strings.TrimSpace(config.SecretKey)
 		if config.SecretKey == "" && option.Value != "" {
 			var old setting.GmpayConfig
 			if err := common.UnmarshalJsonStr(option.Value, &old); err != nil {

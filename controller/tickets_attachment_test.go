@@ -11,12 +11,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type countingReader struct {
@@ -92,7 +94,7 @@ func TestTicketFormAbortsAtFirstLimitViolation(t *testing.T) {
 			require.GreaterOrEqual(t, int64(len(body)), tc.minTotal)
 			reader := &countingReader{reader: bytes.NewReader(body)}
 			ctx, _ := ticketContext(reader, contentType)
-			form, err := readTicketForm(ctx)
+			form, err := readSupportTicketForm(ctx)
 			require.Nil(t, form)
 			var formErr *ticketFormError
 			require.True(t, errors.As(err, &formErr), "%v", err)
@@ -138,12 +140,71 @@ func TestCreateTicketCompensatesFilesWhenDatabaseCommitFails(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{stored[0].StorageKey, stored[1].StorageKey}, names)
 
-	// 事务失败时临时文件被清理，不留下孤儿文件。
-	require.NoError(t, model.DB.Migrator().DropTable(&model.TicketAttachment{}))
+	// 事务失败时已提升和临时的文件都被清理，不留下孤儿文件。预算查询照常成功，
+	// 失败发生在事务里写附件记录的那一步。
+	failed := failTicketAttachmentInserts(t)
 	require.Equal(t, false, create()["success"])
+	require.Positive(t, failed.Load(), "the failure must happen inside the transaction")
 	after, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	require.Len(t, after, 2)
+	require.ElementsMatch(t, names, entryNames(after))
+	requireNoTicketReservations(t)
+}
+
+// failTicketAttachmentInserts makes every insert into ticket_attachments fail
+// inside its transaction and counts the attempts.
+func failTicketAttachmentInserts(t *testing.T) *atomic.Int32 {
+	t.Helper()
+	const name = "test:fail_ticket_attachment_insert"
+	var attempts atomic.Int32
+	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "ticket_attachments" {
+			attempts.Add(1)
+			_ = tx.AddError(errors.New("forced ticket attachment insert failure"))
+		}
+	}))
+	t.Cleanup(func() { require.NoError(t, model.DB.Callback().Create().Remove(name)) })
+	return &attempts
+}
+
+func entryNames(entries []os.DirEntry) []string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
+// Appending a message cleans up the same way: when the transaction fails after
+// the attachments were promoted, no file of that request stays in the directory.
+func TestAddTicketMessageCompensatesFilesWhenDatabaseCommitFails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	useTicketTestDatabase(t)
+	dir := t.TempDir()
+	t.Setenv("TICKET_UPLOAD_DIR", dir)
+	ticket := &model.Ticket{UserID: 9, Title: "t", Category: "api", Priority: "normal"}
+	_, err := model.CreateTicket(ticket, "c", 9, nil)
+	require.NoError(t, err)
+	requireTicketSuccess(t, userTicketReply(t, 9, ticket.ID, tinyPNG(t)))
+	kept := entryNames(mustReadDir(t, dir))
+	require.Len(t, kept, 1)
+
+	failed := failTicketAttachmentInserts(t)
+	reply := userTicketReply(t, 9, ticket.ID, tinyPNG(t), tinyPNG(t))
+	require.Contains(t, reply.Body.String(), `"success":false`)
+	require.Positive(t, failed.Load(), "the failure must happen inside the transaction")
+	require.ElementsMatch(t, kept, entryNames(mustReadDir(t, dir)))
+	requireNoTicketReservations(t)
+	messages, err := model.ListTicketMessages(ticket.ID)
+	require.NoError(t, err)
+	require.Len(t, messages, 2, "the failed reply is not stored")
+}
+
+func mustReadDir(t *testing.T, dir string) []os.DirEntry {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	return entries
 }
 
 func TestTicketFormCommitFailureRemovesPromotedAndTemporaryFiles(t *testing.T) {
@@ -151,7 +212,7 @@ func TestTicketFormCommitFailureRemovesPromotedAndTemporaryFiles(t *testing.T) {
 	t.Setenv("TICKET_UPLOAD_DIR", dir)
 	body, contentType := ticketMultipart(t, map[string]string{"content": "hello"}, tinyPNG(t), tinyPNG(t))
 	ctx, _ := ticketContext(bytes.NewReader(body), contentType)
-	form, err := readTicketForm(ctx)
+	form, err := readSupportTicketForm(ctx)
 	require.NoError(t, err)
 	previous := renameTicketFile
 	calls := 0
@@ -178,7 +239,7 @@ func TestTicketAttachmentFilenameCharacterLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	ctx, _ := ticketContext(bytes.NewReader(body.Bytes()), writer.FormDataContentType())
-	form, err := readTicketForm(ctx)
+	form, err := readSupportTicketForm(ctx)
 	require.Nil(t, form)
 	var formErr *ticketFormError
 	require.ErrorAs(t, err, &formErr)

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -59,17 +60,36 @@ type ticketForm struct {
 	fields  map[string]string
 	uploads []*ticketUpload
 	kept    bool
+	// budgetUserID 是受个人附件预算约束的用户；0 表示管理员回复，不受个人预算约束。
+	budgetUserID int
+	// reserved 是本请求在 ticketUploads 里持有的预留字节，discard 时全部释放。
+	reserved int64
+	// ctx 是请求的上下文，预算查询随请求取消。
+	ctx context.Context
 }
 
-// readTicketForm 流式解析工单表单：读到超出数量或大小的那一段时立即中止，
+// readUserTicketForm 读取用户提交的工单表单，附件受该用户的 24 小时预算约束。
+func readUserTicketForm(c *gin.Context, userID int) (*ticketForm, error) {
+	if userID <= 0 {
+		return nil, errors.New("ticket form requires a signed-in user")
+	}
+	return readTicketForm(c, userID)
+}
+
+// readSupportTicketForm 读取管理员回复的表单，只受单请求和可用空间限制。
+func readSupportTicketForm(c *gin.Context) (*ticketForm, error) {
+	return readTicketForm(c, 0)
+}
+
+// readTicketForm 流式解析工单表单：读到超出数量、大小或预算的那一段时立即中止，
 // 不先缓冲整个请求。附件先写临时文件，进入数据库事务前由 commit 提升。
-func readTicketForm(c *gin.Context) (*ticketForm, error) {
+func readTicketForm(c *gin.Context, budgetUserID int) (*ticketForm, error) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
 	reader, err := c.Request.MultipartReader()
 	if err != nil {
 		return nil, invalidTicketForm()
 	}
-	form := &ticketForm{fields: map[string]string{}}
+	form := &ticketForm{fields: map[string]string{}, budgetUserID: budgetUserID, ctx: c.Request.Context()}
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -120,8 +140,10 @@ func (form *ticketForm) keep() {
 	}
 }
 
-// discard 清理尚未提升的临时文件，以及事务失败时已提升的文件。
+// discard 释放本请求的附件预留，并清理尚未提升的临时文件，以及事务失败时已提升的文件。
+// 每个请求结束时都会调用它，包括已 keep 的成功请求。
 func (form *ticketForm) discard() {
+	form.releaseReservation()
 	if form.kept {
 		return
 	}
@@ -156,11 +178,15 @@ func (form *ticketForm) readPart(part *multipart.Part) error {
 	if len(form.uploads) == maxTicketAttachmentCount {
 		return &ticketFormError{common.NewMessage("At most {{count}} attachments are allowed", map[string]any{"count": maxTicketAttachmentCount}), "ATTACHMENT_TOO_MANY"}
 	}
+	if err := form.reserveAttachment(); err != nil {
+		return err
+	}
 	upload, err := stageTicketUpload(part)
 	if err != nil {
 		return err
 	}
 	form.uploads = append(form.uploads, upload)
+	form.shrinkReservation(maxTicketAttachmentSize - upload.attachment.Size)
 	return nil
 }
 

@@ -1,5 +1,7 @@
 {
   "A backup payment icon cannot exceed 256 characters": "备用支付图标不能超过 256 个字符",
+  "A backup payment link cannot contain a user name or password": "备用支付链接不能包含用户名或密码",
+  "A backup payment link cannot exceed 2048 bytes": "备用支付链接不能超过 2048 字节",
   "A token ID is required for correlation queries.": "关联查询需要提供令牌 ID。",
   "API info #{{index}} URL cannot exceed 500 characters": "第{{index}}个API信息的URL长度不能超过500字符",
   "API info #{{index}} contains disallowed content": "第{{index}}个API信息包含不允许的内容",

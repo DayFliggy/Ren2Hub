@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -189,12 +190,18 @@ func TestMidjourneyContinuationAdmittedOnOriginChannel(t *testing.T) {
 				route.fill(t, b)
 			}
 			before := mjUserQuota(t)
+			// An earlier synchronous usage S stays the only bonus-window row.
+			synced := model.TopUpBonusUsageHourly{UserID: mjUserID, HourUTC: time.Now().Unix()/3600*3600 - 3600, Quota: 777}
+			require.NoError(t, model.DB.Create(&synced).Error)
 
 			recorder := route.submit(t, token, "/mj/submit/change", mjContinuations[0].body)
 
 			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 			assert.Equal(t, []string{"key-a"}, route.upstream.secrets, "sent once, with the origin channel's key")
 			assert.Equal(t, 50_000, before-mjUserQuota(t), "0.1 x 500000 on the origin channel")
+			var bonusRows []model.TopUpBonusUsageHourly
+			require.NoError(t, model.DB.Find(&bonusRows).Error)
+			assert.Equal(t, []model.TopUpBonusUsageHourly{synced}, bonusRows, "a Midjourney submission is task billing")
 			var next model.Midjourney
 			require.NoError(t, model.DB.Where("mj_id = ?", "mj-next-1").First(&next).Error)
 			assert.Equal(t, a.Id, next.ChannelId)

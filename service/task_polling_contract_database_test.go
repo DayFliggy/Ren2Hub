@@ -82,9 +82,16 @@ func TestTaskPollingContractDatabaseMatrix(t *testing.T) {
 			t.Logf("database: %s", version)
 			t.Run("admission_failures_do_not_penalize_provider", TestTaskPollAdmissionFailuresAreNotUpstreamFailures)
 			t.Run("admission_deletion_has_no_side_effects", TestTaskPollAdmissionDeletionSkipsWithoutSideEffects)
+			// Terminal settlement, failure refunds and timeout refunds are task
+			// billing: an earlier synchronous usage S stays the only bonus-window row.
+			synced := model.TopUpBonusUsageHourly{UserID: 990001, HourUTC: 1_790_000_000 / 3600 * 3600, Quota: 4242}
+			require.NoError(t, db.Create(&synced).Error)
 			t.Run("timeout_refund_is_once", TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce)
 			t.Run("terminal_usage_settlement", TestUpdateBatchTasksSettlesTieredUsageForTerminalStates)
 			t.Run("terminal_failure_refund", TestUpdateBatchTasksRefundsFailedTaskWithoutUsageSettlement)
+			var bonusRows []model.TopUpBonusUsageHourly
+			require.NoError(t, db.Find(&bonusRows).Error)
+			assert.Equal(t, []model.TopUpBonusUsageHourly{synced}, bonusRows)
 		})
 	}
 }

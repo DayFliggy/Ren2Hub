@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 361,
+    "extension": 376,
     "removed": 45
   },
   "files": [
@@ -1618,7 +1618,7 @@
       "path": "controller/model_catalog.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "68550481d1135f9eb8d00e99753375b5c43c2c7a41a068163253c9930a78fdc4",
+      "local_sha256": "752a59238204b03df1b4acc5c81794bce76cd3fb3399e247bb828a7b0ff24159",
       "reasons": [
         "catalog-stats"
       ],
@@ -1983,7 +1983,7 @@
       "path": "controller/plugin_native_e2e_test.go",
       "status": "adapted",
       "upstream_sha256": "e44dcc9d9fc3369890abe2153b2edfa340009a0b4e84f046d947546302b2beff",
-      "local_sha256": "bce1584d560a159f7c643060916338828b50354ee6ea48157108e582927c8702"
+      "local_sha256": "9aaa49f20bd7f28fc06b974e0b386c7959bb3381ac6a3277a7691f01895004d4"
     },
     {
       "path": "controller/plugin_protocol.go",
@@ -2606,7 +2606,7 @@
       "path": "controller/tickets.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bba690f8362111fad2ab0c83a6335a02c3283d0d3ff111b27794cd378bd8801e",
+      "local_sha256": "23b3e4f8491f04268dbe2710034ac3a149db106e20d9db75062703f2981bbbdc",
       "reasons": [
         "ticket"
       ],
@@ -2624,7 +2624,7 @@
       "path": "controller/tickets_admin.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7ae8a125b3bce511bfc1aef8580391e8844ebae5a9dce44f968b085dac4e1a10",
+      "local_sha256": "07119c827cb07a1b634b86eeebf23a256126ccc1c51be9ffc86c88a946d0a61b",
       "reasons": [
         "ticket"
       ],
@@ -2642,7 +2642,7 @@
       "path": "controller/tickets_attachment.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d34b9b647af3494fc4a2188ead2c54a94e59c11f68e59f0776c7439b096cf73d",
+      "local_sha256": "4afd01a599cc4d62e1a0c25705acc2e3ea826855309453f502302e37e0c7d860",
       "reasons": [
         "ticket"
       ],
@@ -2655,6 +2655,18 @@
           "controller/tickets_attachment.go#1"
         ]
       }
+    },
+    {
+      "path": "controller/tickets_attachment_budget_query_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c655699113a3561c5dac1fa3e75dcf8fc745a163ce851c6212011e3ee5b06815"
+    },
+    {
+      "path": "controller/tickets_attachment_budget_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6524996296444922fafa2822a5a1a4e039b75a9ca183474b17784330d79a40f9"
     },
     {
       "path": "controller/tickets_attachment_cleanup.go",
@@ -2678,7 +2690,7 @@
       "path": "controller/tickets_attachment_cleanup_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "07c92ed6fc5354b0a828ab99336c44748534db30250af664e57b1607ff761082"
+      "local_sha256": "a120d422c638f282d13c55389b0362a975ce1dcde2ceab54b665ee5380917fc3"
     },
     {
       "path": "controller/tickets_attachment_lock_linux.go",
@@ -2717,16 +2729,76 @@
       }
     },
     {
+      "path": "controller/tickets_attachment_reservation.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "567717191ddcd1e301164cb92e95643ac92462d90d4f05425147cc7a87ca9df1",
+      "reasons": [
+        "ticket"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 工单附件 24 小时预算、进程内预留与可用空间下限的扩展文件，属合同 ticket（SYNC_LEDGER.md#现行本地差异）；不改上游文件",
+        "method": "本轮实现逐文件审查；计划经 PLAN-REVIEW 裁定"
+      }
+    },
+    {
+      "path": "controller/tickets_attachment_reservation_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "b80f872a88c2881cb96d52de8bc8de35f831a9ed42862ddcbf2399cd14735890"
+    },
+    {
+      "path": "controller/tickets_attachment_space_linux.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a42a8dc35880438ac35355a7f8ccc499082f06279ed9beff3f32eb8e78ac1cb8",
+      "reasons": [
+        "ticket"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 工单附件 24 小时预算、进程内预留与可用空间下限的扩展文件，属合同 ticket（SYNC_LEDGER.md#现行本地差异）；不改上游文件",
+        "method": "本轮实现逐文件审查；计划经 PLAN-REVIEW 裁定"
+      }
+    },
+    {
+      "path": "controller/tickets_attachment_space_other.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4278435c09a2e66ba841a8f72daa380b62f017a8ec4e3d992acbe55eac31d92e",
+      "reasons": [
+        "ticket"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 工单附件 24 小时预算、进程内预留与可用空间下限的扩展文件，属合同 ticket（SYNC_LEDGER.md#现行本地差异）；不改上游文件",
+        "method": "本轮实现逐文件审查；计划经 PLAN-REVIEW 裁定"
+      }
+    },
+    {
+      "path": "controller/tickets_attachment_space_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4ffb5d95988979295464af29ad8338442c80b3b9d4bd62b811ce302e0f4e145a"
+    },
+    {
       "path": "controller/tickets_attachment_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "316e9589b64eda866c56d4441feb3b249174e800ad2104507e34fedd4fdeee4c"
+      "local_sha256": "4675cbcd12bbd821606732802d678aaf318ab882f1bd8b0a5dc0715efecad7b4"
     },
     {
       "path": "controller/tickets_deleted_owner_test.go",
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "721126091ed01ec085b820fabf3c1b9893df02f1fff23256cd44a0cc61bed2d1"
+    },
+    {
+      "path": "controller/tickets_status_audit_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f507fdf37a094feea0bb99b93aba7f0230e5dd572902d4350ca623ef99d791c0"
     },
     {
       "path": "controller/token.go",
@@ -2768,7 +2840,7 @@
       "path": "controller/token_route_permission.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ee81ecfa7a85bdbb951c161a85dea2a51df8172093242c7fb3ce21474b5e2a4e",
+      "local_sha256": "a755959f36c0c9eb51225982c0b7cb3dfc360988ded9f6d6236066e2b80149c9",
       "reasons": [
         "token-routing"
       ],
@@ -4616,7 +4688,7 @@
       "path": "model/gmpay.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0639a6ecac40767041f56971188152f1295e33a9860bc9fb30bc61a4dde5dad5",
+      "local_sha256": "e94e5a960e793d6dd4eadc9dcad90ee0ed8eb49cec0793b994863408f2554fec",
       "reasons": [
         "gmpay",
         "topup-bonus"
@@ -4635,7 +4707,7 @@
       "path": "model/gmpay_config.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "53f9f53c29b728d376a458a67f1958d23111c021e4c29491290d1bd61ba34ce6",
+      "local_sha256": "c92e7beec46c42388a29b89576ba182ceb10279cd24121c075a562e4f28b0596",
       "reasons": [
         "gmpay"
       ],
@@ -4653,13 +4725,13 @@
       "path": "model/gmpay_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "78e604d72984c7553991f82b3be72e98f34c2727d1c91308f17b8a69db0bfefc"
+      "local_sha256": "22585709ad9e448295c4761c1e8115864a6ead890eb933935856e3474312bb52"
     },
     {
       "path": "model/gmpay_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "87210a33796eca04a01459a4bf0c0392c1620823d224deb8d4a36e4d5a296d09"
+      "local_sha256": "bc6270212527282ca924fadd8d21cde148bb7a92acebe45feda01f4ba5264df0"
     },
     {
       "path": "model/gorm_logger.go",
@@ -5504,7 +5576,7 @@
       "path": "model/ticket.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9b9dbabf7a49d438036ea020ae0b91bb0914ac4021cdf05a5d299dc720167ab9",
+      "local_sha256": "c23dac37b34d65677973dda6c51f3cef9db6900ee3014f3e6062a5e39acbbfaa",
       "reasons": [
         "ticket"
       ],
@@ -5528,7 +5600,7 @@
       "path": "model/ticket_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e2de81cc76950f88ed96adcd2191667678955db34b00e6dd1d8cd37794df7f1b"
+      "local_sha256": "ebce13e61ff9d3f20e488aa3a6f13e0dfc137e3b2fffa7439cb7b7d00a307dea"
     },
     {
       "path": "model/token.go",
@@ -5757,6 +5829,12 @@
       }
     },
     {
+      "path": "model/topup_bonus_usage_native_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "17034b55d7dd524b2dcf6ad0e6e3c7ec42b81266581d3f86052c9f75f3e2ea4a"
+    },
+    {
       "path": "model/topup_native_facade_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -5893,19 +5971,18 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "8939a79f86b48d599f7cfb77302027f40e13dedc6162b29cc4aceb6082725f70",
+      "local_sha256": "9f8a66e7e9f90941f190b145f4bd27102be3135c6a6c6bf509e59bca85a12dbc",
       "reasons": [
         "affiliate",
         "auth-cache-integrity",
         "concurrency",
         "group-removal",
         "retired",
-        "topup-bonus",
         "vue-frontend"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -6302,7 +6379,7 @@
       "path": "pkg/gmpay/gmpay.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9a37049ecb70c9ca3a18c58169a058d9792418f073e3be23afdb9addc97afedf",
+      "local_sha256": "71250c00ad2b893b728193615ab4c039c6565a9504aa5e6e0a8b9db4fc7ecc41",
       "reasons": [
         "gmpay"
       ],
@@ -6320,7 +6397,7 @@
       "path": "pkg/gmpay/gmpay_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "fa34c390d7f03becb42495c260c6692c82d302c6820a8a0e02d115574f63c3dd"
+      "local_sha256": "9ed02c850a4e6c45348a06f30cccff674e88f37a83f4094a0a068700506e31d3"
     },
     {
       "path": "pkg/ionet/client.go",
@@ -9255,7 +9332,7 @@
       "path": "relay/native_count.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cc2d9f4d5fb887791142fe863653d3bd888759b01966c30838dc1310a6de66f1",
+      "local_sha256": "d63c2bff55368d668623301e3a3e31282d607f35ce4244609d91ef52d550e26e",
       "reasons": [
         "native-count"
       ],
@@ -9268,12 +9345,6 @@
           "relay/native_count.go#1"
         ]
       }
-    },
-    {
-      "path": "relay/native_count_outcome_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "e0ac3e022af7d74d2181e7f2e22605a44a0fd497e4567ee9ca4b165629523edc"
     },
     {
       "path": "relay/native_restored_origin_relay_task_route_test.go",
@@ -10826,7 +10897,7 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "99d0e54db5fd92fc12676ecb3d0638f5f7e66e3e0a902c5210f9acf2b74f9477",
+      "local_sha256": "8d74387f9ad04d401e8872ca1d8137cdf029a692cb496ef47e198db3b046c7b9",
       "reasons": [
         "ticket",
         "token-routing"
@@ -10869,6 +10940,12 @@
       "test_fixture_for": "router/native_restored_web_test.go"
     },
     {
+      "path": "router/gmpay_notify_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "0356b3962f48099aaafbbe165a03101f9892e0e5851d8d047c0ef97bf9ae5463"
+    },
+    {
       "path": "router/main.go",
       "status": "upstream_equal",
       "upstream_sha256": "f10096d5a680b31baebac11633d1f3b3dc2e31782feb75ca2ec88ff4f81fee72",
@@ -10878,7 +10955,7 @@
       "path": "router/mj_origin_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6620cbe11000d94f1c1d322f58feb2ff3650759bbfd2de10b80a69447886e511"
+      "local_sha256": "5efff7749525b0ed0809f20c8f09d21065ffa9254b6249be22aff1cf2a7b9ce9"
     },
     {
       "path": "router/mj_origin_upstream_probe_test.go",
@@ -10887,10 +10964,22 @@
       "local_sha256": "faac2bd606e1a8896e1b0247bced42bdaa871475c19253270bfbd0f8a3f3df17"
     },
     {
+      "path": "router/model_catalog_scope_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "32c4690f5f615d23a67c4318a45a9b019d7ac21c52fce6c55eca0ab60a649acf"
+    },
+    {
+      "path": "router/native_count_error_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4060034e5071db717c87b49f473255830507c55b01c8a96127b73e6b5939b228"
+    },
+    {
       "path": "router/native_count_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0507203b5f63aea31b322ea813f3814be1f77bcec4d690ed17253de913424dac"
+      "local_sha256": "25c8050c79e1c5af3d875024d7925fa479ebedccd3b4345ac58bafcfabbcb5cc"
     },
     {
       "path": "router/native_restored_remix_storage_test.go",
@@ -11010,6 +11099,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "4446286e49b6dddc1834b18e1d10ee150947739f453471f9272695bf50ea00e9",
       "local_sha256": "4446286e49b6dddc1834b18e1d10ee150947739f453471f9272695bf50ea00e9"
+    },
+    {
+      "path": "router/tickets_rate_limit_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "134a50c424d8512d32d33763187d76f0e72b07676a07e606b3996e42f20db2f9"
     },
     {
       "path": "router/token-routing.go",
@@ -11511,7 +11606,7 @@
       "path": "service/channel_upstream_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9aa38c8b8c2056a34a341a44f1ca58c0408f3b1e373cf4d9f20f461d5c13b632",
+      "local_sha256": "91ff0ca2be6bdb29446ac8a54da3aeb9bff0f3923aacfc2008b03ba706299ece",
       "reasons": [
         "upstream-ratio"
       ],
@@ -11601,7 +11696,7 @@
       "path": "service/channel_upstream_ratio_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2693c2787d85abdb90168e9c9169e6c5764b177efced5874f6a49c1160599394"
+      "local_sha256": "cd4e11bb18496304d0ba1ae947e5d634928ab41e6944b70ad2d27d852148efeb"
     },
     {
       "path": "service/codex_channel_models.go",
@@ -11897,7 +11992,7 @@
       "path": "service/gmpay_config.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "64bc1eeaf317a51e84c4288883dc85de4977a8f9da4b6bd476a0df57591134c1",
+      "local_sha256": "f7b3535bf36e3e9895587ae5f379c2f3f110acc1c178447bfffcb06601f6a1e1",
       "reasons": [
         "gmpay"
       ],
@@ -12446,16 +12541,17 @@
       "path": "service/quota.go",
       "status": "adapted",
       "upstream_sha256": "e6e7edfb401a83bcd68f4f4cbdd38b7f9c2eec2c5f37b04e3a079cc57a18bb17",
-      "local_sha256": "817822c4ca6300f2aba0f00b214a8cd94791937275b12afb907db5587735292e",
+      "local_sha256": "f108c1d9a7e5425fa33fe5c6a6e5bd199e27a99b5be6460db16dafa203fdada3",
       "reasons": [
         "channel-ratio",
         "group-removal",
         "no-builtin-prices",
-        "retired"
+        "retired",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/quota.go#1, service/quota.go#10, service/quota.go#11, service/quota.go#12, service/quota.go#13, service/quota.go#14, service/quota.go#15, service/quota.go#16, service/quota.go#17, service/quota.go#18, service/quota.go#19, service/quota.go#2, service/quota.go#3, service/quota.go#4, service/quota.go#5, service/quota.go#6, service/quota.go#7, service/quota.go#8, service/quota.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/quota.go#1, service/quota.go#10, service/quota.go#11, service/quota.go#12, service/quota.go#13, service/quota.go#14, service/quota.go#15, service/quota.go#16, service/quota.go#17, service/quota.go#18, service/quota.go#19, service/quota.go#2, service/quota.go#3, service/quota.go#4, service/quota.go#5, service/quota.go#6, service/quota.go#7, service/quota.go#8, service/quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12604,7 +12700,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1b706c26e9b9d5d9581f57bb378679d871616cc70696cb1595712f232ae4521a",
+      "local_sha256": "7b56f4219372d4a514f20d50306a0fa460d96bf7e453b90b69aee1142a4fb04e",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -12618,6 +12714,12 @@
           "service/route_attempt.go#1"
         ]
       }
+    },
+    {
+      "path": "service/route_attempt_native_count_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2e6158d27872499a1bb67d185c6e2ce4af3c4888cd03bf91b63a3e369fce9c7f"
     },
     {
       "path": "service/route_attempt_test.go",
@@ -12809,7 +12911,7 @@
       "path": "service/route_user_view_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2a9bf77b8b03cfe9cc39b09ff917aaa3d13a3aa570d3a2604fb024dc43d484ee"
+      "local_sha256": "63c5888d5f75e1d3e7549c6084ff1b4aa6a384ffabbb678cfc240c2042603c71"
     },
     {
       "path": "service/security_verification.go",
@@ -12995,7 +13097,7 @@
       "path": "service/task_polling_contract_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "70d0564eeea830119a7c67f692e3c4d78b2ef12e1f8c55f727343136aa90b2be"
+      "local_sha256": "95dd9e8c21e5dfac77f7144f4e418798f73ca3859ae9c5a91a2db4e9e7b80457"
     },
     {
       "path": "service/task_polling_test.go",
@@ -13007,15 +13109,16 @@
       "path": "service/text_quota.go",
       "status": "adapted",
       "upstream_sha256": "ba6a6d3f5d44867186c5cbede88cf6be1085324821a17111d369d6bdb3f84dc7",
-      "local_sha256": "6b5c89fa5c760d1dacb6ef0fa372a7d6886f11b27f3938403aab88e03cd1db9b",
+      "local_sha256": "19385a4f33789623fea18284f020fa7184243774036260f1ac1d8f13fa8270a7",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "no-builtin-prices"
+        "no-builtin-prices",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -13046,7 +13149,7 @@
       "path": "service/text_quota_test.go",
       "status": "adapted",
       "upstream_sha256": "849332308a0b71f4be5da52de394d87dd3cf47b589734e275fa2ee6f94050c31",
-      "local_sha256": "b34d09e85844df09b367d81ff2906c4b54a173351f41fd9ebe2b2f643ec96e15"
+      "local_sha256": "56e4687dcba678a45416bab2ec5acbf2f611cad4bf7045806117cd67396876a8"
     },
     {
       "path": "service/ticket_notification_failure_test.go",
@@ -13140,7 +13243,7 @@
       "path": "service/token_route_preview.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e8d37e67312446ff81842559490781547490e6d5ffa8c7505774bd7299b9b776",
+      "local_sha256": "65fa85f1acfa23dacb623cc46f7b211ffc7484d3340d3d63601c715b023b2765",
       "reasons": [
         "token-routing"
       ],
@@ -13215,10 +13318,30 @@
       }
     },
     {
+      "path": "service/topup_bonus_task_usage_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "34d91a48ab55d5deff363c83438a146c7502e9302513a86a35979c8ca12905c8"
+    },
+    {
       "path": "service/topup_bonus_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "837972fc13e5e1667a7d865ab89acbe08ac58c0f843d1dbf342fd9dda0675824"
+      "local_sha256": "3cafcbdfddcf0c73105d3fafb76b844ae9d96d26073e3057e9d35a1da4c6160d"
+    },
+    {
+      "path": "service/topup_bonus_usage.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fe8fe71615e781ea57dfbd7154296e2c475a505600300659c68c47f5883d5100",
+      "reasons": [
+        "topup-bonus"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "2026-11-17 加赠窗口只统计同步计费路径的写入包装，见 SYNC_LEDGER.md#充值加赠接点；model/user.go 两个函数恢复上游原文",
+        "method": "本轮实现逐文件审查；设计经主会话与 Codex gpt-6-astra 定稿"
+      }
     },
     {
       "path": "service/twofa.go",
@@ -13291,15 +13414,16 @@
       "path": "service/violation_fee.go",
       "status": "adapted",
       "upstream_sha256": "ee38f6a2b2243f41f05f44bd81c0ef39250cafc1d3d5f2031715d90987014f88",
-      "local_sha256": "c2e9c0e6fe6289a8e943dea781c31c8a04e3a9e803efb77f3c91a892fca230a7",
+      "local_sha256": "a9cc6b7c93b10e1d9a4a287c2adf64b781c2f9b44e5038692d3d29d152a549f3",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired"
+        "retired",
+        "topup-bonus"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -13526,7 +13650,7 @@
       "path": "setting/operation_setting/backup_payment_setting.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1445cb92703f37b20c52273364fb51744ac2b20348428d1eebf79d6d2e78bd96",
+      "local_sha256": "0cf4486503afa39ac9e397cd03b2ad8223e554c8dc3ab37084213302d1bbe746",
       "reasons": [
         "backup-payment-links"
       ],
@@ -13540,7 +13664,7 @@
       "path": "setting/operation_setting/backup_payment_setting_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0b396b027b1745879c63c6938a6e7b68b58cd6ce2bbc8b21c58655eb8c94e86b"
+      "local_sha256": "f64b7701827e5de244dc849bb84b33f94413fa10e419faf713edd1cde47f84d8"
     },
     {
       "path": "setting/operation_setting/channel_affinity_setting.go",

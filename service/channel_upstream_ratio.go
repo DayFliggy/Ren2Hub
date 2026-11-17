@@ -27,14 +27,16 @@ var (
 )
 
 // 主流协议渠道可能挂在 Sub2API/NewAPI 中转后面，需要管理员手动识别。
+// upstreamRatioDetectTypes 只含正常转发时把保存的 Key 全部内容作为凭据发给渠道地址的类型
+// （火山引擎的语音合成把 appid|token 拆开发送，两段都发给渠道地址），识别请求把它作为 Bearer
+// 发送不会扩大泄露面。智谱 v3（JWT）、讯飞（签名地址）、腾讯（复合 Key 走 TC3 签名）和
+// 百度 v2（只发送第一段）由复合 Key 派生凭据，不在其中。
 var upstreamRatioDetectTypes = map[int]struct{}{
 	constant.ChannelTypeOpenAI: {}, constant.ChannelTypeAnthropic: {}, constant.ChannelTypeGemini: {},
 	constant.ChannelTypeXai: {}, constant.ChannelTypeOpenRouter: {},
-	constant.ChannelTypeBaidu: {}, constant.ChannelTypeZhipu: {}, constant.ChannelTypeAli: {},
-	constant.ChannelTypeXunfei: {}, constant.ChannelTypeTencent: {}, constant.ChannelTypeMoonshot: {},
+	constant.ChannelTypeBaidu: {}, constant.ChannelTypeAli: {}, constant.ChannelTypeMoonshot: {},
 	constant.ChannelTypeZhipu_v4: {}, constant.ChannelTypeLingYiWanWu: {}, constant.ChannelTypeMiniMax: {},
 	constant.ChannelTypeSiliconFlow: {}, constant.ChannelTypeDeepSeek: {}, constant.ChannelTypeVolcEngine: {},
-	constant.ChannelTypeBaiduV2: {},
 }
 
 // UpstreamRatioKind 决定渠道走哪条探测路径。多 Key 渠道无法确定用哪把 Key 代表渠道，只能手动填写。

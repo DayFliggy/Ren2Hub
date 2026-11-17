@@ -14,7 +14,7 @@
 
 路由保存 `{mode:"auto"|"manual",version,entries:[{channel_id,enabled}],max_channel_ratio:null|"1.5"}`，手动顺序由 `entries` 的数组顺序决定，请求中的 `position` 不作为输入，保存时按数组下标重写。响应含 Token、模式、版本、带 `position` 的列表及倍率上限。自动模式不保存自选列表；手动空列表保持为空。非法请求400、未授权渠道403、版本冲突409、不可见Token404；数据库错误500，不以空候选假成功。scoped PAT 创建 `type:"manual"` 的 Token 时，PAT 自身也要带 `routing:write`，否则 403 `ROUTING_FORBIDDEN`。删除业务分组，旧组参数明确拒绝：`/api/channel/*`、`POST|PUT /api/token/`、`/api/user/`、`/api/user/self` 和 `*/routing` 的写请求只要请求体非空，不论 Content-Type 都检查，非 JSON 请求体返回 400 `invalid JSON request`。
 
-预览响应回显解析后的 `model`、`transport` 和 `stream`（WS 为 true），并给出 `ordering`：手动模式为 `"manual"`，自动模式为 `"weighted_random_per_request"`，表示加权随机按每个请求单独计算，预览只是其中一次抽样。普通用户视图（模型目录与 `routing/channels` 共用 `service.RouteChannel`）的共享字段为 `id`、`name`、`type`、`status`、`models`、`supported_endpoints`、`channel_ratio`、`max_concurrency`、`eligible` 和可选的 `filter_reason`。模型目录的渠道项另含 `lab`（`id`、`name`、`source`），用于厂商分类展示，不参与路由或计费；`routing/channels` 不因共用字段而增加该项。实时 `in_flight` 只出现在管理端渠道列表、搜索、详情和更新响应里。
+预览响应回显解析后的 `model`、`transport` 和 `stream`（WS 为 true），并给出 `ordering`：手动模式为 `"manual"`，自动模式为 `"weighted_random_per_request"`，表示加权随机按每个请求单独计算，预览只是其中一次抽样。条目为 `{channel_id,name?,eligible,reason,channel_ratio}`。自动模式只列出服务所查模型、且可路由的渠道，被禁用的渠道与模型目录一样不出现；手动模式按列表顺序列出全部条目，指向被禁用或已删除渠道的条目保留 `reason`（如 `channel_unavailable`），但不返回 `name`，`channel_ratio` 为空串。普通用户视图（模型目录与 `routing/channels` 共用 `service.RouteChannel`）的共享字段为 `id`、`name`、`type`、`status`、`models`、`supported_endpoints`、`channel_ratio`、`max_concurrency`、`eligible` 和可选的 `filter_reason`。模型目录的渠道项另含 `lab`（`id`、`name`、`source`），用于厂商分类展示，不参与路由或计费；`routing/channels` 不因共用字段而增加该项。实时 `in_flight` 只出现在管理端渠道列表、搜索、详情和更新响应里。
 
 | 聚合接口 | 合同 |
 | --- | --- |
@@ -41,9 +41,15 @@
 
 `quality` 的窗口与原生 `/api/perf-metrics/summary` 相同，最后一个点是当前未满的小时；窗口内没有请求时 `summary` 为 `null`，没有请求的小时三个比率都为 `null`。`stats.system_usage` 在监控关闭、尚未采样或采样超过 30 秒时为 `null`，不返回 0；`db_pool.log` 为 `null` 且 `log_shared=true` 表示日志库与主库共用连接池。
 
-个人工单 `/api/tickets` 全部要求浏览器会话：GET列表、POST创建、GET `/:id`、POST `/:id/messages`、PATCH `/:id/status`、GET `/attachments/:attachment_id`。创建与回复为multipart，附件字段 `attachments`，最多五张、每张10MiB；详情返回 `{ticket,messages}`，列表返回 `{items,total,page,page_size}`。表单按流式解析，第一次越界就停止读取，返回 HTTP 200、`success:false` 和 `code`：`ATTACHMENT_TOO_MANY`、`ATTACHMENT_TOO_LARGE`、`ATTACHMENT_TYPE_UNSUPPORTED`、`REQUEST_TOO_LARGE`、`VALIDATION_ERROR`。附件先写临时文件，在数据库事务开始前改名到最终位置；改名失败时清理已暂存或改名的文件，不创建工单或回复记录，并返回普通错误响应。数据库事务失败也会清理这些文件；成功提交后才保留文件。当前后端不发送 `ATTACHMENT_STORAGE_FAILED`，不能把旧的前端兼容分支解释为现行接口的部分成功保证。下载响应带 `X-Content-Type-Options: nosniff`。
+个人工单 `/api/tickets` 全部要求浏览器会话：GET列表、POST创建、GET `/:id`、POST `/:id/messages`、PATCH `/:id/status`、GET `/attachments/:attachment_id`。创建与回复为multipart，附件字段 `attachments`，最多五张、每张10MiB；详情返回 `{ticket,messages}`，列表返回 `{items,total,page,page_size}`。表单按流式解析，第一次越界就停止读取，返回 HTTP 200、`success:false` 和 `code`：`ATTACHMENT_TOO_MANY`、`ATTACHMENT_TOO_LARGE`、`ATTACHMENT_TYPE_UNSUPPORTED`、`ATTACHMENT_QUOTA_EXCEEDED`、`ATTACHMENT_STORAGE_FULL`、`REQUEST_TOO_LARGE`、`VALIDATION_ERROR`。
+
+每个附件开始写入前，在进程内按单张上限 10 MiB 预留，写完收缩到实际大小，请求以任何方式结束时释放；不使用 `Content-Length`，没有附件的文字回复不经过这两项检查。个人预算：每个用户滚动 24 小时内作为作者在用户消息里写入的附件（按 `ticket_attachments.message_id → ticket_messages.author_id` 统计）加上该用户在途预留和本次预留不超过 200 MiB，否则返回 `ATTACHMENT_QUOTA_EXCEEDED`，剩余不足 10 MiB 时不再接受新附件。预算查询在登记本次预留之后进行，不持有预留锁，带请求上下文和 3 秒超时；查询失败、超时或请求取消时释放本次预留并按普通错误返回。这是写入速率预算，不是累计占用上限，附件不删除。管理员回复入口不受个人预算约束。空间下限：附件目录所在文件系统的 `Bavail` 减去全站在途预留和本次预留后不足 5 GiB 时，用户和管理员都返回 `ATTACHMENT_STORAGE_FULL`，附件停止接收直到空间恢复；读取可用空间失败按普通错误返回。下限只约束本应用的附件写入，不能阻止同一分区上的其他写入。非 Linux 的开发构建不做空间检查，产品只交付 Linux 镜像。用户的创建与回复按 IP 限速，管理员回复按管理员账号限速（`UserCriticalRateLimit("ticket-admin")`）。附件先写临时文件，在数据库事务开始前改名到最终位置；改名失败时清理已暂存或改名的文件，不创建工单或回复记录，并返回普通错误响应。数据库事务失败也会清理这些文件；成功提交后才保留文件。当前后端不发送 `ATTACHMENT_STORAGE_FAILED`，不能把旧的前端兼容分支解释为现行接口的部分成功保证。下载响应带 `X-Content-Type-Options: nosniff`。
 
 管理员工单前缀 `/api/admin/tickets`：读取列表/详情/summary/附件需要 `ticket:read`，回复需要 `ticket:reply`，agents、status、assignee 需要 `ticket:manage`。指派使用 PATCH `/:id/assignee` 与 `{assignee_id:number|null}`。管理员scope与当前角色权限取交集；个人接口不会因为PAT有ticket scope而开放。
+
+状态修改（用户与管理员的 PATCH `/:id/status`）只接受 `open` 和 `closed`，按流转处理：`open`/`replied` → `closed` 写入关闭时间，`closed` → `open` 清空关闭时间。请求当前状态，或对 `replied` 的工单请求 `open`，不写库，返回工单现状，`updated_at` 和列表排序不变；管理端只在状态真的变化时写审计。
+
+工单通知（新工单、回复、指派）的类型都是 `ticket_update`，走原生通知器按“接收人 + 类型”的限额（默认 10 分钟 2 条，`NOTIFY_LIMIT_COUNT`、`NOTIFICATION_LIMIT_DURATION_MINUTE`）。同一个接收人短时间内超出的通知不发送，其中可能有别的工单的通知；通知是尽力而为，处理工单以管理员工单列表和用户的工单列表为准。
 
 提交用户被删除后，工单仍出现在管理员列表、summary 计数和关键字搜索中，详情、回复与状态修改照常可用。列表和详情的每个工单都带 `user_deleted:boolean`；软删除的用户保留用户名和显示名，硬删除只保留 `user.id`（取自工单的 `user_id`），用户名、显示名为空串，详情不返回 `email`。回复不会给已删除用户发送通知。
 

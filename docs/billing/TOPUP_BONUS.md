@@ -65,12 +65,13 @@ Stripe 和 Creem 的实扣由远端价格决定。前端先用 `GET /api/user/to
 
 ## 窗口
 
-小时表 `topup_bonus_usage_hourly` 按 (user_id, 整点 UTC) 记录 used_quota 的业务增量，写入点有两个：
+小时表 `topup_bonus_usage_hourly` 按 (user_id, 整点 UTC) 记录同步计费路径的用量。是否计入取决于计费路径，不取决于模型、是否流式或客户端是否等待结果：
 
-- 位置：`model/user.go` 的 `UpdateUserUsedQuotaAndRequestCount` 与 `UpdateUserUsedQuota`。消费、违规费、任务差额和退款都经过这两个函数。
+- 计入：同步结算的文本、音频和实时请求，以及违规扣费。四个写入点是 `service/text_quota.go` 的 `PostTextConsumeQuota`、`service/quota.go` 的 `PostAudioConsumeQuota` 与 `PostWssConsumeQuota`、`service/violation_fee.go` 的 `ChargeViolationFeeIfNeeded`；它们经 `service/topup_bonus_usage.go` 的包装各写一次小时行，金额等于这次加到 used_quota 的额度，零额度不写。
+- 不计入：任务计费的请求，包括视频、Suno、Midjourney，以及经任务插件计费的图片请求（豆包 Seedream、阿里的图片模型），无论客户端是当场拿到结果还是轮询。它们的提交、差额结算和失败退款照常改 used_quota，不写小时表。所以仪表盘的消费和已用额度包含这些请求，加赠窗口不包含。
 - 写法：同步写库，不进批量队列。
 
-小时表是与 used_quota 并行的尽力统计，两者不在同一个事务里。任一边写入失败，或批量模式下进程中断，都会让窗口金额偏高或偏低。小时写入失败只记录错误并计数，不影响扣费。
+小时表是用量统计，不是钱包净支出的凭证。它与 used_quota 并行写入，两者不在同一个事务里；同步路径先记用量后结算，补扣失败、任一边写入失败，或批量模式下进程中断，都会让窗口金额与实际扣费不一致。小时写入失败只记录错误并计数，不影响扣费。
 
 业务日 D 的截止点是当天 00:00（配置时区）。日、周、月窗口分别覆盖截止点前的 1、7、30 个业务日，区间左闭右开，结果按天缓存。以下写入会落进已缓存的过去小时：
 

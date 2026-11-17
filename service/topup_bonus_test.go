@@ -136,7 +136,7 @@ func seedTopUpBonusResolveRows(t *testing.T, db *gorm.DB) {
 		model.TopUpBonusUsageHourly{UserID: 7, HourUTC: cutoff - 3600, Quota: 100},
 		model.TopUpBonusUsageHourly{UserID: 7, HourUTC: cutoff - 3*86400, Quota: 400},
 		model.TopUpBonusUsageHourly{UserID: 7, HourUTC: cutoff - 20*86400, Quota: 500},
-		model.TopUpBonusUsageHourly{UserID: 8, HourUTC: cutoff - 3600, Quota: -5000}, // refunds floor at 0
+		model.TopUpBonusUsageHourly{UserID: 8, HourUTC: cutoff - 3600, Quota: -5000}, // negative rows (task refunds under the old rule) floor at 0
 		model.TopUpBonusUsageHourly{UserID: 9, HourUTC: cutoff - 3600, Quota: 3000},
 		model.TopUpBonusUsageHourly{UserID: 1, HourUTC: cutoff - 3600, Quota: 1000}, // excluded from the site total
 	)

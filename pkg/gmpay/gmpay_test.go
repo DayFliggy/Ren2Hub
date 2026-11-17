@@ -477,7 +477,6 @@ func TestVerifyNotificationRejectsInvalidClaims(t *testing.T) {
 		{"invalid token amount", func(p map[string]string) { p["actual_amount"] = "-1" }, true, ErrInvalidParameters},
 		{"missing address", func(p map[string]string) { delete(p, "receive_address") }, true, ErrInvalidParameters},
 		{"missing trade", func(p map[string]string) { p["trade_id"] = "" }, true, ErrInvalidParameters},
-		{"missing tx", func(p map[string]string) { p["block_transaction_id"] = "" }, true, ErrInvalidParameters},
 		{"long tx", func(p map[string]string) { p["block_transaction_id"] = strings.Repeat("x", 129) }, true, ErrInvalidParameters},
 		{"bad status", func(p map[string]string) { p["status"] = "9" }, true, ErrInvalidParameters},
 		{"non numeric status", func(p map[string]string) { p["status"] = "paid" }, true, ErrInvalidParameters},
@@ -494,6 +493,45 @@ func TestVerifyNotificationRejectsInvalidClaims(t *testing.T) {
 			}
 			_, err = VerifyNotification(params, Config{MerchantID: "1000", Key: "secret"})
 			assert.ErrorIs(t, err, test.want)
+		})
+	}
+}
+
+// After the payer switches asset or network in the hosted cashier, epusdt
+// pays a child order and notifies with the parent order's fields: the chain
+// transaction id is empty and token, actual_amount and receive_address are the
+// originally selected ones. The signed callback must verify; the empty chain
+// id is carried through for the settlement layer, not dropped as invalid.
+func TestVerifyNotificationAcceptsSwitchedPaymentParentCallback(t *testing.T) {
+	for name, withField := range map[string]bool{"empty field": true, "absent field": false} {
+		t.Run(name, func(t *testing.T) {
+			params := map[string]string{
+				"pid": "1000", "trade_id": "parent-trade", "order_id": "o1", "amount": "73",
+				"actual_amount": "10", "receive_address": "TParentAddr", "token": "usdt", "status": "2",
+			}
+			if withField {
+				params["block_transaction_id"] = ""
+			}
+			signature, err := Sign(params, "secret")
+			require.NoError(t, err)
+			body := `{"pid":"1000","trade_id":"parent-trade","order_id":"o1","amount":73,"actual_amount":10,"receive_address":"TParentAddr","token":"usdt",`
+			if withField {
+				body += `"block_transaction_id":"",`
+			}
+			body += `"status":2,"signature":"` + signature + `"}`
+			parsed, err := ParseNotification(postNotification(t, body))
+			require.NoError(t, err)
+			notification, err := VerifyNotification(parsed, Config{MerchantID: "1000", Key: "secret"})
+			require.NoError(t, err)
+			assert.Equal(t, &Notification{
+				PID: "1000", TradeNo: "parent-trade", OrderNo: "o1", Token: "usdt",
+				ReceiveAddress: "TParentAddr", BlockTransactionID: "", Amount: "73", ActualAmount: "10", Status: StatusPaySuccess,
+			}, notification)
+
+			// The empty chain id does not weaken the signature over the rest.
+			parsed["actual_amount"] = "11"
+			_, err = VerifyNotification(parsed, Config{MerchantID: "1000", Key: "secret"})
+			assert.ErrorIs(t, err, ErrInvalidSignature)
 		})
 	}
 }

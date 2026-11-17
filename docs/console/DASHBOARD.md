@@ -31,11 +31,11 @@
 
 ## 服务端合同
 
-| 接口                          | 最低角色 | PAT scope      | 数据范围               |
-| ----------------------------- | -------- | -------------- | ---------------------- |
-| `GET /api/data/self/summary`  | 普通用户 | `usage:read`   | 固定鉴权用户 ID        |
-| `GET /api/data/summary`       | 管理员   | `log:read`     | 所有用户历史聚合       |
-| `GET /api/user/model-catalog` | 普通用户 | `profile:read` | 现有公开渠道和模型目录 |
+| 接口                          | 最低角色 | PAT scope                                           | 数据范围               |
+| ----------------------------- | -------- | --------------------------------------------------- | ---------------------- |
+| `GET /api/data/self/summary`  | 普通用户 | `usage:read`                                        | 固定鉴权用户 ID        |
+| `GET /api/data/summary`       | 管理员   | `log:read`                                          | 所有用户历史聚合       |
+| `GET /api/user/model-catalog` | 普通用户 | `profile:read`；带 `token_id` 时另需 `routing:read` | 现有公开渠道和模型目录 |
 
 两个 summary 入口都禁用 HTTP 缓存。不接受 query 中的 user_id 或 scope 来扩大范围；范围由已鉴权路由显式构造，空 scope 与无效个人 ID 拒绝查询。时间上限、时区、比较区间、数据开关、额度十进制字符串与个人接口一致。
 

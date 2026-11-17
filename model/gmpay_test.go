@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/gmpay"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,7 +141,6 @@ func TestRechargeGmpayRejectsMismatchedReceiptBeforeAndAfterSuccess(t *testing.T
 			func(p *GmpayPayment) { p.ActualAmount = "" },
 			func(p *GmpayPayment) { p.ActualAmount = "0" },
 			func(p *GmpayPayment) { p.ReceiveAddress = "" },
-			func(p *GmpayPayment) { p.BlockTransactionID = "" },
 		} {
 			invalid := payment
 			mutate(&invalid)
@@ -147,15 +148,109 @@ func TestRechargeGmpayRejectsMismatchedReceiptBeforeAndAfterSuccess(t *testing.T
 			require.ErrorIs(t, err, ErrGmpayPaymentMismatch)
 		}
 	}
+	// A receipt bound with a chain transaction id cannot be replayed without it.
+	withoutTransaction := payment
+	withoutTransaction.BlockTransactionID = ""
+	_, err := RechargeGmpay(withoutTransaction, "")
+	require.ErrorIs(t, err, ErrGmpayPaymentMismatch)
 	invalid := payment
 	invalid.GatewayTradeNo = "different-receipt"
-	_, err := RechargeGmpay(invalid, "")
+	_, err = RechargeGmpay(invalid, "")
 	require.ErrorIs(t, err, ErrGmpayPaymentMismatch)
 	already, err := RechargeGmpay(payment, "")
 	require.NoError(t, err)
 	assert.True(t, already)
 	require.NoError(t, db.First(&user, user.Id).Error)
 	assert.Equal(t, int(750_000), user.Quota)
+}
+
+func requireNoGmpayReceipt(t *testing.T, db *gorm.DB, orderID int) {
+	t.Helper()
+	var snapshot GmpayOrder
+	require.NoError(t, db.First(&snapshot, orderID).Error)
+	assert.Nil(t, snapshot.GatewayTradeNo)
+	assert.Empty(t, snapshot.SettledCryptoAmount)
+	assert.Empty(t, snapshot.SettledReceiveAddress)
+	assert.Empty(t, snapshot.SettledTransactionID)
+	assert.NotEqual(t, GmpayStatusSettled, snapshot.Status)
+}
+
+// A switched-asset payment reaches the site as the parent order's callback
+// without a chain transaction id. It credits the frozen quota once; a replay
+// with the same evidence is idempotent, and later evidence that adds a chain
+// id is a different receipt and is refused. Checks that fail leave no receipt.
+func TestRechargeGmpayWithoutChainTransactionCreditsOnce(t *testing.T) {
+	db := useGmpayTestDB(t)
+	user := User{Username: "gmpay-switched", AffCode: "gmpay-switched"}
+	require.NoError(t, db.Create(&user).Error)
+	order := TopUp{UserId: user.Id, TradeNo: "gmpay-switched-order", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
+	payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
+	payment.BlockTransactionID = ""
+
+	amountChanged := payment
+	amountChanged.AmountMinor++
+	_, err := RechargeGmpay(amountChanged, "")
+	require.ErrorIs(t, err, ErrTopUpReceiptMismatch)
+	requireNoGmpayReceipt(t, db, order.Id)
+	for _, mutate := range []func(*GmpayPayment){
+		func(p *GmpayPayment) { p.Token = "usdc" },
+		func(p *GmpayPayment) { p.MerchantID = "other-merchant" },
+		func(p *GmpayPayment) { p.MerchantVersionID = "other-version" },
+	} {
+		invalid := payment
+		mutate(&invalid)
+		_, err := RechargeGmpay(invalid, "")
+		require.ErrorIs(t, err, ErrGmpayPaymentMismatch)
+		requireNoGmpayReceipt(t, db, order.Id)
+	}
+
+	already, err := RechargeGmpay(payment, "")
+	require.NoError(t, err)
+	assert.False(t, already)
+	var snapshot GmpayOrder
+	require.NoError(t, db.First(&snapshot, order.Id).Error)
+	assert.Equal(t, GmpayStatusSettled, snapshot.Status)
+	require.NotNil(t, snapshot.GatewayTradeNo)
+	assert.Equal(t, payment.GatewayTradeNo, *snapshot.GatewayTradeNo)
+	assert.Equal(t, payment.ActualAmount, snapshot.SettledCryptoAmount)
+	assert.Equal(t, payment.ReceiveAddress, snapshot.SettledReceiveAddress)
+	assert.Empty(t, snapshot.SettledTransactionID)
+
+	already, err = RechargeGmpay(payment, "")
+	require.NoError(t, err)
+	assert.True(t, already)
+	withTransaction := payment
+	withTransaction.BlockTransactionID = "0xlater"
+	_, err = RechargeGmpay(withTransaction, "")
+	require.ErrorIs(t, err, ErrGmpayPaymentMismatch)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, 750_000, user.Quota)
+	assert.Equal(t, common.TopUpStatusSuccess, GetTopUpByTradeNo(order.TradeNo).Status)
+}
+
+// An administrator may complete the order before the gateway's callback
+// arrives; the later callback without a chain id only binds the receipt.
+func TestManualCompleteGmpayThenCallbackWithoutChainTransactionBindsOnly(t *testing.T) {
+	db := useGmpayTestDB(t)
+	user := User{Username: "gmpay-manual-switched", AffCode: "gmpay-manual-switched"}
+	require.NoError(t, db.Create(&user).Error)
+	order := TopUp{UserId: user.Id, TradeNo: "gmpay-manual-switched", Amount: 1, Money: 1, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
+	payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
+	payment.BlockTransactionID = ""
+	require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
+	for range 2 {
+		already, err := RechargeGmpay(payment, "")
+		require.NoError(t, err)
+		assert.True(t, already)
+	}
+	var snapshot GmpayOrder
+	require.NoError(t, db.First(&snapshot, order.Id).Error)
+	require.NotNil(t, snapshot.GatewayTradeNo)
+	assert.Equal(t, payment.GatewayTradeNo, *snapshot.GatewayTradeNo)
+	assert.Equal(t, payment.ReceiveAddress, snapshot.SettledReceiveAddress)
+	assert.Empty(t, snapshot.SettledTransactionID)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, 750_000, user.Quota)
 }
 
 func TestGmpaySettlementRequiresSnapshot(t *testing.T) {
@@ -459,4 +554,33 @@ func TestGmpayNonPendingOrderDoesNotConsumePaymentEvidence(t *testing.T) {
 
 		})
 	}
+}
+
+func storedGmpaySecret(t *testing.T, db *gorm.DB) string {
+	t.Helper()
+	var option Option
+	require.NoError(t, db.Where(&Option{Key: setting.GmpayConfigKey}).First(&option).Error)
+	var stored setting.GmpayConfig
+	require.NoError(t, common.UnmarshalJsonStr(option.Value, &stored))
+	return stored.SecretKey
+}
+
+// A secret submitted as only whitespace means "keep the stored secret", the
+// same as an empty one; with no stored secret it stays empty and an enabled
+// configuration is refused. Surrounding whitespace is not part of a secret.
+func TestSaveGmpayConfigTreatsBlankSecretAsUnchanged(t *testing.T) {
+	db := useGmpayTestDB(t)
+	enabled := setting.GmpayConfig{PayAddress: "https://payments.example.test", MerchantID: "merchant", SecretKey: " \t ", Enabled: true, Assets: []setting.GmpayAsset{{Name: "USDT", Token: "usdt", Network: "tron"}}}
+	require.ErrorIs(t, SaveGmpayConfig(context.Background(), enabled), gmpay.ErrInvalidConfig)
+	disabled := enabled
+	disabled.Enabled = false
+	require.NoError(t, SaveGmpayConfig(context.Background(), disabled))
+	assert.Empty(t, storedGmpaySecret(t, db))
+
+	enabled.SecretKey = " stored-secret\n"
+	require.NoError(t, SaveGmpayConfig(context.Background(), enabled))
+	assert.Equal(t, "stored-secret", storedGmpaySecret(t, db))
+	enabled.SecretKey = "   "
+	require.NoError(t, SaveGmpayConfig(context.Background(), enabled))
+	assert.Equal(t, "stored-secret", storedGmpaySecret(t, db))
 }

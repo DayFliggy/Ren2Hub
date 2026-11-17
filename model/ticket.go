@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -312,6 +313,18 @@ func createTicketAttachments(tx *gorm.DB, ticketID, messageID int, now int64, at
 	return tx.Create(&attachments).Error
 }
 
+// TicketAttachmentBytesSince 汇总 authorID 自 since（Unix 秒）起在用户消息里上传的
+// 附件字节；管理员的回复不计入。附件与消息在同一事务里以同一时间写入。
+func TicketAttachmentBytesSince(ctx context.Context, authorID int, since int64) (int64, error) {
+	var total int64
+	err := DB.WithContext(ctx).Table("ticket_attachments AS ta").
+		Joins("JOIN ticket_messages AS tm ON tm.id = ta.message_id").
+		Where("tm.author_id = ? AND tm.role = ? AND tm.created_at >= ?", authorID, TicketMessageRoleUser, since).
+		Select("COALESCE(SUM(ta.size), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
 func ListTicketAttachments(ticketID int) ([]TicketAttachment, error) {
 	items := make([]TicketAttachment, 0)
 	err := DB.Where("ticket_id = ?", ticketID).Order("id ASC").Find(&items).Error
@@ -345,19 +358,26 @@ func GetTicketAttachment(attachmentID int) (*TicketAttachment, error) {
 }
 
 func UpdateTicketStatus(ticketID, userID int, status string) (*Ticket, error) {
-	return updateTicketStatus(ticketID, userID, status, true)
+	ticket, _, err := updateTicketStatus(ticketID, userID, status, true)
+	return ticket, err
 }
 
-func UpdateAdminTicketStatus(ticketID, userID int, status string) (*Ticket, error) {
+// UpdateAdminTicketStatus also reports whether the status changed, so only a
+// real transition is audited.
+func UpdateAdminTicketStatus(ticketID, userID int, status string) (*Ticket, bool, error) {
 	return updateTicketStatus(ticketID, userID, status, false)
 }
 
-func updateTicketStatus(ticketID, userID int, status string, requireOwner bool) (*Ticket, error) {
+// updateTicketStatus applies a status transition: open or replied → closed,
+// and closed → open. Requesting the current status, or open for a replied
+// ticket, writes nothing and returns the ticket as stored.
+func updateTicketStatus(ticketID, userID int, status string, requireOwner bool) (*Ticket, bool, error) {
 	status = strings.TrimSpace(status)
 	if status != TicketStatusOpen && status != TicketStatusClosed {
-		return nil, ErrTicketStatusInvalid
+		return nil, false, ErrTicketStatusInvalid
 	}
 	var ticket Ticket
+	changed := false
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		query := lockForUpdate(tx).Where("id = ?", ticketID)
 		if requireOwner {
@@ -366,6 +386,10 @@ func updateTicketStatus(ticketID, userID int, status string, requireOwner bool) 
 		if err := query.First(&ticket).Error; err != nil {
 			return err
 		}
+		if ticket.Status == status || (status == TicketStatusOpen && ticket.Status == TicketStatusReplied) {
+			return nil
+		}
+		changed = true
 		now := time.Now().Unix()
 		updates := map[string]any{"status": status, "updated_at": now}
 		if status == TicketStatusClosed {
@@ -382,7 +406,7 @@ func updateTicketStatus(ticketID, userID int, status string, requireOwner bool) 
 		ticket.UpdatedAt = now
 		return nil
 	})
-	return &ticket, err
+	return &ticket, changed, err
 }
 
 func AssignTicket(ticketID int, assigneeID *int) (*Ticket, error) {

@@ -210,7 +210,7 @@ func AddAdminTicketMessage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	form, err := readTicketForm(c)
+	form, err := readSupportTicketForm(c)
 	if err != nil {
 		respondTicketFormError(c, err)
 		return
@@ -270,7 +270,7 @@ func UpdateAdminTicketStatus(c *gin.Context) {
 		ticketBusinessError(c, common.NewMessage("Invalid ticket status"), "VALIDATION_ERROR")
 		return
 	}
-	ticket, err := model.UpdateAdminTicketStatus(ticketID, c.GetInt("id"), request.Status)
+	ticket, changed, err := model.UpdateAdminTicketStatus(ticketID, c.GetInt("id"), request.Status)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		ticketNotFound(c)
 		return
@@ -279,7 +279,9 @@ func UpdateAdminTicketStatus(c *gin.Context) {
 		ticketBusinessError(c, err, "VALIDATION_ERROR")
 		return
 	}
-	recordManageAudit(c, "ticket.status_update", map[string]interface{}{"ticket_id": ticketID, "status": ticket.Status})
+	if changed {
+		recordManageAudit(c, "ticket.status_update", map[string]interface{}{"ticket_id": ticketID, "status": ticket.Status})
+	}
 	common.ApiSuccess(c, gin.H{"ticket": gin.H{"id": ticket.ID, "status": ticket.Status, "updated": ticket.UpdatedAt}})
 }
 

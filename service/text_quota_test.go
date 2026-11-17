@@ -80,7 +80,9 @@ func TestFixedPriceBillingDatabaseMatrix(t *testing.T) {
 			model.DB, model.LOG_DB = db, logDB
 			common.SetDatabaseTypes(dialect.name, dialect.name)
 			t.Cleanup(func() { model.DB, model.LOG_DB = oldDB, oldLogDB; common.SetDatabaseTypes(oldMainType, oldLogType) })
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}))
+			// The hourly table is migrated so a missing bonus-window write is not
+			// hidden by a failing one.
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.TopUpBonusUsageHourly{}))
 			require.NoError(t, logDB.AutoMigrate(&model.Log{}))
 			versionQuery := "select version()"
 			if dialect.name == common.DatabaseTypeSQLite {
@@ -158,6 +160,7 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 			channel := model.Channel{Name: "fixed-billing", Key: "unused", Status: common.ChannelStatusEnabled}
 			require.NoError(t, db.Create(&channel).Error)
 			t.Cleanup(func() {
+				require.NoError(t, db.Where("user_id = ?", user.Id).Delete(&model.TopUpBonusUsageHourly{}).Error)
 				require.NoError(t, logDB.Where("user_id = ?", user.Id).Delete(&model.Log{}).Error)
 				require.NoError(t, db.Unscoped().Delete(&token).Error)
 				require.NoError(t, db.Unscoped().Delete(&user).Error)
@@ -305,6 +308,16 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 			assert.Equal(t, tc.want, token.UsedQuota)
 			if !tc.refund && !tc.insufficient {
 				assert.Equal(t, 1, user.RequestCount)
+			}
+			// Synchronous settlement (text, audio and realtime) enters the top-up
+			// bonus window once with the settled amount; nothing charged, nothing counted.
+			var bonusRows []model.TopUpBonusUsageHourly
+			require.NoError(t, db.Where("user_id = ?", user.Id).Find(&bonusRows).Error)
+			if tc.want == 0 {
+				assert.Empty(t, bonusRows)
+			} else {
+				require.Len(t, bonusRows, 1)
+				assert.Equal(t, int64(tc.want), bonusRows[0].Quota)
 			}
 		})
 	}

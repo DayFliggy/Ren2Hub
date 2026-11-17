@@ -57,11 +57,11 @@ func ProbeGmpayGateway(ctx context.Context, address string) ([]gmpay.SupportedAs
 	if response.StatusCode != http.StatusOK {
 		return nil, gmpay.ErrGatewayRejected
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+	body, err := io.ReadAll(io.LimitReader(response.Body, gmpay.MaxPublicConfigBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(body) > 65536 {
+	if len(body) > gmpay.MaxPublicConfigBytes {
 		return nil, gmpay.ErrInvalidParameters
 	}
 	return gmpay.ParsePublicConfig(body)

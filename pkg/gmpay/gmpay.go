@@ -41,6 +41,9 @@ const (
 	// unauthenticated input, so it is parsed under the same kind of ceiling the
 	// EasyPay notification parser applies.
 	MaxNotificationBytes = 16 << 10
+	// MaxPublicConfigBytes bounds the public-config probe response; the probe
+	// reads at most one byte more and ParsePublicConfig applies the same limit.
+	MaxPublicConfigBytes = 16 << 10
 	maxFields            = 32
 	maxKeyBytes          = 64
 	maxValueBytes        = 4 << 10
@@ -573,8 +576,11 @@ func VerifyNotification(params map[string]string, config Config) (*Notification,
 	if params["pid"] != config.MerchantID {
 		return nil, ErrInvalidParameters
 	}
+	// The chain transaction id is empty when the payer switched asset or network
+	// in the hosted cashier: epusdt then notifies with the parent order, whose
+	// id stays unset. Settlement compares it with the bound receipt either way.
 	transaction := params["block_transaction_id"]
-	if transaction == "" || len(transaction) > maxIdentifierBytes {
+	if len(transaction) > maxIdentifierBytes {
 		return nil, ErrInvalidParameters
 	}
 	status, err := strconv.Atoi(params["status"])
@@ -624,7 +630,7 @@ type SupportedAsset struct {
 // configuration. The endpoint is unauthenticated, so a success here proves
 // reachability and the asset catalog, not the merchant credential.
 func ParsePublicConfig(body []byte) ([]SupportedAsset, error) {
-	if len(body) == 0 || len(body) > MaxNotificationBytes {
+	if len(body) == 0 || len(body) > MaxPublicConfigBytes {
 		return nil, ErrInvalidParameters
 	}
 	var env struct {

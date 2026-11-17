@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/gin-gonic/gin"
@@ -33,10 +32,10 @@ func NativeCountTokens(c *gin.Context) {
 	provider := relayconstant.NativeCountChannelType(c.Request.URL.Path)
 	info := &relaycommon.RelayInfo{OriginModelName: c.GetString("original_model"), RelayMode: relayconstant.RelayModeNativeCount}
 	info.InitChannelMeta(c)
-	var resultErr *types.NewAPIError
-	defer func() { service.FinishRouteAttempt(c, info, resultErr) }()
+	// The count attempt is not bound to route health (see MarkRouteAttemptSent),
+	// so finishing it only releases the channel slot and needs no outcome.
+	defer service.FinishRouteAttempt(c, info, nil)
 	fail := func(status int, code, message string) {
-		resultErr = types.NewErrorWithStatusCode(errors.New(message), types.ErrorCode(code), status, types.ErrOptionWithSkipRetry())
 		payload := gin.H{"error": gin.H{"type": code, "message": message}}
 		if provider == constant.ChannelTypeAnthropic {
 			payload["type"] = "error"
@@ -111,16 +110,10 @@ func NativeCountTokens(c *gin.Context) {
 		return
 	}
 	if response.StatusCode >= 400 {
-		resultErr = nativeCountUpstreamError(provider, response.StatusCode, data)
 		if retryAfter := response.Header.Get("Retry-After"); retryAfter != "" {
 			c.Header("Retry-After", retryAfter)
 		}
-		var upstreamError map[string]json.RawMessage
-		if common.Unmarshal(data, &upstreamError) != nil || upstreamError == nil {
-			fail(response.StatusCode, "upstream_error", "native token count upstream returned an error")
-			return
-		}
-		c.Data(response.StatusCode, "application/json", data)
+		writeNativeCountUpstreamError(c, provider, response.StatusCode, data)
 		return
 	}
 	if response.StatusCode != http.StatusOK || validateNativeCountResponse(data, provider) != nil {
@@ -130,48 +123,61 @@ func NativeCountTokens(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json", data)
 }
 
-// Only a recognized native request error is excluded from channel health. In
-// particular Gemini can use HTTP 400/INVALID_ARGUMENT for invalid API keys, with
-// the actual credential failure carried by an ErrorInfo detail.
-func nativeCountUpstreamError(provider, status int, data []byte) *types.NewAPIError {
-	failure := types.NewErrorWithStatusCode(errors.New("native count upstream error"), types.ErrorCodeBadResponse, status, types.ErrOptionWithSkipRetry())
-	if status != http.StatusBadRequest {
-		return failure
-	}
-	var payload struct {
+// nativeCountUpstreamErrorMessage replaces an upstream error whose body has no
+// string error.message.
+const nativeCountUpstreamErrorMessage = "native token count upstream returned an error"
+
+// writeNativeCountUpstreamError answers an upstream count error with a fixed
+// set of protocol fields only: the provider's error type (Claude) or status
+// (Gemini) when it is a plain identifier, the HTTP status, and the upstream
+// error.message string. The message is always masked with this channel's
+// upstream addresses. It is read directly instead of through the generation
+// path's RelayErrorHandler/ToOpenAIError: the former appends error.metadata to
+// the message and the latter skips masking when the upstream error.code is
+// count_token_failed. Any other upstream field is dropped.
+func writeNativeCountUpstreamError(c *gin.Context, provider int, status int, data []byte) {
+	var upstream struct {
 		Error struct {
-			Type    string            `json:"type"`
-			Status  string            `json:"status"`
-			Message string            `json:"message"`
-			Code    json.RawMessage   `json:"code"`
-			Details []json.RawMessage `json:"details"`
+			Type    string          `json:"type"`
+			Status  string          `json:"status"`
+			Message json.RawMessage `json:"message"`
 		} `json:"error"`
 	}
-	if common.Unmarshal(data, &payload) != nil {
-		return failure
+	// Every field is optional: a body that is not an error object leaves them
+	// empty and the defaults below apply.
+	_ = common.Unmarshal(data, &upstream)
+	var message string
+	if common.Unmarshal(upstream.Error.Message, &message) != nil || strings.TrimSpace(message) == "" {
+		message = nativeCountUpstreamErrorMessage
 	}
-	upstream := payload.Error
-	switch provider {
-	case constant.ChannelTypeAnthropic:
-		if upstream.Type == "invalid_request_error" && len(upstream.Code) == 0 && upstream.Status == "" && len(upstream.Details) == 0 {
-			return types.WithClaudeError(types.ClaudeError{Type: upstream.Type, Message: upstream.Message}, status, types.ErrOptionWithSkipRetry())
+	message = common.MaskSensitiveInfo(message, common.UpstreamAddresses(c)...)
+	if provider == constant.ChannelTypeAnthropic {
+		errorType := "upstream_error"
+		if isNativeCountErrorLabel(upstream.Error.Type) {
+			errorType = upstream.Error.Type
 		}
-	case constant.ChannelTypeGemini:
-		var code int
-		if upstream.Status != "INVALID_ARGUMENT" || upstream.Type != "" || common.Unmarshal(upstream.Code, &code) != nil || code != status {
-			return failure
-		}
-		for _, detail := range upstream.Details {
-			var kind struct {
-				Type string `json:"@type"`
-			}
-			if common.Unmarshal(detail, &kind) != nil || kind.Type != "type.googleapis.com/google.rpc.BadRequest" {
-				return failure
-			}
-		}
-		return types.WithOpenAIError(types.OpenAIError{Type: upstream.Status, Code: upstream.Status, Message: upstream.Message}, status, types.ErrOptionWithSkipRetry())
+		c.JSON(status, gin.H{"type": "error", "error": gin.H{"type": errorType, "message": message}})
+		return
 	}
-	return failure
+	body := gin.H{"code": status, "message": message}
+	if isNativeCountErrorLabel(upstream.Error.Status) {
+		body["status"] = upstream.Error.Status
+	}
+	c.JSON(status, gin.H{"error": body})
+}
+
+// isNativeCountErrorLabel accepts provider error labels such as
+// "overloaded_error" or "RESOURCE_EXHAUSTED"; free text is not forwarded.
+func isNativeCountErrorLabel(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for _, r := range value {
+		if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 func nativeCountBody(c *gin.Context, info *relaycommon.RelayInfo, provider int) ([]byte, error) {

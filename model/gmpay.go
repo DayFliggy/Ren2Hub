@@ -316,10 +316,13 @@ func bindGmpayReceipt(tx *gorm.DB, order *TopUp, payment GmpayPayment) error {
 	if payment.Token == "" || payment.Token != snapshot.Token {
 		return ErrGmpayPaymentMismatch
 	}
+	// BlockTransactionID may be empty (switched-asset parent callback); the
+	// receipt is still identified by the gateway trade number, and an empty id
+	// is bound and compared like any other value.
 	actualAmount, err := gmpay.ParseTokenAmount(payment.ActualAmount)
 	if err != nil || len(actualAmount.String()) > 64 ||
 		payment.ReceiveAddress == "" || len(payment.ReceiveAddress) > 256 ||
-		payment.BlockTransactionID == "" || len(payment.BlockTransactionID) > 128 {
+		len(payment.BlockTransactionID) > 128 {
 		return ErrGmpayPaymentMismatch
 	}
 	settledAmount := actualAmount.String()

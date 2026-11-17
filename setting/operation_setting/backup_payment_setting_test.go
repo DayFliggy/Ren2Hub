@@ -27,6 +27,12 @@ func TestValidateBackupPaymentLinks(t *testing.T) {
 		{"relative url", `[{"name":"Shop","url":"/wallet"}]`, false},
 		{"icon", `[{"name":"Shop","url":"https://shop.example.com","icon":"telegram"}]`, true},
 		{"long icon", `[{"name":"Shop","url":"https://shop.example.com","icon":"` + strings.Repeat("a", 257) + `"}]`, false},
+		{"padded name", `[{"name":"  Shop  ","url":"https://shop.example.com"}]`, true},
+		{"userinfo", `[{"name":"Shop","url":"https://user:pass@shop.example.com"}]`, false},
+		{"user only", `[{"name":"Shop","url":"https://user@shop.example.com"}]`, false},
+		{"2048-byte url", `[{"name":"Shop","url":"https://shop.example.com/` + strings.Repeat("a", 2048-len("https://shop.example.com/")) + `"}]`, true},
+		{"2049-byte url", `[{"name":"Shop","url":"https://shop.example.com/` + strings.Repeat("a", 2049-len("https://shop.example.com/")) + `"}]`, false},
+		{"2050-byte url of 700 characters", `[{"name":"Shop","url":"https://shop.example.com/` + strings.Repeat("店", 675) + `"}]`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := ValidateBackupPaymentLinks(tc.value)
@@ -57,6 +63,21 @@ func TestWalletBackupPaymentLinks(t *testing.T) {
 	}
 	if got := WalletBackupPaymentLinks(true, "javascript:alert(1)"); !slices.Equal(got, want[1:]) {
 		t.Fatalf("a TopUpLink that is not a web link must not be listed, got %+v", got)
+	}
+}
+
+// The wallet shows the name the checks accepted, without surrounding
+// whitespace, while the option keeps the administrator's text. The stricter
+// backup-link URL rules do not apply to the upstream TopUpLink, whose
+// projection stays as before.
+func TestWalletBackupPaymentLinksUseTrimmedNamesAndKeepTopUpLink(t *testing.T) {
+	useBackupPaymentLinks(t, `[{"name":"  Store\t","url":"https://store.example.com"}]`)
+	want := []BackupPaymentLink{
+		{URL: "https://user:pass@codes.example.com/" + strings.Repeat("a", 2100)},
+		{Name: "Store", URL: "https://store.example.com"},
+	}
+	if got := WalletBackupPaymentLinks(true, want[0].URL); !slices.Equal(got, want) {
+		t.Fatalf("links = %+v, want %+v", got, want)
 	}
 }
 

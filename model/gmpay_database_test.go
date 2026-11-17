@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -204,6 +205,15 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			assert.Equal(t, user.Id, *updated.AssigneeID)
 			_, err = UpdateTicketStatus(ticket.ID, user.Id, TicketStatusClosed)
 			require.NoError(t, err)
+			// Closing again is not a transition: the close time and list order stay.
+			require.NoError(t, db.Model(&Ticket{}).Where("id = ?", ticket.ID).UpdateColumns(map[string]any{"closed_at": 1700000100, "updated_at": 1700000000}).Error)
+			_, changed, err := UpdateAdminTicketStatus(ticket.ID, user.Id, TicketStatusClosed)
+			require.NoError(t, err)
+			assert.False(t, changed)
+			var closed Ticket
+			require.NoError(t, db.First(&closed, ticket.ID).Error)
+			assert.EqualValues(t, 1700000100, closed.ClosedAt)
+			assert.EqualValues(t, 1700000000, closed.UpdatedAt)
 			_, _, err = AddTicketMessage(ticket.ID, user.Id, "late reply", nil)
 			require.ErrorIs(t, err, ErrTicketClosed)
 			_, err = UpdateTicketStatus(ticket.ID, user.Id, TicketStatusOpen)
@@ -211,6 +221,82 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			_, updated, err = AddTicketMessage(ticket.ID, user.Id, "thanks", nil)
 			require.NoError(t, err)
 			assert.Equal(t, TicketStatusOpen, updated.Status)
+
+			// The attachment budget counts the author's own user messages in
+			// the window: not support replies, not older uploads.
+			since := time.Now().Add(-24 * time.Hour).Unix()
+			_, _, err = AddTicketMessage(ticket.ID, user.Id, "recent", []TicketAttachment{{StorageKey: name + "-a", Size: 3 << 20}, {StorageKey: name + "-b", Size: 4 << 20}})
+			require.NoError(t, err)
+			old, _, err := AddTicketMessage(ticket.ID, user.Id, "old", []TicketAttachment{{StorageKey: name + "-old", Size: 50 << 20}})
+			require.NoError(t, err)
+			require.NoError(t, db.Model(&TicketMessage{}).Where("id = ?", old.ID).Update("created_at", since-60).Error)
+			_, _, err = AddSupportTicketMessage(ticket.ID, user.Id, "support", []TicketAttachment{{StorageKey: name + "-support", Size: 60 << 20}})
+			require.NoError(t, err)
+			total, err := TicketAttachmentBytesSince(context.Background(), user.Id, since)
+			require.NoError(t, err)
+			assert.EqualValues(t, 7<<20, total)
+			total, err = TicketAttachmentBytesSince(context.Background(), inviter.Id, since)
+			require.NoError(t, err)
+			assert.Zero(t, total)
+
+			// A switched-asset payment arrives as the parent order's callback
+			// without a chain transaction id. Concurrent duplicates credit once;
+			// another local order reusing its gateway trade number before it has
+			// a create response hits the receipt unique index and rolls back.
+			switched := User{Username: name + "-s", AffCode: name + "-s", Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
+			require.NoError(t, db.Create(&switched).Error)
+			parent := TopUp{UserId: switched.Id, TradeNo: name + "-parent", PaymentProvider: PaymentProviderGmpay, PaymentMethod: "gmpay:usdt.tron", Status: common.TopUpStatusPending, Amount: 1, Money: 7.30}
+			other := TopUp{UserId: switched.Id, TradeNo: name + "-other", PaymentProvider: PaymentProviderGmpay, PaymentMethod: "gmpay:usdt.tron", Status: common.TopUpStatusPending, Amount: 1, Money: 7.30}
+			for _, topUp := range []*TopUp{&parent, &other} {
+				require.NoError(t, CreateGmpayOrder(context.Background(), topUp, &GmpayOrder{ExpectedQuota: 300000, AmountMinor: 730, Currency: "CNY", Token: "usdt", Network: "tron"}, merchant))
+			}
+			t.Cleanup(func() {
+				for _, topUp := range []TopUp{parent, other} {
+					assert.NoError(t, db.Where("top_up_id = ?", topUp.Id).Delete(&GmpayOrder{}).Error)
+					assert.NoError(t, db.Where("id = ?", topUp.Id).Delete(&TopUp{}).Error)
+				}
+				assert.NoError(t, db.Where("user_id = ?", switched.Id).Delete(&Log{}).Error)
+				assert.NoError(t, db.Unscoped().Where("id = ?", switched.Id).Delete(&User{}).Error)
+			})
+			parentPayment := GmpayPayment{OrderNo: parent.TradeNo, MerchantID: merchant.MerchantID, MerchantVersionID: merchant.ID, GatewayTradeNo: "parent-" + name, AmountMinor: 730, Token: "usdt", ActualAmount: "1.01", ReceiveAddress: "parent-address"}
+			credited := make(chan bool, 4)
+			var callbacks sync.WaitGroup
+			release := make(chan struct{})
+			for range 4 {
+				callbacks.Add(1)
+				go func() {
+					defer callbacks.Done()
+					<-release
+					already, err := RechargeGmpay(parentPayment, "")
+					assert.NoError(t, err)
+					credited <- err == nil && !already
+				}()
+			}
+			close(release)
+			callbacks.Wait()
+			close(credited)
+			first := 0
+			for ok := range credited {
+				if ok {
+					first++
+				}
+			}
+			assert.Equal(t, 1, first)
+			reused := parentPayment
+			reused.OrderNo = other.TradeNo
+			_, err = RechargeGmpay(reused, "")
+			require.Error(t, err)
+			require.NotErrorIs(t, err, ErrGmpayPaymentMismatch, "the receipt unique index, not a field check, refuses the reuse")
+			var otherSnapshot GmpayOrder
+			require.NoError(t, db.First(&otherSnapshot, other.Id).Error)
+			assert.Nil(t, otherSnapshot.GatewayTradeNo)
+			assert.NotEqual(t, GmpayStatusSettled, otherSnapshot.Status)
+			assert.Equal(t, common.TopUpStatusPending, GetTopUpByTradeNo(other.TradeNo).Status)
+			var parentSnapshot GmpayOrder
+			require.NoError(t, db.First(&parentSnapshot, parent.Id).Error)
+			assert.Empty(t, parentSnapshot.SettledTransactionID)
+			require.NoError(t, db.First(&switched, switched.Id).Error)
+			assert.Equal(t, 300000, switched.Quota)
 		})
 	}
 }

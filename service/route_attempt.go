@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 )
@@ -86,7 +87,11 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 	}
 	value, exists := c.Get("route_observation_epoch")
 	epoch, bound := value.(uint64)
-	c.Set("route_attempt", &routeAttempt{started: time.Now(), channelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId), model: name, epoch: epoch, bound: exists && bound, operation: routeOperation(c)})
+	// A native token count is free and carries no generation outcome, so it never
+	// writes the breaker, the 429 cooldown or observation samples that order paid
+	// generation requests; the attempt still releases its channel slot.
+	bound = exists && bound && (info == nil || info.RelayMode != relayconstant.RelayModeNativeCount)
+	c.Set("route_attempt", &routeAttempt{started: time.Now(), channelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId), model: name, epoch: epoch, bound: bound, operation: routeOperation(c)})
 }
 
 // FinishRouteAttempt records at most one sample and releases the attempt's channel slot.

@@ -224,3 +224,56 @@ func TestAddTicketMessageMovesReplyableStatusToOpen(t *testing.T) {
 		})
 	}
 }
+
+// A status update is a transition: open or replied → closed and closed → open.
+// Requesting the current status, or open for a replied ticket, writes nothing,
+// so the list order (updated_at) and the close time stay as they were.
+func TestUpdateTicketStatusWritesOnlyRealTransitions(t *testing.T) {
+	db := useTicketTestDB(t)
+	const updatedAt, closedAt = int64(1_700_000_000), int64(1_700_000_100)
+	for _, tc := range []struct {
+		name, current, requested, want string
+		changed                        bool
+	}{
+		{"open stays open", TicketStatusOpen, TicketStatusOpen, TicketStatusOpen, false},
+		{"replied stays replied on open", TicketStatusReplied, TicketStatusOpen, TicketStatusReplied, false},
+		{"closed stays closed", TicketStatusClosed, TicketStatusClosed, TicketStatusClosed, false},
+		{"open closes", TicketStatusOpen, TicketStatusClosed, TicketStatusClosed, true},
+		{"replied closes", TicketStatusReplied, TicketStatusClosed, TicketStatusClosed, true},
+		{"closed reopens", TicketStatusClosed, TicketStatusOpen, TicketStatusOpen, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ticket := Ticket{UserID: 12, Title: "status", Status: tc.current}
+			require.NoError(t, db.Create(&ticket).Error)
+			initialClosed := int64(0)
+			if tc.current == TicketStatusClosed {
+				initialClosed = closedAt
+			}
+			require.NoError(t, db.Model(&ticket).UpdateColumns(map[string]any{"updated_at": updatedAt, "closed_at": initialClosed}).Error)
+
+			updated, err := UpdateTicketStatus(ticket.ID, 12, tc.requested)
+			require.NoError(t, err)
+			var stored Ticket
+			require.NoError(t, db.First(&stored, ticket.ID).Error)
+			assert.Equal(t, tc.want, stored.Status)
+			assert.Equal(t, stored.Status, updated.Status)
+			assert.Equal(t, stored.UpdatedAt, updated.UpdatedAt)
+			assert.Equal(t, stored.ClosedAt, updated.ClosedAt)
+			if !tc.changed {
+				assert.Equal(t, updatedAt, stored.UpdatedAt)
+				assert.Equal(t, initialClosed, stored.ClosedAt)
+				return
+			}
+			assert.Greater(t, stored.UpdatedAt, updatedAt)
+			if tc.want == TicketStatusClosed {
+				assert.Greater(t, stored.ClosedAt, updatedAt)
+			} else {
+				assert.Zero(t, stored.ClosedAt)
+			}
+		})
+	}
+	ticket := Ticket{UserID: 12, Title: "invalid", Status: TicketStatusOpen}
+	require.NoError(t, db.Create(&ticket).Error)
+	_, err := UpdateTicketStatus(ticket.ID, 12, TicketStatusReplied)
+	require.ErrorIs(t, err, ErrTicketStatusInvalid)
+}

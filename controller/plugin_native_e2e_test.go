@@ -409,6 +409,11 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 		t.Run(tc.prompt, func(t *testing.T) {
 			require.NoError(t, database.Model(&model.User{}).Where("id = ?", 7).Update("quota", 1_000_000).Error)
 			require.NoError(t, database.Where("type = ?", model.LogTypeConsume).Delete(&model.Log{}).Error)
+			// An earlier synchronous usage S is the only bonus-window row: the
+			// task-plugin image is task billing even though the client got it at once.
+			require.NoError(t, database.Where("1 = 1").Delete(&model.TopUpBonusUsageHourly{}).Error)
+			synced := model.TopUpBonusUsageHourly{UserID: 7, HourUTC: time.Now().Unix()/3600*3600 - 3600, Quota: 4321}
+			require.NoError(t, database.Create(&synced).Error)
 			upstreamPrompt := strings.TrimPrefix(tc.prompt, "ratio2_")
 			channel.ChannelRatio = "1"
 			if strings.HasPrefix(tc.prompt, "ratio2_") {
@@ -473,6 +478,9 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 			if strings.HasPrefix(tc.prompt, "ratio2_") {
 				assert.InDelta(t, 2.0, relayInfo.PriceData.ChannelRatioInfo.ChannelRatio, 1e-12)
 			}
+			var bonusRows []model.TopUpBonusUsageHourly
+			require.NoError(t, database.Find(&bonusRows).Error)
+			assert.Equal(t, []model.TopUpBonusUsageHourly{synced}, bonusRows, "the charged images stay out of the bonus window")
 		})
 	}
 }

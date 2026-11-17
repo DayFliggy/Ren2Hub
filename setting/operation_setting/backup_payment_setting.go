@@ -28,6 +28,7 @@ const (
 	MaxBackupPaymentLinks       = 10
 	maxBackupPaymentNameRunes   = 32
 	maxBackupPaymentIconBytes   = 256
+	maxBackupPaymentURLBytes    = 2048
 )
 
 // backupPaymentSetting is registered only so the option map starts with the
@@ -71,13 +72,21 @@ func parseBackupPaymentLinks(data []byte) ([]BackupPaymentLink, error) {
 	if len(links) > MaxBackupPaymentLinks {
 		return nil, common.NewMessage("At most 10 backup payment links are allowed")
 	}
-	for _, link := range links {
-		name := strings.TrimSpace(link.Name)
-		if name == "" || utf8.RuneCountInString(name) > maxBackupPaymentNameRunes {
+	for i := range links {
+		link := &links[i]
+		// The wallet shows the checked name; the option keeps the submitted text.
+		link.Name = strings.TrimSpace(link.Name)
+		if link.Name == "" || utf8.RuneCountInString(link.Name) > maxBackupPaymentNameRunes {
 			return nil, common.NewMessage("Each backup payment link needs a name of at most 32 characters")
 		}
 		if !isWebURL(link.URL) {
 			return nil, common.NewMessage("Each backup payment link must be an http or https URL")
+		}
+		if len(link.URL) > maxBackupPaymentURLBytes {
+			return nil, common.NewMessage("A backup payment link cannot exceed 2048 bytes")
+		}
+		if hasURLUserinfo(link.URL) {
+			return nil, common.NewMessage("A backup payment link cannot contain a user name or password")
 		}
 		if len(link.Icon) > maxBackupPaymentIconBytes {
 			return nil, common.NewMessage("A backup payment icon cannot exceed 256 characters")
@@ -99,6 +108,13 @@ func WalletBackupPaymentLinks(complianceConfirmed bool, topUpLink string) []Back
 		links = append(links, BackupPaymentLink{URL: strings.TrimSpace(topUpLink)})
 	}
 	return append(links, *walletBackupPaymentLinks.Load()...)
+}
+
+// hasURLUserinfo applies to backup links only; the upstream TopUpLink keeps
+// its own projection rules.
+func hasURLUserinfo(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	return err == nil && parsed.User != nil
 }
 
 func isWebURL(value string) bool {

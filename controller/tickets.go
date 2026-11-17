@@ -197,7 +197,7 @@ func ListTickets(c *gin.Context) {
 }
 
 func CreateTicket(c *gin.Context) {
-	form, err := readTicketForm(c)
+	form, err := readUserTicketForm(c, c.GetInt("id"))
 	if err != nil {
 		respondTicketFormError(c, err)
 		return
@@ -293,7 +293,7 @@ func AddTicketMessage(c *gin.Context) {
 		ticketBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 		return
 	}
-	form, err := readTicketForm(c)
+	form, err := readUserTicketForm(c, userID)
 	if err != nil {
 		respondTicketFormError(c, err)
 		return

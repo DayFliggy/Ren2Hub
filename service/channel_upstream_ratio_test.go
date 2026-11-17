@@ -555,3 +555,30 @@ func TestUpstreamRatioRecreatedChannelDoesNotInheritRecord(t *testing.T) {
 	require.NoError(t, err, "a version-0 save replaces the previous generation's row")
 	assert.Equal(t, "1.1", view.Ratio)
 }
+
+// Detection sends the channel key as a Bearer token, so it is offered only for
+// types whose relay already sends the whole stored key to the channel's base
+// URL. Types that derive a signature or token from a composite key (Zhipu v3,
+// Xunfei, Tencent, Baidu v2) are unsupported and send nothing; a kept type
+// still detects.
+func TestUpstreamRatioDetectionSkipsDerivedCredentialTypes(t *testing.T) {
+	db := setupUpstreamRatioTest(t)
+	upstream := &fakeUpstream{tokenName: "vip", pricing: fakePricing}
+	server := upstream.serve(t)
+	for id, channelType := range map[int]int{1: constant.ChannelTypeZhipu, 2: constant.ChannelTypeXunfei, 3: constant.ChannelTypeTencent, 4: constant.ChannelTypeBaiduV2} {
+		createUpstreamRatioChannel(t, db, id, channelType, server.URL)
+		view, err := RefreshChannelUpstreamRatio(context.Background(), id)
+		require.NoError(t, err)
+		assert.Equal(t, UpstreamRatioKindUnsupported, view.Kind, channelType)
+		assert.Equal(t, model.UpstreamRatioStatusUnsupported, view.Status, channelType)
+		assert.Equal(t, "unsupported_channel", view.LastError, channelType)
+	}
+	assert.Zero(t, upstream.hits.Load(), "no request reaches the upstream for these types")
+
+	createUpstreamRatioChannel(t, db, 5, constant.ChannelTypeBaidu, server.URL)
+	view, err := RefreshChannelUpstreamRatio(context.Background(), 5)
+	require.NoError(t, err)
+	assert.Equal(t, UpstreamRatioKindDetect, view.Kind)
+	assert.Equal(t, model.UpstreamRatioSourceNewAPI, view.Source)
+	assert.Equal(t, "1.5", view.Ratio)
+}

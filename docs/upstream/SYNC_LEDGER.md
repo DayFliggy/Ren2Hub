@@ -51,7 +51,8 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - `TopUp` 带 `BonusQuota`；`FreezeTopUpQuota` 校验加赠小于到账合计，返利基数为本金。
 - `Redeem` 和 `AdjustUserQuotaWithOperation` 接收预载的加赠求值器，分别在兑换 CAS 和操作号重放检查之后决定加赠。
 - `model/main.go` 在 AutoMigrate 之后调用一次性迁移，查旧表时直接读系统目录并传播错误；配置加载或迁移失败阻止启动。
-- 路由和 Access Token 目录登记 `/api/user/topup-bonus/preview`；`model/user.go` 的两个 used_quota 函数各调用一次 `RecordTopUpBonusUsage`。
+- 路由和 Access Token 目录登记 `/api/user/topup-bonus/preview`。
+- 加赠窗口只统计同步计费路径：`model/user.go` 的 `UpdateUserUsedQuotaAndRequestCount` 和 `UpdateUserUsedQuota` 保持上游原文；`service/text_quota.go` 的 `PostTextConsumeQuota`、`service/quota.go` 的 `PostWssConsumeQuota` 与 `PostAudioConsumeQuota`、`service/violation_fee.go` 的 `ChargeViolationFeeIfNeeded` 各把一个标识符换成 `service/topup_bonus_usage.go` 的 `updateSyncUsedQuotaAndTopUpBonusWindow`。任务计费路径继续调用原生函数，不计入。上游新增调用这两个原生函数的地方默认不计入，同步时逐个判断它是否属于同步计费路径。
 
 ### 备用支付接点
 

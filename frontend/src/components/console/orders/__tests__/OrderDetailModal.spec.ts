@@ -191,6 +191,32 @@ describe('GMPay order details', () => {
     wrapper.unmount()
   })
 
+  it('shows a settled switched-asset payment without a chain transaction id as not recorded', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...nativeTopUpDetail,
+      status: 'success',
+      credited_quota: 5000000,
+      complete_time: 2,
+      gmpay: {
+        ...evidence,
+        settled_receive_address: 'parent-address',
+        settled_transaction_id: '',
+      },
+    })
+    const wrapper = render()
+    await flushPromises()
+    const fields = Object.fromEntries(
+      wrapper
+        .findAll('dl > div')
+        .map((field) => [field.get('dt').text(), field.get('dd').text()])
+    )
+    expect(fields['Gateway order status']).toBe('Settled')
+    expect(fields['Callback receiving address']).toBe('parent-address')
+    expect(fields['Settled transaction ID']).toBe('Not recorded')
+    expect(wrapper.text()).toContain('Completed')
+    wrapper.unmount()
+  })
+
   it('ignores an older response after selecting another order', async () => {
     let finish!: (value: unknown) => void
     const get = vi

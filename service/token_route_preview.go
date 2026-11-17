@@ -100,7 +100,8 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 			reason = routeReasonChannelUnavailable
 		}
 		item := TokenRoutePreviewEntry{ChannelID: id, Reason: reason}
-		if row != nil {
+		// 不可路由（例如被禁用）的渠道不在模型目录里，预览同样不给出它的名称和倍率。
+		if row != nil && model.ChannelRoutable(row) {
 			item.Name = row.Name
 			item.ChannelRatio = row.ChannelRatio
 			// 满载只给出原因，不返回其他用户的实时占用数。
@@ -135,7 +136,9 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 	orderAutomaticRoutes(rows, "preview", modelName, operation, query.Stream)
 	for _, row := range rows {
 		item := project(row.Id)
-		if item.Reason != "model_not_allowed" && item.Reason != "model_unavailable" {
+		switch item.Reason {
+		case "model_not_allowed", "model_unavailable", routeReasonChannelUnavailable:
+		default:
 			out.Entries = append(out.Entries, item)
 		}
 	}

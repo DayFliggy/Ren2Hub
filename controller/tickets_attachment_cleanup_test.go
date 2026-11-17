@@ -24,7 +24,7 @@ func TestTicketAttachmentCleanupCrashChild(t *testing.T) {
 	case "stage", "promote":
 		body, contentType := ticketMultipart(t, map[string]string{"content": "crash"}, tinyPNG(t))
 		ctx, _ := ticketContext(strings.NewReader(string(body)), contentType)
-		form, err := readTicketForm(ctx)
+		form, err := readSupportTicketForm(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
