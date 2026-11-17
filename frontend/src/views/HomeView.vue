@@ -70,7 +70,7 @@
           <button
             ref="stageButton"
             type="button"
-            class="hero-stage-hint flex items-center gap-1.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1.5 text-[11px] tracking-[0.06em] text-[var(--text-secondary)] shadow-[0_6px_18px_var(--shadow-color)] backdrop-blur-[12px] backdrop-saturate-150 transition-all duration-500 [@media(max-height:700px)_and_(max-width:1023px)]:hidden"
+            class="hero-stage-hint relative flex items-center gap-1.5 rounded-full after:absolute after:inset-x-0 after:-inset-y-2 border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1.5 text-[11px] tracking-[0.06em] text-[var(--text-secondary)] shadow-[0_6px_18px_var(--shadow-color)] backdrop-blur-[12px] backdrop-saturate-150 transition-all duration-500 [@media(max-height:700px)_and_(max-width:1023px)]:hidden"
             :class="stageHintClass"
             :inert="immersive"
             data-hero-canvas-boundary

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 
@@ -8,7 +8,17 @@ import i18n from '@/i18n'
 describe('IntegrationMarquee', () => {
   let wrapper: VueWrapper | undefined
 
-  afterEach(() => wrapper?.unmount())
+  // jsdom has no Web Animations; the rail's motion is checked in the browser.
+  beforeEach(() => {
+    Object.defineProperty(Element.prototype, 'animate', {
+      configurable: true,
+      value: vi.fn(() => ({ currentTime: 0, playbackRate: 1, cancel() {} })),
+    })
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    Reflect.deleteProperty(Element.prototype, 'animate')
+  })
 
   // Chromium starts a native drag on the chip icons; that fires pointercancel
   // and the rail stopped following the pointer about 16px into the drag.

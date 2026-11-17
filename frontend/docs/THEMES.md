@@ -123,11 +123,11 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 
 中文正文使用设备自带的中文字体（苹方、微软雅黑、Noto Sans CJK 等），页面不为正文下载中文字形。Noto Sans SC 排在字体栈最后，只在设备画不出某个字符时按分片下载。无衬线字体栈只在 `tailwind.css` 的 `--font-sans` 定义一次，`body` 和首页都引用它。
 
-首页的三款日间展示字体和夜间标题衬线按文案裁剪成子集。`scripts/home-font-faces.json` 写明每款字体渲染哪些 `home` 文案，`bun run fonts:home` 据此生成 `src/assets/fonts/home/subset/` 和 `src/styles/home-font-subsets.css`。改动这些文案后重新运行并提交生成结果；文案超出子集，或子集文件与样式表不是同一次生成的，`src/styles/__tests__/homeFontSubsets.spec.ts` 失败。子集之外的字符由完整字体（日间）或 Noto Serif SC 分片（夜间）补上，代价是多一次下载。
+首页的三款日间展示字体和夜间标题衬线按文案裁剪成子集。`scripts/home-font-faces.json` 写明每款字体渲染哪些 `home` 文案，`bun run fonts:home` 据此生成 `src/assets/fonts/home/subset/` 和 `src/styles/home-font-subsets.css`。改动这些文案后重新运行并提交生成结果；文案超出子集，或子集文件与样式表不是同一次生成的，`src/styles/__tests__/homeFontSubsets.spec.ts` 失败。子集之外的字符由完整字体（日间）或 Noto Serif SC 分片（夜间）补上，代价是多一次下载。日间标题字体的大写 K 画成小写 k，所以标题里的 “Key” 单独取自 `hero.titleKey`，日间用 JetBrains Mono 排成代码样式。
 
 ## 可访问性
 
-浅色和深色主题都必须保留可见焦点、状态文本和足够的文本对比度。夜间主卡、表头仍用 `--text-tertiary`；更亮的菜单、弹窗与提示表面继承 `--text-tertiary-overlay`，避免次级说明在高层表面低于 4.5:1。新增界面字号使用等价 rem，保留用户文字放大；图标按钮可以保持 44px 触控尺寸，不能用固定高度裁切文本。`prefers-reduced-motion` 下关闭非必要动画；Canvas 仍绘制稳定静态帧，并继续限制 DPR、在组件卸载时释放资源。
+浅色和深色主题都必须保留可见焦点、状态文本和足够的文本对比度。夜间主卡、表头仍用 `--text-tertiary`；更亮的菜单、弹窗与提示表面继承 `--text-tertiary-overlay`，避免次级说明在高层表面低于 4.5:1。新增界面字号使用等价 rem，保留用户文字放大；图标按钮可以保持 44px 触控尺寸，不能用固定高度裁切文本。首页信号台的次要文字靠颜色区分层级，不靠透明度压暗，两种主题下都不低于 4.5:1。`prefers-reduced-motion` 下关闭非必要动画；Canvas 仍绘制稳定静态帧，并继续限制 DPR（最多 2 倍，手机舞台 1.5 倍）、在组件卸载时释放资源。
 
 ## 视觉回归
 

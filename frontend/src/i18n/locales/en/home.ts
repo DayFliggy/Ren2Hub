@@ -39,7 +39,8 @@ export default {
   },
   hero: {
     eyebrow: 'ONE KEY · ALL MODELS',
-    titleLead: 'One Key, connect to',
+    titleLead: 'One {key}, connect to',
+    titleKey: 'Key',
     typed: [
       'every LLM',
       'Claude & GPT',
@@ -48,9 +49,9 @@ export default {
     ],
     subtitle: 'Stable, affordable — built for everyone.',
     pledges: [
-      'No prompt tampering',
-      'No body retention',
-      'Auditable usage billing',
+      'No Prompt Tampering',
+      'No Body Retention',
+      'Auditable Usage Billing',
     ],
     ctaPrimary: 'Start free',
     ctaSecondary: 'Read the docs',
@@ -186,7 +187,7 @@ export default {
       stableCalls: 'Stable calls',
       todaySuccess: 'successful requests today',
       protectedBy: 'protected by multi-upstream smart routing',
-      metricsUnavailable: 'request metrics unavailable',
+      metricsUnavailable: 'Request metrics unavailable',
       recentAvailability: 'last 7 days',
       trend24h: 'Last 24 hours',
       units: { days: 'd', hours: 'h', minutes: 'm', seconds: 's' },

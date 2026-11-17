@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   parseHomeRequestMetrics,
+  parsePricingCount,
   parsePublicStatus,
   parseUptimeGroups,
 } from '@/api/public'
@@ -34,6 +35,19 @@ describe('public API response boundaries', () => {
     expect(
       parseUptimeGroups([{ monitors: [{ uptime: 0.99, status: 1 }] }])
     ).toEqual([{ monitors: [{ uptime: 0.99, status: 1 }] }])
+  })
+
+  it('reads the pricing catalog model count and rejects anything else', () => {
+    expect(parsePricingCount({ models: 0 })).toBe(0)
+    expect(parsePricingCount({ models: 128 })).toBe(128)
+    for (const value of [
+      {},
+      { models: -1 },
+      { models: 1.5 },
+      { models: '3' },
+      null,
+    ])
+      expect(() => parsePricingCount(value)).toThrow()
   })
 
   it('rejects malformed public response data', () => {

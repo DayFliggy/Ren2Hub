@@ -1,5 +1,5 @@
 import { createApiClient } from './createClient'
-import { publicHttpTransport } from './httpTransport'
+import { httpTransport, publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
@@ -81,6 +81,7 @@ export interface HomeRequestMetrics {
 }
 
 const publicClient = createApiClient(publicHttpTransport)
+const sessionClient = createApiClient(httpTransport)
 
 function invalidResponse(endpoint: string): never {
   throw new ApiError(`Invalid public API response: ${endpoint}`, {
@@ -340,6 +341,14 @@ export function parseHomeRequestMetrics(value: unknown): HomeRequestMetrics {
   }
 }
 
+/** /api/pricing/count: how many models the pricing catalog lists. */
+export function parsePricingCount(value: unknown): number {
+  const models = isRecord(value) ? value.models : undefined
+  if (typeof models !== 'number' || !Number.isSafeInteger(models) || models < 0)
+    invalidResponse('/api/pricing/count')
+  return models
+}
+
 export const publicApi = {
   async status(signal?: AbortSignal) {
     return parsePublicStatus(
@@ -359,6 +368,19 @@ export const publicApi = {
       await publicClient.get<unknown>('/api/uptime/status', undefined, {
         signal,
       })
+    )
+  },
+  /**
+   * How many models the pricing catalog lists, behind the same access rule as
+   * /api/pricing; a signed-in visitor sends their session.
+   */
+  async pricingCount(signal?: AbortSignal, authenticated = true) {
+    return parsePricingCount(
+      await (authenticated ? sessionClient : publicClient).get<unknown>(
+        '/api/pricing/count',
+        undefined,
+        { signal }
+      )
     )
   },
   async homeMetrics(signal?: AbortSignal) {

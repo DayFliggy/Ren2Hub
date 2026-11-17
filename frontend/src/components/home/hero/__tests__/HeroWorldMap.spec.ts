@@ -110,4 +110,37 @@ describe('HeroWorldMap layout', () => {
     finishInit()
     await flushPromises()
   })
+
+  // A phone's address bar or a window resize can land while the page is
+  // scrolled; the scroll must not count as navigation bar over the map, or the
+  // markers near the top stay hidden after scrolling back.
+  it('measures the navigation bar over the map from the top of the page', async () => {
+    const navbar = document.body.appendChild(document.createElement('header'))
+    navbar.className = 'app-navbar'
+    let scrolled = 0
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        if (this === navbar)
+          return DOMRect.fromRect({ x: 0, y: 0, width: 390, height: 64 })
+        const entry = Object.entries(RECTS).find(([attr]) =>
+          this.hasAttribute(attr)
+        )
+        const [top, height] = entry?.[1] ?? [0, 844]
+        return DOMRect.fromRect({ x: 0, y: top - scrolled, width: 390, height })
+      }
+    )
+    const topInset = () => resize.mock.lastCall?.[2]
+
+    wrapper = mount(Stage, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(topInset()).toBe(64)
+
+    scrolled = 400
+    vi.stubGlobal('scrollY', scrolled)
+    window.dispatchEvent(new Event('resize'))
+    await new Promise((resolve) => setTimeout(resolve, 250))
+
+    expect(topInset()).toBe(64)
+    navbar.remove()
+  })
 })

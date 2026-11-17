@@ -94,6 +94,14 @@ interface RequestGroup {
   latencyRecorded: boolean
 }
 
+// The map repaints its whole canvas on every frame, in software on many phones.
+// A phone stage draws at 1.5× instead of 2×: 44% fewer pixels per frame, and
+// the dots and icons stay crisp at phone sizes.
+const MAX_PIXEL_RATIO = 2
+const MAX_COMPACT_PIXEL_RATIO = 1.5
+// Room left between a marker's icon and the navigation bar above it.
+const TOP_INSET_MARGIN = 6
+
 const SOURCE_ORIGINS = [
   { label: 'NA-CENTRAL', country: 'US' },
   { label: 'US-EAST', country: 'US' },
@@ -161,6 +169,8 @@ export class MapScene {
   private rain: CharRain
   private focusRegion: SceneRegion | null = null
   private copyRegion: SceneRegion | null = null
+  /** Canvas height covered by the navigation bar; no marker is drawn there. */
+  private topInset = 0
   private markers: ModelMarker[] = []
   private users: UserNode[] = []
   private channels: UserChannel[] = []
@@ -334,14 +344,19 @@ export class MapScene {
 
   resize(
     focusRegion: SceneRegion | null = this.focusRegion,
-    copyRegion: SceneRegion | null = this.copyRegion
+    copyRegion: SceneRegion | null = this.copyRegion,
+    topInset = this.topInset
   ) {
     this.focusRegion = focusRegion
     this.copyRegion = copyRegion
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2)
+    this.topInset = topInset
     const rect = this.canvas.getBoundingClientRect()
     this.w = rect.width
     this.h = rect.height
+    this.dpr = Math.min(
+      window.devicePixelRatio || 1,
+      this.isCompactStage() ? MAX_COMPACT_PIXEL_RATIO : MAX_PIXEL_RATIO
+    )
     this.canvas.width = Math.floor(this.w * this.dpr)
     this.canvas.height = Math.floor(this.h * this.dpr)
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
@@ -414,7 +429,11 @@ export class MapScene {
   private positionMarkers() {
     for (const marker of this.markers) {
       marker.place(this.map, this.w, this.h)
-      if (marker.visible && this.markerIntersectsHeroCopy(marker)) {
+      if (
+        marker.visible &&
+        (this.markerIntersectsHeroCopy(marker) ||
+          marker.y - marker.r - TOP_INSET_MARGIN < this.topInset)
+      ) {
         marker.visible = false
       }
     }

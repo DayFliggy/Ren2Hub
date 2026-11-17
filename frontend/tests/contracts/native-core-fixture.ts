@@ -313,6 +313,8 @@ export async function nativeCoreFixture(
       path === '/api/about'
     )
       return ok('')
+    // The home page and the sign-in panel read only the catalog's size.
+    if (path === '/api/pricing/count') return ok({ models: 1 })
     if (path === '/api/pricing')
       return route.fulfill({
         json: {

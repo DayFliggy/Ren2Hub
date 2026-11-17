@@ -20,6 +20,15 @@ html:not(.dark) .landing-shell .hero-title {
   font-synthesis: none;
 }
 
+/* The day display face draws its capital K as a lowercase k, so the
+   technical term "Key" is set as code. */
+html:not(.dark) .landing-shell .hero-title__key {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
 html.light .landing-shell .hero-title {
   position: relative;
 }
@@ -220,14 +229,14 @@ html.dark .landing-shell .hero-integration-boundary {
 }
 
 html.dark .landing-shell .signal-console {
-  opacity: 0.82;
   text-shadow: none;
 }
 
+/* The quieter rows stay at 4.5:1 or more against the page. */
 html.dark .landing-shell .signal-console__telemetry-row,
 html.dark .landing-shell .signal-console__capability,
 html.dark .landing-shell .signal-console__trace-record {
-  opacity: 0.72;
+  opacity: 0.8;
 }
 
 html.dark .landing-shell .signal-console__telemetry-row.is-target,
@@ -614,6 +623,23 @@ html.light .landing-shell > #hero-immersive-stage {
   grid-column: 2;
   grid-row: 2 / 4;
   align-self: center;
+}
+
+/* A narrow day panel has no frame around the trend, so the caption's last
+   line and the trend label beside it read as one sentence; the trend moves
+   below the caption instead. */
+@container (max-width: 26rem) {
+  html:not(.dark) .runtime-ledger-panel--requests > .runtime-request-total,
+  html:not(.dark) .runtime-ledger-panel--requests > .runtime-request-caption,
+  html:not(.dark) .runtime-ledger-panel--requests > .runtime-trend {
+    grid-column: 1 / -1;
+  }
+
+  html:not(.dark) .runtime-ledger-panel--requests > .runtime-trend {
+    grid-row: 4;
+    justify-self: start;
+    margin-top: 0.85rem;
+  }
 }
 
 .runtime-request-total {
@@ -1715,7 +1741,7 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
 }
 .landing-shell .signal-console__phase {
   margin-left: 2px;
-  color: rgb(var(--signal-rgb) / 0.78);
+  color: var(--text-tertiary);
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.11em;
@@ -1739,7 +1765,7 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
   align-items: baseline;
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.045em;
   transition:
     color 600ms ease,
@@ -1748,9 +1774,6 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
 .landing-shell .signal-console__telemetry-index {
   color: var(--text-tertiary);
   font-size: 9px;
-}
-html.dark .landing-shell .signal-console__telemetry-index {
-  color: rgb(var(--signal-rgb) / 0.66);
 }
 .landing-shell .signal-console__telemetry-label {
   color: var(--text-secondary);
@@ -1779,17 +1802,6 @@ html.dark .landing-shell .signal-console__telemetry-index {
   .signal-console__telemetry-value {
   color: var(--accent);
   text-shadow: 0 0 13px rgb(var(--accent-rgb) / 0.38);
-}
-.landing-shell .signal-console__telemetry-row.is-more {
-  opacity: 0.58;
-}
-.landing-shell
-  .signal-console__telemetry-head:hover
-  .signal-console__telemetry-row.is-more,
-.landing-shell
-  .signal-console__telemetry-head:focus-within
-  .signal-console__telemetry-row.is-more {
-  opacity: 0.92;
 }
 .landing-shell .signal-console__more-dots {
   grid-column: 3;
@@ -1963,7 +1975,7 @@ html.dark .landing-shell .signal-console__more-dots {
 .landing-shell
   .signal-console__capability.is-active
   .signal-console__capability-index {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .landing-shell .signal-console__prompt {
   font-weight: 800;
@@ -2025,14 +2037,14 @@ html.dark .landing-shell .signal-console__more-dots {
   transition: border-color 600ms ease;
 }
 .landing-shell .signal-console__capability-index {
-  color: rgb(var(--signal-rgb) / 0.62);
+  color: var(--text-tertiary);
   font-size: 10px;
   line-height: 1.75;
   letter-spacing: 0.08em;
   transition: color 600ms ease;
 }
 .landing-shell .signal-console__node {
-  color: rgb(var(--signal-rgb) / 0.9);
+  color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.52;
   transition: color 600ms ease;
@@ -2049,7 +2061,7 @@ html.dark .landing-shell .signal-console__more-dots {
   display: block;
   margin-top: 3px;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
   transition: color 600ms ease;
 }
@@ -2125,7 +2137,7 @@ html.dark .landing-shell .signal-console__more-dots {
   white-space: nowrap;
 }
 .landing-shell .signal-console__origin-label {
-  color: rgb(var(--signal-rgb) / 0.7);
+  color: var(--text-tertiary);
 }
 .landing-shell .signal-console__origin-value {
   overflow: hidden;
@@ -2300,7 +2312,7 @@ html.dark .landing-shell .signal-console__more-dots {
   }
   .landing-shell .signal-console__ticker-phase {
     flex: none;
-    color: rgb(var(--signal-rgb) / 0.9);
+    color: var(--text-tertiary);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -2313,7 +2325,7 @@ html.dark .landing-shell .signal-console__more-dots {
   }
   .landing-shell .signal-console__ticker-latency {
     flex: none;
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 700;
   }
   /* 沉浸态：Ticker 抬到召回钮上方，去玻璃壳、文字光晕融入背景 */

@@ -29,7 +29,6 @@
 | 位置                                                                                          | 问题                                                                           | 移动端后果                                     | 修法                                                                                                |
 | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `src/views/HomeView.vue:58`、`src/composables/useImmersiveStage.ts:73`                        | 舞台条 `[touch-action:pan-x]` 禁止浏览器竖向滚动，进入沉浸只认下滑（`dy > 0`） | 首屏拇指区约 18% 屏高上滑无响应，页面滚不动    | 改回 `pan-y`，横滑转图交给 `HeroWorldMap` 的 `pending → claim` 状态机；下滑进入沉浸改点按或提高阈值 |
-| `src/canvas/MapScene.ts:319`                                                                  | DPR 上限写死 2；窄屏只降元素数量，未降像素量                                   | 中低端手机首页帧率与发热偏高                   | 按宽度分档（窄屏上限约 1.5），参考 `navigator.deviceMemory` 与 `hardwareConcurrency`                |
 | `src/components/home/hero/HeroWorldMap.vue:352,378`                                           | 只监听 `pagehide`，无 `pageshow`                                               | 从 bfcache 返回首页后地图可能停帧，需真机确认  | 补 `pageshow` 调 `syncRunning()`，卸载时移除                                                        |
 | `src/components/home/hero/HeroWorldMap.vue:63`                                                | resize 防抖 180ms，不监听 `visualViewport`                                     | 地址栏收放期间画布可能拉伸，需真机确认         | 挂 `visualViewport` resize，防抖降到 80–100ms 并 leading 执行一次                                   |
 | `src/composables/useScrolled.ts:8-10`                                                         | scroll 回调无 rAF 节流                                                         | `AppNavbar` 切换 `backdrop-blur-xl` 首帧可能闪 | 参照 `HomeProgressDots.vue` 的 `scheduleFrame`                                                      |
@@ -55,6 +54,6 @@
 
 1. 共享层收口：`ConsoleModal` 聚焦时按 `visualViewport` 调整高度；批量操作栏 sticky；`ConsoleToggle` 焦点光晕。
 2. DataTable 方案：先接 `useTableScrollFade` 与常显滚动条（低成本），再决定是否做 `card` 模式；`TicketsView` 随方案补移动形态。
-3. 首页：`touch-action` 改回 `pan-y` 并重设进入手势；Canvas 补 DPR 分档、`pageshow` 恢复与 `visualViewport` 监听。
+3. 首页：`touch-action` 改回 `pan-y` 并重设进入手势；Canvas 补 `pageshow` 恢复与 `visualViewport` 监听。
 4. 页面级清理：栅格断点、公共页 `svh`、认证页键盘与 Turnstile、其余令牌与样式项。
 5. 补齐视觉回归：在 `mobile-touch-targets.spec.ts` 基础上扩成通用 44px 断言、320/360 视口、内层溢出断言、输入字号断言、非 reduced 动画用例。

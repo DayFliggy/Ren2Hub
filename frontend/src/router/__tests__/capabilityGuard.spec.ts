@@ -7,6 +7,7 @@ const publicApi = vi.hoisted(() => ({
   status: vi.fn(),
   notice: vi.fn(),
   pricing: vi.fn(),
+  pricingCount: vi.fn(),
   uptime: vi.fn(),
 }))
 
@@ -77,6 +78,7 @@ beforeEach(async () => {
   })
   publicApi.notice.mockResolvedValue('')
   publicApi.pricing.mockResolvedValue({ models: [], issues: [] })
+  publicApi.pricingCount.mockResolvedValue(0)
   publicApi.uptime.mockResolvedValue([])
   publicApi.status.mockResolvedValue({
     frontend_capabilities: {

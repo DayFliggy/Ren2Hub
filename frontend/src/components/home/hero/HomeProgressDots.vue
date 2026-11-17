@@ -221,6 +221,20 @@ onBeforeUnmount(() => {
   }
 }
 
+/* On touch screens each dot answers a 44px square; the dots spread out so the
+   squares do not overlap. */
+@media (pointer: coarse) {
+  .home-progress-dots {
+    gap: 1.25rem;
+  }
+
+  .home-progress-dots__dot::after {
+    position: absolute;
+    inset: -0.625rem;
+    content: '';
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-progress-dots__dot::before,
   .home-progress-dots__dot span,

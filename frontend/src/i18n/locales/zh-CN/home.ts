@@ -39,7 +39,8 @@ export default {
   },
   hero: {
     eyebrow: 'ONE KEY · ALL MODELS',
-    titleLead: '一个 Key，接入',
+    titleLead: '一个 {key}，接入',
+    titleKey: 'Key',
     typed: [
       '所有大模型',
       'Claude 与 GPT',

@@ -18,11 +18,19 @@
     <h1
       class="hero-title mt-3 w-full font-extrabold leading-[1.08] tracking-normal text-[var(--text-primary)] sm:mt-4 sm:leading-[1.15]"
     >
-      <span
+      <I18nT
+        keypath="hero.titleLead"
+        tag="span"
+        scope="global"
         class="animate-rise-in whitespace-nowrap"
         style="animation-delay: 0.25s"
-        >{{ t('hero.titleLead') }}</span
       >
+        <template #key
+          ><span class="hero-title__key">{{
+            t('hero.titleKey')
+          }}</span></template
+        >
+      </I18nT>
       <span ref="typedLine" class="block w-full whitespace-nowrap">
         <span
           class="typewriter-scale-box inline-block origin-center lg:origin-right"
@@ -134,7 +142,7 @@
           >
         </dt>
         <dd
-          class="mt-0.5 break-words text-[10px] leading-tight text-[var(--text-tertiary)] sm:text-xs sm:leading-normal"
+          class="mt-0.5 break-words text-xs leading-tight text-[var(--text-tertiary)] sm:leading-normal"
         >
           {{ m.label }}
         </dd>
@@ -154,7 +162,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useI18n } from 'vue-i18n'
+import { I18nT, useI18n } from 'vue-i18n'
 import { useResizeObserver } from '@vueuse/core'
 import { useHomePerformance } from '@/composables/useHomePerformance'
 import { useTyped } from '@/composables/useTyped'

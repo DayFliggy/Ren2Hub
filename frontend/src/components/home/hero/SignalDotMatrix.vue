@@ -156,41 +156,66 @@ const dots = computed<SignalDot[]>(() => {
   height: 4px;
 }
 
+/* A lifecycle change restyles most of the 30 dots. Only their opacity and
+   scale fade, and so does the glow on ::after; colours switch at once, so the
+   browser fades the dots without repainting them. A quiet dot is the warm
+   colour at low opacity and keeps the warm glow at zero opacity, which makes
+   quiet ↔ warm a pure fade in both directions. A dot leaving the accent or
+   response tone fades out the warm glow. */
 .signal-dot-matrix__dot {
+  position: relative;
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: rgb(var(--signal-rgb) / 0.18);
-  box-shadow: none;
-  opacity: 0.5;
+  background: rgb(var(--signal-rgb) / 0.84);
+  opacity: 0.11;
   transform: scale(0.76);
   transition:
-    background-color 620ms ease,
-    box-shadow 620ms ease,
     opacity 560ms ease,
     transform 640ms cubic-bezier(0.22, 0.72, 0.25, 1);
   transition-delay: var(--dot-delay);
 }
 
-.signal-dot-matrix__dot.is-warm {
-  background: rgb(var(--signal-rgb) / 0.84);
+.signal-dot-matrix__dot::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   box-shadow: 0 0 8px rgb(var(--signal-rgb) / 0.24);
+  content: '';
+  opacity: 0;
+  transition: opacity 620ms ease;
+  transition-delay: var(--dot-delay);
+}
+
+.signal-dot-matrix__dot.is-warm {
   opacity: 0.92;
   transform: scale(1);
 }
 
+.signal-dot-matrix__dot.is-warm::after {
+  opacity: 1;
+}
+
 .signal-dot-matrix__dot.is-accent {
   background: var(--accent);
-  box-shadow: 0 0 11px rgb(var(--accent-rgb) / 0.64);
   opacity: 1;
   transform: scale(1.18);
 }
 
+.signal-dot-matrix__dot.is-accent::after {
+  box-shadow: 0 0 11px rgb(var(--accent-rgb) / 0.64);
+  opacity: 1;
+}
+
 .signal-dot-matrix__dot.is-response {
   background: var(--text-primary);
-  box-shadow: 0 0 12px rgb(var(--accent-rgb) / 0.76);
   opacity: 1;
   transform: scale(1.24);
+}
+
+.signal-dot-matrix__dot.is-response::after {
+  box-shadow: 0 0 12px rgb(var(--accent-rgb) / 0.76);
+  opacity: 1;
 }
 
 [data-phase='idle'] .signal-dot-matrix__dot.is-warm {
@@ -211,6 +236,7 @@ const dots = computed<SignalDot[]>(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .signal-dot-matrix__dot,
+  .signal-dot-matrix__dot::after,
   [data-phase='idle'] .signal-dot-matrix__dot.is-warm {
     animation: none;
     transition: none;

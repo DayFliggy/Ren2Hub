@@ -5,7 +5,7 @@
     >
       <div>
         <p
-          class="font-mono text-[10px] font-bold uppercase tracking-[var(--letter-spacing-wide)] text-[var(--brand-scan)]"
+          class="font-mono text-[10px] font-bold uppercase tracking-[var(--letter-spacing-wide)] text-[var(--accent-text)]"
         >
           {{ t('integration.eyebrow') }}
         </p>
@@ -80,10 +80,14 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { useDebounceFn } from '@vueuse/core'
+import {
+  useDebounceFn,
+  useDocumentVisibility,
+  useIntersectionObserver,
+} from '@vueuse/core'
 import IntegrationChip from './IntegrationChip.vue'
 import { INTEGRATIONS } from '@/constants/home/integrations'
 import { useAppStore } from '@/stores'
@@ -102,19 +106,25 @@ const isDragging = ref(false)
 
 // The rail behaves like a physical instrument panel: it settles when inspected,
 // then accelerates back into its ambient pace when the visitor leaves it.
+// The ambient motion is a Web Animation of the track's transform, so the
+// browser runs it without script; script only eases its rate, follows a drag
+// and picks the chip nearest the centre.
 const BASE_SPEED = 0.0252 // px / ms, matching the former 0.42 px / frame pace
 const STOP_EASE_MS = 150
 const RESUME_EASE_MS = 420
 const DRAG_THRESHOLD = 6
+// A chip crosses the centre in about 2.4s, so a highlight that trails by at
+// most this long is not noticeable. The check runs only while the rail shows.
+const ACTIVE_CHECK_MS = 150
 
-let offset = 0
 let groupWidth = 0
 let wrapperCenter = 0
 let centers: number[] = []
-let raf = 0
-let running = false
-let velocity = BASE_SPEED
-let lastFrameAt = 0
+let motion: Animation | null = null
+let rate = 1
+let easeFrame = 0
+let lastEaseAt = 0
+let activeTimer = 0
 let suppressClickUntil = 0
 
 interface PointerSession {
@@ -131,6 +141,15 @@ const reduced =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+const inView = ref(true)
+const pageVisibility = useDocumentVisibility()
+const { stop: stopViewObserver } = useIntersectionObserver(
+  wrapperRef,
+  (entries) => {
+    inView.value = Boolean(entries.at(-1)?.isIntersecting)
+  }
+)
+
 function measure() {
   const track = trackRef.value
   const wrapper = wrapperRef.value
@@ -140,17 +159,44 @@ function measure() {
   groupWidth = group.offsetWidth
   wrapperCenter = wrapper.clientWidth / 2
 
+  // The track and its chips move together, so these are positions along the
+  // track wherever it currently is.
   const trackLeft = track.getBoundingClientRect().left
   centers = Array.from(group.children).map((el) => {
     const rect = (el as HTMLElement).getBoundingClientRect()
-    return rect.left + rect.width / 2 - trackLeft + offset
+    return rect.left + rect.width / 2 - trackLeft
   })
+}
+
+/** How far the track has moved left, within one group width. */
+function currentOffset() {
+  const time = Number(motion?.currentTime ?? 0)
+  return normalizeOffset(time * BASE_SPEED)
+}
+
+function setOffset(offset: number) {
+  if (motion) motion.currentTime = normalizeOffset(offset) / BASE_SPEED
+}
+
+/** (Re)creates the ambient motion for the measured group width. */
+function startMotion() {
+  const track = trackRef.value
+  if (!track || groupWidth <= 0) return
+  motion?.cancel()
+  motion = track.animate(
+    [
+      { transform: 'translateX(0)' },
+      { transform: `translateX(${-groupWidth}px)` },
+    ],
+    { duration: groupWidth / BASE_SPEED, iterations: Infinity }
+  )
+  motion.playbackRate = rate
 }
 
 function updateActive() {
   if (!centers.length || groupWidth <= 0) return
 
-  const target = normalizeOffset(wrapperCenter + offset)
+  const target = normalizeOffset(wrapperCenter + currentOffset())
   let best = 0
   let bestDistance = Infinity
 
@@ -168,59 +214,65 @@ function updateActive() {
   activeIndex.value = best
 }
 
+/** Runs the highlight check while the moving rail is on screen. */
+function syncActiveTimer() {
+  window.clearInterval(activeTimer)
+  activeTimer = 0
+  if (!motion || !inView.value || pageVisibility.value === 'hidden') return
+  updateActive()
+  activeTimer = window.setInterval(updateActive, ACTIVE_CHECK_MS)
+}
+
+watch([inView, pageVisibility], syncActiveTimer)
+
 function normalizeOffset(value: number) {
   if (groupWidth <= 0) return 0
   return ((value % groupWidth) + groupWidth) % groupWidth
-}
-
-function applyTransform() {
-  if (trackRef.value)
-    trackRef.value.style.transform = `translateX(${-offset}px)`
 }
 
 function wantsToPause() {
   return isPointerInside.value || isFocusWithin.value || Boolean(pointerSession)
 }
 
-function updatePosition(delta: number) {
-  offset = normalizeOffset(offset + delta)
-  applyTransform()
+function setRate(next: number) {
+  rate = next
+  if (motion) motion.playbackRate = next
+}
+
+/** Eases the motion's rate toward stopped or full pace, one frame at a time. */
+function easeRate(now: number) {
+  easeFrame = 0
+  const target = wantsToPause() ? 0 : 1
+  // A frame's timestamp can precede the moment the easing was requested.
+  const deltaMs = Math.min(Math.max(now - lastEaseAt, 0), 64)
+  lastEaseAt = now
+  const easeMs = target === 0 ? STOP_EASE_MS : RESUME_EASE_MS
+  const eased = rate + (target - rate) * (1 - Math.exp(-deltaMs / easeMs))
+  setRate(Math.abs(target - eased) < 0.005 ? target : eased)
   updateActive()
+  if (rate !== target) easeFrame = requestAnimationFrame(easeRate)
 }
 
-function resetFrameClock() {
-  lastFrameAt = performance.now()
-}
-
-function frame(now: number) {
-  if (!running) return
-
-  const deltaMs = lastFrameAt ? Math.min(now - lastFrameAt, 64) : 16.7
-  lastFrameAt = now
-
-  if (!isDragging.value) {
-    const targetVelocity = wantsToPause() ? 0 : BASE_SPEED
-    const easeMs = targetVelocity === 0 ? STOP_EASE_MS : RESUME_EASE_MS
-    const easing = 1 - Math.exp(-deltaMs / easeMs)
-    velocity += (targetVelocity - velocity) * easing
-
-    if (Math.abs(velocity) > 0.0001) updatePosition(velocity * deltaMs)
-  }
-
-  raf = requestAnimationFrame(frame)
+function steer() {
+  if (!motion || easeFrame) return
+  if (rate === (wantsToPause() ? 0 : 1)) return
+  lastEaseAt = performance.now()
+  easeFrame = requestAnimationFrame(easeRate)
 }
 
 const onResize = useDebounceFn(() => {
-  const progress = groupWidth > 0 ? offset / groupWidth : 0
+  if (!motion) return
+  const progress = groupWidth > 0 ? currentOffset() / groupWidth : 0
   measure()
-  offset = normalizeOffset(progress * groupWidth)
-  applyTransform()
+  startMotion()
+  setOffset(progress * groupWidth)
   measure()
   updateActive()
 }, 180)
 
 function onPointerEnter() {
   isPointerInside.value = true
+  steer()
 }
 
 function onPointerLeave() {
@@ -229,6 +281,7 @@ function onPointerLeave() {
   // If a non-dragging mouse press leaves the rail, it cannot produce a valid chip
   // click. Releasing this lock avoids leaving the ambient motion paused.
   if (pointerSession && !pointerSession.dragged) pointerSession = null
+  steer()
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -238,14 +291,15 @@ function onPointerDown(event: PointerEvent) {
     id: event.pointerId,
     startX: event.clientX,
     startY: event.clientY,
-    startOffset: offset,
+    startOffset: currentOffset(),
     dragged: false,
   }
 
   // Pause immediately after a real press, so a click cannot land on a different
   // chip while the browser is resolving its eventual click event.
-  velocity = 0
-  resetFrameClock()
+  cancelAnimationFrame(easeFrame)
+  easeFrame = 0
+  setRate(0)
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -267,8 +321,7 @@ function onPointerMove(event: PointerEvent) {
   }
 
   event.preventDefault()
-  offset = normalizeOffset(session.startOffset - deltaX)
-  applyTransform()
+  setOffset(session.startOffset - deltaX)
   updateActive()
 }
 
@@ -282,7 +335,7 @@ function finishPointerSession(pointerId?: number) {
   }
 
   isDragging.value = false
-  resetFrameClock()
+  steer()
 }
 
 function onPointerUp(event: PointerEvent) {
@@ -306,11 +359,13 @@ function onClickCapture(event: MouseEvent) {
 
 function onFocusIn() {
   isFocusWithin.value = true
+  steer()
 }
 
 function onFocusOut(event: FocusEvent) {
   const nextTarget = event.relatedTarget as Node | null
   if (!wrapperRef.value?.contains(nextTarget)) isFocusWithin.value = false
+  steer()
 }
 
 function onWindowBlur() {
@@ -325,17 +380,18 @@ onMounted(() => {
     return
   }
 
-  updateActive()
-  running = true
-  resetFrameClock()
-  raf = requestAnimationFrame(frame)
+  startMotion()
+  syncActiveTimer()
   window.addEventListener('resize', onResize)
   window.addEventListener('blur', onWindowBlur)
 })
 
 onBeforeUnmount(() => {
-  running = false
-  cancelAnimationFrame(raf)
+  stopViewObserver()
+  cancelAnimationFrame(easeFrame)
+  window.clearInterval(activeTimer)
+  motion?.cancel()
+  motion = null
   window.removeEventListener('resize', onResize)
   window.removeEventListener('blur', onWindowBlur)
 })

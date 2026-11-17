@@ -28,7 +28,7 @@
     "family": "Ren2HomeSerif",
     "weight": 700,
     "axes": { "wght": 700 },
-    "copy": ["hero.titleLead", "hero.typed"],
+    "copy": ["hero.titleLead", "hero.titleKey", "hero.typed"],
     "files": {
       "serif-latin.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7kqGWbg.woff2",
       "serif-116.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7oqP0dTpxZbB9E9gjjmzKvaeKHUTtJDWv3z-us4bxD8F5og.116.woff2",

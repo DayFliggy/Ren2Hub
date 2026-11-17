@@ -299,4 +299,36 @@ describe('canvas scene motion', () => {
     expect(flyline.point(1).y).toBeCloseTo(marker.y, 6)
     scene.dispose()
   })
+
+  it('keeps model markers below the navigation bar', async () => {
+    rect = DOMRect.fromRect({ x: 0, y: 0, width: 360, height: 640 })
+    const scene = await createScene()
+    const markers = (
+      scene as unknown as {
+        markers: { y: number; r: number; visible: boolean }[]
+      }
+    ).markers
+    const reaching = (inset: number) =>
+      markers.filter((marker) => marker.visible && marker.y - marker.r < inset)
+
+    scene.resize(null, null, 0)
+    const inset = Math.max(...markers.map((marker) => marker.y - marker.r)) / 2
+    expect(reaching(inset).length).toBeGreaterThan(0)
+
+    scene.resize(null, null, inset)
+    expect(reaching(inset + 6)).toEqual([])
+    scene.dispose()
+  })
+
+  it('draws a phone stage at 1.5 device pixels per CSS pixel at most', async () => {
+    vi.stubGlobal('devicePixelRatio', 3)
+    const scene = await createScene()
+    const canvas = (scene as unknown as { canvas: HTMLCanvasElement }).canvas
+
+    expect(canvas.width).toBe(Math.floor(390 * 1.5))
+    rect = DOMRect.fromRect({ x: 0, y: 0, width: 1440, height: 900 })
+    scene.resize()
+    expect(canvas.width).toBe(1440 * 2)
+    scene.dispose()
+  })
 })

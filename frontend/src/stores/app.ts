@@ -2,10 +2,9 @@ import { configureQuotaDisplay } from '@/utils/format'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
-import { invalidResponse, isRecord } from '@/api/contracts'
+import { isRecord } from '@/api/contracts'
 import { publicApi, type FeatureStatus, type PublicStatus } from '@/api/public'
 import i18n from '@/i18n'
-import { publicCatalogApi } from '@/api/publicCatalog'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { BRAND_LOGO_PATH, BRAND_NAME } from '@/constants/branding'
 import { useAuthStore } from '@/stores/auth'
@@ -344,20 +343,17 @@ export const useAppStore = defineStore('app', () => {
       modelCountState.value = 'signIn'
       return
     }
+    // The count alone; the catalog itself is loaded by the pricing page.
     const result = await pricingRequest.run((signal) =>
-      publicCatalogApi.pricing(signal, auth.isAuthenticated)
+      publicApi.pricingCount(signal, auth.isAuthenticated)
     )
     if (result.stale) return
     if (!result.ok) {
       modelCountState.value = 'error'
       throw result.error
     }
-    if (result.value.issues.length > 0) {
-      modelCountState.value = 'error'
-      invalidResponse('/api/pricing')
-    }
     modelCountState.value = 'ready'
-    modelCount.value = result.value.models.length
+    modelCount.value = result.value
   }
 
   watch(

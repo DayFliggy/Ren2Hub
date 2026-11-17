@@ -59,8 +59,22 @@ function readRegion(selector: string): SceneRegion | null {
   }
 }
 
-// The hub sits in the map focus column; model markers hide behind the copy.
-// Immersive mode hides the copy, so the hub re-centres on the whole stage.
+/**
+ * How far the fixed navigation bar reaches down the canvas with the page at
+ * the top, which is where it overlaps the map; a resize can land while the
+ * page is scrolled.
+ */
+function readTopInset(): number {
+  const canvas = canvasEl.value
+  const navbar = document.querySelector<HTMLElement>('.app-navbar')
+  if (!canvas || !navbar) return 0
+  const canvasTop = canvas.getBoundingClientRect().top + window.scrollY
+  return Math.max(0, navbar.getBoundingClientRect().bottom - canvasTop)
+}
+
+// The hub sits in the map focus column; model markers hide behind the copy
+// and stay clear of the navigation bar. Immersive mode hides the copy, so the
+// hub re-centres on the whole stage.
 function resizeScene() {
   scene?.resize(
     readRegion(
@@ -68,7 +82,8 @@ function resizeScene() {
         ? '[data-hero-map-immersive-focus]'
         : '[data-hero-map-focus]'
     ),
-    readRegion('[data-hero-map-copy]')
+    readRegion('[data-hero-map-copy]'),
+    readTopInset()
   )
 }
 watch(

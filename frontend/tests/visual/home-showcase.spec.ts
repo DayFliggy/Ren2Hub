@@ -723,7 +723,6 @@ test('runtime band motion pauses while the band is off screen', async ({
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.locator('#app > *').first().waitFor({ state: 'visible' })
   const band = page.locator('#home-runtime')
-  await expect(band.locator('[data-zero-trend-wave]')).toHaveCount(1)
   const motion = () =>
     band.evaluate((element) =>
       element
@@ -744,11 +743,165 @@ test('runtime band motion pauses while the band is off screen', async ({
       'runtime-trend-wave-float',
     ].map((name) => `${name} ${state}`)
 
-  await expect.poll(motion).toEqual(every('paused'))
+  // The request metrics, and with them the trend wave, load once the band shows.
   await band.scrollIntoViewIfNeeded()
+  await expect(band.locator('[data-zero-trend-wave]')).toHaveCount(1)
   await expect.poll(motion).toEqual(every('running'))
   await page.evaluate(() => window.scrollTo(0, 0))
   await expect.poll(motion).toEqual(every('paused'))
+  await band.scrollIntoViewIfNeeded()
+  await expect.poll(motion).toEqual(every('running'))
+})
+
+// Below the full-height hero the band only touches the viewport, so its clock
+// does not tick and its request metrics wait until the visitor scrolls to it.
+test('runtime band clock and metrics wait until the band shows', async ({
+  page,
+}) => {
+  // Each clock reading advances the page's time by one second.
+  await configureStablePage(page, {
+    theme: 'light',
+    authenticated: true,
+    clockStepMs: 1_000,
+  })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  let metricsRequests = 0
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/home/metrics')
+      metricsRequests += 1
+  })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const band = page.locator('#home-runtime')
+  const clock = () =>
+    band
+      .locator('.runtime-flap')
+      .evaluateAll((flaps) => flaps.map((flap) => flap.dataset.value).join(''))
+  await expect(band.locator('.runtime-flap').first()).toBeAttached()
+  // The launch time arrives with the site status; wait for it to settle.
+  await page.waitForLoadState('networkidle')
+  const atTop = await clock()
+  await page.waitForTimeout(2_200)
+
+  expect(await clock()).toBe(atTop)
+  expect(metricsRequests).toBe(0)
+
+  await band.scrollIntoViewIfNeeded()
+  await expect.poll(() => metricsRequests).toBeGreaterThan(0)
+  await expect.poll(clock).not.toBe(atTop)
+})
+
+/** The integration rail's moving track, its motion and the highlighted chip. */
+function railState(page: import('@playwright/test').Page) {
+  return page
+    .locator('.hero-integration-marquee-wrapper > div')
+    .evaluate((track: HTMLElement) => {
+      const [motion] = track.getAnimations()
+      const group = track.firstElementChild as HTMLElement
+      return {
+        inlineTransform: track.style.transform,
+        rate: motion?.playbackRate,
+        x: new DOMMatrix(getComputedStyle(track).transform).m41,
+        groupWidth: group.offsetWidth,
+        active: [...group.children].findIndex(
+          (chip) => chip.querySelector('.chip-active') !== null
+        ),
+      }
+    })
+}
+
+async function openMovingHome(page: import('@playwright/test').Page) {
+  await configureStablePage(page, { theme: 'light', authenticated: true })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.chip-active').first()).toBeVisible()
+}
+
+// The browser runs the rail's ambient motion as a Web Animation; script only
+// eases its rate and moves the highlight, it never writes a transform per frame.
+test('integration rail moves on its own and settles while hovered', async ({
+  page,
+}) => {
+  await openMovingHome(page)
+  const start = await railState(page)
+  expect(start.inlineTransform).toBe('')
+  expect(start.rate).toBe(1)
+
+  await expect.poll(async () => (await railState(page)).x).not.toBe(start.x)
+  await expect
+    .poll(async () => (await railState(page)).active, { timeout: 8_000 })
+    .not.toBe(start.active)
+
+  await page.locator('.hero-integration-marquee-wrapper').hover()
+  await expect.poll(async () => (await railState(page)).rate).toBe(0)
+  const settled = (await railState(page)).x
+  await page.waitForTimeout(400)
+  expect((await railState(page)).x).toBe(settled)
+
+  await page.mouse.move(5, 5)
+  await expect.poll(async () => (await railState(page)).rate).toBe(1)
+  expect((await railState(page)).inlineTransform).toBe('')
+})
+
+// On a landscape phone the rail leaves the screen near the end of the page.
+// Its motion stays with the compositor, but the highlight check stops there and
+// catches up as soon as the rail shows again.
+test('integration rail stops checking its highlight while off screen', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 844, height: 390 })
+  await openMovingHome(page)
+  const rail = page.locator('.hero-integration-marquee-wrapper')
+  type Counter = { railHighlightChanges: number }
+  await rail.evaluate((element) => {
+    const counter = window as unknown as Counter
+    counter.railHighlightChanges = 0
+    new MutationObserver((records) => {
+      counter.railHighlightChanges += records.length
+    }).observe(element, { subtree: true, attributeFilter: ['class'] })
+  })
+  const changes = () =>
+    page.evaluate(() => (window as unknown as Counter).railHighlightChanges)
+
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight)
+  )
+  await expect(rail).not.toBeInViewport()
+  // Let the visibility observer report the rail hidden before counting.
+  await page.waitForTimeout(300)
+  await page.evaluate(() => {
+    ;(window as unknown as Counter).railHighlightChanges = 0
+  })
+  await page.waitForTimeout(3_000)
+  expect(await changes()).toBe(0)
+
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect.poll(changes, { timeout: 8_000 }).toBeGreaterThan(0)
+})
+
+test('dragging the integration rail moves it with the pointer', async ({
+  page,
+}) => {
+  await openMovingHome(page)
+  const box = (await page
+    .locator('.hero-integration-marquee-wrapper')
+    .boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await expect.poll(async () => (await railState(page)).rate).toBe(0)
+  const before = await railState(page)
+  await page.mouse.move(x - 60, y, { steps: 4 })
+  await page.mouse.move(x - 120, y, { steps: 4 })
+  const after = await railState(page)
+  await page.mouse.up()
+
+  const moved =
+    (((before.x - after.x) % before.groupWidth) + before.groupWidth) %
+    before.groupWidth
+  expect(moved).toBeCloseTo(120, 0)
+  await expect(page).toHaveURL(/\/$/)
 })
 
 test('home showcase remains intact at narrow mobile width', async ({
@@ -819,19 +972,29 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
         const trendBounds = panel
           .querySelector<HTMLElement>('.runtime-trend')!
           .getBoundingClientRect()
+        const captionBounds = panel
+          .querySelector<HTMLElement>('.runtime-request-caption')!
+          .getBoundingClientRect()
+        // A narrow day panel stacks the trend below the caption; elsewhere it
+        // sits beside the total and the caption. Either way none overlap.
+        const clear = (bounds: DOMRect) =>
+          bounds.right <= trendBounds.left + 1 ||
+          bounds.bottom <= trendBounds.top + 1
         return {
           totalLeft: totalBounds.left,
           totalRight: totalBounds.right,
           panelLeft: panelBounds.left,
           panelRight: panelBounds.right,
           overflow: element.scrollWidth - element.clientWidth,
-          trendLeft: trendBounds.left,
+          totalClear: clear(totalBounds),
+          captionClear: clear(captionBounds),
         }
       })
       expect(geometry.totalLeft).toBeGreaterThanOrEqual(geometry.panelLeft - 1)
       expect(geometry.totalRight).toBeLessThanOrEqual(geometry.panelRight + 1)
       expect(geometry.overflow).toBeLessThanOrEqual(1)
-      expect(geometry.totalRight).toBeLessThanOrEqual(geometry.trendLeft + 1)
+      expect(geometry.totalClear, '总数与趋势图重叠').toBe(true)
+      expect(geometry.captionClear, '说明文字与趋势图重叠').toBe(true)
       await assertNoHorizontalOverflow(page)
     })
   }
