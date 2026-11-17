@@ -465,15 +465,10 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
               loaded: ['Ren2HomeTime', 'Ren2HomeSketch', 'Ren2HomeStamp'],
             }
           : {
-              display: 'Ren2NotoSerifSC',
+              display: 'Ren2HomeSerif',
               stamp: 'Ren2JetBrainsMono',
               hand: 'Ren2JetBrainsMono',
-              loaded: [
-                'Ren2NotoSerifSC',
-                'Ren2JetBrainsMono',
-                'Ren2NotoSansSC',
-                'Ren2Inter',
-              ],
+              loaded: ['Ren2HomeSerif', 'Ren2JetBrainsMono', 'Ren2Inter'],
             }
       expect(displayFont).toContain(expectedFonts.display)
       expect(
@@ -771,6 +766,47 @@ test('home progress dots activate the runtime section at a tall viewport', async
   await expect(dots.nth(1)).toHaveAttribute('aria-current', 'location')
   await expect(page.locator('#home-runtime')).toBeInViewport()
 })
+
+const INTER = 'UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7'
+const JETBRAINS_MONO =
+  'tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg'
+
+// The display fonts load as subsets cut from the home copy, and Chinese body
+// text uses the system font, which the test host has. A complete display font
+// or a Noto slice among the requests means some text lost its subset or went
+// back to a web font.
+for (const theme of ['light', 'dark'] as VisualTheme[]) {
+  for (const locale of ['zh-CN', 'en'] as const) {
+    test(`${theme} ${locale} home fetches only the fonts its text needs`, async ({
+      page,
+    }) => {
+      const fonts = new Set<string>()
+      page.on('request', (request) => {
+        const font = /\/fonts\/(.+)\.woff2$/.exec(
+          new URL(request.url()).pathname
+        )
+        if (font) fonts.add(font[1])
+      })
+      await configureStablePage(page, { theme, authenticated: true, locale })
+      await page.goto('/')
+      await waitForStablePage(page)
+      await page.locator('.home-showcase').scrollIntoViewIfNeeded()
+      await page.evaluate(() => document.fonts.ready)
+
+      const subsets = [...fonts].filter((font) =>
+        font.startsWith('home/subset/')
+      )
+      expect(
+        [...fonts].filter((font) => !subsets.includes(font)).sort()
+      ).toEqual([INTER, JETBRAINS_MONO].sort())
+      expect(
+        [
+          ...new Set(subsets.map((font) => /subset\/([a-z]+)/.exec(font)![1])),
+        ].sort()
+      ).toEqual(theme === 'light' ? ['sketch', 'stamp', 'time'] : ['serif'])
+    })
+  }
+}
 
 test('homepage display fonts stay scoped away from the console', async ({
   page,

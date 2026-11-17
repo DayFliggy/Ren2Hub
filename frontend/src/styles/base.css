@@ -62,16 +62,7 @@ body {
   overflow-x: clip;
   background-color: var(--page-background);
   color: var(--text-primary);
-  font-family:
-    'Ren2Inter',
-    'Ren2NotoSansSC',
-    Inter,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    'PingFang SC',
-    'Microsoft YaHei',
-    sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

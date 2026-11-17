@@ -52,6 +52,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       manifest: true,
+      // A font is fetched only for text that needs it. Inlined into the
+      // stylesheet, a small font file would be downloaded by every page.
+      assetsInlineLimit: (file) =>
+        file.endsWith('.woff2') ? false : undefined,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -62,6 +66,10 @@ export default defineConfig(({ mode }) => {
             if (id.includes('echarts')) return 'vendor-chart'
             // Only the 2FA setup dialog needs it; keep it off the eager vendor chunk.
             if (id.includes('/qrcode.vue/')) return 'vendor-qrcode'
+            // Only lazy pages parse plugin documents and Markdown; these stay
+            // with the pages that import them.
+            if (/\/node_modules\/(yaml|acorn|marked)\//.test(id))
+              return undefined
             if (
               id.includes('/vue/') ||
               id.includes('/vue-router/') ||

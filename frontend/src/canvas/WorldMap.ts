@@ -28,15 +28,21 @@ function buildAlphaLut(r: number, g: number, b: number): string[] {
     arr[i] = `rgba(${r},${g},${b},${(i / A_STEPS).toFixed(3)})`
   return arr
 }
-// alpha(0~1) → 量化档字符串
-function lutAt(lut: string[], a: number): string {
+// alpha(0~1) → 量化档序号
+function alphaStep(a: number): number {
   let i = (a * A_STEPS + 0.5) | 0
   if (i < 0) i = 0
   else if (i > A_STEPS) i = A_STEPS
-  return lut[i]
+  return i
 }
-function buildAlphaLutHex(hex: string): string[] {
-  return buildAlphaLut(...hexRgb(hex))
+// 点阵调色板：陆地、星辉、海洋三段，每段 A_STEPS+1 档；颜色序号 = 段起点 + alpha 档。
+const LAND = 0
+const HIGHLIGHT = A_STEPS + 1
+const OCEAN = 2 * (A_STEPS + 1)
+function buildPalette(theme: CanvasTheme): string[] {
+  return [theme.mapLand, theme.mapHighlight, theme.mapOcean].flatMap((hex) =>
+    buildAlphaLut(...hexRgb(hex))
+  )
 }
 
 // 涟漪十六进制色 → [r,g,b] 解析缓存：颜色种类有限，避免主循环内重复 parseInt+slice
@@ -102,14 +108,19 @@ export class WorldMap {
   private theme: CanvasTheme
   private focusX: number | null = null
   private focusY: number | null = null
-  private highlightLut: string[]
-  private landLut: string[]
-  private oceanLut: string[]
+  private palette: string[]
   private dots: MapDot[] = []
+  // 本帧待画的点按颜色串成链：queueHead[颜色] 是该色最后入队的点，queueNext[点] 是它之前入队的点。
+  // 同色的点连续画，每帧只切换几十次 fillStyle，而不是每个点一次。
+  private queueHead = new Int32Array(3 * (A_STEPS + 1)).fill(-1)
+  private queueNext = new Int32Array(0)
+  private dotSize = new Float64Array(0)
   private glows: Glow[] = []
   // 鼠标悬浮聚光：跟随光标照亮半径内点阵，进出平滑淡入淡出
   private hoverX = 0
   private hoverY = 0
+  private hoverVx = 0 // 光标每个 60Hz 步长的位移
+  private hoverVy = 0
   private hoverActive = false
   private hoverStrength = 0 // 缓动 0~1
   private flowX = 1 // 海洋洋流方向(单位向量，随鼠标移动缓动)
@@ -205,16 +216,12 @@ export class WorldMap {
   constructor(reduced = false, theme: CanvasTheme = getCanvasTheme('dark')) {
     this.reduced = reduced
     this.theme = theme
-    this.highlightLut = buildAlphaLutHex(theme.mapHighlight)
-    this.landLut = buildAlphaLutHex(theme.mapLand)
-    this.oceanLut = buildAlphaLutHex(theme.mapOcean)
+    this.palette = buildPalette(theme)
   }
 
   setTheme(theme: CanvasTheme) {
     this.theme = theme
-    this.highlightLut = buildAlphaLutHex(theme.mapHighlight)
-    this.landLut = buildAlphaLutHex(theme.mapLand)
-    this.oceanLut = buildAlphaLutHex(theme.mapOcean)
+    this.palette = buildPalette(theme)
     this.bgGrad = null
   }
 
@@ -286,11 +293,25 @@ export class WorldMap {
     if (this.glows.length > 8) this.glows.shift()
   }
 
-  /** 鼠标悬浮聚光：每帧下传光标位置和速度，驱动海洋尾迹方向与静止涟漪。 */
+  /** 鼠标悬浮聚光：每帧下传光标位置，以及它每个 60Hz 步长的位移。 */
   setHover(x: number, y: number, active: boolean, vx = 0, vy = 0) {
     this.hoverX = x
     this.hoverY = y
+    this.hoverVx = vx
+    this.hoverVy = vy
     this.hoverActive = active
+  }
+
+  /**
+   * 按光标的位置和速度推进一步：海洋尾迹的方向与生成、静止计时、静止涟漪。
+   * 由 update 每个固定步长调用一次，快慢与绘制帧率无关。
+   */
+  private advanceHover() {
+    const x = this.hoverX
+    const y = this.hoverY
+    const vx = this.hoverVx
+    const vy = this.hoverVy
+    const active = this.hoverActive
     const sp = Math.hypot(vx, vy)
     // 移动明显时把流向缓动到移动方向；静止则维持(洋流有惯性)
     if (sp > WorldMap.STILL_SPEED) {
@@ -315,7 +336,7 @@ export class WorldMap {
     } else if (!active) {
       this.wakeCarry = 0
     }
-    // 静止计时（鼠标停住时本方法仍每帧被调用，sp≈0 会持续累加）
+    // 静止计时（鼠标停住时 sp≈0，每步累加）
     if (active && sp < WorldMap.STILL_SPEED) this.stillFrames++
     else this.stillFrames = 0
     // 涟漪闸门：静止够久升起、一动即落
@@ -395,9 +416,12 @@ export class WorldMap {
         })
       }
     }
+    this.queueNext = new Int32Array(this.dots.length)
+    this.dotSize = new Float64Array(this.dots.length)
   }
 
   update() {
+    this.advanceHover()
     this.t += 1
     // 悬浮聚光强度平滑缓动（进出约 0.3s 淡入淡出，避免突兀）
     this.hoverStrength +=
@@ -475,7 +499,10 @@ export class WorldMap {
       baseFocusY + this.h * (desktop ? 0.07 : 0.08) * Math.cos(this.t * 0.008)
     const fieldR = Math.min(this.w, this.h) * (desktop ? 0.32 : 0.28)
 
-    for (const d of this.dots) {
+    // 每帧从空队列开始：上一帧若中途抛错，留下的链不会接进这一帧
+    this.queueHead.fill(-1)
+    for (let i = 0; i < this.dots.length; i++) {
+      const d = this.dots[i]
       // 逐帧按滚动重算屏幕 x（y 不随滚动变），离屏跳过
       d.x = this.projX(d.lon)
       if (d.x < -2 || d.x > this.w + 2) continue
@@ -490,24 +517,32 @@ export class WorldMap {
         if (dl < sweepW) gain = 1 - dl / sweepW
       }
       // 左上能量场增益：距场心越近 + noise 扰动 → 明暗涌动
+      // 距离先比平方：绝大多数点在场外，不必开方
       if (!this.reduced) {
-        const fd = Math.hypot(d.x - fieldCx, d.y - fieldCy)
-        if (fd < fieldR) {
+        const fx = d.x - fieldCx
+        const fy = d.y - fieldCy
+        const fd2 = fx * fx + fy * fy
+        if (fd2 < fieldR * fieldR) {
           const nz = noise2D(d.x * 0.01 + this.t * 0.004, d.y * 0.01)
-          gain += (1 - fd / fieldR) * nz * 0.5
+          gain += (1 - Math.sqrt(fd2) / fieldR) * nz * 0.5
         }
       }
       // 点击照亮增益：落在照亮源半径内 → 按距离与剩余生命增亮
       for (const gl of this.glows) {
-        const gd = Math.hypot(d.x - gl.x, d.y - gl.y)
-        if (gd < gl.r) gain += (1 - gd / gl.r) * gl.life * 0.9
+        const gx = d.x - gl.x
+        const gy = d.y - gl.y
+        const gd2 = gx * gx + gy * gy
+        if (gd2 < gl.r * gl.r)
+          gain += (1 - Math.sqrt(gd2) / gl.r) * gl.life * 0.9
       }
       // 悬浮聚光增益：仅陆地响应鼠标（提亮 + 就地变代码流 ASCII）。
       // 海洋点不吃 hover 增益、不变字形，只由 drawOceanFlow 的流体波纹表现"扫过海面"。
       if (d.land && this.hoverStrength > 0.01) {
-        const hd = Math.hypot(d.x - this.hoverX, d.y - this.hoverY)
-        if (hd < WorldMap.HOVER_R) {
-          const f = 1 - hd / WorldMap.HOVER_R
+        const hx = d.x - this.hoverX
+        const hy = d.y - this.hoverY
+        const hd2 = hx * hx + hy * hy
+        if (hd2 < WorldMap.HOVER_R * WorldMap.HOVER_R) {
+          const f = 1 - Math.sqrt(hd2) / WorldMap.HOVER_R
           const hoverF = f * f * this.hoverStrength // 二次衰减：中心明显更亮，边缘更快隐没
           gain += hoverF * WorldMap.HOVER_INTENSITY
           if (hoverF > WorldMap.GLYPH_GATE) {
@@ -521,14 +556,13 @@ export class WorldMap {
         ripples && ripples.length ? this.rippleTint(d.x, d.y, ripples) : null
       let a: number
       let r: number
+      let color: number
       if (d.land) {
         // 海岸点渐隐（feather）：软化边缘、减轻锯齿；内陆点不受影响
         const feather = 1 - 0.5 * d.edge
         a = (0.35 * breath + gain * 0.5) * feather
         r = (1.2 + gain * 0.9) * (1 - 0.25 * d.edge)
-        // 逐点查表着色（替代每点拼串）；涟漪命中时用其预染色
-        if (tint) ctx.fillStyle = tint
-        else if (d.honey) {
+        if (d.honey) {
           // 星辉金点缀：夜间叠加逐点失谐的慢频明度呼吸（星星眨眼）；
           // 日间保持焦糖稳定点亮，像账本上落下的批注戳。
           let starAlpha = a + 0.1
@@ -538,15 +572,24 @@ export class WorldMap {
               0.45 *
                 Math.sin(this.t * (0.008 + (d.phase % 0.014)) + d.phase * 7)
           }
-          ctx.fillStyle = lutAt(this.highlightLut, starAlpha)
-        } else ctx.fillStyle = lutAt(this.landLut, a)
+          color = HIGHLIGHT + alphaStep(starAlpha)
+        } else color = LAND + alphaStep(a)
       } else {
         a = 0.1 * breath + gain * 0.22
         r = 0.8
-        ctx.fillStyle = tint ?? lutAt(this.oceanLut, a > 0.6 ? 0.6 : a)
+        color = OCEAN + alphaStep(a > 0.6 ? 0.6 : a)
       }
-      ctx.fillRect(d.x - r / 2, d.y - r / 2, r, r)
+      // 涟漪命中的点用涟漪的颜色，数量少，直接画；其余按颜色入队
+      if (tint) {
+        ctx.fillStyle = tint
+        ctx.fillRect(d.x - r / 2, d.y - r / 2, r, r)
+        continue
+      }
+      this.dotSize[i] = r
+      this.queueNext[i] = this.queueHead[color]
+      this.queueHead[color] = i
     }
+    this.paintQueuedDots(ctx)
 
     // 局部海流层（跟随鼠标的正弦波纹）+ 静止态阵阵涟漪；reduced 下不绘制，海洋维持稀疏点
     if (!this.reduced) {
@@ -644,7 +687,7 @@ export class WorldMap {
   }
 
   // 静止态「阵阵涟漪」：鼠标停住一段时间后，从光标处一圈接一圈扩散的同心圆环。
-  // 生成/推进在 setHover 中完成；此处只按 rippleMode 闸门与各环剩余生命绘制。
+  // 生成/推进在 advanceHover 中完成；此处只按 rippleMode 闸门与各环剩余生命绘制。
   private drawOceanRipples(ctx: CanvasRenderingContext2D) {
     if (this.rippleMode <= 0.01 || !this.oceanRipples.length) return
     ctx.save()
@@ -659,6 +702,23 @@ export class WorldMap {
       ctx.stroke()
     }
     ctx.restore()
+  }
+
+  /**
+   * 逐色画出本帧入队的点。网格上的点彼此不重叠，先后顺序不影响它们之间的画面；
+   * 悬浮字符和涟漪染色的点已先画，入队的点画在它们之后。
+   */
+  private paintQueuedDots(ctx: CanvasRenderingContext2D) {
+    for (let color = 0; color < this.queueHead.length; color++) {
+      let i = this.queueHead[color]
+      if (i < 0) continue
+      ctx.fillStyle = this.palette[color]
+      for (; i >= 0; i = this.queueNext[i]) {
+        const d = this.dots[i]
+        const r = this.dotSize[i]
+        ctx.fillRect(d.x - r / 2, d.y - r / 2, r, r)
+      }
+    }
   }
 
   // 将一个陆地点渲染为流动代码流 ASCII（字符随时间+位置滚动，邻点错位 → 像流动的代码）。

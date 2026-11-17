@@ -5,6 +5,7 @@
 ## 文件职责
 
 - `src/styles/fonts.css`：本地自托管 WOFF2 字体声明。
+- `src/styles/home-font-subsets.css`：首页展示字体的声明，由 `bun run fonts:home` 生成，不手改。
 - `src/styles/tokens.css`：颜色、阴影、状态、品牌和 Canvas 共享令牌。
 - `src/styles/tailwind.css`：Tailwind 4 入口、CSS 主题映射和保持现有布局的兼容 utility。
 - `src/styles/tailwind-defaults.css`：恢复 Tailwind 3 生产 CSS 的边框、占位文字、控件字体继承、按钮光标和对话框默认值，并在 utilities 前输出公共页面容器。
@@ -116,11 +117,13 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 字体通过 `src/assets/fonts/` 中的本地 WOFF2 文件自托管，不依赖运行时外部样式加载：
 
 - Inter：正文与界面拉丁字符
-- Noto Sans SC：中文无衬线字符
 - Noto Serif SC：展示标题与两套主题中的克制衬线表达
 - JetBrains Mono：代码、数字和等宽信息
+- Noto Sans SC：中文无衬线字符的兜底
 
-系统字体仅作为本地字体不可用时的回退。
+中文正文使用设备自带的中文字体（苹方、微软雅黑、Noto Sans CJK 等），页面不为正文下载中文字形。Noto Sans SC 排在字体栈最后，只在设备画不出某个字符时按分片下载。无衬线字体栈只在 `tailwind.css` 的 `--font-sans` 定义一次，`body` 和首页都引用它。
+
+首页的三款日间展示字体和夜间标题衬线按文案裁剪成子集。`scripts/home-font-faces.json` 写明每款字体渲染哪些 `home` 文案，`bun run fonts:home` 据此生成 `src/assets/fonts/home/subset/` 和 `src/styles/home-font-subsets.css`。改动这些文案后重新运行并提交生成结果；文案超出子集，或子集文件与样式表不是同一次生成的，`src/styles/__tests__/homeFontSubsets.spec.ts` 失败。子集之外的字符由完整字体（日间）或 Noto Serif SC 分片（夜间）补上，代价是多一次下载。
 
 ## 可访问性
 

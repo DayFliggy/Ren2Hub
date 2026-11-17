@@ -91,6 +91,10 @@ interface SceneInternals {
       point: (t: number) => ScenePoint
     }>
   }>
+  sceneTimeMs: number
+  draw: () => void
+  rain: { drops: number[] }
+  map: { stillFrames: number }
 }
 
 describe('canvas scene motion', () => {
@@ -176,6 +180,92 @@ describe('canvas scene motion', () => {
     setReducedMotion(false)
     expect(frames.size).toBe(0)
     scene.dispose()
+  })
+
+  /**
+   * Runs a scene on a display of the given refresh rate, with every frame
+   * taking `cost()` milliseconds to produce.
+   */
+  function onDisplay(scene: MapScene, hz: number, cost: () => number) {
+    const internals = scene as unknown as SceneInternals
+    const draw = internals.draw.bind(scene)
+    let drawn = 0
+    internals.draw = () => {
+      draw()
+      drawn++
+      now += cost()
+    }
+    let display = now
+    return {
+      /** One second of display frames: the frames drawn and scene time passed. */
+      second() {
+        const before = { drawn, time: internals.sceneTimeMs }
+        for (let frame = 0; frame < hz; frame++) {
+          display += 1000 / hz
+          now = Math.max(now, display)
+          const pending = [...frames.values()]
+          frames.clear()
+          pending.forEach((callback) => callback(now))
+        }
+        return {
+          drawn: drawn - before.drawn,
+          time: Math.round(internals.sceneTimeMs - before.time),
+        }
+      },
+    }
+  }
+
+  // A device that spends much of a display frame producing one frame of the
+  // scene leaves every other display frame to the rest of the page. A display
+  // that is already that slow keeps its rate.
+  it.each([
+    { hz: 60, slow: 30, fast: 60 },
+    { hz: 120, slow: 30, fast: 60 },
+    { hz: 30, slow: 30, fast: 30 },
+  ])(
+    'draws $slow frames a second on a $hz Hz display while frames are slow to produce',
+    async ({ hz, slow, fast }) => {
+      const scene = await createScene()
+      let drawMs = 12
+      const display = onDisplay(scene, hz, () => drawMs)
+      scene.start()
+
+      display.second()
+      expect(display.second()).toEqual({ drawn: slow, time: 1000 })
+
+      drawMs = 0.5
+      display.second()
+      expect(display.second()).toEqual({ drawn: fast, time: 1000 })
+      scene.dispose()
+    }
+  )
+
+  // Motion follows the clock, not the number of frames drawn: the character
+  // rain falls and a resting pointer raises its ripples as fast as before.
+  it('keeps ambient motion at its speed while frames are drawn half as often', async () => {
+    async function twoSeconds(drawMs: number) {
+      const scene = await createScene()
+      const internals = scene as unknown as SceneInternals
+      const display = onDisplay(scene, 60, () => drawMs)
+      scene.setMouse(200, 300, true)
+      scene.start()
+      const rainStart = internals.rain.drops[1]
+      display.second()
+      display.second()
+      const motion = {
+        rainFall: internals.rain.drops[1] - rainStart,
+        pointerRest: internals.map.stillFrames,
+      }
+      scene.dispose()
+      return motion
+    }
+
+    const smooth = await twoSeconds(0.5)
+    const spaced = await twoSeconds(12)
+
+    expect(smooth.pointerRest).toBeGreaterThan(110)
+    expect(Math.abs(spaced.pointerRest - smooth.pointerRest)).toBeLessThan(3)
+    expect(Math.abs(spaced.rainFall / smooth.rainFall - 1)).toBeLessThan(0.03)
   })
 
   // Relayouts (resize, immersive toggle) move the model markers; an in-flight

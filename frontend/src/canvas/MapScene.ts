@@ -139,6 +139,9 @@ export class MapScene {
   // Cap fixed-timestep catch-up so a tab resuming from background can't run a
   // huge update loop (mirrors the 100ms deltaMs clamp in frame()).
   private static readonly MAX_CATCHUP_STEPS = 4
+  // A frame that takes longer than this to update and draw is drawn at half
+  // the rate, 30 a second; rasterising it happens later and is not counted.
+  private static readonly SLOW_FRAME_MS = MapScene.FRAME_MS / 4
   private static readonly EDGE_DWELL_MS = 500
   private static readonly POINTER_COOLDOWN_MS = 450
   private static readonly MAX_ACTIVE_GROUPS = 4
@@ -195,6 +198,8 @@ export class MapScene {
   private running = false
   private disposed = false
   private lastFrame = 0
+  private frameSpacing: 1 | 2 = 1 // 60Hz frames from one drawn frame to the next
+  private frameWorkMs = 0 // smoothed time update() and draw() take per frame
   private reducedQuery?: MediaQueryList
 
   constructor(
@@ -1157,8 +1162,11 @@ export class MapScene {
     this.sceneTimeMs += clamped
     this.t += frameScale
 
-    const velocityX = this.mouse.active ? this.mouse.x - this.prevMouseX : 0
-    const velocityY = this.mouse.active ? this.mouse.y - this.prevMouseY : 0
+    // The pointer's movement per fixed step: a frame can span several steps,
+    // and the map compares this speed with per-step thresholds.
+    const moving = this.mouse.active && frameScale > 0
+    const velocityX = moving ? (this.mouse.x - this.prevMouseX) / frameScale : 0
+    const velocityY = moving ? (this.mouse.y - this.prevMouseY) / frameScale : 0
     this.map.setHover(
       this.mouse.x,
       this.mouse.y,
@@ -1170,7 +1178,8 @@ export class MapScene {
     this.prevMouseY = this.mouse.y
 
     // Fixed-timestep for the frame-count-based subsystems (globe rotation/breath,
-    // gateway hub, model markers, user nodes): their update() bodies advance a
+    // pointer wakes and ripples, character rain, gateway hub, model markers,
+    // user nodes): their update() bodies advance a
     // fixed amount per call, so we step them once per 60fps-equivalent slice and
     // carry the sub-frame remainder — total steps then track wall-clock exactly,
     // making their speed identical across 60/120/144/165/240Hz. At 60/120/240Hz
@@ -1184,6 +1193,7 @@ export class MapScene {
     if (steps > MapScene.MAX_CATCHUP_STEPS) steps = MapScene.MAX_CATCHUP_STEPS
     for (let s = 0; s < steps; s++) {
       this.map.update()
+      this.rain.update(this.theme)
       this.hub.update(this.reduced)
       for (const marker of this.markers) marker.update()
       for (const user of this.users) user.update()
@@ -1318,13 +1328,29 @@ export class MapScene {
     if (!this.running) return
     this.raf = requestAnimationFrame(this.frame)
     const elapsed = now - this.lastFrame
-    if (elapsed < MapScene.FRAME_MS - 1) return
+    if (elapsed < MapScene.FRAME_MS * this.frameSpacing - 1) return
     // Preserve wall-clock duration exactly. Quantising the anchor here can
     // double-count time on displays whose rAF cadence sits near 60Hz.
     this.lastFrame = now
+    const started = performance.now()
     // Cap to ~6 frames so a background tab resuming doesn't teleport animations
     this.update(Math.min(elapsed, 100))
     this.draw()
+    this.paceFrames(performance.now() - started)
+  }
+
+  /**
+   * Draws every other 60Hz frame while a frame is slow to update and draw,
+   * which leaves that time to scrolling, input and the rest of the page, and
+   * every frame again once frames are cheap. Motion keeps its speed: updates
+   * advance by the time that really passed. Returning to every frame needs a
+   * clear margin, so the rate does not flip back and forth.
+   */
+  private paceFrames(workMs: number) {
+    this.frameWorkMs += (workMs - this.frameWorkMs) * 0.1
+    if (this.frameWorkMs > MapScene.SLOW_FRAME_MS) this.frameSpacing = 2
+    else if (this.frameWorkMs < MapScene.SLOW_FRAME_MS * 0.7)
+      this.frameSpacing = 1
   }
 
   start() {

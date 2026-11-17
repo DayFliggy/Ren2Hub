@@ -1,0 +1,40 @@
+[
+  {
+    "family": "Ren2HomeTime",
+    "weight": 400,
+    "copy": ["hero.titleLead", "hero.typed"],
+    "files": { "time.woff2": "home/pingfang-shiguang.woff2" },
+    "rest": "home/pingfang-shiguang.woff2"
+  },
+  {
+    "family": "Ren2HomeSketch",
+    "weight": 400,
+    "copy": [
+      "showcase.runtime.running",
+      "showcase.runtime.stableCalls",
+      "showcase.runtime.units"
+    ],
+    "files": { "sketch.woff2": "home/yunfeng-hanchan.woff2" },
+    "rest": "home/yunfeng-hanchan.woff2"
+  },
+  {
+    "family": "Ren2HomeStamp",
+    "weight": 400,
+    "copy": ["showcase.runtime.uptimeTag", "showcase.runtime.servedTag"],
+    "files": { "stamp.woff2": "home/nishiki-teki.woff2" },
+    "rest": "home/nishiki-teki.woff2"
+  },
+  {
+    "family": "Ren2HomeSerif",
+    "weight": 700,
+    "axes": { "wght": 700 },
+    "copy": ["hero.titleLead", "hero.typed"],
+    "files": {
+      "serif-latin.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7kqGWbg.woff2",
+      "serif-116.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7oqP0dTpxZbB9E9gjjmzKvaeKHUTtJDWv3z-us4bxD8F5og.116.woff2",
+      "serif-117.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7oqP0dTpxZbB9E9gjjmzKvaeKHUTtJDWv3z-us4bxD8F5og.117.woff2",
+      "serif-118.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7oqP0dTpxZbB9E9gjjmzKvaeKHUTtJDWv3z-us4bxD8F5og.118.woff2",
+      "serif-119.woff2": "H4chBXePl9DZ0Xe7gG9cyOj7oqP0dTpxZbB9E9gjjmzKvaeKHUTtJDWv3z-us4bxD8F5og.119.woff2"
+    }
+  }
+]

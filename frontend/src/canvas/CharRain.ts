@@ -29,6 +29,22 @@ export class CharRain {
     }
   }
 
+  // 隔列稀疏：日间每 2 列画 1 列，夜间每 4 列画 1 列；其余列既不画也不推进。
+  private static drawsColumn(column: number, theme: CanvasTheme): boolean {
+    return column % (theme.name === 'dark' ? 4 : 2) === 1
+  }
+
+  /** 字符下落一个固定步长（60Hz）；落出画面后随机回到顶部。 */
+  update(theme: CanvasTheme) {
+    if (this.reduced) return
+    for (let i = 0; i < this.cols; i++) {
+      if (!CharRain.drawsColumn(i, theme)) continue
+      if (this.drops[i] * FONT > this.h && Math.random() > 0.975)
+        this.drops[i] = Math.random() * -20
+      else this.drops[i] += this.speeds[i]
+    }
+  }
+
   draw(theme: CanvasTheme = getCanvasTheme('dark')) {
     if (this.reduced) return // 降级：不绘制字符雨
     const ctx = this.ctx
@@ -36,10 +52,7 @@ export class CharRain {
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
     for (let i = 0; i < this.cols; i++) {
-      // 隔列稀疏（约 1/2 列）：偶数列从不绘制，直接跳过。
-      // （原先仍对 drops[i] 累加，但该值永不被读取——纯死计算。）
-      const columnStride = theme.name === 'dark' ? 4 : 2
-      if (i % columnStride !== 1) continue
+      if (!CharRain.drawsColumn(i, theme)) continue
       const rowY = this.drops[i] * FONT
       const ch = CHARS[Math.floor(Math.random() * CHARS.length)]
       const x = i * FONT
@@ -55,9 +68,6 @@ export class CharRain {
         theme.name === 'light' ? 0.08 : 0.065
       )
       ctx.fillText(ch, x, rowY)
-      this.drops[i] += this.speeds[i]
-      if (rowY > this.h && Math.random() > 0.975)
-        this.drops[i] = Math.random() * -20
     }
   }
 }
