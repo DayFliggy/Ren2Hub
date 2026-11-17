@@ -238,24 +238,6 @@ test('mobile drawer preserves manual scrolling until it closes at the desktop bo
   ).toBeFocused()
 })
 
-test('dashboard content scrolls clear of the floating support button', async ({
-  page,
-}) => {
-  await configureStablePage(page, { theme: 'light' })
-  await page.setViewportSize({ width: 1024, height: 768 })
-  await page.goto('/dashboard')
-  await waitForStablePage(page)
-
-  await page
-    .locator('[data-console-scroll-zone]')
-    .evaluate((zone) => zone.scrollTo({ top: zone.scrollHeight }))
-  const trigger = (await page
-    .getByRole('button', { name: '联系我们' })
-    .boundingBox())!
-  const content = (await page.getByRole('tabpanel').boundingBox())!
-  expect(content.y + content.height).toBeLessThanOrEqual(trigger.y)
-})
-
 test('console navigation entries are real links', async ({ page }) => {
   await configureStablePage(page, { theme: 'light' })
   await page.goto('/keys')

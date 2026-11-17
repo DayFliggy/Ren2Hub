@@ -26,50 +26,6 @@ async function expectReadableControls(page: Page, controls: Locator) {
 }
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`contact options receive clicks across the mobile breakpoint (${theme})`, async ({
-    page,
-    context,
-  }, testInfo) => {
-    await configureStablePage(page, { theme })
-    // Prove that the real link receives the click without contacting Telegram.
-    await context.route('https://t.me/ren2hub', (route) =>
-      route.fulfill({
-        contentType: 'text/html',
-        body: '<p>Contact fixture</p>',
-      })
-    )
-    await page.goto('/dashboard')
-    await waitForStablePage(page)
-    const trigger = page.locator('.contact-float-trigger')
-    const link = page.getByRole('link', { name: 'Telegram', exact: true })
-
-    for (const width of [320, 390, 480, 481, 1440]) {
-      await page.setViewportSize({ width, height: 900 })
-      await trigger.click()
-      await expect(trigger).toHaveAttribute('aria-expanded', 'true')
-      await link.scrollIntoViewIfNeeded()
-      if (width === 390 || width === 1440) {
-        await captureEvidence(page, {
-          path: testInfo.outputPath(`contact-${theme}-${width}.png`),
-        })
-      }
-      const popupPromise = page.waitForEvent('popup')
-      await link.click({ timeout: 5000 })
-      const popup = await popupPromise
-      await expect(popup).toHaveURL('https://t.me/ren2hub')
-      await popup.close()
-      await expect(trigger).toHaveAttribute('aria-expanded', 'false')
-
-      await trigger.click()
-      await page.mouse.click(8, 880)
-      await expect(trigger).toHaveAttribute('aria-expanded', 'false')
-      await trigger.click()
-      await trigger.click()
-      await expect(trigger).toHaveAttribute('aria-expanded', 'false')
-      await assertNoHorizontalOverflow(page)
-    }
-  })
-
   test(`channel form controls retain readable mobile text (${theme})`, async ({
     page,
   }, testInfo) => {

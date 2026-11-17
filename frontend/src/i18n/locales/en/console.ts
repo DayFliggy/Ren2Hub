@@ -393,13 +393,6 @@ export default {
     disabledModeHint: 'This module is not enabled on the current backend.',
   },
 
-  contact: {
-    qqGroup: 'QQ group',
-    aiSupport: 'AI support',
-    open: 'Contact us',
-    close: 'Close contact options',
-  },
-
   dashboard: {
     notProvided: 'Not provided',
     greeting: {

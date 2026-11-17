@@ -85,7 +85,6 @@ async function render(role: number) {
           'StatsHourlyChart',
           'StatsDualTrend',
           'AutoRoutePanel',
-          'ContactFloatBall',
           'DateRangePicker',
         ].map((name) => [name, true])
       ),

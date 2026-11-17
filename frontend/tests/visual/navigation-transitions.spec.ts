@@ -12,8 +12,6 @@ interface NavigationFrame {
   contentWidth: number
   /** Combined opacity of the visible tab strip in the page header. */
   stripOpacity: number | null
-  /** Bottom edge of the dashboard contact ball, in viewport pixels. */
-  ballBottom: number | null
   /** Top-level pages displayed inside #app. */
   shells: number
   shellFading: boolean
@@ -61,7 +59,6 @@ async function startRecording(page: Page) {
       )
         stripOpacity =
           (stripOpacity ?? 1) * Number(getComputedStyle(node).opacity)
-      const ball = document.querySelector('.contact-float-ball')
       const shells = [...document.querySelectorAll('#app > *')].filter(
         (element) =>
           !element.hasAttribute('data-navigation-progress') &&
@@ -73,8 +70,6 @@ async function startRecording(page: Page) {
         previousShown: displayed(state.previous),
         contentWidth: box?.offsetWidth ?? 0,
         stripOpacity,
-        ballBottom:
-          ball && displayed(ball) ? ball.getBoundingClientRect().bottom : null,
         shells: shells.length,
         shellFading: shells.some((element) =>
           element.classList.contains('shell-enter-active')
@@ -212,25 +207,6 @@ test('a wide screen takes the next page width in one step', async ({
   expect(
     [...new Set(frames.map((frame) => frame.contentWidth))].sort()
   ).toEqual([narrow, wide])
-  await finish(page)
-})
-
-test('the dashboard contact ball stays in the viewport while the page arrives', async ({
-  page,
-}) => {
-  await configureStablePage(page, { theme: 'light', user: { role: 100 } })
-  await openWithMotion(page, '/keys')
-  await startRecording(page)
-  await page
-    .locator('[data-top-nav="desktop"]')
-    .getByRole('button', { name: '仪表盘', exact: true })
-    .click()
-  await expect(page).toHaveURL(/\/dashboard$/)
-  const frames = await stopRecording(page)
-
-  const bottoms = frames.flatMap((frame) => frame.ballBottom ?? [])
-  expect(bottoms.length).toBeGreaterThan(5)
-  expect(Math.max(...bottoms)).toBeLessThanOrEqual(900)
   await finish(page)
 })
 

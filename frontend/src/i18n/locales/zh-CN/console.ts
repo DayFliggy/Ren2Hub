@@ -370,13 +370,6 @@ export default {
     disabledModeHint: '当前后端尚未启用此模块。',
   },
 
-  contact: {
-    qqGroup: 'QQ 群',
-    aiSupport: 'AI 客服',
-    open: '联系我们',
-    close: '关闭联系方式',
-  },
-
   dashboard: {
     notProvided: '未提供',
     greeting: {

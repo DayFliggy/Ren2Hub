@@ -14,7 +14,6 @@ import StatsModelTable from '@/components/console/dashboard/stats/StatsModelTabl
 import StatsHourlyChart from '@/components/console/dashboard/stats/StatsHourlyChart.vue'
 import StatsDualTrend from '@/components/console/dashboard/stats/StatsDualTrend.vue'
 import AutoRoutePanel from '@/components/console/dashboard/autoroute/AutoRoutePanel.vue'
-import ContactFloatBall from '@/components/console/ContactFloatBall.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -359,8 +358,6 @@ const rangeOptions = computed(() => [
         <AutoRoutePanel />
       </div>
     </div>
-
-    <ContactFloatBall />
   </div>
 </template>
 
