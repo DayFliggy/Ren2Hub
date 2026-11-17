@@ -5055,7 +5055,7 @@
       "path": "model/option_backup_payment_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "94ba0e94ee5dc7bf32702df5a346d47ae84246d2f36bca387b7d1b691593b4d9"
+      "local_sha256": "b09c8bf6561e0f7ddc02b43b03ea7c6e113823a33e9132a7cdf130fe263f133e"
     },
     {
       "path": "model/option_failure_test.go",

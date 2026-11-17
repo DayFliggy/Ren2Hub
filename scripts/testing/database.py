@@ -37,7 +37,7 @@ MATRIX_TESTS = {
         "TestMigrationSchemaStability", "TestRedemptionSortingDatabases",
         "TestRequestPolicyDatabaseMatrix", "TestAdminTicketsKeepDeletedOwnersDatabases",
         "TestTopUpQueryDatabases", "TestTopUpBonusDatabaseMatrix", "TestChannelUpstreamRatioDatabases",
-        "TestNativeTopUpFacadeDatabaseMatrix",
+        "TestNativeTopUpFacadeDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
     ),
     "controller": (
         "TestModelPricingConversionDatabaseMatrix", "TestProviderChannelManagementDatabaseMatrix", "TestModelManagementDatabaseMatrix",
