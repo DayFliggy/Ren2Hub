@@ -2636,7 +2636,8 @@ export default {
     howStep3Desc:
       '朋友完成符合政策的充值后，按充值本金的 {reward} 计算奖励；兑换码不参与，冻结时长与有效期以当前政策为准。',
     howStep4Title: '手动转入账户余额',
-    howStep4Desc: '可转奖励一次全部转入账户余额，没有最低金额。',
+    howStep4Desc:
+      '可转奖励一次全部转入账户余额，没有最低金额；仅用于平台内消费，不支持提现。',
   },
 
   activity: {

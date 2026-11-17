@@ -3683,7 +3683,7 @@
       "path": "middleware/frontend_static_brotli.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f7cf5120e8e793bf0937c35bdaaeb8d9a931f0de766e7285b5565464d9fa1ea4",
+      "local_sha256": "c350ab2e7f55bb1ae3666c11899f026763d48d62fb9159a201ab6945bf242edb",
       "reasons": [
         "vue-frontend"
       ],
@@ -3697,7 +3697,7 @@
       "path": "middleware/frontend_static_brotli_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "89f1b4d5c10725b9af6e0dfbbf50fab096e34a6c66bbac1556086303e1cacfc7"
+      "local_sha256": "dfc906da32cdb2f11618d3149afe64d93a5ecdbe98764437d47cdaee395fa12d"
     },
     {
       "path": "middleware/frontend_static_test.go",
@@ -13526,7 +13526,7 @@
       "path": "setting/operation_setting/backup_payment_setting.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ec8949f0a466dd46ff919e51089053dd970cbdec32e79cac6e24c7dc483e5e54",
+      "local_sha256": "452464624df4aacf4910a28bdebf29b6d46101cdc4ac42f8ce48e1486ab8ec61",
       "reasons": [
         "backup-payment-links"
       ],
@@ -13540,7 +13540,7 @@
       "path": "setting/operation_setting/backup_payment_setting_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "75375e0732586275862a457c332eaf2ce65e1af236566a1654011e15cf91e244"
+      "local_sha256": "a5a9b62739996b619a762c1dcd7299677368285ac6820fb59f0e1771a51a79ff"
     },
     {
       "path": "setting/operation_setting/channel_affinity_setting.go",

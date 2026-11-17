@@ -24,11 +24,14 @@ var brotliFrontendExtensions = map[string]bool{
 // ServeFrontendBrotliFiles sends the brotli sibling written at build time when
 // the request accepts br, so the server never compresses these files. It runs
 // just before ServeFrontendFiles, which answers every request it passes on.
+// A request for several ranges is passed on: ServeContent would answer it
+// with a multipart/byteranges body, which is not a brotli stream.
 func ServeFrontendBrotliFiles(frontendFS static.ServeFileSystem) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		urlPath := c.Request.URL.Path
 		if !brotliFrontendExtensions[path.Ext(urlPath)] ||
 			!acceptsBrotli(c.GetHeader("Accept-Encoding")) ||
+			strings.Contains(c.GetHeader("Range"), ",") ||
 			!frontendFS.Exists("/", urlPath) {
 			return
 		}

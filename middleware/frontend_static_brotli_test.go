@@ -3,6 +3,8 @@ package middleware
 import (
 	"bytes"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -163,4 +165,32 @@ func TestServeFrontendBrotliFilesHonoursPreconditionsAndRanges(t *testing.T) {
 	assert.Equal(t, "br", ranged.Header().Get("Content-Encoding"))
 	assert.Equal(t, "10", ranged.Header().Get("Content-Length"))
 	assert.Equal(t, files["static/js/app.js.br"][:10], ranged.Body.Bytes())
+}
+
+// ServeContent answers several ranges with a multipart/byteranges body that is
+// not a brotli stream, so those requests get parts of the original file.
+func TestServeFrontendBrotliFilesSendsMultipleRangesFromTheOriginal(t *testing.T) {
+	router, files := newBrotliFrontendRouter(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/static/js/app.js", nil)
+	request.Header.Set("Accept-Encoding", "br")
+	request.Header.Set("Range", "bytes=0-9,20-29")
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusPartialContent, recorder.Code)
+	assert.Empty(t, recorder.Header().Get("Content-Encoding"))
+	mediaType, params, err := mime.ParseMediaType(recorder.Header().Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "multipart/byteranges", mediaType)
+	reader := multipart.NewReader(recorder.Body, params["boundary"])
+	original := files["static/js/app.js"]
+	for _, want := range [][]byte{original[0:10], original[20:30]} {
+		part, err := reader.NextPart()
+		require.NoError(t, err)
+		body, err := io.ReadAll(part)
+		require.NoError(t, err)
+		assert.Equal(t, want, body)
+	}
+	_, err = reader.NextPart()
+	assert.ErrorIs(t, err, io.EOF)
 }

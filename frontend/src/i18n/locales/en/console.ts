@@ -2749,7 +2749,7 @@ export default {
       'Qualifying top-ups earn {reward} of their principal. Redemption codes do not qualify; hold periods and eligibility follow the current policy.',
     howStep4Title: 'Transfer rewards to balance',
     howStep4Desc:
-      'Transfer all available rewards to your account balance with no minimum amount.',
+      'Transfer all available rewards to your account balance with no minimum amount. Rewards can only be spent on the platform and cannot be withdrawn.',
   },
 
   activity: {
