@@ -613,17 +613,15 @@ test('zero request trend uses a floating wave placeholder', async ({
   await expect(page.locator('.runtime-trend-placeholder')).toHaveCount(0)
 
   const styles = await page.evaluate(() => {
-    const wave = document.querySelector<SVGPathElement>(
-      '[data-zero-trend-wave] path'
-    )
-    if (!wave) {
+    const wave = document.querySelector<SVGSVGElement>('[data-zero-trend-wave]')
+    const path = wave?.querySelector('path')
+    if (!wave || !path) {
       throw new Error('Zero request trend wave missing')
     }
-    const waveStyle = getComputedStyle(wave)
     return {
-      animationName: waveStyle.animationName,
-      stroke: waveStyle.stroke,
-      opacity: waveStyle.opacity,
+      animationName: getComputedStyle(wave).animationName,
+      stroke: getComputedStyle(path).stroke,
+      opacity: getComputedStyle(wave).opacity,
     }
   })
 
@@ -631,6 +629,126 @@ test('zero request trend uses a floating wave placeholder', async ({
   expect(styles.stroke).not.toBe('none')
   expect(Number(styles.opacity)).toBeGreaterThan(0)
   await assertNoHorizontalOverflow(page)
+})
+
+async function showZeroRequests(page: import('@playwright/test').Page) {
+  await page.route('**/api/home/metrics*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        message: '',
+        data: {
+          available: true,
+          requests_24h: 0,
+          hourly_requests: Array(24).fill(0),
+          generated_at: 1_785_103_200,
+        },
+      },
+    })
+  )
+}
+
+// Chromium can run an endless transform or opacity animation of an HTML box on
+// the compositor. Any other property, or any animation of a shape inside an
+// SVG (which Chromium does not composite), makes the main thread restyle and
+// repaint on every frame for as long as the page is open. This reads the
+// keyframes, not the compositor, so it guards the properties only; the named
+// animations must be found, so an empty page cannot pass.
+const homeEndlessAnimations = [
+  'chip-breathe',
+  'cta-sheen-move',
+  'home-progress-breathe',
+  'home-progress-glow',
+  'runtime-trend-wave-float',
+]
+
+for (const theme of ['light', 'dark'] as VisualTheme[]) {
+  test(`${theme} home's endless animations change only transform and opacity`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme, authenticated: true })
+    await showZeroRequests(page)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.locator('#app > *').first().waitFor({ state: 'visible' })
+    await expect(page.locator('.chip-active').first()).toBeVisible()
+    // The wave itself keeps moving, so scroll its band into view.
+    await page.locator('#home-runtime').scrollIntoViewIfNeeded()
+    await expect(page.locator('[data-zero-trend-wave]')).toBeVisible()
+
+    const endless = await page.evaluate(() =>
+      document.getAnimations().flatMap((animation) => {
+        const effect = animation.effect as KeyframeEffect | null
+        if (!effect || effect.getTiming().iterations !== Infinity) return []
+        const properties = new Set(
+          effect.getKeyframes().flatMap((frame) => Object.keys(frame))
+        )
+        for (const key of ['offset', 'computedOffset', 'easing', 'composite'])
+          properties.delete(key)
+        const paintsOnMain = [...properties].filter(
+          (property) =>
+            !['transform', 'translate', 'scale', 'rotate', 'opacity'].includes(
+              property
+            )
+        )
+        const target = effect.target
+        const svgShape =
+          target instanceof SVGElement && target.ownerSVGElement !== null
+        // Scoped component styles suffix their keyframes with the scope id.
+        const name = (
+          (animation as CSSAnimation).animationName ?? 'script animation'
+        ).replace(/-[0-9a-f]{8}$/, '')
+        const problem = svgShape ? 'SVG shape' : paintsOnMain.join(',')
+        return [{ name, problem }]
+      })
+    )
+
+    expect(endless.map(({ name }) => name)).toEqual(
+      expect.arrayContaining(homeEndlessAnimations)
+    )
+    expect(
+      endless
+        .filter(({ problem }) => problem)
+        .map(({ name, problem }) => `${name}: ${problem}`)
+    ).toEqual([])
+  })
+}
+
+test('runtime band motion pauses while the band is off screen', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light', authenticated: true })
+  await showZeroRequests(page)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.locator('#app > *').first().waitFor({ state: 'visible' })
+  const band = page.locator('#home-runtime')
+  await expect(band.locator('[data-zero-trend-wave]')).toHaveCount(1)
+  const motion = () =>
+    band.evaluate((element) =>
+      element
+        .getAnimations({ subtree: true })
+        .filter(
+          (animation) => animation.effect?.getTiming().iterations === Infinity
+        )
+        .map(
+          (animation) =>
+            `${(animation as CSSAnimation).animationName} ${animation.playState}`
+        )
+        .sort()
+    )
+  const every = (state: string) =>
+    [
+      'runtime-status-breathe',
+      'runtime-status-ripple',
+      'runtime-trend-wave-float',
+    ].map((name) => `${name} ${state}`)
+
+  await expect.poll(motion).toEqual(every('paused'))
+  await band.scrollIntoViewIfNeeded()
+  await expect.poll(motion).toEqual(every('running'))
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect.poll(motion).toEqual(every('paused'))
 })
 
 test('home showcase remains intact at narrow mobile width', async ({

@@ -28,12 +28,28 @@ const { stop } = useIntersectionObserver(
   { threshold: 0 }
 )
 
-onBeforeUnmount(stop)
+// The band's endless motion runs only while some of it shows. Under the
+// full-height hero the band's edge touches the viewport, which counts as
+// intersecting, so this observer's viewport ends 1px early on each side.
+const motionVisible = ref(!observesVisibility)
+const { stop: stopMotion } = useIntersectionObserver(
+  root,
+  (entries) => {
+    motionVisible.value = Boolean(entries.at(-1)?.isIntersecting)
+  },
+  { rootMargin: '-1px 0px' }
+)
+
+onBeforeUnmount(() => {
+  stop()
+  stopMotion()
+})
 </script>
 
 <template>
   <main ref="root" class="home-showcase no-handdrawn">
     <RuntimePulseBand
+      :motion-paused="!motionVisible"
       :runtime="showcase.runtime.value"
       :uptime-label="uptimePercent === null ? null : uptimeLabel"
       :request-metrics="showcase.requestMetrics.value"

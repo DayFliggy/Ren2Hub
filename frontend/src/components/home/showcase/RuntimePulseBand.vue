@@ -11,6 +11,8 @@ const props = defineProps<{
   /** null when no uptime source reports availability; the row is omitted. */
   uptimeLabel: string | null
   requestMetrics: HomeRequestMetrics | null
+  /** The band is off screen; its endless motion stops. */
+  motionPaused?: boolean
 }>()
 
 const { locale, t } = useI18n()
@@ -169,6 +171,7 @@ onBeforeUnmount(() => {
     id="home-runtime"
     class="home-band runtime-band"
     aria-labelledby="runtime-title"
+    :data-motion-paused="motionPaused ? '' : undefined"
   >
     <h2 id="runtime-title" class="sr-only">
       {{ t('showcase.runtime.title') }}

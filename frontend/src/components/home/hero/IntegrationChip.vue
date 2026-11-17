@@ -11,7 +11,7 @@
     class="block shrink-0 overflow-visible"
   >
     <div
-      class="hero-integration-chip group relative flex size-12 items-center justify-center rounded-full border transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+      class="hero-integration-chip group relative flex size-12 items-center justify-center rounded-full border transition-[translate,scale,opacity,border-color,background-color] duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
       :class="
         active
           ? 'chip-active z-10 -translate-y-0.5 scale-110 border-[var(--accent)] bg-[var(--accent-soft)] opacity-100'
@@ -92,8 +92,26 @@ const inactiveIconClass = computed(() =>
   pointer-events: none;
   animation: chip-halo 2.4s ease-in-out infinite;
 }
-/* 选中态：蜂蜜黄呼吸外发光（参考二狗 API 的满色高亮对比） */
+/* 选中态：蜂蜜黄呼吸外发光（参考二狗 API 的满色高亮对比）。弱光是选中卡片自身的
+   阴影，强光叠在 ::before 上，只让它的透明度起伏：合成器即可完成动画，不必每帧重绘
+   阴影。两层叠加近似原先在两组阴影之间的插值：峰值亮度接近，光晕的扩散范围和
+   起伏过程略有不同。 */
 .chip-active {
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.35),
+    0 6px 18px -4px rgb(var(--accent-rgb) / 0.35);
+}
+.chip-active::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.31),
+    0 10px 26px -2px rgb(var(--accent-rgb) / 0.31);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
   animation: chip-breathe 2.4s ease-in-out infinite;
 }
 .chip-active::after {
@@ -109,14 +127,10 @@ const inactiveIconClass = computed(() =>
 @keyframes chip-breathe {
   0%,
   100% {
-    box-shadow:
-      0 0 0 1px rgb(var(--accent-rgb) / 0.35),
-      0 6px 18px -4px rgb(var(--accent-rgb) / 0.35);
+    opacity: 0;
   }
   50% {
-    box-shadow:
-      0 0 0 1px rgb(var(--accent-rgb) / 0.55),
-      0 10px 26px -2px rgb(var(--accent-rgb) / 0.55);
+    opacity: 1;
   }
 }
 @keyframes chip-halo {
@@ -156,8 +170,10 @@ const inactiveIconClass = computed(() =>
   .chip-active::after {
     animation: none;
   }
-  .chip-active {
+  .chip-active::before {
     animation: none;
+  }
+  .chip-active {
     box-shadow:
       0 0 0 1px rgb(var(--accent-rgb) / 0.4),
       0 6px 18px -4px rgb(var(--accent-rgb) / 0.4);

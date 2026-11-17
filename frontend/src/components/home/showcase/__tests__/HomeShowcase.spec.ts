@@ -15,10 +15,14 @@ vi.mock('@/api/public', async (importOriginal) => {
 })
 
 type Callback = (entries: Partial<IntersectionObserverEntry>[]) => void
+// The showcase observes its section for metrics and for motion; a scroll
+// reaches every observer.
+let callbacks: Callback[] = []
 let observed: Callback | null = null
 class RecordingObserver {
   constructor(callback: Callback) {
-    observed = callback
+    callbacks.push(callback)
+    observed = (entries) => callbacks.forEach((each) => each(entries))
   }
   observe() {}
   disconnect() {}
@@ -30,6 +34,7 @@ class RecordingObserver {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  callbacks = []
   observed = null
   vi.stubGlobal('IntersectionObserver', RecordingObserver)
   mocks.homeMetrics.mockResolvedValue({

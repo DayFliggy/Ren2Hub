@@ -164,6 +164,7 @@ onBeforeUnmount(() => {
 }
 
 .home-progress-dots__dot span {
+  position: relative;
   width: 0.3rem;
   height: 0.3rem;
   border-radius: 50%;
@@ -194,6 +195,21 @@ onBeforeUnmount(() => {
   animation: home-progress-breathe 1.8s ease-in-out infinite;
 }
 
+/* The breathing glow sits on its own layer and only fades, so the compositor
+   runs it without repainting the dot's shadow on every frame. At its peak it
+   adds to the dot's resting ring rather than replacing it. */
+.home-progress-dots__dot.is-active span::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 17%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 40%, transparent);
+  content: '';
+  opacity: 0;
+  animation: home-progress-glow 1.8s ease-in-out infinite;
+}
+
 .home-progress-dots__dot:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
@@ -207,7 +223,8 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .home-progress-dots__dot::before,
-  .home-progress-dots__dot span {
+  .home-progress-dots__dot span,
+  .home-progress-dots__dot span::after {
     animation: none;
     transition: none;
   }
@@ -215,10 +232,13 @@ onBeforeUnmount(() => {
 
 @keyframes home-progress-breathe {
   50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--accent) 17%, transparent),
-      0 0 12px color-mix(in srgb, var(--accent) 40%, transparent);
     transform: scale(1.35);
+  }
+}
+
+@keyframes home-progress-glow {
+  50% {
+    opacity: 1;
   }
 }
 </style>
