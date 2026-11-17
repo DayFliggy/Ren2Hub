@@ -89,14 +89,13 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 最近一次正式发布
 
-2026-11-16 08:33 UTC，充值加赠替换充值折扣上线，从 `ff82c3d9d` 普通升级，回退目标也是它。
+2026-11-17 10:10 UTC，从 `0780f4573` 普通升级，回退目标也是它。内容：Vue 控制台的页面切换与预取、首页性能三批（brotli 静态文件、`/api/pricing/count`）、模型/日志/令牌/工单文案精简、钱包与邀请页重做和备用支付链接（`backup_payment_setting.links`），以及 Codex gpt-6-astra 四轮交叉审计的修复。没有表结构变化，public 表仍是 46 张；生产没有备用支付配置，钱包只列出原生 `TopUpLink`（若为 http/https）。
 
-- 应用提交 `0780f4573afca52ceba4922169f323821439d266`，根提交 `034dac1d9b9cdde5efcc64a8372a546d24672db7`，镜像 `sha256:30bb7eca4998b0d950a211f5a5111fb6583fae0fb9faec781a4bdc59080cb380`。
-- 本地门禁在独立克隆的 `37f7257cc` 上运行：`run.py quick` 通过；`run.py affected --base ff82c3d9d` 覆盖 171 个改动文件，Go 单测 6,857 项、三库矩阵 386/386、固定选择 race、Vitest 1,887 项、前端静态检查与构建、ui-contracts 565/565 通过。没有运行 `all`，没有验证真实支付。
-- 完整隔离候选从 `ff82c3d9d` 镜像升级，结果为 `candidate_success=false`、退出码 2、`deployment_eligible=true`：已知诊断、阻断、routing（30 通过、1 已知、6 阻断）、原生差异和 race 的结果都与 `ff82c3d9d` 的候选相同，外部请求为零，升级合同实跑通过。
-- 生产库原本没有折扣配置，迁移后使用内置版本 0（不发放加赠），public 表由 48 张变为 46 张。
+- 应用提交 `96b70e3abc9466ea212ae7bbb705a3e5ffbc136b`，根提交 `644a585e0ee7b2aac84ad5d440131c8801948932`，镜像 `sha256:84f6db77c0ee5c362021271c44972a80845faf3dc59d354cc9097fe38ebb7299`。
+- 本地门禁按改动定向运行：registry、Go 点名用例、三库 `TestBackupPaymentLinksOptionDatabaseRoundTrip`、Python 236 项、Vitest（改动源码相关 590 例，1 例既有慢用例在满载时超时，单独与基线上均通过）、前端静态检查、28 个视觉 spec 246 例、`run.py build`；新增的并发用例在 golang:1.26.10 容器里单独 `-race` 通过。没有运行全量档位和 routing，没有验证真实支付。
+- 范围候选 `--scope auto`（`upgrade`、`management`）从正式 `0780f4573` 镜像做升级演练，`candidate_success=true`、`deployment_eligible=true`。
 
-这次发布之后的提交只改了测试脚本和文档，没有重新部署。现场核验、备份和回退边界见工作区的服务器档案（`docs/server/SERVER_PROFILE.md`）。
+现场核验、备份和回退边界见工作区的服务器档案（`docs/server/SERVER_PROFILE.md`）。
 
 ## 记录规则
 
