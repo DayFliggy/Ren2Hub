@@ -453,11 +453,7 @@ onBeforeUnmount(() => {
     </div>
 
     <ConsoleCard v-if="loadError && !loading" :padded="false">
-      <EmptyState
-        :title="t('auditLogs.loadFailed')"
-        :hint="t('auditLogs.loadFailedHint')"
-        illustration="empty-logs"
-      >
+      <EmptyState :title="t('auditLogs.loadFailed')" illustration="empty-logs">
         <ConsoleButton class="mt-5" variant="secondary" @click="load">
           {{ t('common.retry') }}
         </ConsoleButton>

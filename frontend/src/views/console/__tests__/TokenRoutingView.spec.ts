@@ -240,9 +240,6 @@ it('adds eligible platform channels without duplicates and preserves disabled en
 })
 it('allows an explicitly empty manual list and explains that there is no automatic fallback', async () => {
   const wrapper = await render()
-  expect(wrapper.get('header p').text()).toBe(
-    'Configure routing for this API key.'
-  )
   expect(wrapper.get('fieldset').text()).toContain(
     'Choose platform channels and try them in your saved order.'
   )
@@ -269,9 +266,6 @@ it('shows automatic routing criteria once and retains its manual-list warning', 
   expect(wrapper.text()).toContain(
     'Saving automatic mode clears the manual channel list.'
   )
-  expect(wrapper.get('header p').text()).toBe(
-    'Configure routing for this API key.'
-  )
   wrapper.unmount()
 })
 it.each(['0', '1000.000000000000000001', '0.0000000000000000001', '-1', '1e2'])(
@@ -283,7 +277,9 @@ it.each(['0', '1000.000000000000000001', '0.0000000000000000001', '-1', '1e2'])(
       .setValue(ratio)
     await button(wrapper, 'Save').trigger('click')
     expect(mocks.save).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('at most 18 decimal places')
+    expect(
+      wrapper.findAll('[role="alert"]').map((alert) => alert.text())
+    ).toContainEqual(expect.stringContaining('at most 18 decimal places'))
     wrapper.unmount()
   }
 )

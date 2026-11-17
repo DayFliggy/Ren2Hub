@@ -144,9 +144,6 @@ defineExpose({ validate, isDirty })
         ><Plus :size="16" />{{ t('endpointAdd') }}</ConsoleButton
       >
     </div>
-    <p class="text-xs text-[var(--text-tertiary)]">
-      {{ t('endpointsHint') }}
-    </p>
     <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
   </div>
 </template>

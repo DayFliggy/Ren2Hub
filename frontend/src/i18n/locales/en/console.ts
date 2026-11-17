@@ -729,8 +729,7 @@ export default {
     neverExpire: 'Never',
     expireInvalid: 'Enter a valid expiration time or turn expiration off.',
     revealTitle: 'Full key',
-    revealNote:
-      'The full key is shown only once. Reads are rate-limited and never cached.',
+    revealNote: 'Store the full key securely.',
     created: 'Key created',
     updated: 'Key updated',
     deleted: 'Key deleted',
@@ -755,7 +754,6 @@ export default {
     statEnabled: 'Enabled',
     statUsed: 'Quota used',
     emptyTitle: 'No keys yet',
-    emptyHint: 'Click "Create key" to get started',
   },
 
   routing: {
@@ -854,7 +852,6 @@ export default {
     statOpen: 'Open',
     statClosed: 'Closed',
     emptyTitle: 'No tickets yet',
-    emptyHint: 'Click "New ticket" to submit your issue',
     listLoadFailed: 'Failed to load tickets',
     filterStatus: 'Status',
     status: {
@@ -882,7 +879,7 @@ export default {
       priorityLabel: 'Priority',
       contentLabel: 'Description',
       contentPlaceholder:
-        'Describe the issue in detail, including steps to reproduce, expected results, etc.',
+        'Describe the issue, steps to reproduce and expected result',
       imagesLabel: 'Attachments',
       modelIdLabel: 'Model ID (optional)',
       modelIdPlaceholder: 'e.g. gpt-4',
@@ -899,11 +896,10 @@ export default {
       replyPlaceholder: 'Type your reply…',
       send: 'Send',
       closedBanner: 'This ticket is closed',
-      closedHint:
-        'Closed tickets cannot be replied to. Reopen it to continue the conversation.',
+      closedHint: 'Reopen the ticket to continue replying.',
       confirmCloseTitle: 'Close this ticket?',
       confirmCloseMessage:
-        'You will not be able to reply after closing. You can reopen it anytime.',
+        'You cannot reply after closing, but you can reopen it anytime.',
       dept: {
         support: 'Support',
       },
@@ -2043,7 +2039,6 @@ export default {
     startDate: 'Start date',
     endDate: 'End date',
     exportTitle: 'Export data',
-    exportSubtitle: 'Export data to your computer',
     docType: 'Document type',
     statTotalRequests: 'Total requests',
     statTotalQuota: 'Total spend',
@@ -2182,7 +2177,6 @@ export default {
     emptyTitle: 'No audit logs',
     emptyHint: 'No audit events match these filters.',
     loadFailed: 'Could not load audit logs',
-    loadFailedHint: 'The audit ledger is unavailable. Try again shortly.',
     exportSubtitle: 'Exports the current filters, up to {limit} records',
     unknownAction: 'Unknown operation',
     columns: {

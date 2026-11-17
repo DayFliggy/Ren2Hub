@@ -289,7 +289,6 @@ function display(field: string, value: string | number | null) {
   <ConsoleModal
     :open="open"
     :title="t('syncTitle')"
-    :subtitle="t('syncSubtitle')"
     size="xl"
     :close-disabled="saving"
     @close="emit('close')"
@@ -619,7 +618,6 @@ function display(field: string, value: string | number | null) {
       </section>
     </div>
     <div v-else-if="step === 2" class="grid gap-4">
-      <p class="text-sm text-[var(--text-primary)]">{{ t('confirmNote') }}</p>
       <ul class="grid gap-1 text-sm text-[var(--text-primary)]">
         <li>{{ t('planCreate', { count: missingNames.length }) }}</li>
         <li>

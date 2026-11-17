@@ -758,7 +758,6 @@ onBeforeUnmount(() => {
     <ConsoleModal
       :open="exportOpen"
       :title="t('logs.exportTitle')"
-      :subtitle="t('logs.exportSubtitle')"
       size="lg"
       @close="closeExport"
     >

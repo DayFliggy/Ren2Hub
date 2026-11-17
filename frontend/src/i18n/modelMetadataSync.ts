@@ -1,7 +1,6 @@
 // Metadata sync follows the native NewAPI candidate and selection contract.
 const zh = {
   syncTitle: '同步模型资料',
-  syncSubtitle: '应用前逐项检查新增和覆盖内容，定价、渠道及分组权限不会改变。',
   syncSteps: '同步步骤',
   stepSelect: '选择模型',
   stepPreview: '预览字段',
@@ -34,9 +33,8 @@ const zh = {
   pageOf: '第 {current} 页，共 {total} 页',
   previousPage: '上一页',
   nextPage: '下一页',
-  newModelsHint: '已选择的新模型会导入下列全部资料；无需逐个勾选字段。',
-  existingModelsHint:
-    '已有模型：勾选要更新的字段，当前内容会被右侧内容替换；未勾选的保持不变。',
+  newModelsHint: '新模型将导入下列全部资料。',
+  existingModelsHint: '已有模型只覆盖勾选的字段。',
   selectAllFields: '全选变更字段',
   clearFieldSelection: '取消全选',
   fieldsSelected: '已勾选 {selected} / {total} 个变更字段',
@@ -74,7 +72,6 @@ const zh = {
   ruleContains: '包含',
   ruleSuffix: '后缀',
   fields: '字段',
-  confirmNote: '仅提交此处列出的变更。',
   planCreate: '将新建 {count} 个模型',
   planOverwrite: '将覆盖 {models} 个模型的 {fields} 个字段',
   importNote: '导入元信息不会添加渠道、开放模型访问或配置价格。',
@@ -93,7 +90,7 @@ const zh = {
   applyChanges: '应用 {count} 个模型的变更',
   applying: '正在应用...',
   missingTitle: '缺失的模型',
-  missingSubtitle: '正在使用但未在系统中配置的模型',
+  missingSubtitle: '已在使用但没有资料的模型',
   showingRange: '显示第 {start}-{end} 条，共 {total}',
   searchMissing: '搜索缺失的模型',
   noMissing: '未找到缺失的模型。',
@@ -112,8 +109,6 @@ const en: {
     : Record<keyof (typeof zh)[K], string>
 } = {
   syncTitle: 'Sync model metadata',
-  syncSubtitle:
-    'Review every addition and overwrite before applying. Pricing, channels, and group access are not changed.',
   syncSteps: 'Sync steps',
   stepSelect: 'Select models',
   stepPreview: 'Preview fields',
@@ -148,10 +143,8 @@ const en: {
   pageOf: 'Page {current} of {total}',
   previousPage: 'Previous page',
   nextPage: 'Next page',
-  newModelsHint:
-    'Selected new models import all metadata shown below. No field selection is needed.',
-  existingModelsHint:
-    'Existing models: select fields to replace their current values with the values on the right. Unselected fields stay unchanged.',
+  newModelsHint: 'All metadata below is imported for new models.',
+  existingModelsHint: 'Existing models: only checked fields are overwritten.',
   selectAllFields: 'Select all changed fields',
   clearFieldSelection: 'Clear field selection',
   fieldsSelected: '{selected} of {total} changed fields selected',
@@ -190,7 +183,6 @@ const en: {
   ruleContains: 'Contains',
   ruleSuffix: 'Suffix',
   fields: 'Fields',
-  confirmNote: 'Only the changes listed here will be committed.',
   planCreate: '{count} models will be created',
   planOverwrite: '{fields} fields will be overwritten across {models} models',
   importNote:
@@ -210,8 +202,7 @@ const en: {
   applyChanges: 'Apply {count} model changes',
   applying: 'Applying...',
   missingTitle: 'Missing Models',
-  missingSubtitle:
-    'Models that are being used but not configured in the system',
+  missingSubtitle: 'Models in use without metadata',
   showingRange: 'Showing {start}-{end} of {total}',
   searchMissing: 'Search missing models',
   noMissing: 'No missing models found.',

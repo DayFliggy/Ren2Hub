@@ -1,12 +1,12 @@
 export const clientConfigMessages = {
   'zh-CN': {
     title: '客户端配置',
-    hint: '配置只引用 REN2HUB_API_KEY 环境变量。请在客户端进程中设置密钥；预览、复制和下载均不会读取完整密钥或修改客户端设置。',
+    hint: '配置引用 REN2HUB_API_KEY 环境变量，请在客户端进程中设置密钥；配置不含完整密钥。',
     client: '客户端',
     model: '模型',
     server_address: '客户端服务地址',
     server_address_hint:
-      '请使用客户端能够访问的入口，保留反向代理路径前缀。此处修改仅用于本次导出，不修改站点设置；未以 /v1 结尾时会自动补上。',
+      '填写客户端可访问的地址并保留反向代理路径前缀；仅用于本次导出，未以 /v1 结尾时自动补上。',
     current_site: '使用当前站点地址',
     loading: '正在核对配置…',
     retry: '重新核对',
@@ -18,10 +18,8 @@ export const clientConfigMessages = {
     preview: '配置预览',
     prices_omitted:
       '价格由网关结算，配置不填写价格。Pi 的客户端成本统计可能显示 0，不代表免费。',
-    codex_limits:
-      '当前接口未提供上下文或输出上限，配置不声明这些能力。请核对所用模型和 Codex 客户端的限制。',
-    pi_limits:
-      '当前接口未提供以下模型能力。请根据供应商资料填写；这些值仅用于本次配置，不会保存到服务器。',
+    codex_limits: '接口未提供上下文和输出上限，配置不声明这些值，请自行核对。',
+    pi_limits: '接口未提供以下能力，请按供应商资料填写，仅用于本次配置。',
     context_window: '上下文上限（Token）',
     max_tokens: '最大输出（Token）',
     reasoning: '推理能力',
@@ -34,8 +32,7 @@ export const clientConfigMessages = {
     codex_install: '将内容合并到 ~/.codex/config.toml，保留已有配置。',
     pi_install:
       '将 providers.ren2hub 合并到 ~/.pi/agent/models.json，然后在 Pi 中运行 /model 选择模型。',
-    route_note:
-      '导出前核对当前 Key 的模型权限和协议路由；不向供应商发起请求，也不保证实时容量。',
+    route_note: '导出前会核对此 Key 的模型权限和协议路由，不保证实时容量。',
     error: {
       invalid_address:
         '请填写有效的 HTTP 或 HTTPS 服务地址，不含用户名、密码、查询参数或片段。',
@@ -53,12 +50,12 @@ export const clientConfigMessages = {
   },
   en: {
     title: 'Client configuration',
-    hint: 'Configuration references the REN2HUB_API_KEY environment variable. Set the key in the client process. Preview, copy and download never read the full key or change client settings.',
+    hint: 'The configuration references the REN2HUB_API_KEY environment variable; set the key in the client process. It never contains the full key.',
     client: 'Client',
     model: 'Model',
     server_address: 'Client server address',
     server_address_hint:
-      'Use an address reachable from your client, retaining any reverse proxy path prefix. Edits affect only this export, not site settings. /v1 is appended unless already present.',
+      'Use an address your client can reach, keeping any reverse proxy path prefix. Applies to this export only; /v1 is appended unless the address ends with it.',
     current_site: 'Use current site address',
     loading: 'Checking configuration…',
     retry: 'Check again',
@@ -71,9 +68,9 @@ export const clientConfigMessages = {
     prices_omitted:
       'The gateway settles charges; prices are omitted. Pi may show zero client cost, which does not mean free usage.',
     codex_limits:
-      'The current API does not provide context or output limits, so this configuration omits them. Check the limits of your model and Codex client.',
+      'The API does not provide context or output limits, so the configuration omits them. Check them yourself.',
     pi_limits:
-      'The current API does not provide these model capabilities. Enter values from your provider. They apply only to this configuration and are not saved to the server.',
+      'The API does not provide these values. Enter them from your provider; they apply to this configuration only.',
     context_window: 'Context window (tokens)',
     max_tokens: 'Maximum output (tokens)',
     reasoning: 'Reasoning support',
@@ -88,7 +85,7 @@ export const clientConfigMessages = {
     pi_install:
       'Merge providers.ren2hub into ~/.pi/agent/models.json, then run /model in Pi to select the model.',
     route_note:
-      'The Key’s current model access and protocol routes are checked before export. No provider request is sent and live capacity is not guaranteed.',
+      'Model access and protocol routes for this Key are checked before export. Live capacity is not guaranteed.',
     error: {
       invalid_address:
         'Enter a valid HTTP or HTTPS server address without a username, password, query or fragment.',

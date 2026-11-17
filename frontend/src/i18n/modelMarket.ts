@@ -30,9 +30,7 @@ const zh = {
   resultCount: '{models} 个模型 · {offers} 项渠道报价',
   benchmark: '平台基准价',
   reference: '对照参考',
-  benchmarkHint: '平台配置的模型基准价，渠道报价已包含对应倍率。',
-  benchmarkNote:
-    '平台基准价仅用于价格对照，不代表原厂官方价格，也不提供渠道运行指标。',
+  benchmarkNote: '平台基准价仅供对照，不是原厂官方价格。',
   billingModes: {
     token: '按量',
     per_call: '按次',
@@ -52,7 +50,6 @@ const zh = {
       '该模型的音频价格因调用协议而异，无法显示统一单价',
   },
   expressionPrice: '按表达式计价',
-  expressionHint: '价格随请求用量与计价规则变化，查看详情了解完整规则。',
   expression: '计价表达式',
   additionalRules: '附加计价规则',
   cacheWriteRule: '缓存写入规则',
@@ -98,8 +95,7 @@ const zh = {
   noQuote: '暂无报价',
   channelsEmpty: '当前筛选下没有渠道供给',
   noStatistics: '未按渠道统计',
-  noStatisticsDetail:
-    '性能统计只按模型汇总全部渠道，不区分渠道，因此无法提供单个渠道的健康历史、请求耗时与 TPS。',
+  noStatisticsDetail: '统计按模型汇总，不区分渠道。',
   modelStats: {
     scope: '模型统计 · 全部渠道 · 近 {hours} 小时',
     successRate: '成功率',
@@ -121,12 +117,8 @@ const zh = {
   tableModel: '模型',
   tableChannels: '渠道报价 · USD',
   tableRegion: '渠道比价表，可横向滚动',
-  tableHint:
-    '左右固定模型与平台基准，中间滑动查看渠道；悬停或键盘聚焦可高亮整列。',
   tableCaption: '模型与渠道报价对照',
-  comparisonNote: '仅比较相同计价维度与单位；按次、按量和表达式报价分别阅读。',
-  catalogNote: '模型说明与端点属于模型；渠道决定倍率与可用供给。',
-  supplyNote: '此页仅查看供给与报价，实际请求按令牌路由配置分配。',
+  supplyNote: '实际请求按 API Key 的路由配置分配。',
   detailsTitle: '渠道报价与平台基准对照',
   detailChannel: '渠道与计费变体',
   detailPrice: '展示单价（含倍率）',
@@ -155,7 +147,7 @@ const zh = {
   partialPrices: '{count} 个模型含未配置的计价项',
   invalidRecord: '价格记录无效',
   unknownModel: '未知模型',
-  quotaNotice: 'USD · 不同计价单位不作直接比较',
+  quotaNotice: '价格单位：USD',
 }
 
 const en: typeof zh = {
@@ -193,10 +185,8 @@ const en: typeof zh = {
   resultCount: '{models} models · {offers} channel offers',
   benchmark: 'Platform base price',
   reference: 'Reference',
-  benchmarkHint:
-    'Model prices configured by the platform. Channel quotes include their multipliers.',
   benchmarkNote:
-    'Platform base prices are a pricing reference, not official provider prices, and have no channel performance statistics.',
+    'Platform base prices are for reference, not official provider prices.',
   billingModes: {
     token: 'Usage',
     per_call: 'Per request',
@@ -217,8 +207,6 @@ const en: typeof zh = {
       'The quota unit is invalid, so the price cannot be converted',
   },
   expressionPrice: 'Expression pricing',
-  expressionHint:
-    'The price depends on usage and billing rules. View details for the full expression.',
   expression: 'Billing expression',
   additionalRules: 'Additional pricing rules',
   cacheWriteRule: 'Cache write rule',
@@ -265,8 +253,7 @@ const en: typeof zh = {
   noQuote: 'No quote',
   channelsEmpty: 'No channel offers match these filters',
   noStatistics: 'No per-channel statistics',
-  noStatisticsDetail:
-    'Performance metrics are aggregated per model across all channels, so health history, request duration and TPS are not available for an individual channel.',
+  noStatisticsDetail: 'Statistics are aggregated per model, not per channel.',
   modelStats: {
     scope: 'Model statistics · all channels · last {hours} h',
     successRate: 'Success rate',
@@ -288,15 +275,8 @@ const en: typeof zh = {
   tableModel: 'Model',
   tableChannels: 'Channel quotes · USD',
   tableRegion: 'Channel price comparison, horizontally scrollable',
-  tableHint:
-    'Model and platform prices stay fixed while channels scroll. Hover or focus a channel to highlight its column.',
   tableCaption: 'Model and channel price comparison',
-  comparisonNote:
-    'Compare matching dimensions and units. Read per-request, usage and expression prices separately.',
-  catalogNote:
-    'Descriptions and endpoints belong to the model; channels provide multipliers and available supply.',
-  supplyNote:
-    'This page displays supply and pricing. Requests follow the routing configuration of your API key.',
+  supplyNote: "Requests follow your API key's routing settings.",
   detailsTitle: 'Channel quotes and platform reference',
   detailChannel: 'Channel and billing variant',
   detailPrice: 'Displayed price (multiplier included)',
@@ -326,7 +306,7 @@ const en: typeof zh = {
   partialPrices: '{count} models have unconfigured pricing items',
   invalidRecord: 'Invalid pricing record',
   unknownModel: 'Unknown model',
-  quotaNotice: 'USD · Compare prices with matching units',
+  quotaNotice: 'Prices in USD',
 }
 
 export const modelMarketMessages = { 'zh-CN': zh, en }

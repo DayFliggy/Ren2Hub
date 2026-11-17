@@ -165,7 +165,6 @@ const timeLabel = (value: number | null) => (value ? formatTime(value) : '—')
   <ConsoleModal
     :open="true"
     :title="vendor ? vendor.name : t('createVendor')"
-    :subtitle="t('vendorSubtitle')"
     presentation="drawer"
     size="lg"
     :close-disabled="saving"

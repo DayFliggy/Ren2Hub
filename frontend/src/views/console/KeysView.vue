@@ -284,7 +284,6 @@ onBeforeUnmount(() => {
         selectable
         checkbox-shape="round"
         :empty-title="t('keys.emptyTitle')"
-        :empty-hint="t('keys.emptyHint')"
         empty-illustration="empty-keys"
       >
         <template #cell-name="{ row }">
@@ -514,7 +513,6 @@ onBeforeUnmount(() => {
         <EmptyState
           v-else-if="rows.length === 0"
           :title="t('keys.emptyTitle')"
-          :hint="t('keys.emptyHint')"
           illustration="empty-keys"
         />
         <KeyMobileList

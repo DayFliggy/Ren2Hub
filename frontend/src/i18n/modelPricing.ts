@@ -1,7 +1,6 @@
 const zh = {
   pricingIssues: '{count} 个任务模型的价格需要处理',
-  pricingIssuesHint:
-    '以下插件无法按已保存的价格计费。请检查模型价格；此提示不会自动填入价格。',
+  pricingIssuesHint: '以下插件无法按已保存的价格计费，请检查并修正模型价格。',
   pricingIssue_unconfigured: '未设置价格',
   pricingIssue_incompatible: '价格引用了插件不再提供的用量字段',
   pricingIssue_stale: '插件不再提供此模型',
@@ -93,7 +92,7 @@ const zh = {
   enabled: '启用',
   preview: '当前草稿预览',
   laneFallback:
-    '未启用的附加单价按输入单价计费，其中音频输出按音频输入单价计费。上游内置的音频倍率预先勾选；加载时就没有单价的倍率可以留空，按原倍率保存，已显示的单价不能清空，删除请取消勾选。两个音频倍率都删除后，兼容接口改走文本结算；Gemini 2.5 Flash、2.0 Flash 等模型在文本结算中仍按上游固定单价计音频输入。',
+    '未启用的附加单价按输入单价计费，其中音频输出按音频输入单价。取消勾选即删除该单价；加载时没有单价的倍率可留空并按原倍率保存。两个音频倍率都删除后，兼容接口改走文本结算，Gemini 2.5 Flash、2.0 Flash 等模型的音频输入仍按上游固定单价。',
   toolBuiltinPrice:
     '内置工具未配置时使用上游内置单价；这里保存的值覆盖内置价，0 表示免费。其他工具未配置时不收费。',
   invalid: '请填写有效的非负价格；留空不表示免费。',
@@ -159,8 +158,7 @@ const zh = {
   stale: '插件已不再提供这个模型，请清空它的表达式后保存',
   unavailable: '当前价格用到了插件不再提供的用量字段，请按任务用量重新编写',
   sourceTitle: '自动获取模型价格',
-  sourceHint:
-    '选择一个价格源及模型，将候选价格填入当前草稿；保存模型价格后才生效。',
+  sourceHint: '候选价格填入草稿，保存模型价格后生效。',
   loading: '正在获取',
   success: '获取成功',
   partial: '部分可用',
@@ -268,7 +266,7 @@ const zh = {
   downloadedSha256: '下载内容 SHA-256：{digest}',
   publishedSha256: '发布的 SHA-256：{digest}',
   upstreamHint:
-    'basellm 和 models.dev 使用内置预设上游，OpenRouter 使用已配置 key 的 OpenRouter 渠道；只列出价格与已保存价格不同的模型。',
+    'OpenRouter 需要已配置 key 的 OpenRouter 渠道；只列出与已保存价格不同的模型。',
   upstreamSource: '预设上游与渠道',
   upstream_basellm: 'basellm 官方倍率预设',
   upstream_models_dev: 'models.dev 价格预设',
@@ -312,7 +310,7 @@ const en: Record<keyof typeof zh, string> = {
   pricingIssues:
     'Task model prices need attention: {count} model | Task model prices need attention: {count} models',
   pricingIssuesHint:
-    'These plugins cannot charge using the saved prices. Review the model prices; this notice does not fill prices automatically.',
+    'These plugins cannot bill with the saved prices. Review and fix the model prices.',
   pricingIssue_unconfigured: 'No price set',
   pricingIssue_incompatible:
     'The price uses usage the plugin no longer provides',
@@ -410,7 +408,7 @@ const en: Record<keyof typeof zh, string> = {
   enabled: 'Enabled',
   preview: 'Draft preview',
   laneFallback:
-    'Extra prices that are not enabled bill at the input price; audio output bills at the audio input price. Built-in upstream audio ratios start enabled. A ratio that had no price when loaded can stay empty and is saved unchanged; a shown price cannot be cleared, so uncheck it to delete it. Once both audio ratios are gone, compatible requests use text settlement, where Gemini 2.5 Flash, 2.0 Flash and similar models still bill audio input at a fixed upstream price.',
+    'Disabled extra prices bill at the input price; a disabled audio output price bills at the audio input price. Uncheck a price to delete it; a ratio loaded without a price can stay empty and is saved unchanged. Deleting both audio ratios moves compatible requests to text settlement, where Gemini 2.5 Flash, 2.0 Flash and similar models still bill audio input at a fixed upstream price.',
   toolBuiltinPrice:
     'Built-in tools use the upstream built-in price unless overridden here; 0 makes a tool free. Other tools are free until priced.',
   invalid: 'Enter a nonnegative price. Empty does not mean free.',
@@ -485,7 +483,7 @@ const en: Record<keyof typeof zh, string> = {
     'The price uses usage the plugin no longer provides. Rewrite it with the fields under Task usage.',
   sourceTitle: 'Fetch model prices',
   sourceHint:
-    'Choose one source and a model range. Fill the draft, then save model prices to apply.',
+    'Candidates fill the draft and apply after you save model prices.',
   loading: 'Fetching',
   success: 'Ready',
   partial: 'Partially available',
@@ -601,7 +599,7 @@ const en: Record<keyof typeof zh, string> = {
   downloadedSha256: 'Downloaded SHA-256: {digest}',
   publishedSha256: 'Published SHA-256: {digest}',
   upstreamHint:
-    'basellm and models.dev use built-in preset upstreams; OpenRouter uses an OpenRouter channel with a configured key. Only models whose prices differ from saved prices are listed.',
+    'OpenRouter needs an OpenRouter channel with a key. Only models whose prices differ from saved prices are listed.',
   upstreamSource: 'Preset upstreams and channels',
   upstream_basellm: 'basellm official ratio preset',
   upstream_models_dev: 'models.dev price preset',

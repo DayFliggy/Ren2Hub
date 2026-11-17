@@ -174,7 +174,6 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
         :page-size="pageSize"
         :scroll-region-label="t('tickets.breadcrumb.1')"
         :empty-title="t('tickets.emptyTitle')"
-        :empty-hint="t('tickets.emptyHint')"
         empty-illustration="empty-tickets"
       >
         <template #cell-title="{ row }">

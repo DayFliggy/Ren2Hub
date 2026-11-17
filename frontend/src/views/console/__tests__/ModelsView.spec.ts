@@ -101,7 +101,7 @@ describe('native model catalog page', () => {
     expect(popup.textContent).not.toMatch(/上下文|最大输出|工具调用|推理强度/)
     // Channel offers keep the unavailable state and explain why.
     expect(popup.textContent).toContain('未按渠道统计')
-    expect(popup.textContent).toContain('性能统计只按模型汇总全部渠道')
+    expect(popup.textContent).toContain('统计按模型汇总，不区分渠道')
   })
   it('does not render permission-scoped prices after a catalog failure', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('denied'))

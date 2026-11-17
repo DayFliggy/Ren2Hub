@@ -696,7 +696,7 @@ export default {
     neverExpire: '永不过期',
     expireInvalid: '请填写有效的过期时间，或关闭过期时间。',
     revealTitle: '完整密钥',
-    revealNote: '完整密钥仅本次展示，请妥善保管。读取已限流且禁用缓存。',
+    revealNote: '请妥善保管完整密钥。',
     created: '令牌已创建',
     updated: '令牌已更新',
     deleted: '令牌已删除',
@@ -721,7 +721,6 @@ export default {
     statEnabled: '当前启用',
     statUsed: '已用额度',
     emptyTitle: '暂无令牌',
-    emptyHint: '点击右上角「创建令牌」开始',
   },
 
   routing: {
@@ -816,7 +815,6 @@ export default {
     statOpen: '待处理',
     statClosed: '已关闭',
     emptyTitle: '暂无工单',
-    emptyHint: '点击右上角「新建工单」提交你的问题',
     listLoadFailed: '工单列表加载失败',
     filterStatus: '状态',
     status: {
@@ -843,7 +841,7 @@ export default {
       categoryLabel: '类别',
       priorityLabel: '优先级',
       contentLabel: '详细描述',
-      contentPlaceholder: '请详细描述问题，包括复现步骤、预期结果等',
+      contentPlaceholder: '描述问题、复现步骤和预期结果',
       imagesLabel: '附件图片',
       modelIdLabel: '模型 ID（可选）',
       modelIdPlaceholder: '如 gpt-4',
@@ -860,9 +858,9 @@ export default {
       replyPlaceholder: '输入回复内容…',
       send: '发送',
       closedBanner: '此工单已关闭',
-      closedHint: '已关闭的工单无法回复，您可以重新开启继续对话',
+      closedHint: '重新开启后可继续回复。',
       confirmCloseTitle: '关闭此工单？',
-      confirmCloseMessage: '关闭后将无法继续回复，可随时重新开启。',
+      confirmCloseMessage: '关闭后不能回复，可随时重新开启。',
       dept: {
         support: '客服',
       },
@@ -1966,7 +1964,6 @@ export default {
     startDate: '开始日期',
     endDate: '结束日期',
     exportTitle: '导出数据',
-    exportSubtitle: '将数据导出到本地电脑',
     docType: '选择文档类型',
     statTotalRequests: '总请求',
     statTotalQuota: '总消耗',
@@ -2103,8 +2100,7 @@ export default {
     emptyTitle: '暂无审计日志',
     emptyHint: '当前筛选条件下没有审计事件。',
     loadFailed: '审计日志加载失败',
-    loadFailedHint: '无法读取审计记录，请稍后重试。',
-    exportSubtitle: '严格按当前筛选导出，最多 {limit} 条记录',
+    exportSubtitle: '按当前筛选导出，最多 {limit} 条记录',
     unknownAction: '未知操作',
     columns: {
       time: '时间',

@@ -322,7 +322,6 @@ function onFocusOut(event: FocusEvent) {
         </div>
       </article>
     </div>
-    <p class="market-matrix-help">{{ t('tableHint') }}</p>
   </div>
 </template>
 
@@ -492,18 +491,11 @@ function onFocusOut(event: FocusEvent) {
   padding-top: 0.8rem;
   border-top: 1px dashed var(--border-default);
 }
-.market-matrix-help {
-  color: var(--text-tertiary);
-  font-size: 0.6875rem;
-  line-height: 1.7;
-  margin-top: 0.75rem;
-}
 .market-matrix-mobile {
   display: none;
 }
 @container model-market (max-width: 720px) {
-  .market-matrix-scroll,
-  .market-matrix-help {
+  .market-matrix-scroll {
     display: none;
   }
   .market-matrix-mobile {

@@ -342,9 +342,6 @@ watch(
       <h1 class="text-2xl font-semibold text-[var(--text-primary)]">
         {{ t('routing.title') }}
       </h1>
-      <p class="mt-1 text-sm text-[var(--text-tertiary)]">
-        {{ t('routing.description') }}
-      </p>
     </header>
 
     <div

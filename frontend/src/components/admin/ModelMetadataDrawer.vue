@@ -249,7 +249,6 @@ onBeforeUnmount(() => controller.abort())
         ? t('createModel')
         : detail?.model_name || t('modelMetadata')
     "
-    :subtitle="t('drawerSubtitle')"
     size="xl"
     presentation="drawer"
     :close-disabled="saving"
@@ -301,17 +300,10 @@ onBeforeUnmount(() => controller.abort())
                       class="font-mono"
                       :placeholder="t('modelNamePlaceholder')"
                       :aria-describedby="
-                        renamed
-                          ? 'model-metadata-name-hint model-metadata-name-warning'
-                          : 'model-metadata-name-hint'
+                        renamed ? 'model-metadata-name-warning' : undefined
                       "
                     />
                   </FormField>
-                  <small
-                    id="model-metadata-name-hint"
-                    class="mt-1 block text-xs text-[var(--text-tertiary)]"
-                    >{{ t('modelNameHint') }}</small
-                  >
                   <small
                     v-if="renamed"
                     id="model-metadata-name-warning"
@@ -333,14 +325,7 @@ onBeforeUnmount(() => controller.abort())
                 <!-- A group of controls, not one labelled input: a wrapping
                      <label> would forward caption clicks to the first control
                      and switch the icon back to inherit. -->
-                <fieldset
-                  class="min-w-0 sm:col-span-2"
-                  :aria-describedby="
-                    iconMode === 'custom'
-                      ? 'model-metadata-icon-hint'
-                      : undefined
-                  "
-                >
+                <fieldset class="min-w-0 sm:col-span-2">
                   <legend
                     class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
                   >
@@ -411,13 +396,6 @@ onBeforeUnmount(() => controller.abort())
                       </div>
                     </div>
                   </div>
-                  <p
-                    v-if="iconMode === 'custom'"
-                    id="model-metadata-icon-hint"
-                    class="mt-1.5 block text-xs text-[var(--text-tertiary)]"
-                  >
-                    {{ t('iconHint') }}
-                  </p>
                 </fieldset>
                 <div>
                   <span
@@ -492,7 +470,9 @@ onBeforeUnmount(() => controller.abort())
               </fieldset>
             </section>
             <section class="drawer-section">
-              <div class="flex flex-wrap items-center justify-between gap-2">
+              <div
+                class="mb-2 flex flex-wrap items-center justify-between gap-2"
+              >
                 <h3 class="drawer-section-title">{{ t('endpoints') }}</h3>
                 <div class="w-52">
                   <label class="sr-only" for="template-select">{{
@@ -515,9 +495,6 @@ onBeforeUnmount(() => controller.abort())
                   </select>
                 </div>
               </div>
-              <p class="mb-2 mt-1 text-sm text-[var(--text-secondary)]">
-                {{ t('endpointConfiguration') }}
-              </p>
               <MetadataEndpointEditor
                 :key="editorKey"
                 ref="endpointEditor"

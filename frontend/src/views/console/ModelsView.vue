@@ -276,10 +276,6 @@ onMounted(load)
       @detail="openDetails"
     />
 
-    <footer v-if="!loading && !error && hasResults" class="market-page-note">
-      <p>{{ t(view === 'comparison' ? 'comparisonNote' : 'catalogNote') }}</p>
-      <p>{{ t('supplyNote') }}</p>
-    </footer>
     <ModelMarketDetails
       :model="detailModel"
       :offer-id="detailOfferId"
@@ -424,15 +420,6 @@ html.dark .market-type-tab.active::after {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
-}
-.market-page-note {
-  margin-top: 1.2rem;
-  color: var(--text-tertiary);
-  font-size: 0.6875rem;
-  line-height: 1.9;
-}
-.market-page-note p + p {
-  margin-top: 0.2rem;
 }
 .market-pricing-issues {
   border: 1px solid var(--border-default);

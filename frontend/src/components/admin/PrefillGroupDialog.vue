@@ -456,7 +456,6 @@ watch(
   <ConsoleModal
     :open="open && view === 'form'"
     :title="form.id ? t('editGroupTitle') : t('createGroup')"
-    :subtitle="form.id ? t('editGroupSubtitle') : t('createGroupSubtitle')"
     presentation="drawer"
     size="lg"
     :close-disabled="saving"
@@ -470,15 +469,10 @@ watch(
     >
       <fieldset class="min-w-0 sibling-space-y-6" :disabled="saving">
         <section class="sibling-space-y-4">
-          <div>
-            <h3 class="text-sm font-semibold text-[var(--text-secondary)]">
-              {{ t('groupDetails') }}
-            </h3>
-            <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-              {{ t('groupDetailsHint') }}
-            </p>
-          </div>
-          <FormField :label="t('groupName')" :hint="t('groupNameHint')">
+          <h3 class="text-sm font-semibold text-[var(--text-secondary)]">
+            {{ t('groupDetails') }}
+          </h3>
+          <FormField :label="t('groupName')">
             <TextInput
               v-model="form.name"
               name="prefill-group-name"
@@ -487,10 +481,7 @@ watch(
               :placeholder="t('groupNamePlaceholder')"
             />
           </FormField>
-          <FormField
-            :label="t('description')"
-            :hint="t('groupDescriptionHint')"
-          >
+          <FormField :label="t('description')">
             <textarea
               v-model="form.description"
               name="prefill-group-description"
@@ -505,14 +496,9 @@ watch(
         <section
           class="sibling-space-y-4 border-t border-[var(--border-subtle)] pt-6"
         >
-          <div>
-            <h3 class="text-sm font-semibold text-[var(--text-secondary)]">
-              {{ t('configuration') }}
-            </h3>
-            <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-              {{ t('configurationHint') }}
-            </p>
-          </div>
+          <h3 class="text-sm font-semibold text-[var(--text-secondary)]">
+            {{ t('configuration') }}
+          </h3>
           <!-- A div, not FormField's <label>: the select and list editor
                contain their own buttons, which a label would re-activate. -->
           <div>
@@ -528,9 +514,6 @@ watch(
             />
             <p class="mt-1.5 text-xs text-[var(--text-tertiary)]">
               {{ t(TYPE_META[form.type].hint) }}
-            </p>
-            <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-              {{ t('groupTypeHint') }}
             </p>
           </div>
           <div
@@ -565,12 +548,7 @@ watch(
                 {{ t('endpointItemsHint') }}
               </p>
             </template>
-            <template v-else>
-              <StringListEditor v-model="form.list" :label="t('items')" />
-              <p class="text-xs text-[var(--text-tertiary)]">
-                {{ t('listItemsHint') }}
-              </p>
-            </template>
+            <StringListEditor v-else v-model="form.list" :label="t('items')" />
           </div>
         </section>
       </fieldset>

@@ -123,9 +123,7 @@ describe('model metadata drawer', () => {
   it('keeps tags and the custom icon when their caption or hint is clicked', async () => {
     const wrapper = setup(42)
     await flushPromises()
-    const iconHint =
-      'Select a suggested icon or keep an existing advanced icon key.'
-    for (const text of [iconHint, 'Icon']) await clickText(wrapper, text)
+    await clickText(wrapper, 'Icon')
     expect(wrapper.get('input[aria-label="Icon"]').element).toHaveProperty(
       'value',
       'Custom'

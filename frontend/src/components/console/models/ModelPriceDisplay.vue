@@ -75,7 +75,6 @@ function label(line: MarketPriceLine) {
       <pre v-if="mode === 'full'" class="market-expression">{{
         pricing.expression
       }}</pre>
-      <p v-else class="market-price-hint">{{ t('expressionHint') }}</p>
     </template>
     <template v-else>
       <span

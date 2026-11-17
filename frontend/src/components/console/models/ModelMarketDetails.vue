@@ -221,7 +221,6 @@ const usageFields = computed(() =>
       <section class="market-detail-quotes">
         <div class="market-detail-section-heading">
           <h3>{{ t('detailsTitle') }}</h3>
-          <p>{{ t('benchmarkHint') }}</p>
         </div>
         <div class="market-detail-quote-list">
           <div class="market-detail-offer-head" aria-hidden="true">
@@ -477,7 +476,6 @@ const usageFields = computed(() =>
 .market-detail-section-heading {
   margin-bottom: 0.7rem;
 }
-.market-detail-section-heading p,
 .market-detail-formula {
   font-size: 0.75rem;
   color: var(--text-tertiary);

@@ -3,7 +3,7 @@ export const tokenRoutingMessages = {
     routing: {
       preview: 'Preview saved routing',
       previewHint:
-        'Checks the saved configuration without sending an upstream request or charging quota. Automatic mode lists eligible candidates, not a selected channel. Checks static eligibility only; body-dependent plugin modes are validated when executing. Save edits before previewing them.',
+        'Checks static eligibility of the saved configuration without sending upstream requests or charging quota. Save edits before previewing.',
       previewVersion: 'Saved version {version}',
       model: 'Model',
       path: 'API path',
@@ -65,7 +65,6 @@ export const tokenRoutingMessages = {
         'Enter a positive multiplier up to 1000 with at most 18 decimal places, or leave it empty.',
       automatic: 'Automatic',
       manual: 'Manual routing',
-      description: 'Configure routing for this API key.',
       add: 'Add channel',
       empty: 'No channels selected.',
       unavailable: 'Unavailable channel #{id}',
@@ -89,7 +88,7 @@ export const tokenRoutingMessages = {
     routing: {
       preview: '预览已保存路由',
       previewHint:
-        '只检查已保存的配置，不发送上游请求、不扣额度。自动模式展示符合条件的候选渠道，不代表最终中选。只证明静态资格，依赖请求体的插件模式在执行时检查。编辑后需先保存再预览。',
+        '只检查已保存配置的静态资格，不发送上游请求、不扣额度。编辑后需先保存再预览。',
       previewVersion: '已保存版本 {version}',
       model: '模型',
       path: 'API 路径',
@@ -146,7 +145,6 @@ export const tokenRoutingMessages = {
         '请输入不超过 1000、最多 18 位小数的正数倍率，或留空表示不限制。',
       automatic: '自动路由',
       manual: '手动路由',
-      description: '配置此 API Key 的路由方式。',
       add: '添加渠道',
       empty: '尚未选择渠道。',
       unavailable: '不可用渠道 #{id}',

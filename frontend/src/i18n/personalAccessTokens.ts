@@ -2,8 +2,7 @@ export const personalAccessTokenMessages = {
   en: {
     pat: {
       title: 'Personal access tokens',
-      description:
-        'Named credentials for management APIs. Model requests use API keys from the Keys page.',
+      description: 'For management APIs. Use API keys for model requests.',
       create: 'Create access token',
       edit: 'Edit access token',
       rename: 'Rename',
@@ -55,8 +54,7 @@ export const personalAccessTokenMessages = {
   'zh-CN': {
     pat: {
       title: '个人访问令牌',
-      description:
-        '为管理 API 创建具名凭据。模型调用请使用密钥页面中的 API Key。',
+      description: '用于管理 API；模型调用请使用 API Key。',
       create: '创建访问令牌',
       edit: '编辑访问令牌',
       rename: '改名',
