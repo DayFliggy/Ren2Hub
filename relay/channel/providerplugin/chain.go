@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -358,6 +359,7 @@ func (a *Adaptor) dialWebSocket(c *gin.Context, info *relaycommon.RelayInfo, req
 	if info.ChannelSetting.TLSInsecureSkipVerify {
 		dialer.TLSClientConfig = common2.InsecureTLSConfig
 	}
+	service.MarkRouteScanDispatched(c)
 	session, resp, err := dialer.DialContext(c.Request.Context(), target.String(), header)
 	if err != nil {
 		statusCode := http.StatusBadGateway

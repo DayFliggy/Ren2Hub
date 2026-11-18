@@ -1,11 +1,14 @@
 package controller
 
 import (
-	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
@@ -70,6 +74,30 @@ func TestRelayRetryWithoutCandidateKeepsUpstreamError(t *testing.T) {
 	require.NotContains(t, body, "No available channel")
 }
 
+// captureRouteErrors takes a synchronized snapshot while the mock gateway is running.
+func captureRouteErrors(t *testing.T) func() string {
+	t.Helper()
+	output, err := os.CreateTemp(t.TempDir(), "route-errors-")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, output.Close()) })
+	common.LogWriterMu.Lock()
+	oldWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = output
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		defer common.LogWriterMu.Unlock()
+		gin.DefaultErrorWriter = oldWriter
+	})
+	return func() string {
+		common.LogWriterMu.Lock()
+		defer common.LogWriterMu.Unlock()
+		data, err := os.ReadFile(output.Name())
+		require.NoError(t, err)
+		return string(data)
+	}
+}
+
 func TestRelayFullScanIsTraceableWithoutErrorLog(t *testing.T) {
 	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {})
 	ch := fixture.channel
@@ -86,16 +114,7 @@ func TestRelayFullScanIsTraceableWithoutErrorLog(t *testing.T) {
 	engine.POST("/v1/responses", middleware.RequestId(), middleware.TokenAuth(), middleware.Distribute(), func(c *gin.Context) {
 		t.Fatal("full channel reached the relay")
 	})
-	var output bytes.Buffer
-	common.LogWriterMu.Lock()
-	oldWriter := gin.DefaultErrorWriter
-	gin.DefaultErrorWriter = &output
-	common.LogWriterMu.Unlock()
-	t.Cleanup(func() {
-		common.LogWriterMu.Lock()
-		defer common.LogWriterMu.Unlock()
-		gin.DefaultErrorWriter = oldWriter
-	})
+	readLog := captureRouteErrors(t)
 	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"ws-billing","input":"hello"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer sk-"+fixture.token.Key)
@@ -106,9 +125,7 @@ func TestRelayFullScanIsTraceableWithoutErrorLog(t *testing.T) {
 	require.NotContains(t, response.Body.String(), "full_skips")
 	requestID := response.Header().Get(common.RequestIdKey)
 	require.NotEmpty(t, requestID)
-	common.LogWriterMu.Lock()
-	logged := output.String()
-	common.LogWriterMu.Unlock()
+	logged := readLog()
 	require.Equal(t, 1, strings.Count(logged, "route_scan "))
 	require.Contains(t, logged, requestID+" | route_scan round=1 candidates=1 full_skips=1 result=full")
 	var count int64
@@ -137,4 +154,82 @@ func TestRelayScanSummaryIsAdminOnly(t *testing.T) {
 	require.EqualValues(t, 1, total)
 	require.NotContains(t, user[0].Other, "request_policy")
 	require.NotContains(t, user[0].Other, "full_skips")
+}
+
+func TestRelayPrechargeRejectionKeepsSelectedScan(t *testing.T) {
+	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(1000))`, func(*websocket.Conn, *http.Request) {})
+	var calls atomic.Int32
+	fixture.httpUpstream = func(http.ResponseWriter, *http.Request) { calls.Add(1) }
+	readLog := captureRouteErrors(t)
+	status, body := postResponsesThroughGateway(t, fixture)
+	waitRelayFinished(t, fixture)
+	require.Equal(t, http.StatusForbidden, status, body)
+	require.Zero(t, calls.Load())
+	require.NotContains(t, body, "full_skips")
+	logged := readLog()
+	require.Equal(t, 1, strings.Count(logged, "route_scan "))
+	require.Contains(t, logged, "responses-http-billing | route_scan round=1 candidates=1 full_skips=0 result=selected")
+	require.Contains(t, logged, fmt.Sprintf("channel_id=%d request_status=403", fixture.channel.Id))
+	var rows int64
+	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("request_id = ?", "responses-http-billing").Count(&rows).Error)
+	require.Zero(t, rows)
+}
+
+func TestRelayRoutingStorageFailuresAreTraceable(t *testing.T) {
+	for _, tc := range []struct {
+		name, table, marker string
+		limit               bool
+		status              int
+	}{
+		{"token scope", "token_route_profiles", "route_scope stage=token_route_scope result=error", false, 500},
+		{"candidate lookup", "channels", "route_scan round=1 candidates=0 full_skips=0 result=error", false, 500},
+		{"slot limit", "channels", "route_scan round=1 candidates=1 full_skips=0 result=error", true, 503},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {})
+
+			queryCallbacks := model.DB.Callback().Query()
+			require.NoError(t, queryCallbacks.Before("gorm:query").Register("test:route-store", func(tx *gorm.DB) {
+				if tx.Statement.Table == tc.table && (!tc.limit || slices.Contains(tx.Statement.Selects, "max_concurrency")) {
+					tx.AddError(errors.New("private routing storage error"))
+				}
+			}))
+			t.Cleanup(func() { require.NoError(t, queryCallbacks.Remove("test:route-store")) })
+			if tc.limit {
+				require.Error(t, service.RefreshChannelConcurrencyLimit(context.Background(), fixture.channel.Id))
+			}
+			engine := gin.New()
+			engine.POST("/v1/responses", middleware.RequestId(), middleware.TokenAuth(), middleware.Distribute(), func(*gin.Context) { t.Fatal("storage failure reached relay") })
+			request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"ws-billing","input":"hello"}`))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Authorization", "Bearer sk-"+fixture.token.Key)
+			response := httptest.NewRecorder()
+			readLog := captureRouteErrors(t)
+			engine.ServeHTTP(response, request)
+			require.Equal(t, tc.status, response.Code)
+			id := response.Header().Get(common.RequestIdKey)
+			require.NotEmpty(t, id)
+			logged := readLog()
+			require.Equal(t, 1, strings.Count(logged, id+" | "+tc.marker))
+			if tc.name == "token scope" {
+				require.NotContains(t, logged, "route_scan ")
+			}
+			require.NotContains(t, response.Body.String(), "private routing storage error")
+			require.NotContains(t, response.Body.String(), "route_scan")
+		})
+	}
+}
+
+func TestResponsesWSPrechargeRejectionKeepsSelectedScan(t *testing.T) {
+	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(1000))`, func(*websocket.Conn, *http.Request) {})
+	readLog := captureRouteErrors(t)
+	require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create","model":"ws-billing","input":"hello"}`)))
+	response := readResponsesWSTestEvent(t, fixture.client)
+	require.Equal(t, "error", response["type"])
+	require.Zero(t, fixture.connections.Load())
+	require.NotContains(t, fmt.Sprint(response), "full_skips")
+	logged := readLog()
+	require.Equal(t, 1, strings.Count(logged, "route_scan "))
+	require.Contains(t, logged, "responses-ws-billing-ws-0 | route_scan round=1 candidates=1 full_skips=0 result=selected")
+	require.Contains(t, logged, fmt.Sprintf("channel_id=%d request_status=403", fixture.channel.Id))
 }

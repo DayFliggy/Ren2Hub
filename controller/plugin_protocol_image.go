@@ -16,7 +16,6 @@ import (
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/requestplugin"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -44,7 +43,7 @@ func serveTaskPluginImageProtocol(c *gin.Context, pinned pluginruntime.PinnedEnd
 	// The request plugins' report hooks receive the submission once the
 	// client has the response.
 	defer func() {
-		requestplugin.Report(c, types.RelayFormatTask, relayInfo, nil, taskReportError(taskErr))
+		reportTaskProtocolSubmission(c, relayInfo, taskErr)
 	}()
 	// DashScope bills the images as soon as it accepts the upstream call. A
 	// client that gives up while the submission is in flight must not cancel

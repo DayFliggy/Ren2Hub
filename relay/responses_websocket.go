@@ -262,6 +262,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			info = &relaycommon.RelayInfo{OriginModelName: modelName, StartTime: started}
 			info.SetRequestPluginIngress(ingressSteps, ingressRecord)
 		}
+		if apiErr != nil {
+			service.LogRejectedRouteSelection(c, apiErr.StatusCode)
+		}
 		service.FinishRouteAttempt(c, info, apiErr)
 		perfmetrics.RecordRelayResult(c.Request.Context(), info, apiErr)
 		// Settlement already marks the request policy successful, and nothing
@@ -294,7 +297,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	if ingressErr != nil {
 		ingress := &relaycommon.RelayInfo{}
 		ingress.SetRequestPluginIngress(ingressSteps, ingressRecord)
-		service.RecordRelayErrorLog(c, 0, ingressErr, ingress)
+		service.RecordTerminalRelayErrorLog(c, 0, ingressErr, ingress)
 		return ingressErr
 	}
 	if changed {
@@ -776,7 +779,7 @@ func reloadResponsesWSCreate(c *gin.Context, create *responsesWSCreateRequest) *
 func recordResponsesWSPluginError(c *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) {
 	switch apiErr.GetErrorCode() {
 	case types.ErrorCodeRequestRejected, types.ErrorCodeRequestPluginFailed:
-		service.RecordRelayErrorLog(c, info.ChannelId, apiErr, info)
+		service.RecordTerminalRelayErrorLog(c, info.ChannelId, apiErr, info)
 	}
 }
 

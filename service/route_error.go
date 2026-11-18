@@ -56,6 +56,12 @@ func (e *ChannelSelectError) Text(c *gin.Context) string {
 	return e.Message
 }
 
+// A scope read fails before the token's routing mode and candidate set are known.
+func tokenRouteScopeFailure(c *gin.Context, err error) *ChannelSelectError {
+	logger.LogError(c, common.LogText("route_scope stage=token_route_scope result=error: %v", err))
+	return classifyRouteLoadFailure(err)
+}
+
 func logRouteLoadFailure(c *gin.Context, err error) {
 	logger.LogError(c, common.LogText("load routing candidates failed: %v", err))
 }

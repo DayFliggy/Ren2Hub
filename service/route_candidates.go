@@ -259,6 +259,15 @@ type routeScan struct {
 }
 
 func (s *routeScan) record(c *gin.Context, channel *model.Channel, err error) {
+	// Plugin decoding may canonicalize the model or pin an origin channel.
+	// Publish the successful probe only when Distribute actually reacquires it.
+	if state, ok := common.GetContextKeyType[*taskPluginPreselection](c, taskPluginPreselectionKey); ok && state.selecting && err == nil {
+		if channel != nil {
+			state.scan = s
+		}
+		return
+	}
+
 	result := "no_candidate"
 	channelID := 0
 	switch {
@@ -273,10 +282,9 @@ func (s *routeScan) record(c *gin.Context, channel *model.Channel, err error) {
 		Decision: PolicyDecision{Action: "scan", Reason: result, Source: "routing"}})
 	if channel == nil {
 		// Early admission refusals and the last failed retry may have no database log.
-		message := fmt.Sprintf("route_scan round=%d candidates=%d full_skips=%d result=%s duration_us=%d",
-			s.Round, s.Candidates, s.FullSkips, result, s.DurationUS)
+		message := s.message(result)
 		if err != nil {
-			message += ": " + err.Error()
+			message = common.LogText("%s: %v", message, err)
 		}
 		logger.LogError(c, message)
 	}
@@ -360,18 +368,45 @@ func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) 
 	return nil, model.ErrTokenRouteForbidden
 }
 
+const taskPluginPreselectionKey = "task_plugin_preselection_scan"
+
+type taskPluginPreselection struct {
+	selecting bool
+	scan      *routeScan
+}
+
+// PreselectTaskPluginEndpointChannel chooses a decoder or relay before the final route is known.
+func PreselectTaskPluginEndpointChannel(c *gin.Context, modelName string) (*model.Channel, *ChannelSelectError) {
+	state := &taskPluginPreselection{selecting: true}
+	c.Set(taskPluginPreselectionKey, state)
+	channel, err := SelectChannelForRequest(c, modelName, nil)
+	state.selecting = false
+	return channel, err
+}
+
 // ReacquireSelectedRouteChannel admits a channel chosen before user admission
 // under the request's current filters. A full or no longer eligible channel
 // returns nil so the caller selects again; other failures are reported.
 func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, *ChannelSelectError) {
+	var scan *routeScan
+	if state, ok := common.GetContextKeyType[*taskPluginPreselection](c, taskPluginPreselectionKey); ok {
+		scan, state.scan = state.scan, nil
+	}
+	started := time.Now()
 	channel, err := AcquirePinnedRouteChannel(c, channelID, modelName)
 	if errors.Is(err, ErrConcurrencyFull) || errors.Is(err, model.ErrTokenRouteForbidden) {
 		// The caller selects again, which records affinity use afresh.
 		forgetChannelAffinityUse(c)
 		return nil, nil
 	}
+	if scan != nil {
+		scan.DurationUS += time.Since(started).Microseconds()
+		scan.record(c, channel, err)
+	} else if err != nil {
+		logRouteLoadFailure(c, err)
+	}
 	if err != nil {
-		return nil, routeLoadFailure(c, err)
+		return nil, classifyRouteLoadFailure(err)
 	}
 	return channel, nil
 }

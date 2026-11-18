@@ -80,7 +80,7 @@ python3 -B scripts/testing/run.py candidate --scope auto[,billing,…] --previou
 
 后端各行的改动都会让 `auto` 选中 `upgrade`（连带 `management`），表中只列还要追加的部分。
 
-三库矩阵包含 `model`、`controller`、`service`、`middleware`、`pkg/perf_metrics` 的 161 项登记测试，清单在 `scripts/testing/database.py`。工作区部署脚本（根仓库 `scripts/server/`）用 `python3 -B scripts/test-local.py infra [模块|类|方法]`，路径与测试模块的对照在 task-testing 技能的根仓库适配里。
+三库矩阵包含 `model`、`controller`、`service`、`middleware`、`pkg/perf_metrics` 的登记测试，完整清单在 `scripts/testing/database.py`。工作区部署脚本（根仓库 `scripts/server/`）用 `python3 -B scripts/test-local.py infra [模块|类|方法]`，路径与测试模块的对照在 task-testing 技能的根仓库适配里。
 
 ## 功能链路
 

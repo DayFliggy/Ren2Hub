@@ -140,7 +140,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		// plugins did.
 		ingress := &relaycommon.RelayInfo{}
 		ingress.SetRequestPluginIngress(ingressSteps, ingressRecord)
-		service.RecordRelayErrorLog(c, 0, newAPIError, ingress)
+		service.RecordTerminalRelayErrorLog(c, 0, newAPIError, ingress)
 		return
 	}
 
@@ -402,7 +402,7 @@ func midjourneyRequestPlugins(c *gin.Context, relayInfo *relaycommon.RelayInfo) 
 		relayInfo.SetRequestPluginIngress(relayInfo.RequestPluginSteps, relayInfo.RequestPluginRecord)
 	}
 	if apiErr != nil {
-		service.RecordRelayErrorLog(c, channelID, apiErr, relayInfo)
+		service.RecordTerminalRelayErrorLog(c, channelID, apiErr, relayInfo)
 	}
 	return apiErr
 }
@@ -597,7 +597,7 @@ func executeTaskSubmissionWith(
 	if ingressErr != nil {
 		// The submission reached no channel and reserved nothing; its error
 		// log shows what the plugins did.
-		service.RecordRelayErrorLog(c, 0, ingressErr, relayInfo)
+		service.RecordTerminalRelayErrorLog(c, 0, ingressErr, relayInfo)
 		taskErr = requestplugin.TaskError(ingressErr)
 		diagnostics.failed(stage, "request_plugin", taskErr, false)
 		return nil, taskErr

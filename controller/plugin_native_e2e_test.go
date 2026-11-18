@@ -533,6 +533,7 @@ export function buildQueryRequest(ctx) { return {url: ctx.baseUrl + "/query"}; }
 export function parseTaskResult() { return {status: "SUCCESS"}; }`,
 		`export const meta = {apiVersion: 1, key: "rp-task", name: "Task", version: "1.0.0", author: {name: "Test"}};
 export function ingress(ctx, req) {
+  if (ctx.config.fail) throw new Error("ingress fixture");
   if (ctx.config.reject) return {action: "reject", code: "blocked.task", message: "No " + ctx.format};
   return {action: "continue", effects: [{type: "json.patch", ops: [{op: "replace", path: "/prompt", value: req.body.prompt.replace("a@b.c", "[email]")}]}]};
 }
@@ -596,8 +597,17 @@ export function egress(ctx, req) {
 	assert.Equal(t, 1_000_000, quota())
 	errorLog := lastLog(model.LogTypeError)
 	assert.Zero(t, errorLog.ChannelId)
+	assert.Equal(t, "stop", gjson.Get(errorLog.Other, "admin_info.request_policy.0.decision.action").Str)
 	assert.JSONEq(t, `[{"plugin":"rp-task","name":{"en":"Task"},"stage":"ingress","rejected":{"code":"blocked.task"}}]`, gjson.Get(errorLog.Other, "request_plugins").Raw)
 	assert.Equal(t, "reject", gjson.Get(errorLog.Other, "admin_info.request_plugins.0.action").Str)
+
+	recorder, _, taskErr = submit(`[{"id":"door","name":"Door","plugin":"rp-task","enabled":true,"global":true,"config":{"fail":true}}]`, "task_rp_failed")
+	require.NotNil(t, taskErr)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assert.Empty(t, sent)
+	errorLog = lastLog(model.LogTypeError)
+	assert.Equal(t, "request_plugin_failed", gjson.Get(errorLog.Other, "error_code").Str)
+	assert.Equal(t, "stop", gjson.Get(errorLog.Other, "admin_info.request_policy.0.decision.action").Str)
 
 	// The redacted prompt is what the task plugin decodes, prices, sends and
 	// stores; the consume log shows the change.

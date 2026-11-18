@@ -138,7 +138,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		return selectOriginTaskChannel(c, pin.ChannelId, modelName)
 	}
 	if err := LoadTokenRouteConstraints(c); err != nil {
-		return nil, routeLoadFailure(c, err)
+		return nil, tokenRouteScopeFailure(c, err)
 	}
 	if !pinned && !HasPrivateTokenRoute(c) && (retry == nil || retry.GetRetry() == 0) {
 		if row, selectErr, decided := selectAffinityChannel(c, modelName); decided {

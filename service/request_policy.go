@@ -49,7 +49,7 @@ type RequestPolicyState struct {
 	OutcomeRecorded   bool
 	mu                sync.Mutex
 	events            []PolicyEvent
-	scanRounds        int
+	scans             routeScanState
 }
 
 func RequestPolicy(c *gin.Context) *RequestPolicyState {
@@ -73,8 +73,7 @@ func (s *RequestPolicyState) AddEvent(event PolicyEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if event.Scan != nil {
-		s.scanRounds++
-		event.Scan.Round = s.scanRounds
+		s.scans.track(event)
 	}
 	if len(s.events) < 512 {
 		s.events = append(s.events, event)
@@ -175,6 +174,7 @@ func RecordRequestPolicyTermination(c *gin.Context, apiErr *types.NewAPIError) {
 		return
 	}
 	state.FinalLogged = true
+	LogRejectedRouteSelection(c, apiErr.StatusCode)
 	events := state.Events()
 	if len(events) == 0 || events[len(events)-1].Decision.Action != "stop" {
 		state.AddEvent(PolicyEvent{ChannelID: c.GetInt("channel_id"), Status: apiErr.StatusCode, ErrorCode: string(apiErr.GetErrorCode()), Decision: PolicyDecision{Action: "stop", Reason: "request_failed", Source: "system"}, Health: "unchanged"})

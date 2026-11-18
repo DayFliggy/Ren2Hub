@@ -33237,5 +33237,126 @@
     "path": "/home/work/ren2hub-native-b388-20261114/inventory/merged-review-v4.json",
     "sha256": "86c8535a5fc8396932c41aa9973acc49b02ca88f041059df7c46f995b23151fc"
   },
-  "round5_adjudication_count": 1
+  "round5_adjudication_count": 1,
+  "current_file_reviews": {
+    "controller/plugin_protocol.go": {
+      "local_sha256": "e8687f997ac8ac19eacaece27d9341746a5c28e83f82a9a0b7004476fab40e99",
+      "hunks": [
+        {
+          "header": "@@ -252,7 +252,7 @@",
+          "sha256": "403b13b1a8a3ac9b8a455539de289db0ec7029aaa9c9d2596154c69aa1190280",
+          "basis": "Responses 任务提交在 defer 中转交共用的提交收尾函数，客户端提前断开时也会执行。"
+        },
+        {
+          "header": "@@ -1239,6 +1239,13 @@",
+          "sha256": "7df72001d2e66708b4938939b0e2672a2fd1d2e9065565f753983af41a17f1a0",
+          "basis": "共用收尾函数在请求插件报告前，以真实任务错误记录本次请求终止。成功提交不会写失败事件。"
+        }
+      ],
+      "regression": "controller/plugin_protocol_test.go:TestDisconnectedTaskProtocolsLogLocalSubmissionRejection"
+    },
+    "controller/plugin_protocol_image.go": {
+      "local_sha256": "6dc9f47e9247f17272636fbae771ed5248c4254a7f4ce937f0df5eeacd3c319d",
+      "hunks": [
+        {
+          "header": "@@ -16,7 +16,6 @@",
+          "sha256": "93a1772163d38b33199ff2395497702bb8785f02086372d993d6406643e34604",
+          "basis": "图像任务协议改用同一提交收尾函数，从文件中去掉直接调用请求插件报告的导入。"
+        },
+        {
+          "header": "@@ -44,7 +43,7 @@",
+          "sha256": "9e1ec515cc554e5b62a7a2d39ae7e9778004f050dcc0259fb3bf358ad9384676",
+          "basis": "图像任务提交的 defer 走共用收尾函数，客户端断开后仍可按请求 ID 追踪实际的本地拒绝。"
+        }
+      ],
+      "regression": "controller/plugin_protocol_test.go:TestDisconnectedTaskProtocolsLogLocalSubmissionRejection"
+    },
+    "relay/channel/providerplugin/chain.go": {
+      "local_sha256": "c58f5a459a8ad8e337a85c63159cdd1f708ca24d8ecdf779f5d633e2ff8b507a",
+      "hunks": [
+        {
+          "header": "@@ -19,6 +19,7 @@",
+          "sha256": "54c3b6c71ff4b43c840b71745788ed3c429fd6aa5ccc80e44e10975f0120d5d5",
+          "basis": "引入 service 以调用选渠诊断的发送标记。"
+        },
+        {
+          "header": "@@ -358,6 +359,7 @@",
+          "sha256": "c726e1350d3b95ebee5152f431697d2dc40f85c6a8a34e9d88c8086a1821ae57",
+          "basis": "提供商插件完成本地校验后，在直连 WebSocket 握手前清除尚未发送的扫描摘要。"
+        }
+      ],
+      "regression": "router/provider_plugin_gaps_test.go:TestGapsUpstreamWebSocket/rejected_handshake"
+    },
+    "relay/channel/xunfei/relay-xunfei.go": {
+      "local_sha256": "97a881a8dbd471aba77ef13ca1fbd001d02b3ad028567920b988c4fbb473c6db",
+      "hunks": [
+        {
+          "header": "@@ -16,6 +16,7 @@",
+          "sha256": "ecd8ccc0a3ef7cc6f527c9009de17a7a15bf579cb4a3d189f0f0bac6da34afc4",
+          "basis": "引入 service 记录流首输出及发送标记。"
+        },
+        {
+          "header": "@@ -130,7 +131,7 @@",
+          "sha256": "6fe0588411b9bc5bcddbfa0357a24d4377dc35697309645b47c7aa104cf5266b",
+          "basis": "流式入口将请求上下文传至拨号函数。"
+        },
+        {
+          "header": "@@ -149,6 +150,7 @@",
+          "sha256": "88b6ac358fe6edf9edd26bb16c786c18ff8a23c7dfe70b36f1e56b741b4fcb0e",
+          "basis": "已写出的供应商流输出参与渠道性能观察。"
+        },
+        {
+          "header": "@@ -160,7 +162,7 @@",
+          "sha256": "32eb26029d376cf710be617c39e9c0c3a51d9293afa88699e7be4e5b2ff162dc",
+          "basis": "普通入口使用相同的上下文传递。"
+        },
+        {
+          "header": "@@ -200,10 +202,11 @@",
+          "sha256": "d05e924807208ad42f37b411ceb2bbeb923a8bf0d9ff79bf482e5f36889397ba",
+          "basis": "直连拨号前清除待发送扫描记录，握手失败归为已发送。"
+        }
+      ],
+      "regression": "relay/channel/xunfei/route_scan_test.go:TestRouteScanBeforeAndAfterXunfeiDial"
+    },
+    "service/request_policy.go": {
+      "local_sha256": "ba98da85ac3df904b82806d5eb95e16232ad4336a4f3a819fef8beae2adbd976",
+      "hunks": [
+        {
+          "header": "@@ -25,7 +25,6 @@",
+          "sha256": "ac7ed9e857e1c025372e483f5a3d5f54f5567e8aacab0f39c0a9530beb45766e",
+          "basis": "移除 PolicyEvent.Group，日志延续平台渠道身份。"
+        },
+        {
+          "header": "@@ -33,6 +32,7 @@",
+          "sha256": "1fcd9c0b21c08878b278b689d15175bd4092dbdbc674266dd08a740fd5245ef8",
+          "basis": "PolicyEvent.Scan 仅在自动扫描事件中序列化，随管理员请求策略导出。"
+        },
+        {
+          "header": "@@ -42,7 +42,6 @@",
+          "sha256": "399e37831da74b7e60d5929d990a3a41f0fdb4e19683d907df526b78b530831e",
+          "basis": "移除按业务分组选择渠道的 SelectedGroup 状态。"
+        },
+        {
+          "header": "@@ -50,6 +49,7 @@",
+          "sha256": "022f92772810f4b659d3fbbac23c5adcd510276ef6255cbfe688f9fe0f1f201f",
+          "basis": "routeScanState 为每个请求保存轮次和已选择但尚未发送的渠道。"
+        },
+        {
+          "header": "@@ -67,14 +67,14 @@",
+          "sha256": "0b4753aef5443520c60f470136db0fc8979aaa561aeceb734025a090e3c94277",
+          "basis": "AddEvent 在策略事件锁内跟踪扫描结果和轮次，沿用事件上限，取消业务分组的默认填充。"
+        },
+        {
+          "header": "@@ -86,11 +86,10 @@",
+          "sha256": "d7a51414384dfbdac0b4ea372d5fbc389ec946e3f2f4e6100c184d9152c33e4d",
+          "basis": "BeginAttempt 仍按渠道记录中继尝试，省去分组参数及写回。"
+        },
+        {
+          "header": "@@ -175,6 +174,7 @@",
+          "sha256": "03479f7c3d460ef77b9ac417ae29c529f56d170fdf5cf02c5ede3714fdad061a",
+          "basis": "首次终止时输出选中后、上游发送前遭拒的扫描摘要，保留原生终止决策和错误码。"
+        }
+      ]
+    }
+  }
 }

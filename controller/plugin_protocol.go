@@ -252,7 +252,7 @@ func serveTaskPluginProtocol(
 	// The request plugins' report hooks receive the submission once the
 	// client has the response.
 	defer func() {
-		requestplugin.Report(c, types.RelayFormatTask, relayInfo, nil, taskReportError(taskErr))
+		reportTaskProtocolSubmission(c, relayInfo, taskErr)
 	}()
 	submissionStage := "relay_info"
 	// A Responses client only observes an asynchronous task. Once admitted,
@@ -1237,6 +1237,13 @@ func writeTaskPluginProtocolEvent(c *gin.Context, event dto.PluginResponsesStrea
 		event.SequenceNumber,
 	)
 	return nil
+}
+
+// The submission result is available even when its client has already disconnected.
+func reportTaskProtocolSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo, taskErr *dto.TaskError) {
+	err := taskReportError(taskErr)
+	service.RecordRequestPolicyTermination(c, err)
+	requestplugin.Report(c, types.RelayFormatTask, relayInfo, nil, err)
 }
 
 func respondPluginProtocolSubmissionError(c *gin.Context, taskErr *dto.TaskError) {

@@ -25,6 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -272,6 +273,30 @@ export function convertStreamEvent(ctx, input) {
   return {send: ["bye"], body: chatReply(state.text, usage)};
 }
 ` + gapsChatHelpers
+	t.Run("rejected handshake", func(t *testing.T) {
+		harness := newRelayHarness(t)
+		registerRelayPlugin(t, source)
+		harness.upstream.respond = func(w http.ResponseWriter, _ int, _ capturedRequest) { w.WriteHeader(http.StatusForbidden) }
+		harness.install(t, harness.pluginChannel("gaps-ws", "sk-static"))
+		var logged bytes.Buffer
+		common.LogWriterMu.Lock()
+		previous := gin.DefaultErrorWriter
+		gin.DefaultErrorWriter = &logged
+		common.LogWriterMu.Unlock()
+		defer func() {
+			common.LogWriterMu.Lock()
+			gin.DefaultErrorWriter = previous
+			common.LogWriterMu.Unlock()
+		}()
+
+		outcome := harness.post(t, "/v1/chat/completions", relayTestBody)
+		require.GreaterOrEqual(t, outcome.status, 400)
+		require.Len(t, harness.upstream.captured(), 1)
+		common.LogWriterMu.Lock()
+		output := logged.String()
+		common.LogWriterMu.Unlock()
+		require.NotContains(t, output, "result=selected", "an upstream handshake rejection is already dispatched")
+	})
 	for name, tc := range map[string]struct {
 		body     string
 		want     []string

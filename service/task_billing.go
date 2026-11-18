@@ -74,6 +74,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 		setTaskImageCount(other, info.PriceData.OtherRatios()["image_count"])
 	}
 	appendTaskLogInfo(task, other)
+	appendRequestPolicyAdminInfo(c, other)
 	attachQuotaSaturation(c, info, other)
 	if len(info.RequestPluginSteps) > 0 {
 		other.SetAdmin("request_plugins", info.RequestPluginSteps)

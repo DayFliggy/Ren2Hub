@@ -95,6 +95,10 @@ func AppendRelayLogAdminInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 	}
 
 	AppendChannelAffinityAdminInfo(ctx, other)
+	appendRequestPolicyAdminInfo(ctx, other)
+}
+
+func appendRequestPolicyAdminInfo(ctx *gin.Context, other *model.LogOther) {
 	if events := RequestPolicy(ctx).Events(); len(events) > 0 {
 		other.SetAdmin("request_policy", events)
 	}

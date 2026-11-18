@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 881,
-    "adapted": 281,
-    "extension": 382,
+    "upstream_equal": 876,
+    "adapted": 286,
+    "extension": 384,
     "removed": 45
   },
   "files": [
@@ -1989,19 +1989,41 @@
       "path": "controller/plugin_native_e2e_test.go",
       "status": "adapted",
       "upstream_sha256": "e44dcc9d9fc3369890abe2153b2edfa340009a0b4e84f046d947546302b2beff",
-      "local_sha256": "9aaa49f20bd7f28fc06b974e0b386c7959bb3381ac6a3277a7691f01895004d4"
+      "local_sha256": "ae393bf4ea8e4bd6566edaaeab384c940fff096325c28d503bb33bda0de8ea9f",
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "TestTaskSubmissionRunsRequestPlugins 验证任务入口插件拒绝及必需插件失败时落库的终止决策。"
+      }
     },
     {
       "path": "controller/plugin_protocol.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "94f1b7449f3bc415d9ff860926ac9fed39f2db2861b1b3fda040963de5d88bbf",
-      "local_sha256": "94f1b7449f3bc415d9ff860926ac9fed39f2db2861b1b3fda040963de5d88bbf"
+      "local_sha256": "e8687f997ac8ac19eacaece27d9341746a5c28e83f82a9a0b7004476fab40e99",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "断连后记录实际任务提交结果的最小接点，见 SYNC_LEDGER.md#自动选渠诊断接点 及 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "hunk_review": "NATIVE_B388_REVIEW.json",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "controller/plugin_protocol_image.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "02bada0519a00bc30f425fe4fbf5180b012a6dd2228a99eccf1499b051d2324f",
-      "local_sha256": "02bada0519a00bc30f425fe4fbf5180b012a6dd2228a99eccf1499b051d2324f"
+      "local_sha256": "6dc9f47e9247f17272636fbae771ed5248c4254a7f4ce937f0df5eeacd3c319d",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "断连后记录实际任务提交结果的最小接点，见 SYNC_LEDGER.md#自动选渠诊断接点 及 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "hunk_review": "NATIVE_B388_REVIEW.json",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "controller/plugin_protocol_limiter.go",
@@ -2025,7 +2047,7 @@
       "path": "controller/plugin_protocol_test.go",
       "status": "adapted",
       "upstream_sha256": "b78a1a551b1d13a3b40126426dc84050e323a00208cf9efc5020f87af32e201f",
-      "local_sha256": "aa22a415efc1a23ffd76e34bdf32d865e15a0aadb197c8521a02406fb3e49712"
+      "local_sha256": "201a8f370e1ea7c45ba291da1ab4213d9ccbe8b8a9f7633216b4b39a69aee2ee"
     },
     {
       "path": "controller/prefill_group.go",
@@ -2167,7 +2189,7 @@
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "478c7d453db4e6e64bfb440eab14fda1c31d6e9d493f6231aaf73c9f5f8c64d6",
-      "local_sha256": "df6cf1e65b5e1ec1a49f4bdd2fab228c294436093cb3d43a9f34dbb2534f644a",
+      "local_sha256": "65f206031cb5d8c6a8de0a10a71d8c7b6ed390c98455409785ab61f3d13d63ec",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -2179,7 +2201,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2223,7 +2245,7 @@
       "path": "controller/relay_route_selection_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "87dbba0d70a65ac11bb3d56362a7f22133780ee76cbb3e71009698a0c171e9c2"
+      "local_sha256": "cc9a57e2c29c72b9b8f257c63161b562a4d423c86a3b1bd6f0b52b60252a649a"
     },
     {
       "path": "controller/relay_stream_test.go",
@@ -2271,7 +2293,7 @@
       "path": "controller/relay_task_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5e8775289dc08c8a1f9f522e73ab14ba772bff9a25c9ad50026496b6a29e3a95"
+      "local_sha256": "789047691d9a7bd1d61ec016497e6abb477accc13abca6f44c1884722481d425"
     },
     {
       "path": "controller/relay_task_selection_error_test.go",
@@ -2313,9 +2335,13 @@
     },
     {
       "path": "controller/responses_websocket_plugin_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "9edba2c470bae2cc70309c8cc9e1458e5eaabc9ea7d2822e14337007fd8b8866",
-      "local_sha256": "9edba2c470bae2cc70309c8cc9e1458e5eaabc9ea7d2822e14337007fd8b8866"
+      "local_sha256": "2ccf8ac242b1a9f2f229778336230d0c64d03a481b7cdc06666f243bf826209d",
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "TestResponsesWebSocketRunsRequestPlugins 验证入口拒绝和必需出站插件失败时，错误行包含唯一终止决策且错误码一致。"
+      }
     },
     {
       "path": "controller/responses_websocket_private_route_test.go",
@@ -3987,7 +4013,7 @@
       "path": "middleware/task_plugin.go",
       "status": "adapted",
       "upstream_sha256": "fd0f9d8922762268154cbe031d44d14dba8ef98bb399b10b13572e5a3f295ed1",
-      "local_sha256": "90136ebb7811551ab7c9fcb99874620eeb63edb2fba18634e84b6aa2eec15999",
+      "local_sha256": "be46a9fcb2b79cd32545ddc1bc5db46a92aa5d8f7888568837516987a4730b21",
       "reasons": [
         "concurrency",
         "group-removal",
@@ -3996,7 +4022,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/task_plugin.go#1, middleware/task_plugin.go#2, middleware/task_plugin.go#3, middleware/task_plugin.go#4, middleware/task_plugin.go#7, middleware/task_plugin.go#8",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/task_plugin.go#1, middleware/task_plugin.go#2, middleware/task_plugin.go#3, middleware/task_plugin.go#4, middleware/task_plugin.go#7, middleware/task_plugin.go#8。共享端点试选调用延迟记录的选择器，见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4013,7 +4039,7 @@
       "path": "middleware/task_plugin_endpoint_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ae2f6c0abf1623b8416a4d5aec28ca77b4aa954042aae8c2f135a847a94d18c6"
+      "local_sha256": "f00a3f8cfd8823096139de63b3cf5e780051f41c81f4a289f757f6efcaf6ae90"
     },
     {
       "path": "middleware/task_plugin_model.go",
@@ -8311,9 +8337,18 @@
     },
     {
       "path": "relay/channel/providerplugin/chain.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "d75339dd06f7195c1cd686bf11d2fee37a3f6e467ec3c5811976000f8e737d22",
-      "local_sha256": "d75339dd06f7195c1cd686bf11d2fee37a3f6e467ec3c5811976000f8e737d22"
+      "local_sha256": "c58f5a459a8ad8e337a85c63159cdd1f708ca24d8ecdf779f5d633e2ff8b507a",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "hunk_review": "NATIVE_B388_REVIEW.json",
+        "current_hunk_review": true,
+        "basis": "直接 WebSocket 拨号的选渠诊断及当前逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。"
+      }
     },
     {
       "path": "relay/channel/providerplugin/eventstream.go",
@@ -8709,20 +8744,27 @@
       "path": "relay/channel/xunfei/relay-xunfei.go",
       "status": "adapted",
       "upstream_sha256": "6e370aa46c89d389e5d67335181b3a9b7306c193a936bb1df1ee53682c3f5567",
-      "local_sha256": "59379b5837155a819b0b96d4118b0b2c82cf10c930da04791f3f8c4d53b519c2",
+      "local_sha256": "97a881a8dbd471aba77ef13ca1fbd001d02b3ad028567920b988c4fbb473c6db",
       "reasons": [
         "token-routing"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/xunfei/relay-xunfei.go#1, relay/channel/xunfei/relay-xunfei.go#2",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/xunfei/relay-xunfei.go#1, relay/channel/xunfei/relay-xunfei.go#2 直接 WebSocket 拨号的选渠诊断及当前逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "relay/channel/xunfei/relay-xunfei.go#1",
           "relay/channel/xunfei/relay-xunfei.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
+    },
+    {
+      "path": "relay/channel/xunfei/route_scan_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "698ba772504bff42fbc24dc7d2fbf8b3eed369fd186fe2916c87d3d9b51860c5"
     },
     {
       "path": "relay/channel/zhipu/adaptor.go",
@@ -9732,7 +9774,7 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "5eff80a23e4c69573bb6598fec1a14205a59202833abdce7b8033557395a5b07",
-      "local_sha256": "a8240649430cfd1b76a51d3e1614a315f8ed749f1ddb37007280685673868ad3",
+      "local_sha256": "217bf86087501ff1ec2d610d626597905f0da2b374d58cd7b05aeaa85250aeb0",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -9741,7 +9783,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11064,9 +11106,13 @@
     },
     {
       "path": "router/provider_plugin_gaps_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "45242601d3d67663f18b7b87fd03a969c4d40a53bf0ca3bbf21619a97fa30db7",
-      "local_sha256": "45242601d3d67663f18b7b87fd03a969c4d40a53bf0ca3bbf21619a97fa30db7"
+      "local_sha256": "a7461993ccb4c8f0d6b34a436bf217db10d8646df72fbd9261bb0f55bbe51ca2",
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "TestGapsUpstreamWebSocket 的 rejected_handshake 子例验证提供商插件拨号失败时已经清除待发送扫描记录。"
+      }
     },
     {
       "path": "router/provider_plugin_relay_test.go",
@@ -11606,7 +11652,7 @@
       "path": "service/channel_select.go",
       "status": "adapted",
       "upstream_sha256": "aa425048996ac7f7d1b35e777717d705b3fef3aa44e8b196a048d3acfce35c60",
-      "local_sha256": "9cf13a49f1806ffabc9f2ef20e02f627e049140d7024dcd5658d41a3c0ac3fec",
+      "local_sha256": "3c89cce2fda0ced212c42bbfc5ac5d815fa23504cb8dbe73af8d33e861ab1641",
       "reasons": [
         "concurrency",
         "group-removal",
@@ -11615,7 +11661,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_select.go#1, service/channel_select.go#2, service/channel_select.go#3, service/channel_select.go#4, service/channel_select.go#5, service/channel_select.go#6, service/channel_select.go#7",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_select.go#1, service/channel_select.go#2, service/channel_select.go#3, service/channel_select.go#4, service/channel_select.go#5, service/channel_select.go#6, service/channel_select.go#7。读取 Token 路由策略失败时保留配置阶段的错误来源，见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12200,15 +12246,16 @@
       "path": "service/log_info_generate.go",
       "status": "adapted",
       "upstream_sha256": "aa9443a1a8a607dfe9bb3297bfb34c1949b8015ade379756e9006dc7a97b9398",
-      "local_sha256": "ac0f777b2667f6ba6eb66af90eb4e1a343d2a3496fed8fe2ba686b921c527725",
+      "local_sha256": "1b3e9f0b26a00db5deb10274632ec4042720f7e8ad67a7a40edf55aa1c39792e",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired"
+        "retired",
+        "token-routing"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/log_info_generate.go#1, service/log_info_generate.go#2, service/log_info_generate.go#3, service/log_info_generate.go#4, service/log_info_generate.go#5, service/log_info_generate.go#6",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/log_info_generate.go#1, service/log_info_generate.go#2, service/log_info_generate.go#3, service/log_info_generate.go#4, service/log_info_generate.go#5, service/log_info_generate.go#6。普通中继与任务消费日志共用请求策略的管理员字段，见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12663,13 +12710,14 @@
       "path": "service/request_policy.go",
       "status": "adapted",
       "upstream_sha256": "0d9b8b91e5ad0eec7926520ce82fa4a70a6ea949496850b524ba404f0cf51e32",
-      "local_sha256": "3cb1692fce05ad84dd4e3f05aef3cd2f20ddff7dc1e99c85a15fad09fe51b48f",
+      "local_sha256": "ba98da85ac3df904b82806d5eb95e16232ad4336a4f3a819fef8beae2adbd976",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "token-routing"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12677,7 +12725,8 @@
           "service/request_policy.go#2",
           "service/request_policy.go#3",
           "service/request_policy.go#4"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -12739,7 +12788,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "160fc54772b883390e0ad3f10524b95048f103cfb5a7f365efef61aee48ad573",
+      "local_sha256": "f9943ebc3bc79997da4c97cbe84dee9d529bf5954b2459fd196a85b56ab04e8b",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -12789,13 +12838,13 @@
       "path": "service/route_breaker_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9335c989590338b9d332400f244b7f593a927b95025b39fb7f4ae20a9b1e3b5b"
+      "local_sha256": "25b1f95a9fe21906318c2c6af92bea15bdb42693174af3929a058c657ab2be74"
     },
     {
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ec70f3349766f7b74cb77b0f0baedab23bb821c867a252d1e6db13c2122efeee",
+      "local_sha256": "25be368d1f970926c066b5042348c46e9beb2dabeab5fc2ecb91a3075dc24e92",
       "reasons": [
         "concurrency",
         "origin-task-continuation",
@@ -12815,7 +12864,7 @@
       "path": "service/route_error.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3f393655a5e3dfa57e6be251233b764491e2bfb16413fbaf675d11dd104e367c",
+      "local_sha256": "311651667613776ccdb0a203686a71dccc590ffd756076591465f49471a94950",
       "reasons": [
         "token-routing"
       ],
@@ -12889,6 +12938,19 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "a0d8aabc54927c6d28ab6252d287d0d79893894f45ff1057d7f994d8747b21f7"
+    },
+    {
+      "path": "service/route_scan_rejection.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4db32e792a4a759642d1e52d2b313a26d70275772e5a93c4a4729e7d831d69b3",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "自动选渠后、本地拒绝发送的请求级诊断扩展。同一扩展也提供本地终止错误的写入点，先记录策略终止，再写错误日志。见 SYNC_LEDGER.md#自动选渠诊断接点。"
+      }
     },
     {
       "path": "service/route_scan_test.go",
@@ -13052,15 +13114,16 @@
       "path": "service/task_billing.go",
       "status": "adapted",
       "upstream_sha256": "1f41e2e6a0b5f375220fda35838c537285e2fde7b292cf97dfbd4da16ff91646",
-      "local_sha256": "7626a96ad1cea5f640a0dabb6b91dbb3485e3807e07ef964129b1a2fee2823b6",
+      "local_sha256": "dca429c8736eae450e2b2e2cdbb5403f7efb8ed489af328213657627181e1231",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired"
+        "retired",
+        "token-routing"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_billing.go#1, service/task_billing.go#10, service/task_billing.go#2, service/task_billing.go#3, service/task_billing.go#4, service/task_billing.go#5, service/task_billing.go#6, service/task_billing.go#7, service/task_billing.go#8, service/task_billing.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_billing.go#1, service/task_billing.go#10, service/task_billing.go#2, service/task_billing.go#3, service/task_billing.go#4, service/task_billing.go#5, service/task_billing.go#6, service/task_billing.go#7, service/task_billing.go#8, service/task_billing.go#9。LogTaskConsumption 将本次请求的策略事件接入管理员消费日志，见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [

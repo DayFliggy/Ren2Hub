@@ -18,7 +18,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 上游 `payment_setting.amount_discount`。
 - 上游 #8247：本地已在 `InsertWithTx` 的同一事务里写入 OAuth 邀请人。
 
-来源清单 `CORE_SOURCE_DELTA.json` 按文件登记状态、哈希、合同理由和审查依据，现为 881 `upstream_equal`、281 `adapted`、357 `extension`、45 `removed`。改动核心目录后用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 对象的只读 NewAPI 检出>` 重算；`--check-local` 只核对本地哈希，不需要上游检出。
+来源清单 `CORE_SOURCE_DELTA.json` 按文件登记状态、哈希、合同理由和审查依据，各分类的当前文件数见清单的 `counts`。改动核心目录后用 `scripts/refresh-core-source-delta.py --upstream-repo <含 b388 对象的只读 NewAPI 检出>` 重算；`--check-local` 只核对本地哈希，不需要上游检出。
 
 ## 现行本地差异
 
@@ -42,6 +42,17 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 带 `no-builtin-prices` 理由的文件（如 `setting/ratio_setting/model_ratio.go`、`relay/helper/price.go`、`service/text_quota.go`）逐提交手工合并：丢弃模型默认价格和内置表达式的增删，只吸收计费维度和计算逻辑。`setting/operation_setting/tools.go` 与上游一致，照常吸收。
 - 退役前缀在 `router/web-router.go` 的 `retiredAPIPrefixes`，上游在这些前缀下新增路由时不注册。
 - `router/web-router.go` 在原生 `ServeFrontendFiles` 之前挂 `ServeFrontendBrotliFiles`（扩展文件 `middleware/frontend_static_brotli.go`）：`scripts/prepare-frontend-embed.mjs` 构建时给 js、mjs、css、svg、json、webmanifest、txt 写入更小的 `<文件>.br`（质量 11）并一同嵌入；请求接受 `br`（合法 q 值大于 0）且该文件存在时由 `http.ServeContent` 原样发送，条件请求、HEAD 和单段 Range 按该文件应答；多段 Range 的 multipart 正文不是 brotli 流，所以忽略 Range、返回完整 `.br`（200），条件请求照常；服务端不压缩，其余请求照原生走 gzip 或原文件。上游改 `ServeFrontendFiles` 的路径判断、响应头或缓存时对照这里。
+
+### 自动选渠诊断接点
+
+合并上游的请求策略、任务计费和共享端点代码时，对照[渠道路由合同](../routing/UNIFIED_ROUTING.md)保留下列接点。
+
+- `service/request_policy.go` 把选渠摘要挂在管理员策略事件中，由路由扩展维护轮次和实际发送前的状态。相对冻结上游的现行逐段依据见 `NATIVE_B388_REVIEW.json` 的 `current_file_reviews`。刷新来源清单时会复核源文件与差异段的指纹。
+- HTTP 请求终止及 Responses WebSocket 每次 create 的错误收尾读取待发送的扫描记录。传输层在真正开始发送时清除此记录，预扣等本地拒绝则按请求 ID 输出诊断。提供商插件和讯飞的 WebSocket 各自直接拨号，两个拨号点在握手前调用 `MarkRouteScanDispatched`。
+- Responses 与图像任务协议在提交收尾时共用 `reportTaskProtocolSubmission`。客户端断开后，这个接点仍将选中渠道后发生的本地拒绝交给策略记录，然后调用原有请求插件报告。两个分支的回归用例是 `controller.TestDisconnectedTaskProtocolsLogLocalSubmissionRejection`。
+- 请求插件在普通中继、任务、Midjourney 和 Responses WebSocket 的本地错误出口调用 `RecordTerminalRelayErrorLog`。它先记录请求终止，再把策略事件连同错误写入日志。
+- 普通中继消费日志和 `service/task_billing.go` 的 `LogTaskConsumption` 共用 `service/log_info_generate.go` 的 `appendRequestPolicyAdminInfo`，事件只写在已有日志的管理员字段中。
+- `middleware/task_plugin.go` 在共享端点试选时调用 `PreselectTaskPluginEndpointChannel`，保留规范模型名回退与原任务固定渠道的处理顺序。选渠前读取 Token 路由策略失败时，错误在 `service/channel_select.go` 单独记录。
 
 ### 充值加赠接点
 

@@ -24,7 +24,7 @@ LABEL = "io.ren2hub.local-test.run-id"
 IMAGES = {"mysql": "mysql:8.4", "postgres": "postgres:15.19"}
 # 显式清单使测试改名、被删除或未运行都成为失败，而非自动缩减覆盖范围。
 MATRIX_TESTS = {
-    "middleware": ("TestRouteTaskPluginEndpointUsesSelectedChannel",),
+    "middleware": ("TestRouteTaskPluginEndpointUsesSelectedChannel", "TestTaskPluginEndpointScanDiagnostics"),
     "model": (
         "TestTokenRoutingDatabases", "TestTokenRouteChannelMutationLockOrderDatabases",
         "TestAuthCacheIntegrityDatabaseMatrix", "TestGmpayAndTicketDatabaseContracts",

@@ -29,6 +29,10 @@ export function ingress(ctx, req) {
   if (!input.includes("secret")) return {action: "continue"};
   return {action: "continue", effects: [{type: "json.patch", ops: [{op: "replace", path: "/input", value: input.replaceAll("secret", "[redacted]")}]}]};
 }
+export function egress(ctx, req) {
+  if (req.body.input === "fail outbound") throw new Error("outbound fixture");
+  return {action: "continue"};
+}
 export function reply(ctx, res) {
   const result = {action: "continue", mask: []};
   for (const output of res.outputs) {
@@ -117,6 +121,13 @@ func TestResponsesWebSocketRunsRequestPlugins(t *testing.T) {
 	assert.Equal(t, "request_rejected", rejected["error"].(map[string]any)["code"])
 	assert.Empty(t, received)
 
+	// A failed required egress hook stops the create before the upstream connection opens.
+	create("fail outbound")
+	outbound := readResponsesWSTestEvent(t, client)
+	assert.Equal(t, "error", outbound["type"])
+	assert.Equal(t, float64(http.StatusInternalServerError), outbound["status"])
+	assert.Empty(t, received)
+
 	// The ingress patch reaches the upstream and the reply is masked.
 	create("my secret plan")
 	assert.Equal(t, "my [redacted] plan", gjson.Get(upstream(), "input").Str)
@@ -171,8 +182,14 @@ func TestResponsesWebSocketRunsRequestPlugins(t *testing.T) {
 		assert.JSONEq(t, want, stripRecordNames(t, record.Raw), logs[index].Other)
 	}
 	var errorLogs []model.Log
-	require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeError).Find(&errorLogs).Error)
-	require.Len(t, errorLogs, 1)
+	require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeError).Order("id").Find(&errorLogs).Error)
+	require.Len(t, errorLogs, 2)
+	for _, row := range errorLogs {
+		events := gjson.Get(row.Other, `admin_info.request_policy.#(decision.action=="stop")#`).Array()
+		require.Len(t, events, 1, row.Other)
+		assert.Equal(t, gjson.Get(row.Other, "error_code").Str, events[0].Get("error_code").Str)
+	}
+	assert.Equal(t, "request_plugin_failed", gjson.Get(errorLogs[1].Other, "request_plugins.0.rejected.code").Str)
 	assert.Contains(t, errorLogs[0].Content, "Blocked")
 	assert.JSONEq(t, `[{"plugin":"rp-ws","stage":"ingress","rejected":{"code":"blocked.ws"}}]`, stripRecordNames(t, gjson.Get(errorLogs[0].Other, "request_plugins").Raw))
 }

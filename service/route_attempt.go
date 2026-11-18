@@ -77,6 +77,7 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 	if value, ok := c.Get("route_attempt"); ok && value != nil {
 		return
 	}
+	MarkRouteScanDispatched(c)
 	if info != nil {
 		info.BeginUpstreamAttempt()
 	}

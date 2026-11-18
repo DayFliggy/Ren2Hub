@@ -174,16 +174,29 @@ func TestRetryAfterCooldownDemotesChannelWithoutRemovingIt(t *testing.T) {
 func TestHeaderless429CooldownExpiresAfterFiveSeconds(t *testing.T) {
 	resetRouteObservations(t)
 	synctest.Test(t, func(t *testing.T) {
-		c := routeTestContext(t)
-		BeginRouteObservation(c)
-		common.SetContextKey(c, constant.ContextKeyChannelId, 11)
-		MarkRouteAttemptSent(c, nil)
-		ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
+		headerless429 := func(keyIndex int, modelName string) {
+			c := routeTestContext(t)
+			BeginRouteObservation(c)
+			common.SetContextKey(c, constant.ContextKeyChannelId, 11)
+			common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)
+			common.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, keyIndex)
+			MarkRouteAttemptSent(c, &relaycommon.RelayInfo{OriginModelName: modelName})
+			ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
+		}
+
+		headerless429(0, "first-model")
+		time.Sleep(4 * time.Second)
+		health, _ := routeObservations.routeHealth(11, "second-model")
+		require.Equal(t, routeWorstHealth, health, "the other model shares the first key's cooldown")
+		health, _ = routeObservations.routeHealth(22, "first-model")
+		require.Zero(t, health, "another channel serving the same model remains healthy")
+
+		headerless429(1, "second-model")
 		time.Sleep(5*time.Second - time.Millisecond)
-		health, _ := routeObservations.routeHealth(11, "other-model")
-		require.Equal(t, routeWorstHealth, health)
+		health, _ = routeObservations.routeHealth(11, "first-model")
+		require.Equal(t, routeWorstHealth, health, "the second key renews the cooldown for the first model")
 		time.Sleep(time.Millisecond)
-		health, _ = routeObservations.routeHealth(11, "other-model")
+		health, _ = routeObservations.routeHealth(11, "first-model")
 		require.Zero(t, health)
 	})
 }

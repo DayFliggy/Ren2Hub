@@ -105,6 +105,28 @@ class SourceDeltaCheckTests(unittest.TestCase):
             self.assertEqual(manifest.read_bytes(), before)
             self.assertEqual(registry.source_delta(root), ['model/changed.go', 'model/kept.go', 'model/new_test.go'])
 
+    def test_local_hash_alone_cannot_validate_an_outdated_hunk_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            upstream = root / 'docs/upstream'
+            upstream.mkdir(parents=True)
+            shutil.copy(SOURCE / registry.DELTA, root / registry.DELTA)
+            (root / 'model').mkdir()
+            path = 'model/example.go'
+            (root / path).write_text('package model\n')
+            subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+            row = {'path': path, 'local_sha256': sha('package model\n'), 'review': {'hunk_review': 'NATIVE_B388_REVIEW.json', 'current_hunk_review': True}}
+            (upstream / 'CORE_SOURCE_DELTA.json').write_text(json.dumps({'files': [row]}))
+            (upstream / 'NATIVE_B388_REVIEW.json').write_text('{}')
+            self.assertNotEqual(self.check(root)[0], 0)
+            review = {'local_sha256': sha('old source'), 'hunks': []}
+            (upstream / 'NATIVE_B388_REVIEW.json').write_text(json.dumps({'current_file_reviews': {path: review}}))
+            self.assertNotEqual(self.check(root)[0], 0)
+            review['local_sha256'] = row['local_sha256']
+            (upstream / 'NATIVE_B388_REVIEW.json').write_text(json.dumps({'current_file_reviews': {path: review}}))
+            self.assertEqual(self.check(root), (0, []))
+
 
 if __name__ == '__main__':
     unittest.main()

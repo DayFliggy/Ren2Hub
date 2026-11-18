@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -92,8 +93,12 @@ type endpointRouteCase struct {
 	mapped                   bool
 	// manual lists the Token's ordered manual route by fixture name;
 	// disabledEntry marks one of those entries as disabled.
-	manual        []string
-	disabledEntry string
+	// requestModel lets the client send a spelling absent from channel abilities.
+	requestModel       string
+	afterRequest       func(*gin.Context)
+	beforeDistribution gin.HandlerFunc
+	manual             []string
+	disabledEntry      string
 	// ordinaryBusy holds the only permit of the ordinary channel; userBusy
 	// holds the user's only permit so admission rejects the request.
 	ordinaryBusy, pluginBusy, userBusy bool
@@ -153,6 +158,88 @@ func endpointRouteCases() []endpointRouteCase {
 		// Pre-selection failures that are not "no channel" decide the request
 		// before the plugin decoder can replace them with its own error.
 		{name: "all busy channels report capacity before plugin decoding", ordinaryBusy: true, pluginBusy: true, decoderRejects: true, wantStatus: http.StatusTooManyRequests},
+	}
+}
+
+func TestTaskPluginEndpointScanDiagnostics(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			checkTaskPluginScanDiagnostics(t, endpointRouteDatabase(t, dialect))
+		})
+	}
+}
+
+func checkTaskPluginScanDiagnostics(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	common.MemoryCacheEnabled = false
+	for _, test := range []struct {
+		tc      endpointRouteCase
+		reasons []string
+	}{
+		{endpointRouteCase{name: "canonical spelling fallback", requestModel: "CHANNEL-ROUTE-MODEL", pluginOnly: true, wantPlugin: true}, []string{"selected"}},
+		{endpointRouteCase{name: "preselection reused"}, []string{"selected"}},
+		{endpointRouteCase{name: "reacquisition storage failure", wantStatus: http.StatusInternalServerError}, []string{"error"}},
+		{endpointRouteCase{name: "reselection after losing the slot", want: "alternate"}, []string{"selected"}},
+		{endpointRouteCase{name: "origin pin supersedes preselection", pluginOnly: true, originPin: true, wantPlugin: true, want: "alternate"}, nil},
+		{endpointRouteCase{name: "preselection rejects full channels", ordinaryBusy: true, pluginBusy: true, wantStatus: http.StatusTooManyRequests}, []string{"full"}},
+	} {
+		t.Run(test.tc.name, func(t *testing.T) {
+			var logged bytes.Buffer
+			common.LogWriterMu.Lock()
+			prev := gin.DefaultErrorWriter
+			gin.DefaultErrorWriter = &logged
+			common.LogWriterMu.Unlock()
+			t.Cleanup(func() {
+				common.LogWriterMu.Lock()
+				gin.DefaultErrorWriter = prev
+				common.LogWriterMu.Unlock()
+			})
+			check := func(c *gin.Context) {
+				var reasons []string
+				for _, event := range service.RequestPolicy(c).Events() {
+					if event.Scan != nil {
+						reasons = append(reasons, event.Decision.Reason)
+						assert.Equal(t, len(reasons), event.Scan.Round)
+					}
+				}
+				assert.Equal(t, test.reasons, reasons)
+			}
+			tc := test.tc
+			tc.afterRequest = check
+			switch tc.name {
+			case "reacquisition storage failure":
+				tc.beforeDistribution = func(c *gin.Context) {
+					const callback = "test:fail-reacquisition"
+					require.NoError(t, db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+						tx.AddError(errors.New("private re-acquisition failure"))
+					}))
+					defer db.Callback().Query().Remove(callback)
+					c.Next()
+				}
+			case "reselection after losing the slot":
+				tc.beforeDistribution = func(c *gin.Context) {
+					selected := c.MustGet(contextKeyTaskPluginEndpointSelection).(taskPluginEndpointSelection).Channel
+					require.NoError(t, db.Model(selected).Update("max_concurrency", 1).Error)
+					require.NoError(t, service.RefreshChannelConcurrencyLimit(c.Request.Context(), selected.Id))
+					held, err := service.AcquireChannelConcurrency(c.Request.Context(), selected)
+					require.NoError(t, err)
+					defer held.Release()
+					c.Next()
+				}
+			}
+			runEndpointRouteCase(t, db, tc)
+			logs := logged.String()
+			if tc.wantStatus == http.StatusTooManyRequests {
+				assert.Equal(t, 1, strings.Count(logs, "route_scan "))
+				assert.Contains(t, logs, "result=full")
+			} else if tc.wantStatus == http.StatusInternalServerError {
+				assert.Equal(t, 1, strings.Count(logs, "route_scan "))
+				assert.Contains(t, logs, "result=error")
+			} else {
+				assert.NotContains(t, logs, "route_scan ")
+			}
+		})
 	}
 }
 
@@ -228,7 +315,7 @@ func runEndpointRouteCase(t *testing.T, database *gorm.DB, tc endpointRouteCase)
 		named["ordinary"] = ordinary
 		channels = append(channels, ordinary)
 	}
-	if tc.originPin || tc.retry || tc.shared {
+	if tc.want == "alternate" || tc.retry || tc.shared {
 		alternate := &model.Channel{Type: ordinary.Type, Status: common.ChannelStatusEnabled, Name: "alternate", Key: "alternate-key", Models: modelName}
 		if tc.wantPlugin {
 			alternate.Type = plugin.Type
@@ -295,7 +382,7 @@ func runEndpointRouteCase(t *testing.T, database *gorm.DB, tc endpointRouteCase)
 		require.NoError(t, err)
 		t.Cleanup(permit.Release)
 	}
-	serveEndpointRouteCase(t, tc, path, modelName, key, named, endpointRouteUserID)
+	serveEndpointRouteCase(t, tc, path, common.GetStringIfEmpty(tc.requestModel, modelName), key, named, endpointRouteUserID)
 	for name, channel := range named {
 		want := 0
 		if (tc.ordinaryBusy && name == "ordinary") || (tc.pluginBusy && name == "plugin") {
@@ -330,6 +417,12 @@ func serveEndpointRouteCase(t *testing.T, tc endpointRouteCase, path, modelName,
 	}
 	reached := false
 	router := gin.New()
+	if tc.afterRequest != nil {
+		router.Use(func(c *gin.Context) {
+			c.Next()
+			tc.afterRequest(c)
+		})
+	}
 	router.POST(path, func(c *gin.Context) {
 		c.Set("id", requestUserID)
 		c.Set("user_max_concurrency", 1)
@@ -342,7 +435,11 @@ func serveEndpointRouteCase(t *testing.T, tc endpointRouteCase, path, modelName,
 			}
 			service.GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: pinned.Id, Source: dto.PinSourceToken, Rank: dto.PinRankToken})
 		}
-	}, ModelRequestRateLimit(), RouteTaskPluginEndpoint(), PrepareTaskPluginEndpoint(), Distribute(), func(c *gin.Context) {
+	}, ModelRequestRateLimit(), RouteTaskPluginEndpoint(), PrepareTaskPluginEndpoint(), func(c *gin.Context) {
+		if tc.beforeDistribution != nil {
+			tc.beforeDistribution(c)
+		}
+	}, Distribute(), func(c *gin.Context) {
 		reached = true
 		if tc.observationContext == "stream" {
 			assert.True(t, common.GetContextKeyBool(c, constant.ContextKeyIsStream))

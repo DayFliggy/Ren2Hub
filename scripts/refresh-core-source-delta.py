@@ -2,6 +2,7 @@
 """更新冻结核心的文件差异；不将工作树哈希或历史测试当作候选身份。"""
 import argparse
 import collections
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -50,6 +51,28 @@ if any(path == 'docs' or path.startswith('docs/') or path in ('.', '..') for pat
     raise ValueError('documentation is outside the core manifest scope')
 local_paths = set(git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', *scopes)
                   .decode().strip('\0').split('\0'))
+# 原始 1109 段属于基线审查；对后来重新逐段审查的文件，刷新文件哈希前须先核对本次裁定。
+if any(review.get('hunk_review') == 'NATIVE_B388_REVIEW.json' for review in reviews.values()):
+    review_data = json.loads((MANIFEST.parent / 'NATIVE_B388_REVIEW.json').read_text())
+    current = review_data.get('current_file_reviews', {})
+    expected = {path for path, review in reviews.items() if review.get('current_hunk_review')}
+    if expected != current.keys():
+        sys.exit('current hunk review file mismatch: ' + ', '.join(sorted(expected ^ current.keys())))
+    for path, review in current.items():
+        local_file = ROOT / path
+        local = local_file.read_bytes() if local_file.is_file() else None
+        if local is None or hashlib.sha256(local).hexdigest() != review['local_sha256']:
+            sys.exit(f'{path}: current hunk review needs updating')
+        if not args.check_local:
+            source = git('show', upstream + ':' + path, repository=args.upstream_repo)
+            diff = difflib.diff_bytes(difflib.unified_diff, source.splitlines(True), local.splitlines(True))
+            hunks = []
+            for line in list(diff)[2:]:
+                if line.startswith(b'@@ '):
+                    hunks.append(hashlib.sha256())
+                hunks[-1].update(line)
+            if [h.hexdigest() for h in hunks] != [h['sha256'] for h in review['hunks']]:
+                sys.exit(f'{path}: reviewed hunks differ from frozen upstream diff')
 if args.check_local:
     # 上游侧哈希只有刷新时才能复算；这里只回答“工作树是否已偏离清单”。
     recorded = {row['path']: row['local_sha256'] for row in data['files']}

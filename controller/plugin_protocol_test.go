@@ -148,6 +148,56 @@ func TestServeTaskPluginProtocolDisconnectDuringSubmissionFinishesDurableWithout
 	}
 }
 
+func TestDisconnectedTaskProtocolsLogLocalSubmissionRejection(t *testing.T) {
+	events := []string{}
+	setupTaskSubmissionDatabase(t, true, &events)
+	oldCache, oldRedis := common.MemoryCacheEnabled, common.RedisEnabled
+	common.MemoryCacheEnabled, common.RedisEnabled = false, false
+	t.Cleanup(func() { common.MemoryCacheEnabled, common.RedisEnabled = oldCache, oldRedis })
+
+	responses := compilePluginProtocolTestEndpoint(t, "reject-on-disconnect", `
+		export const protocols = {openai_responses: {
+			renderEvents: function() { return {events: [], done: false}; },
+			renderFinal: function() { return {}; }
+		}};
+	`)
+	for _, pinned := range []pluginruntime.PinnedEndpoint{responses, imageProtocolTestEndpoint(t)} {
+		t.Run(pinned.Protocol, func(t *testing.T) {
+			serve := serveTaskPluginProtocol
+			c, recorder := newPluginProtocolTestContext(true, true)
+			if pinned.Protocol == pluginruntime.ProtocolOpenAIImage {
+				serve = serveTaskPluginImageProtocol
+				c, recorder = newImageProtocolTestContext("")
+			}
+			readLogs := captureRouteErrors(t)
+			requestID := "disconnect-" + pinned.Protocol
+			c.Set(common.RequestIdKey, requestID)
+			client, cancel := context.WithCancel(c.Request.Context())
+			defer cancel()
+			c.Request = c.Request.WithContext(client)
+			deps := pluginProtocolTestDeps()
+			deps.submit = func(c *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
+				channel, err := service.SelectChannelForRequest(c, info.OriginModelName, nil)
+				require.Nil(t, err)
+				require.Equal(t, 1, channel.Id)
+				defer service.ReleaseRouteChannel(c)
+				cancel()
+				require.NoError(t, c.Request.Context().Err(), "accepted submission has its own lifetime")
+				return nil, service.TaskErrorWrapperLocal(errors.New("insufficient quota"), "insufficient_user_quota", http.StatusForbidden)
+			}
+
+			serve(c, pinned, deps)
+
+			require.False(t, c.Writer.Written())
+			require.Empty(t, recorder.Body.String())
+			logs := readLogs()
+			require.Contains(t, logs, requestID)
+			require.Regexp(t, `route_scan round=1 candidates=1 full_skips=0 result=selected duration_us=[0-9]+ channel_id=1 request_status=403`, logs)
+			require.Equal(t, 1, strings.Count(logs, "route_scan "))
+		})
+	}
+}
+
 func TestServeTaskPluginProtocolDisconnectBeforeDurableBarrierPersistsAndSettlesWithoutRefund(t *testing.T) {
 	events := make([]string, 0, 3)
 	database := setupTaskSubmissionDatabase(t, true, &events)
