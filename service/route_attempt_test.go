@@ -116,6 +116,9 @@ func TestRouteAttemptConfigurationChangeCannotRepopulateObservations(t *testing.
 			if !sentBeforeChange {
 				MarkRouteAttemptSent(c, info)
 			}
+			ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
+			health, _ := routeObservations.routeHealth(channel.Id, "")
+			require.Zero(t, health, "a stale 429 cannot cool down the new configuration")
 			FinishRouteAttempt(c, info, nil)
 			require.Empty(t, routeObservations.snapshot(), "the old selection cannot publish into the new configuration")
 			require.Zero(t, ChannelInFlight(channel.Id))

@@ -56,10 +56,18 @@ func (e *ChannelSelectError) Text(c *gin.Context) string {
 	return e.Message
 }
 
+func logRouteLoadFailure(c *gin.Context, err error) {
+	logger.LogError(c, common.LogText("load routing candidates failed: %v", err))
+}
+
 // routeLoadFailure renders a candidate lookup or admission failure. Capacity is
 // the only expected outcome; storage details stay in the server log.
 func routeLoadFailure(c *gin.Context, err error) *ChannelSelectError {
-	logger.LogError(c, common.LogText("load routing candidates failed: %v", err))
+	logRouteLoadFailure(c, err)
+	return classifyRouteLoadFailure(err)
+}
+
+func classifyRouteLoadFailure(err error) *ChannelSelectError {
 	if errors.Is(err, ErrConcurrencyFull) {
 		return &ChannelSelectError{StatusCode: http.StatusTooManyRequests, Code: "channel_concurrency_exceeded", Message: err.Error()}
 	}

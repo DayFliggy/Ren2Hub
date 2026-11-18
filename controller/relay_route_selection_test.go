@@ -1,14 +1,22 @@
 package controller
 
 import (
+	"bytes"
+	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/gin-gonic/gin"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
@@ -60,4 +68,73 @@ func TestRelayRetryWithoutCandidateKeepsUpstreamError(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, status)
 	require.Contains(t, body, "upstream exploded")
 	require.NotContains(t, body, "No available channel")
+}
+
+func TestRelayFullScanIsTraceableWithoutErrorLog(t *testing.T) {
+	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {})
+	ch := fixture.channel
+	require.NoError(t, model.DB.Model(ch).Update("max_concurrency", 1).Error)
+	require.NoError(t, service.RefreshChannelConcurrencyLimit(context.Background(), ch.Id))
+	permit, err := service.AcquireChannelConcurrency(context.Background(), ch)
+	require.NoError(t, err)
+	t.Cleanup(permit.Release)
+	previous := constant.ErrorLogEnabled
+	constant.ErrorLogEnabled = false
+	t.Cleanup(func() { constant.ErrorLogEnabled = previous })
+
+	engine := gin.New()
+	engine.POST("/v1/responses", middleware.RequestId(), middleware.TokenAuth(), middleware.Distribute(), func(c *gin.Context) {
+		t.Fatal("full channel reached the relay")
+	})
+	var output bytes.Buffer
+	common.LogWriterMu.Lock()
+	oldWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = &output
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		defer common.LogWriterMu.Unlock()
+		gin.DefaultErrorWriter = oldWriter
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"ws-billing","input":"hello"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer sk-"+fixture.token.Key)
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
+	require.Equal(t, http.StatusTooManyRequests, response.Code)
+	require.Contains(t, response.Body.String(), "channel_concurrency_exceeded")
+	require.NotContains(t, response.Body.String(), "full_skips")
+	requestID := response.Header().Get(common.RequestIdKey)
+	require.NotEmpty(t, requestID)
+	common.LogWriterMu.Lock()
+	logged := output.String()
+	common.LogWriterMu.Unlock()
+	require.Equal(t, 1, strings.Count(logged, "route_scan "))
+	require.Contains(t, logged, requestID+" | route_scan round=1 candidates=1 full_skips=1 result=full")
+	var count int64
+	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("request_id = ?", requestID).Count(&count).Error)
+	require.Zero(t, count)
+}
+
+func TestRelayScanSummaryIsAdminOnly(t *testing.T) {
+	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {})
+	fixture.httpUpstream = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"ok","status":"completed","usage":{"input_tokens":10,"output_tokens":1,"total_tokens":11}}`)
+	}
+	status, _ := postResponsesThroughGateway(t, fixture)
+	waitRelayFinished(t, fixture)
+	require.Equal(t, http.StatusOK, status)
+	filter := model.LogFilter{Type: model.LogTypeConsume, RequestId: "responses-http-billing"}
+	admin, total, err := model.GetAllLogs(filter, 0, 10)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	model.FormatAdminLogs(admin)
+	require.Contains(t, admin[0].Other, `"full_skips":0`)
+	require.Contains(t, admin[0].Other, `"reason":"selected"`)
+	user, total, err := model.GetUserLogs(fixture.user.Id, filter, 0, 10)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.NotContains(t, user[0].Other, "request_policy")
+	require.NotContains(t, user[0].Other, "full_skips")
 }

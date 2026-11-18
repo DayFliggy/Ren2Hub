@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -146,10 +147,13 @@ func TestRetryAfterCooldownDemotesChannelWithoutRemovingIt(t *testing.T) {
 	common.SetContextKey(c, constant.ContextKeyChannelId, 11)
 	info := &relaycommon.RelayInfo{OriginModelName: "route-model", RelayMode: 1, StartTime: time.Now()}
 	MarkRouteAttemptSent(c, info)
-	ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{}})
+	ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Retry-After": []string{""}}})
 	ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusServiceUnavailable, Header: http.Header{"Retry-After": []string{"30"}}})
-	require.Empty(t, routeObservations.cooldowns, "only a 429 with Retry-After starts a cooldown")
+	require.Empty(t, routeObservations.cooldowns, "neither an explicitly empty header nor a non-429 starts a cooldown")
 	ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Retry-After": []string{"30"}}})
+	longCooldown := routeObservations.cooldowns[11]
+	ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
+	require.Equal(t, longCooldown, routeObservations.cooldowns[11], "a headerless 429 cannot shorten the existing cooldown")
 	FinishRouteAttempt(c, info, types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests))
 	for range 20 {
 		selected, selectErr := SelectChannelForRequest(routeTestContext(t), "route-model", nil)
@@ -167,6 +171,23 @@ func TestRetryAfterCooldownDemotesChannelWithoutRemovingIt(t *testing.T) {
 	require.Equal(t, 11, selected.Id, "a manual list keeps its order")
 }
 
+func TestHeaderless429CooldownExpiresAfterFiveSeconds(t *testing.T) {
+	resetRouteObservations(t)
+	synctest.Test(t, func(t *testing.T) {
+		c := routeTestContext(t)
+		BeginRouteObservation(c)
+		common.SetContextKey(c, constant.ContextKeyChannelId, 11)
+		MarkRouteAttemptSent(c, nil)
+		ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
+		time.Sleep(5*time.Second - time.Millisecond)
+		health, _ := routeObservations.routeHealth(11, "other-model")
+		require.Equal(t, routeWorstHealth, health)
+		time.Sleep(time.Millisecond)
+		health, _ = routeObservations.routeHealth(11, "other-model")
+		require.Zero(t, health)
+	})
+}
+
 func TestRetryAfterParsing(t *testing.T) {
 	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 	header := func(value string) http.Header { return http.Header{"Retry-After": []string{value}} }
@@ -179,7 +200,7 @@ func TestRetryAfterParsing(t *testing.T) {
 	until, ok = retryAfterUntil(header("999999999999"), now)
 	require.True(t, ok)
 	require.Equal(t, now.Add(routeObservationTTL).UnixMilli(), until, "the cooldown is capped by the observation TTL")
-	for _, value := range []string{"", "0", "-5", "soon", now.Add(-time.Minute).Format(http.TimeFormat)} {
+	for _, value := range []string{"", "  ", "0", "-5", "-9223372036854775807", "soon", now.Add(-time.Minute).Format(http.TimeFormat)} {
 		_, ok = retryAfterUntil(header(value), now)
 		require.False(t, ok, value)
 	}

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 881,
     "adapted": 281,
-    "extension": 381,
+    "extension": 382,
     "removed": 45
   },
   "files": [
@@ -2217,13 +2217,13 @@
       "path": "controller/relay_route_cooldown_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cf7b3c20e398fd6db9eee5ca4bc70658fd137296f0d0dff3755d3d0ac025805f"
+      "local_sha256": "d57e63eb93246cb61f7702f772d94598aa9839f35d152b47615188187c962f9e"
     },
     {
       "path": "controller/relay_route_selection_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "64b1e3c37364949540b979c5427140918aefefe8aeabc3678d8049e5cb0267e7"
+      "local_sha256": "87dbba0d70a65ac11bb3d56362a7f22133780ee76cbb3e71009698a0c171e9c2"
     },
     {
       "path": "controller/relay_stream_test.go",
@@ -11606,7 +11606,7 @@
       "path": "service/channel_select.go",
       "status": "adapted",
       "upstream_sha256": "aa425048996ac7f7d1b35e777717d705b3fef3aa44e8b196a048d3acfce35c60",
-      "local_sha256": "12e30a7d12f9fe683da66338884791fc733ae20b675f94251656a80d62de7836",
+      "local_sha256": "9cf13a49f1806ffabc9f2ef20e02f627e049140d7024dcd5658d41a3c0ac3fec",
       "reasons": [
         "concurrency",
         "group-removal",
@@ -12663,7 +12663,7 @@
       "path": "service/request_policy.go",
       "status": "adapted",
       "upstream_sha256": "0d9b8b91e5ad0eec7926520ce82fa4a70a6ea949496850b524ba404f0cf51e32",
-      "local_sha256": "c797845773443d5f865a4c50ecc02200e81c092bf194892d4905ff983559a2dc",
+      "local_sha256": "3cb1692fce05ad84dd4e3f05aef3cd2f20ddff7dc1e99c85a15fad09fe51b48f",
       "reasons": [
         "group-removal"
       ],
@@ -12739,7 +12739,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7b56f4219372d4a514f20d50306a0fa460d96bf7e453b90b69aee1142a4fb04e",
+      "local_sha256": "160fc54772b883390e0ad3f10524b95048f103cfb5a7f365efef61aee48ad573",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -12758,19 +12758,19 @@
       "path": "service/route_attempt_native_count_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2e6158d27872499a1bb67d185c6e2ce4af3c4888cd03bf91b63a3e369fce9c7f"
+      "local_sha256": "b4440a0e445814cfde4f3b4085fbd38f82a078acceafe73196f2ac5e91bda108"
     },
     {
       "path": "service/route_attempt_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b5a665e5ef3a2cb4cd26b2460cba5b1418e3103c21adca15387af36e0869035a"
+      "local_sha256": "1c79e0d43669eafb7e4b667644bafc6cc6f99aad691dfc2239a2cb27918facc3"
     },
     {
       "path": "service/route_breaker.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "00c04d60a1c77a4b176631e5cafd8fc005387aaaa3276a5fd6a0ee49f87b6f1a",
+      "local_sha256": "67578a848d9b5bf0c6181fd060a4d747c21d7f3a7f05b3e7d0fbcddf8e589768",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -12789,13 +12789,13 @@
       "path": "service/route_breaker_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1b664e851ecc40737ee190278f0145f85b4535a2c11e2d096704e16be69579b5"
+      "local_sha256": "9335c989590338b9d332400f244b7f593a927b95025b39fb7f4ae20a9b1e3b5b"
     },
     {
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b66a1cb3053816b7926539a2bb48bf9ccde69881fad83af7968ad4dfb7ea8dc0",
+      "local_sha256": "ec70f3349766f7b74cb77b0f0baedab23bb821c867a252d1e6db13c2122efeee",
       "reasons": [
         "concurrency",
         "origin-task-continuation",
@@ -12815,7 +12815,7 @@
       "path": "service/route_error.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "54b265fd4d8d2adc2f2a8733fe5d4879acf9b17438b875b1fdaafafcbd2dca49",
+      "local_sha256": "3f393655a5e3dfa57e6be251233b764491e2bfb16413fbaf675d11dd104e367c",
       "reasons": [
         "token-routing"
       ],
@@ -12889,6 +12889,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "a0d8aabc54927c6d28ab6252d287d0d79893894f45ff1057d7f994d8747b21f7"
+    },
+    {
+      "path": "service/route_scan_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e596b59602c4f6fbf6203f94f549f3f19dc866c3c79586db49a7385964ba257e"
     },
     {
       "path": "service/route_stream_output.go",

@@ -32,6 +32,7 @@ type PolicyEvent struct {
 	ElapsedMS   int64          `json:"elapsed_ms"`
 	Decision    PolicyDecision `json:"decision"`
 	Health      string         `json:"health,omitempty"`
+	Scan        *routeScan     `json:"scan,omitempty"`
 }
 
 // RequestPolicyState records how one request was routed so administrators can
@@ -48,6 +49,7 @@ type RequestPolicyState struct {
 	OutcomeRecorded   bool
 	mu                sync.Mutex
 	events            []PolicyEvent
+	scanRounds        int
 }
 
 func RequestPolicy(c *gin.Context) *RequestPolicyState {
@@ -70,6 +72,10 @@ func (s *RequestPolicyState) AddEvent(event PolicyEvent) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if event.Scan != nil {
+		s.scanRounds++
+		event.Scan.Round = s.scanRounds
+	}
 	if len(s.events) < 512 {
 		s.events = append(s.events, event)
 	}

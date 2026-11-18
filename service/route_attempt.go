@@ -61,8 +61,7 @@ func ObserveRouteBinaryOutput(c *gin.Context) {
 	attempt.firstOutput.CompareAndSwap(0, time.Now().UnixNano())
 }
 
-// ObserveRouteResponse 由传输层在收到上游响应后调用。上游 429 带 Retry-After 时，
-// 在这段时间内把渠道降到最差档；只降档、不剔除。
+// ObserveRouteResponse 由传输层在收到上游 429 时按 Retry-After 或缺头的短冷却期限将渠道降档。
 func ObserveRouteResponse(c *gin.Context, resp *http.Response) {
 	attempt := currentRouteAttempt(c)
 	if attempt == nil || !attempt.bound || resp == nil || resp.StatusCode != http.StatusTooManyRequests {

@@ -39,6 +39,7 @@ func TestNativeCountAttemptsLeaveRouteHealthUntouched(t *testing.T) {
 				MarkRouteAttemptSent(c, info)
 				if status == http.StatusTooManyRequests {
 					ObserveRouteResponse(c, limited)
+					ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
 				}
 				FinishRouteAttempt(c, info, types.NewOpenAIError(errors.New("upstream"), types.ErrorCodeBadResponseStatusCode, status))
 			}

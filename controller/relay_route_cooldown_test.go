@@ -14,10 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// B7: an upstream 429 with Retry-After seen by the real transport must demote
-// that channel, so the next request starts on the other channel instead of
-// hitting the cooling one again.
 func TestRelayRetryAfter429DemotesChannelForNextRequest(t *testing.T) {
+	testRelay429Cooldown(t, "60")
+}
+
+func TestRelayHeaderless429DemotesChannelForNextRequest(t *testing.T) {
+	testRelay429Cooldown(t, "")
+}
+
+func testRelay429Cooldown(t *testing.T, retryAfter string) {
+	t.Helper()
 	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {})
 	oldRetries := common.RetryTimes
 	common.RetryTimes = 1
@@ -28,7 +34,9 @@ func TestRelayRetryAfter429DemotesChannelForNextRequest(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer upstream-") {
 			primaryHits.Add(1)
-			w.Header().Set("Retry-After", "60")
+			if retryAfter != "" {
+				w.Header().Set("Retry-After", retryAfter)
+			}
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = fmt.Fprint(w, `{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"slow down"}}`)
 			return
@@ -42,6 +50,9 @@ func TestRelayRetryAfter429DemotesChannelForNextRequest(t *testing.T) {
 	// primary is always ordered first.
 	weight := uint(10)
 	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", fixture.channel.Id).Updates(map[string]any{"base_url": upstream.URL, "weight": weight}).Error)
+	// Fixtures reuse database IDs while route health lives for the process.
+	require.NoError(t, model.ChannelRoutingChanged(fixture.channel.Id))
+	t.Cleanup(func() { require.NoError(t, model.ChannelRoutingChanged(fixture.channel.Id)) })
 	backup := *fixture.channel
 	backup.Id = 0
 	backup.Name = "responses-http-cooldown-backup"
@@ -65,6 +76,13 @@ func TestRelayRetryAfter429DemotesChannelForNextRequest(t *testing.T) {
 	waitRelayFinished(t, fixture)
 	require.Equal(t, http.StatusOK, status, body)
 	require.Equal(t, int64(1), primaryHits.Load(), "the cooling primary must not be tried first again")
+	require.Equal(t, int64(2), backupHits.Load())
+
+	require.NoError(t, model.DB.Model(&backup).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	status, body = postResponsesThroughGateway(t, fixture)
+	waitRelayFinished(t, fixture)
+	require.Equal(t, http.StatusTooManyRequests, status, body)
+	require.Equal(t, int64(2), primaryHits.Load(), "the cooling primary still serves when it is the only candidate")
 	require.Equal(t, int64(2), backupHits.Load())
 
 	var primary model.Channel

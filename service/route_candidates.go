@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -248,34 +250,81 @@ func ReleaseRouteChannel(c *gin.Context) {
 	}
 }
 
+// routeScan describes one automatic selection, including a scan that exits before relay starts.
+type routeScan struct {
+	Round      int   `json:"round"`
+	Candidates int   `json:"candidates"`
+	FullSkips  int   `json:"full_skips"`
+	DurationUS int64 `json:"duration_us"`
+}
+
+func (s *routeScan) record(c *gin.Context, channel *model.Channel, err error) {
+	result := "no_candidate"
+	channelID := 0
+	switch {
+	case channel != nil:
+		result, channelID = "selected", channel.Id
+	case errors.Is(err, ErrConcurrencyFull):
+		result = "full"
+	case err != nil:
+		result = "error"
+	}
+	RequestPolicy(c).AddEvent(PolicyEvent{ChannelID: channelID, Scan: s,
+		Decision: PolicyDecision{Action: "scan", Reason: result, Source: "routing"}})
+	if channel == nil {
+		// Early admission refusals and the last failed retry may have no database log.
+		message := fmt.Sprintf("route_scan round=%d candidates=%d full_skips=%d result=%s duration_us=%d",
+			s.Round, s.Candidates, s.FullSkips, result, s.DurationUS)
+		if err != nil {
+			message += ": " + err.Error()
+		}
+		logger.LogError(c, message)
+	}
+}
+
 func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, error) {
 	ReleaseRouteChannel(c)
 	BeginRouteObservation(c)
 	scope, err := requestRouteScope(c)
 	if err != nil {
+		logRouteLoadFailure(c, err)
 		return nil, err
 	}
+	pin, pinned, _ := GetChannelConstraints(c).ResolvedPin()
+	manual := HasPrivateTokenRoute(c)
+	var scan routeScan
+	started := time.Now()
 	rows, err := routeCandidates(c.Request.Context(), scope, modelName, GetChannelConstraints(c).Filters)
-	if err != nil {
-		return nil, err
+	var selected *model.Channel
+	if err == nil {
+		scan.Candidates = len(rows)
+		if !manual {
+			orderAutomaticRoutes(rows, c.GetString(common.RequestIdKey), modelName, routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream))
+		}
+		selected, err = scan.acquire(c, rows, pin.ChannelId, pinned)
 	}
-	if !HasPrivateTokenRoute(c) {
-		orderAutomaticRoutes(rows, c.GetString(common.RequestIdKey), modelName, routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream))
+	if !manual && !pinned {
+		scan.DurationUS = time.Since(started).Microseconds()
+		scan.record(c, selected, err)
+	} else if err != nil {
+		logRouteLoadFailure(c, err)
 	}
+	return selected, err
+}
+
+func (s *routeScan) acquire(c *gin.Context, rows []*model.Channel, pinID int, pinned bool) (*model.Channel, error) {
 	used := make(map[int]bool)
 	for _, value := range c.GetStringSlice("use_channel") {
 		id, _ := strconv.Atoi(value)
 		used[id] = true
 	}
-	pin, pinned, _ := GetChannelConstraints(c).ResolvedPin()
-	busy := false
 	for _, channel := range rows {
-		if used[channel.Id] || pinned && channel.Id != pin.ChannelId {
+		if used[channel.Id] || pinned && channel.Id != pinID {
 			continue
 		}
 		selected, err := acquireRouteChannel(c, channel)
 		if errors.Is(err, ErrConcurrencyFull) {
-			busy = true
+			s.FullSkips++
 			continue
 		}
 		if errors.Is(err, errConcurrencyResourceDeleted) {
@@ -284,7 +333,7 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 		}
 		return selected, err
 	}
-	if busy {
+	if s.FullSkips > 0 {
 		return nil, ErrConcurrencyFull
 	}
 	return nil, nil

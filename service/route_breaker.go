@@ -16,6 +16,7 @@ import (
 const (
 	routeBreakerOpenFailures   = 5
 	routeBreakerCooldown       = time.Minute
+	routeHeaderless429Cooldown = 5 * time.Second
 	routeBreakerCloseSuccesses = 3
 	routeHalfOpenWeight        = 0.3
 	routeWorstHealth           = 2
@@ -112,15 +113,21 @@ func (s *routeObservationStore) coolDown(epoch uint64, channelID int, until int6
 	s.cooldowns[channelID] = until
 }
 
-// retryAfterUntil 解析上游 429 的 Retry-After（秒数或 HTTP 日期），上限为观察表的过期时间。
-// 缺失、无法解析或已过去的值不产生冷却。
+// retryAfterUntil 计算上游 429 的冷却截止时间。缺头使用短冷却，显式值仅接受有效的等待期。
 func retryAfterUntil(header http.Header, now time.Time) (int64, bool) {
-	value := strings.TrimSpace(header.Get("Retry-After"))
-	if value == "" {
+	values, present := header["Retry-After"]
+	if !present {
+		return now.Add(routeHeaderless429Cooldown).UnixMilli(), true
+	}
+	if len(values) == 0 {
 		return 0, false
 	}
+	value := strings.TrimSpace(values[0])
 	var wait time.Duration
 	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds <= 0 {
+			return 0, false
+		}
 		wait = time.Duration(min(seconds, int64(routeObservationTTL/time.Second))) * time.Second
 	} else if at, err := http.ParseTime(value); err == nil {
 		wait = at.Sub(now)

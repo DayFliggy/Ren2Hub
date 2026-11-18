@@ -147,7 +147,8 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	}
 	channel, err := selectQualifiedChannel(c, modelName)
 	if err != nil {
-		return nil, routeLoadFailure(c, err)
+		// The selector already logged this scan, including failures before the relay starts.
+		return nil, classifyRouteLoadFailure(err)
 	}
 	if channel == nil && pinned {
 		channel, err := model.CacheGetChannel(pin.ChannelId)

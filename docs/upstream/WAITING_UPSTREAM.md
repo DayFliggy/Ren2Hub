@@ -16,6 +16,18 @@
 | MJ 与插件的存储错误分类                | `relay/mjproxy_handler.go` image-seed 的 `GetByMJId` 吞错；`middleware/task_plugin.go` 存储失败仍用 not_found code；`getTaskOriginModelName` 吞错 | 保留错误诊断并等待。image-seed 非满载的准入错误仍为 400 `code=4`，不声称统一 503                                                                                                |
 | MJ simple-change、模型限制和 HTTP 配置 | 只有 content 的 simple-change 映射为 change；image-seed 模型限制；全局 MJ HTTP 客户端                                                             | 与上游相同；本地只保留原渠道准入接点，不扩展协议和错误语义                                                                                                                      |
 
+## HTTP 流失败后的会话亲和写回
+
+冻结点 `b388140a` 的 `middleware/distributor.go` 在处理请求后根据 HTTP 状态码写回亲和。客户端已收到 200 后，即使上游最终失败，`SwitchOnSuccess` 也可能把会话绑定到最后一次尝试的渠道，或者续期原绑定。此项单独跟踪，不计入上表的冻结诊断。
+
+复现使用真实路由 `POST /v1/messages`、启用亲和的 Claude 模型和本地模拟上游。请求设置 `stream: true` 和可命中规则的 `metadata.user_id`。处理结束后用同一会话键查看绑定：
+
+- 开启心跳，等客户端收到 `: PING` 后让所有上游尝试返回 529。也可先发送文本增量，再返回 Claude `error` 事件。这两种情况都应保留原绑定和原到期时间，首次请求应保持未绑定。
+- 正常输出并以 `message_stop` 完成时，应绑定最终接单的渠道。上游已受理、客户端读到输出后主动断开时，保留对已接单渠道的续期。
+- `GET /v1/responses` 的 WebSocket 使用独立的绑定时机。上游接受首个 `response.create` 并返回 `response.created` 时即可绑定，接受之前直接返回错误应保持未绑定。
+
+上游验收应结合最后一次尝试的受理情况和明确的协议失败事件。仅凭 HTTP 200、已记录结果或流是否正常结束，无法区分以上情况。
+
 ## 本地合同，不属于等待上游
 
 续作倍率上限、自动与有序手动路由、即时并发、路由观测、预览范围、路由表锁序是 Ren2Hub 定制，行为见[统一路由](../routing/UNIFIED_ROUTING.md)。续作只豁免手动列表，超出当前 Key 上限须在占槽和预扣前拒绝。插件错误净化仅放行宿主生成的 `channel_ratio_exceeded`，不放行任意供应商错误。锁序验收必须跑真实的 MySQL 和 PostgreSQL，SQLite 不能证明行锁安全。
