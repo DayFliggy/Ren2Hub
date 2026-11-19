@@ -582,13 +582,11 @@
    "upstream_sha256": "a0f66fc852955cd43ba395bf90e838fdee55e409bded140e799ef5917e4ef8d3",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -600,13 +598,11 @@
    "upstream_sha256": "3a90fee00ecc25b09099f3159ebbd3b68d65b3b6d83dc9aa4e61eb3f4b1353ba",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -618,13 +614,11 @@
    "upstream_sha256": "6ec442acf54e37cf4324e8bb8ddb08000e0d86ef5147d30125537d5c92438ceb",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -636,13 +630,11 @@
    "upstream_sha256": "6864dd3fe1db8931c740355ef8df9c19cdbd88d044a107f4fba9dd59b3f98b7e",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -654,13 +646,11 @@
    "upstream_sha256": "8045ccea73ddb386c7ce6c5d0d499cfcac20f3576f5638dc31adfd7950b949e6",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -672,13 +662,11 @@
    "upstream_sha256": "fb00ac6777dcb6455374923d3478720faea179f40e6cb72b0463563767625bfb",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -690,13 +678,11 @@
    "upstream_sha256": "7c199028daaee66189f4df5de7354cad96b6bfe2f6b32043a0672e21939fca5f",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -708,13 +694,11 @@
    "upstream_sha256": "329feaafef83d53c81cb537fbc175e80a900e85ffd4d01b99c293faa39594a3e",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -726,13 +710,11 @@
    "upstream_sha256": "8bd350bfc7f69f28adb33ca0ad42a327a09598c89583707af68951170d2ce6e8",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -774,13 +756,11 @@
    "upstream_sha256": "a0a438ad87c737d6eab7a72aa154fdd5ffa0d9a0bec49acecdbaf3844968e5ab",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -804,13 +784,11 @@
    "upstream_sha256": "aaefe92a73e14e7de2c844e149355c3b7f50191653fde8e401fba6532081741a",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -822,13 +800,11 @@
    "upstream_sha256": "e1188d23506b1932320e71a9b1e625d70abd471314d16111c50b03254b3d33cc",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -840,13 +816,11 @@
    "upstream_sha256": "51d0a93840fbac6b044d8499dcf2a18453d952762211a842cde83323b99f2c8e",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -858,13 +832,11 @@
    "upstream_sha256": "7495dc066f5c096405500a3a1d6ebe3d305b5a9bb4b7e260d74280c38906ebab",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -961,13 +933,11 @@
    "upstream_sha256": "95011b8f9cc6c676ad9499dbd0cac512fbf894f097a029f80c35c9b52151044b",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -979,13 +949,11 @@
    "upstream_sha256": "d72837cb45e553c37431d597ec623b4f10cb0cdc0cd05c653fc4bd867b502d68",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -997,13 +965,11 @@
    "upstream_sha256": "91acebc219756b2408bd519f9e7d11c03eaac4f8eb23a6550c2acced775c927e",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -1015,13 +981,11 @@
    "upstream_sha256": "259c3f6506c2862136504b6b2549910fc1aa1d7894688a3361f6c70eee18f45c",
    "local_sha256": null,
    "disposition": "vue_partial",
-   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植，市场价格的 30m 标签已补（市场目录目前不携带 cache_write_mode，见报告）。",
+   "basis": "Vue 已按后端 cache_write_mode 与表达式变量区分 5m、1h、30m、12h（管理端预览、动态价格变量标签、日志用量）；上游编辑器的 GPT/Claude/通用/自定义分类与“Cache Write”统一命名未移植。市场价格的缓存写入时长不随带：市场目录（MarketPricing）不携带 cache_write_mode，ModelPriceDisplay 的时长分支（含原有的 claude_ttl → 5m）在生产里到不了界面，未新增 30m 分支。",
    "local_paths": [
     "frontend/src/features/pricing/previewRows.ts",
     "frontend/src/features/pricing/reference.ts",
-    "frontend/src/components/console/log-ui/LogUsageCell.vue",
-    "frontend/src/components/console/models/ModelPriceDisplay.vue",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/components/console/log-ui/LogUsageCell.vue"
    ]
   },
   {
@@ -1034,10 +998,9 @@
    "upstream_sha256": "01585199d998f5cdc72991f966c404a49c9fa8e6413ef3982920081718e76d1e",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1050,10 +1013,9 @@
    "upstream_sha256": "925b3fe06273be9dd63e68a3ae74f5f21f7ff0563317f18106aa321f877ccb92",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1066,10 +1028,9 @@
    "upstream_sha256": "2ba9ac489690fbe171600b906dfab5fd807500729ac7bf7438f80c533898d560",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1082,10 +1043,9 @@
    "upstream_sha256": "d912d14bb2c2c7a15d6e3e6a4c36ab60a75df62832f1ec309bac7238f701b2db",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1098,10 +1058,9 @@
    "upstream_sha256": "668d2846c3552c9d9be920cf1235efaed25eb882519cb82c0e3a3517241aaa31",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1114,10 +1073,9 @@
    "upstream_sha256": "a8bb2f3d314ea13eaa3ba46f63e33b821ee59ae95b70a3a7a14fbed9fa78c44f",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1130,10 +1088,9 @@
    "upstream_sha256": "077259c3ff1a25f2ded52de542eccbfbd3149c513bbbd66958cb456050caf723",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   },
   {
@@ -1145,10 +1102,9 @@
    "upstream_sha256": "0167b14c686a78fa8dbea49195f5e447c920933d3c6e7ea959eb709e97788e45",
    "local_sha256": null,
    "disposition": "vue_adapted",
-   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts，缓存 30m 标签在 modelMarket.ts；上游的其他语言不随带。",
+   "basis": "Vue 文案在本地 i18n：插件范围词条在 pluginExtensions.ts；上游的缓存时长新词条不随带（见 bb30732b8 的市场价格处置），其他语言不随带。",
    "local_paths": [
-    "frontend/src/i18n/pluginExtensions.ts",
-    "frontend/src/i18n/modelMarket.ts"
+    "frontend/src/i18n/pluginExtensions.ts"
    ]
   }
  ]
