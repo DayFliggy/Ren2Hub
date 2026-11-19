@@ -66,3 +66,10 @@ func publishChannelRoutingIDs(ids []int) error {
 	}
 	return nil
 }
+
+// ChannelRoutingQuality is a read-only management projection of the worst evidenced model band.
+type ChannelRoutingQuality struct {
+	Model  string `json:"model"`
+	Band   int    `json:"band"`
+	Reason string `json:"reason"`
+}

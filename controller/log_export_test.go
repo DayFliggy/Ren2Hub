@@ -10,10 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"errors"
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/tidwall/gjson"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -162,6 +167,7 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			selfStat := callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, query+"&username=root&user_id=99", "alice")[0]
 			require.Equal(t, true, selfStat["success"])
 			assert.EqualValues(t, 10, selfStat["data"].(map[string]any)["quota"])
+			verifyRouteAttemptLogVisibility(t)
 
 		})
 	}
@@ -260,4 +266,61 @@ func TestAcquireLogExportLock(t *testing.T) {
 			releaseAgain()
 		})
 	}
+}
+
+func verifyRouteAttemptLogVisibility(t *testing.T) {
+	t.Helper()
+	c := newPinRetryContext()
+	c.Set("id", 1)
+	c.Set("username", "alice")
+	c.Set(common.RequestIdKey, "route-evidence")
+	info := &relaycommon.RelayInfo{OriginModelName: "evidence", StartTime: time.Now(), ChannelMeta: &relaycommon.ChannelMeta{}}
+	state := service.RequestPolicy(c)
+
+	// Two sends on the same client request must preserve the first failure
+	// and the final channel's explicit zero in the persisted settlement log.
+	for _, id := range []int{8, 9} {
+		common.SetContextKey(c, constant.ContextKeyChannelId, id)
+		service.BeginRouteObservation(c)
+		state.BeginAttempt(&model.Channel{Id: id})
+		service.MarkRouteAttemptSent(c, info)
+		if id == 8 {
+			err := types.NewOpenAIError(errors.New("simulated"), types.ErrorCodeBadResponseStatusCode, 502)
+			service.FinishRouteAttempt(c, info, err)
+			continue
+		}
+		service.ObserveRouteUsage(c, "openai", []byte(`{"usage":{"prompt_tokens":100,"output_tokens":17,"prompt_tokens_details":{"cached_tokens":0}}}`))
+		other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
+		model.RecordConsumeLog(c, 1, model.RecordConsumeLogParams{ChannelId: id, ModelName: "evidence", Other: other})
+		service.FinishRouteAttempt(c, info, nil)
+	}
+	read := func(handler gin.HandlerFunc, role int, requestID string) string {
+		t.Helper()
+		response := callLogHandler(t, handler, 1, role, "request_id="+requestID)[0]
+		require.Equal(t, true, response["success"])
+		items := response["data"].(map[string]any)["items"].([]any)
+		require.Len(t, items, 1)
+		return items[0].(map[string]any)["other"].(string)
+	}
+	for _, role := range []int{common.RoleAdminUser, common.RoleRootUser} {
+		admin := read(GetAllLogs, role, "route-evidence")
+		policy := gjson.Get(admin, "admin_info.request_policy").Array()
+		require.Len(t, policy, 3)
+		assert.EqualValues(t, 8, policy[0].Get("channel_id").Int())
+		assert.Equal(t, "failure", policy[0].Get("route_attempt.outcome").String())
+		assert.EqualValues(t, 502, policy[0].Get("route_attempt.status").Int())
+		assert.EqualValues(t, 9, policy[1].Get("channel_id").Int())
+		assert.Equal(t, "success", policy[1].Get("route_attempt.outcome").String())
+		assert.True(t, policy[1].Get("route_attempt.cache_known").Bool())
+		assert.True(t, policy[1].Get("route_attempt.cache_read_tokens").Exists())
+		assert.EqualValues(t, 0, policy[1].Get("route_attempt.cache_read_tokens").Int())
+		assert.EqualValues(t, 100, policy[1].Get("route_attempt.input_tokens").Int())
+		legacy := read(GetAllLogs, role, "a-1")
+		assert.Contains(t, legacy, "use_channel")
+		assert.NotContains(t, legacy, "route_attempt")
+	}
+	self := read(GetUserLogs, common.RoleCommonUser, "route-evidence")
+	assert.NotContains(t, self, "route_attempt")
+	assert.NotContains(t, self, "request_policy")
+	assert.NotContains(t, self, "admin_info")
 }

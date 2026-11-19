@@ -72,8 +72,18 @@ export function parseChannelStatusDetails(value: unknown): AdminChannel {
     name: requiredString(value.lab.name, endpoint),
     source: requiredString(value.lab.source, endpoint),
   }
+  const quality = value.routing_quality
+  if (quality !== undefined && !isRecord(quality)) invalidResponse(endpoint)
   return {
     ...value,
+    routing_quality:
+      quality === undefined
+        ? undefined
+        : {
+            model: requiredString(quality.model, endpoint),
+            band: requiredStrictInteger(quality.band, endpoint),
+            reason: requiredString(quality.reason, endpoint),
+          },
     lab,
     // Older mocks omit channel_info; the native list always sends it.
     channel_info:

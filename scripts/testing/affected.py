@@ -343,7 +343,9 @@ def plan(source: Path, files: list[str], packages: dict[str, dict], impact: dict
                           and not is_documentation(path))
     if unclassified:
         notes.add(f'未触发任何层：{len(unclassified)} 个文件')
-    return {'files': files, 'go': go, 'frontend': select_frontend(source, files), 'visual': visual,
+    from release_scope import routing_workload_inputs
+    return {'files': files, 'go': go, 'routing_workload_inputs': routing_workload_inputs(files),
+            'frontend': select_frontend(source, files), 'visual': visual,
             'python': bool(python), 'unclassified': unclassified, 'not_covered': sorted(notes)}
 
 

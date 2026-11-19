@@ -133,7 +133,16 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 	if operation == relayconstant.RelayModeUnknown && (strings.HasPrefix(requestPath, "/v1/tasks/") || requestPath == "/v1/videos" || requestPath == "/v1/video/generations") {
 		operation = relayconstant.RelayModeVideoSubmit
 	}
-	orderAutomaticRoutes(rows, "preview", modelName, operation, query.Stream)
+	eligible, excluded := make([]*model.Channel, 0, len(rows)), make([]*model.Channel, 0)
+	for _, row := range rows {
+		if reasons[row.Id] == "" {
+			eligible = append(eligible, row)
+		} else {
+			excluded = append(excluded, row)
+		}
+	}
+	orderAutomaticRoutes(eligible, "preview", modelName, operation, query.Stream)
+	rows = append(eligible, excluded...)
 	for _, row := range rows {
 		item := project(row.Id)
 		switch item.Reason {

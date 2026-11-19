@@ -12,12 +12,15 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -158,12 +161,41 @@ func TestRelayScanSummaryIsAdminOnly(t *testing.T) {
 
 func TestRelayPrechargeRejectionKeepsSelectedScan(t *testing.T) {
 	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(1000))`, func(*websocket.Conn, *http.Request) {})
+	// Open the breaker in virtual time far enough in the past for this real
+	// request to own the half-open probe when the billing check rejects it.
+	synctest.Test(t, func(t *testing.T) {
+		for range 5 {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			common.SetContextKey(c, constant.ContextKeyChannelId, fixture.channel.Id)
+			service.BeginRouteObservation(c)
+			info := &relaycommon.RelayInfo{OriginModelName: "ws-billing"}
+			service.MarkRouteAttemptSent(c, info)
+			service.FinishRouteAttempt(c, info, types.NewOpenAIError(errors.New("fixture failure"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway))
+		}
+	})
+	t.Cleanup(func() {
+		require.NoError(t, service.RefreshChannelConcurrencyLimit(context.Background(), fixture.channel.Id))
+	})
+	checkHalfOpen := func() {
+		breakers := service.RoutingSnapshot().Breakers
+		index := slices.IndexFunc(breakers, func(b service.RouteBreakerSnapshot) bool {
+			return b.ChannelID == fixture.channel.Id && b.Model == "ws-billing"
+		})
+		require.NotEqual(t, -1, index)
+		require.Equal(t, "half_open", breakers[index].State)
+		require.False(t, breakers[index].ProbeInFlight)
+	}
+	checkHalfOpen()
+
 	var calls atomic.Int32
 	fixture.httpUpstream = func(http.ResponseWriter, *http.Request) { calls.Add(1) }
 	readLog := captureRouteErrors(t)
 	status, body := postResponsesThroughGateway(t, fixture)
 	waitRelayFinished(t, fixture)
 	require.Equal(t, http.StatusForbidden, status, body)
+	checkHalfOpen()
+	require.Zero(t, service.ChannelInFlight(fixture.channel.Id))
 	require.Zero(t, calls.Load())
 	require.NotContains(t, body, "full_skips")
 	logged := readLog()

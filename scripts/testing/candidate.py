@@ -829,6 +829,14 @@ class Candidate:
         return hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()
 
     def stage(self, stage):
+        if stage == 'routing-workload':
+            from run import environment, routing_workload
+            logs = self.output / 'routing-workload'
+            logs.mkdir(mode=0o700)
+            result = routing_workload(self.source, logs, environment(logs))
+            self.report['stages'][stage] = result
+            private_write(self.output / (stage + '.json'), result)
+            return
         require(source_identity(self.source) == self.report['source'], 'source_changed_before_http_stage')
         app = self.owned('app')
         require(app['State']['Running'] and app['Image'] == self.active_image_id, 'candidate_image_or_state_changed')

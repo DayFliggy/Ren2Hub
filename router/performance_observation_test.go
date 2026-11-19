@@ -56,6 +56,18 @@ func TestPerformanceObservationRemainsRootOnly(t *testing.T) {
 				require.NotContains(t, response.Body.String(), `"observability"`)
 				require.NotContains(t, response.Body.String(), `"db_pool"`)
 			}
+			routeRequest := httptest.NewRequest(http.MethodGet, "/api/performance/routing", nil)
+			routeRequest.Header = request.Header.Clone()
+			routing := httptest.NewRecorder()
+			engine.ServeHTTP(routing, routeRequest)
+			require.Equal(t, test.status, routing.Code, routing.Body.String())
+			if test.role == common.RoleRootUser {
+				require.Contains(t, routing.Body.String(), `"quality"`)
+				require.Contains(t, routing.Body.String(), `"bands"`)
+			} else {
+				require.NotContains(t, routing.Body.String(), `"explorations"`)
+			}
+
 		})
 	}
 }

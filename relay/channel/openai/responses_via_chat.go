@@ -28,6 +28,7 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	var chatResp dto.OpenAITextResponse
+	service.ObserveRouteUsage(c, "openai", body)
 	if err := common.Unmarshal(body, &chatResp); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
@@ -121,6 +122,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		service.ObserveRouteUsage(c, "openai", []byte(data))
 		if streamErr != nil {
 			stopStream(sr, streamErr)
 			return

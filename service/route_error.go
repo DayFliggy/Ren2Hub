@@ -74,6 +74,10 @@ func routeLoadFailure(c *gin.Context, err error) *ChannelSelectError {
 }
 
 func classifyRouteLoadFailure(err error) *ChannelSelectError {
+	var pause *routePauseError
+	if errors.As(err, &pause) {
+		return &ChannelSelectError{StatusCode: http.StatusServiceUnavailable, Code: "channel_temporarily_unavailable", Message: pause.Error()}
+	}
 	if errors.Is(err, ErrConcurrencyFull) {
 		return &ChannelSelectError{StatusCode: http.StatusTooManyRequests, Code: "channel_concurrency_exceeded", Message: err.Error()}
 	}

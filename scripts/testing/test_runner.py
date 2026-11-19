@@ -47,7 +47,7 @@ class RunnerContractTests(unittest.TestCase):
         # The standalone module owns both orchestration and release verification;
         # this profile must not maintain a second test-selection implementation.
         source, output, env = Path('/source'), Path('/output'), {'fixture': 'true'}
-        result = {'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 129}}
+        result = {'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 130}}
         with patch('ordinary_race.run', return_value=result) as execute:
             self.assertIs(run.race(source, output, env), result)
         execute.assert_called_once_with(source, output / 'ordinary-race', env)
@@ -326,7 +326,7 @@ class RunnerContractTests(unittest.TestCase):
             stages, skipped = run.run_selection(run.SOURCE, Path(directory), {}, selection, 'targeted', ('race',))
         self.assertEqual(list(stages), ['python', 'go-vet', 'go-unit', 'databases', 'vitest', 'ui-contracts'])
         self.assertEqual(skipped, ['race'])
-        self.assertEqual(calls['go-unit'][3:], ({'m/model'}, {'m/model': '^TestTopUp'}, True))
+        self.assertEqual(calls['go-unit'][3:], ({'m/model'}, {'m/model': '^TestTopUp'}, True, False))
         self.assertEqual(calls['vitest'][3:], (['frontend/src/a.ts'], True))
         self.assertEqual(calls['databases'][2:], (None, {'TestWalletDatabases'}))
         self.assertEqual(calls['ui-contracts'][3], ['wallet.spec.ts'])

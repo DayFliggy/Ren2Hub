@@ -21,6 +21,7 @@ func OaiResponsesCompactionHandler(c *gin.Context, resp *http.Response) (*dto.Us
 	}
 
 	var compactResp dto.OpenAIResponsesCompactionResponse
+	service.ObserveRouteUsage(c, "openai", responseBody)
 	if err := common.Unmarshal(responseBody, &compactResp); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}

@@ -59,6 +59,7 @@ REQUIRED_CASES = (
     'prefer_strict_affinity', 'client_disconnect_settles_once_and_releases',
     'real_redis_cache_repair_preserves_reservation', 'manual_unavailable_no_auto_fallback',
     'route_version_ownership_edit_mode', 'nonretryable_no_replay', 'retry_after_cooldown',
+    'automatic_breaker_admission', 'prefer_escapes_cooling_channel',
     'expensive_retry_insufficient_reserve', 'delivered_stream_not_replayed',
     'disconnect_retry', 'automatic_busy_hot_limit', 'automatic_nonfull_load_bucket',
     'endpoint_eligibility', 'preview_websocket_eligibility', 'preview_plugin_eligibility',

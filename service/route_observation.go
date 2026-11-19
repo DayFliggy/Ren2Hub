@@ -84,6 +84,8 @@ func (s *routeObservationStore) invalidate(channelID int) {
 		}
 	}
 	delete(s.cooldowns, channelID)
+	routeQualities.invalidate(channelID)
+	routeCaches.invalidate(channelID)
 }
 
 // staleLocked 判断从 epoch 开始的尝试对该渠道是否已过期。调用方持有 s.mu。
@@ -103,7 +105,7 @@ func (s *routeObservationStore) pruneLocked(now int64) {
 		}
 	}
 	for key, state := range s.breakers {
-		if now-state.updatedAt > ttl {
+		if state.openUntil == 0 && now-state.updatedAt > ttl {
 			delete(s.breakers, key)
 		}
 	}

@@ -228,13 +228,18 @@ func (m *ConcurrencyManager) snapshot(kind string) []ConcurrencySnapshot {
 }
 
 type RoutingRuntimeSnapshot struct {
+	Breakers     []RouteBreakerSnapshot     `json:"breakers"`
+	Cooldowns    []RouteCooldownSnapshot    `json:"cooldowns"`
+	Quality      []RouteQualitySnapshot     `json:"quality"`
+	Cache        RouteCacheDiagnostics      `json:"cache"`
 	Users        []ConcurrencySnapshot      `json:"users"`
 	Channels     []ConcurrencySnapshot      `json:"channels"`
 	Observations []RouteObservationSnapshot `json:"observations"`
 }
 
 func RoutingSnapshot() RoutingRuntimeSnapshot {
-	return RoutingRuntimeSnapshot{gatewayConcurrency.snapshot("user"), gatewayConcurrency.snapshot("channel"), routeObservations.snapshot()}
+	breakers, cooldowns := routeObservations.healthSnapshot()
+	return RoutingRuntimeSnapshot{Users: gatewayConcurrency.snapshot("user"), Channels: gatewayConcurrency.snapshot("channel"), Observations: routeObservations.snapshot(), Breakers: breakers, Cooldowns: cooldowns, Quality: qualityDiagnostics(), Cache: routeCaches.diagnostics()}
 }
 
 // Publication serializes a committed database read with publication. Concurrent

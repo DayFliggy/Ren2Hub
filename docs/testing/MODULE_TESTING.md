@@ -2,6 +2,8 @@
 
 默认只测本次改动涉及的模块。全量档位（`quick`、`all`、完整候选、整套 `unit`／`databases`／`race`／`ui-contracts`）只在用户明确要求全量测试时运行，部署也不例外。各层的验证内容、隔离和证据规则见[本地测试方案](LOCAL_TESTING.md)。
 
+路由准入、候选排序、质量观测、用量回执或路由合同改动时，`affected --plan` 列出自动路由负载、质量和缓存仿真的完整用例名。`targeted` 根据当前差异补跑同一组用例，已选择 service 单测时合并运行。每个名字必须实际通过。范围候选按旧镜像到新版本的差异自动加入 `routing-workload`，将源码仿真报告写入候选证据。镜像的 HTTP、SSE、WebSocket 与账务合同仍通过独立 `routing` 档验证。
+
 ## 流程
 
 每个任务和实施计划先写测试计划，再按计划运行。计划格式、八类接点和“定向不扩大”的规则在工作区的 task-testing 技能（`skills/task-testing/`）里，下面是 Ren2Hub 的摘要。

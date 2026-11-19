@@ -36,6 +36,14 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 describe('native channel contract', () => {
+  it('reads the optional runtime quality independently of default priority', () => {
+    expect(parseChannelStatusDetails(channel).routing_quality).toBeUndefined()
+    const quality = { model: 'upstream-model', band: 2, reason: 'cache' }
+    expect(
+      parseChannelStatusDetails({ ...channel, routing_quality: quality })
+        .routing_quality
+    ).toEqual(quality)
+  })
   it('reads disabled reason from other_info and retains integer usage', () => {
     expect(parseChannelStatusDetails(channel)).toMatchObject({
       used_quota: 500000,

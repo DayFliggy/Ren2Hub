@@ -34,6 +34,13 @@ const { t, locale } = useI18n({
   useScope: 'local',
   messages: opsMonitorMessages,
 })
+const { t: globalT } = useI18n({ useScope: 'global' })
+function routeBand(row: { band: number; reason: string }) {
+  return t('native.routeBand', {
+    band: row.band,
+    reason: globalT('channels.qualityReasons.' + row.reason),
+  })
+}
 const summary = computed(() => props.quality?.summary ?? null)
 const hourClock = computed(
   () =>
@@ -198,6 +205,70 @@ const peak = computed(() =>
       </template>
     </template>
     <template v-if="snapshot">
+      <div
+        v-if="snapshot.quality?.length || snapshot.cache?.bands.length"
+        class="ops-trend"
+      >
+        <p class="ops-trend-title">{{ t('native.routeQuality') }}</p>
+        <p
+          v-for="row in snapshot.quality"
+          :key="
+            JSON.stringify([
+              row.channel_id,
+              row.model,
+              row.operation,
+              row.stream,
+            ])
+          "
+          class="ops-footnote"
+        >
+          #{{ row.channel_id }} · {{ row.model }} · {{ routeBand(row) }} ·
+          {{ t('native.sampleCoverage', row) }}
+        </p>
+        <p
+          v-for="row in snapshot.cache?.bands"
+          :key="
+            JSON.stringify([
+              row.channel_id,
+              row.model,
+              row.mode,
+              row.operation,
+              row.stream,
+            ])
+          "
+          class="ops-footnote"
+        >
+          #{{ row.channel_id }} · {{ row.model }} · {{ row.mode }} ·
+          {{
+            t('native.cacheCoverage', {
+              rate: formatPercent(
+                row.samples > 0 ? row.token_rate * 100 : null,
+                locale
+              ).value,
+              coverage: formatPercent(row.coverage * 100, locale).value,
+              samples: row.samples,
+            })
+          }}
+          ·
+          {{ row.known ? routeBand(row) : t('native.cacheUnknown') }}
+        </p>
+        <p
+          v-if="snapshot.cache && snapshot.cache.free_requests > 0"
+          class="ops-footnote"
+        >
+          {{
+            t('native.routeExploration', {
+              count: snapshot.cache.explorations,
+              total: snapshot.cache.free_requests,
+              rate: formatPercent(
+                (100 * snapshot.cache.explorations) /
+                  snapshot.cache.free_requests,
+                locale
+              ).value,
+            })
+          }}
+        </p>
+      </div>
       <dl class="ops-metric-grid ops-metric-grid--3">
         <OpsMetric
           :label="t('native.sampleCount')"

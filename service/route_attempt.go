@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -14,17 +13,31 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 type routeAttempt struct {
-	once        sync.Once
-	started     time.Time
-	channelID   int
-	model       string
-	epoch       uint64
-	bound       bool
-	operation   int
-	firstOutput atomic.Int64
+	probe          *routeProbe
+	once           sync.Once
+	started        time.Time
+	channelID      int
+	model          string
+	epoch          uint64
+	bound          bool
+	operation      int
+	firstOutput    atomic.Int64
+	lastOutput     atomic.Int64
+	status         atomic.Int64
+	cooldown       atomic.Int64
+	estimated      atomic.Bool
+	estimatedCount atomic.Int64
+	usageMu        sync.Mutex
+	usage          routeUsage
+	info           *relaycommon.RelayInfo
+	admission      string
+	price          float64
+	quality        int
+	cacheMode      string
 }
 
 func currentRouteAttempt(c *gin.Context) *routeAttempt {
@@ -43,11 +56,19 @@ func RouteAttemptWasSent(c *gin.Context) bool {
 // 判定流式请求已服务的成功界。原生首字节时钟保持独立，因为重试安全还要看控制帧。
 func ObserveRouteStreamOutput(c *gin.Context, data string) {
 	attempt := currentRouteAttempt(c)
-	if attempt == nil || attempt.firstOutput.Load() != 0 {
+	if attempt == nil {
 		return
 	}
+	// Responses terminals can replay all previously delivered content. Only a
+	// terminal-only response may use that replay as its first observed output.
+	if attempt.firstOutput.Load() != 0 {
+		switch gjson.Get(data, "type").String() {
+		case "response.completed", "response.done", "response.incomplete", "response.output_item.done":
+			return
+		}
+	}
 	if streamEventHasOutput(data) {
-		attempt.firstOutput.CompareAndSwap(0, time.Now().UnixNano())
+		attempt.markOutput(time.Now())
 	}
 }
 
@@ -55,19 +76,30 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 // 与有输出的事件一样标记首个输出。
 func ObserveRouteBinaryOutput(c *gin.Context) {
 	attempt := currentRouteAttempt(c)
-	if attempt == nil || attempt.firstOutput.Load() != 0 {
+	if attempt == nil {
 		return
 	}
-	attempt.firstOutput.CompareAndSwap(0, time.Now().UnixNano())
+	attempt.markOutput(time.Now())
+}
+
+func (a *routeAttempt) markOutput(now time.Time) {
+	instant := now.UnixNano()
+	a.firstOutput.CompareAndSwap(0, instant)
+	a.lastOutput.Store(instant)
 }
 
 // ObserveRouteResponse 由传输层在收到上游 429 时按 Retry-After 或缺头的短冷却期限将渠道降档。
 func ObserveRouteResponse(c *gin.Context, resp *http.Response) {
 	attempt := currentRouteAttempt(c)
-	if attempt == nil || !attempt.bound || resp == nil || resp.StatusCode != http.StatusTooManyRequests {
+	if attempt == nil || !attempt.bound || resp == nil {
+		return
+	}
+	attempt.status.Store(int64(resp.StatusCode))
+	if resp.StatusCode != http.StatusTooManyRequests {
 		return
 	}
 	if until, ok := retryAfterUntil(resp.Header, time.Now()); ok {
+		attempt.cooldown.Store(until)
 		routeObservations.coolDown(attempt.epoch, attempt.channelID, until)
 	}
 }
@@ -80,6 +112,7 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 	MarkRouteScanDispatched(c)
 	if info != nil {
 		info.BeginUpstreamAttempt()
+		info.PerformanceOutputTokens = 0
 	}
 	name := ""
 	if info != nil {
@@ -91,7 +124,12 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 	// writes the breaker, the 429 cooldown or observation samples that order paid
 	// generation requests; the attempt still releases its channel slot.
 	bound = exists && bound && (info == nil || info.RelayMode != relayconstant.RelayModeNativeCount)
-	c.Set("route_attempt", &routeAttempt{started: time.Now(), channelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId), model: name, epoch: epoch, bound: bound, operation: routeOperation(c)})
+	c.Set("route_attempt", &routeAttempt{
+		info: info, started: time.Now(), channelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+		admission: c.GetString("route_admission_source"), quality: c.GetInt("route_selected_quality"),
+		price: c.GetFloat64("route_price_factor"), cacheMode: routeCacheContext(c).mode,
+		probe: currentRouteProbe(c), model: name, epoch: epoch, bound: bound, operation: routeOperation(c),
+	})
 }
 
 // FinishRouteAttempt records at most one sample and releases the attempt's channel slot.
@@ -110,23 +148,37 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 		if !attempt.bound {
 			return
 		}
-		outcome := perfmetrics.OutcomeIgnored
-		if c.Request.Context().Err() != context.DeadlineExceeded {
-			outcome = perfmetrics.ClassifyRelayOutcome(c.Request.Context(), info, apiErr)
-		}
+		now := time.Now()
+		evidence := attempt.finalEvidence(c, info, apiErr, now)
+		outcome := perfmetrics.Outcome(evidence.Outcome)
 		recordAttemptBreaker(attempt, info.IsStream, outcome)
+		state := RequestPolicy(c)
+		state.mu.Lock()
+		attachRouteEvidence(state.events, state.Attempts, attempt.channelID, &evidence)
+		state.mu.Unlock()
 		if outcome == perfmetrics.OutcomeIgnored {
 			return
 		}
-		latency := int64(0)
-		if outcome == perfmetrics.OutcomeSuccess {
-			if !info.IsStream {
-				latency = time.Since(attempt.started).Milliseconds()
-			} else if first := attempt.firstOutput.Load(); first > attempt.started.UnixNano() {
-				latency = max(1, time.Unix(0, first).Sub(attempt.started).Milliseconds())
-			}
+		good := outcome == perfmetrics.OutcomeSuccess
+		latency := evidence.DurationMS
+		if info.IsStream {
+			latency = evidence.FirstOutputMS
 		}
-		recordRouteObservation(attempt.epoch, attempt.channelID, attempt.model, attempt.operation, info.IsStream, outcome == perfmetrics.OutcomeSuccess, latency)
+		if !good {
+			latency = 0
+		}
+		key := routeObservationKey{attempt.channelID, attempt.model, attempt.operation, info.IsStream}
+		tokens, generation := evidence.speedSample()
+		recordRouteQuality(attempt.epoch, info.OriginModelName, key, good, latency, tokens, generation)
+		recordRouteObservation(attempt.epoch, key.id, key.model, key.operation, key.stream, good, latency)
+		if good {
+			ctx := routeCacheContext(c)
+			routeObservations.mu.Lock()
+			if !routeObservations.staleLocked(attempt.epoch, attempt.channelID) {
+				routeCaches.record(ctx, info.OriginModelName, key, attempt.started, now, evidence.CacheReadTokens, evidence.InputTokens, evidence.CacheKnown, attempt.admission)
+			}
+			routeObservations.mu.Unlock()
+		}
 	})
 }
 
@@ -135,10 +187,10 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome) {
 	switch {
 	case stream && attempt.firstOutput.Load() != 0:
-		recordRouteBreaker(attempt.epoch, attempt.channelID, attempt.model, true)
+		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, true)
 	case outcome == perfmetrics.OutcomeSuccess:
-		recordRouteBreaker(attempt.epoch, attempt.channelID, attempt.model, true)
+		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, true)
 	case outcome == perfmetrics.OutcomeFailure:
-		recordRouteBreaker(attempt.epoch, attempt.channelID, attempt.model, false)
+		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, false)
 	}
 }

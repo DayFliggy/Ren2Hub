@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -18,8 +20,10 @@ import (
 	appI18n "github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -181,6 +185,7 @@ func checkTaskPluginScanDiagnostics(t *testing.T, db *gorm.DB) {
 		{endpointRouteCase{name: "preselection reused"}, []string{"selected"}},
 		{endpointRouteCase{name: "reacquisition storage failure", wantStatus: http.StatusInternalServerError}, []string{"error"}},
 		{endpointRouteCase{name: "reselection after losing the slot", want: "alternate"}, []string{"selected"}},
+		{endpointRouteCase{name: "breaker opens between preselection and distribution", want: "alternate"}, []string{"selected"}},
 		{endpointRouteCase{name: "origin pin supersedes preselection", pluginOnly: true, originPin: true, wantPlugin: true, want: "alternate"}, nil},
 		{endpointRouteCase{name: "preselection rejects full channels", ordinaryBusy: true, pluginBusy: true, wantStatus: http.StatusTooManyRequests}, []string{"full"}},
 	} {
@@ -215,6 +220,22 @@ func checkTaskPluginScanDiagnostics(t *testing.T, db *gorm.DB) {
 						tx.AddError(errors.New("private re-acquisition failure"))
 					}))
 					defer db.Callback().Query().Remove(callback)
+					c.Next()
+				}
+			case "breaker opens between preselection and distribution":
+				tc.beforeDistribution = func(c *gin.Context) {
+					selected := c.MustGet(contextKeyTaskPluginEndpointSelection).(taskPluginEndpointSelection).Channel
+					for range 5 {
+						upstream, _ := gin.CreateTestContext(httptest.NewRecorder())
+						upstream.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+						common.SetContextKey(upstream, constant.ContextKeyChannelId, selected.Id)
+						service.BeginRouteObservation(upstream)
+						info := &relaycommon.RelayInfo{OriginModelName: "channel-route-model"}
+						service.MarkRouteAttemptSent(upstream, info)
+						service.ObserveRouteResponse(upstream, &http.Response{StatusCode: http.StatusBadGateway})
+						failure := types.NewOpenAIError(errors.New("upstream failure"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
+						service.FinishRouteAttempt(upstream, info, failure)
+					}
 					c.Next()
 				}
 			case "reselection after losing the slot":
@@ -334,23 +355,11 @@ func runEndpointRouteCase(t *testing.T, database *gorm.DB, tc endpointRouteCase)
 	}
 	for _, channel := range channels {
 		require.NoError(t, channel.Insert())
+		// Each dialect can reuse fixture IDs. Publish the new channel to discard prior runtime samples.
+		require.NoError(t, service.RefreshChannelConcurrencyLimit(context.Background(), channel.Id))
 	}
 	if tc.observationContext != "" {
-		if tc.observationContext == "video" {
-			for range 50 {
-				service.RecordRouteObservation(plugin.Id, modelName, relayconstant.RelayModeVideoSubmit, false, true, 10000)
-				service.RecordRouteObservation(ordinary.Id, modelName, relayconstant.RelayModeVideoSubmit, false, true, 100)
-				service.RecordRouteObservation(plugin.Id, modelName, relayconstant.RelayModeUnknown, false, true, 100)
-				service.RecordRouteObservation(ordinary.Id, modelName, relayconstant.RelayModeUnknown, false, true, 10000)
-			}
-		} else {
-			for range 50 {
-				service.RecordRouteObservation(plugin.Id, modelName, relayconstant.RelayModeResponses, true, true, 10000)
-				service.RecordRouteObservation(ordinary.Id, modelName, relayconstant.RelayModeResponses, true, true, 100)
-				service.RecordRouteObservation(plugin.Id, modelName, relayconstant.RelayModeResponses, false, true, 100)
-				service.RecordRouteObservation(ordinary.Id, modelName, relayconstant.RelayModeResponses, false, true, 10000)
-			}
-		}
+		seedEndpointQuality(t, ordinary.Id, plugin.Id, modelName, tc.observationContext)
 	}
 	if tc.originPin {
 		require.NoError(t, database.Create(&model.Task{TaskID: "task-route-origin", UserId: endpointRouteUserID, ChannelId: named["alternate"].Id, Platform: constant.TaskPlatform(key), Status: model.TaskStatusSuccess}).Error)
@@ -390,6 +399,46 @@ func runEndpointRouteCase(t *testing.T, database *gorm.DB, tc endpointRouteCase)
 		}
 		assert.Equal(t, want, service.ChannelInFlight(channel.Id), "channel %s permit must be released exactly once", name)
 	}
+}
+
+// Publish opposite latency bands for two contexts using the real dispatch clock and
+// evaluator. All database I/O stays outside the virtual clock.
+func seedEndpointQuality(t *testing.T, ordinaryID, pluginID int, modelName, testCase string) {
+	t.Helper()
+	start := time.Now().Add(-10 * time.Minute)
+	synctest.Test(t, func(t *testing.T) {
+		time.Sleep(start.Sub(time.Now()))
+		stop := service.StartRoutingEvaluation()
+		defer stop()
+		synctest.Wait()
+		sample := func(id, mode int, stream bool, delay time.Duration) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/fixture", nil)
+			c.Set("relay_mode", mode)
+			common.SetContextKey(c, constant.ContextKeyChannelId, id)
+			service.BeginRouteObservation(c)
+			info := &relaycommon.RelayInfo{OriginModelName: modelName, IsStream: stream}
+			service.MarkRouteAttemptSent(c, info)
+			time.Sleep(delay)
+			if stream {
+				service.ObserveRouteStreamOutput(c, `{"choices":[{"delta":{"content":"token"}}]}`)
+			}
+			service.FinishRouteAttempt(c, info, nil)
+		}
+		stream := testCase == "stream"
+		mode, other := relayconstant.RelayModeVideoSubmit, relayconstant.RelayModeUnknown
+		if stream {
+			mode, other = relayconstant.RelayModeResponses, relayconstant.RelayModeResponses
+		}
+		for range 20 {
+			sample(ordinaryID, mode, stream, 100*time.Millisecond)
+			sample(pluginID, mode, stream, 5*time.Second)
+			sample(ordinaryID, other, false, 5*time.Second)
+			sample(pluginID, other, false, 100*time.Millisecond)
+		}
+		time.Sleep(5 * time.Minute)
+		synctest.Wait()
+	})
 }
 
 func serveEndpointRouteCase(t *testing.T, tc endpointRouteCase, path, modelName, key string, named map[string]*model.Channel, requestUserID int) {

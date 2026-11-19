@@ -184,6 +184,8 @@ class Routing(Experiment):
         self.exchanges.append({'case': self.current_case, 'request_id': request_id,
             'method': method, 'path': path.split('?')[0], 'model': (body or {}).get('model'), 'status': status,
             'expected_charge':expected_charge})
+        if 'retry-after' in normalized:
+            self.exchanges[-1]['retry_after'] = normalized['retry-after']
         return status, raw
 
     def settled(self, before, amount, timeout=10):

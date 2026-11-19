@@ -63,6 +63,7 @@ type Channel struct {
 	// Ren2Hub 渠道倍率与即时并发；InFlight 和 Lab 是只读投影，不入库
 	ChannelRatio   string                  `json:"channel_ratio" gorm:"type:varchar(64);not null;default:1"`
 	MaxConcurrency int                     `json:"max_concurrency" gorm:"not null;default:0"`
+	RoutingQuality *ChannelRoutingQuality  `json:"routing_quality,omitempty" gorm:"-"`
 	InFlight       int                     `json:"in_flight" gorm:"-"`
 	Lab            modellab.Classification `json:"lab" gorm:"-"`
 	// BalanceDetail is the last balance query in channel responses; see

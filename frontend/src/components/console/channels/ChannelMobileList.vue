@@ -396,6 +396,19 @@ function responseDisplay(channel: AdminChannel): {
                   <span v-else class="tabular-nums text-[var(--text-primary)]">
                     {{ channel.priority }}
                   </span>
+                  <small
+                    v-if="channel.routing_quality"
+                    class="block text-[var(--text-tertiary)]"
+                    >{{
+                      t('channels.qualitySummary', {
+                        ...channel.routing_quality,
+                        reason: t(
+                          'channels.qualityReasons.' +
+                            channel.routing_quality.reason
+                        ),
+                      })
+                    }}</small
+                  >
                 </dd>
               </div>
               <div v-if="visibleFields.includes('weight')" class="min-w-0">

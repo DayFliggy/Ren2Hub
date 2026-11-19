@@ -29,6 +29,35 @@ export interface RoutingObservation {
   latency_known: boolean
 }
 export interface RoutingSnapshot {
+  quality?: {
+    channel_id: number
+    model: string
+    operation: number
+    stream: boolean
+    band: number
+    reason: string
+    samples: number
+    latency_samples: number
+    speed_samples: number
+  }[]
+  cache?: {
+    explorations: number
+    free_requests: number
+    bands: {
+      channel_id: number
+      model: string
+      mode: string
+      operation: number
+      stream: boolean
+      known: boolean
+      band: number
+      reason: string
+      coverage: number
+      token_rate: number
+      samples: number
+      sessions: number
+    }[]
+  }
   users: { id: number; limit: number; in_flight: number }[]
   channels: { id: number; limit: number; in_flight: number }[]
   observations: RoutingObservation[]
@@ -99,6 +128,20 @@ export function parseRoutingSnapshot(value: unknown): RoutingSnapshot {
       in_flight: nonnegative(row.in_flight, endpoint, true),
     }))
   return {
+    quality: (value.quality === undefined ? [] : rows('quality')).map(
+      (row) => ({
+        channel_id: requiredStrictInteger(row.channel_id, endpoint),
+        model: requiredString(row.model, endpoint),
+        operation: requiredStrictInteger(row.operation, endpoint),
+        stream: requiredBoolean(row.stream, endpoint),
+        band: nonnegative(row.band, endpoint, true),
+        reason: requiredString(row.reason, endpoint),
+        samples: nonnegative(row.samples, endpoint, true),
+        latency_samples: nonnegative(row.latency_samples, endpoint, true),
+        speed_samples: nonnegative(row.speed_samples, endpoint, true),
+      })
+    ),
+    cache: parseRouteCache(value.cache, endpoint),
     users: limits('users'),
     channels: limits('channels'),
     observations: rows('observations').map((row) => {
@@ -122,6 +165,34 @@ export function parseRoutingSnapshot(value: unknown): RoutingSnapshot {
         latency_samples: latencySamples,
         latency_known:
           latencyKnown && latencySamples !== null && latencySamples > 0,
+      }
+    }),
+  }
+}
+function parseRouteCache(
+  value: unknown,
+  endpoint: string
+): RoutingSnapshot['cache'] {
+  if (value === undefined) return undefined
+  if (!isRecord(value) || !Array.isArray(value.bands)) invalidResponse(endpoint)
+  return {
+    explorations: nonnegative(value.explorations, endpoint, true),
+    free_requests: nonnegative(value.free_requests, endpoint, true),
+    bands: value.bands.map((row: unknown) => {
+      if (!isRecord(row)) invalidResponse(endpoint)
+      return {
+        channel_id: requiredStrictInteger(row.channel_id, endpoint),
+        model: requiredString(row.model, endpoint),
+        mode: requiredString(row.mode, endpoint),
+        operation: requiredStrictInteger(row.operation, endpoint),
+        stream: requiredBoolean(row.stream, endpoint),
+        known: requiredBoolean(row.known, endpoint),
+        band: nonnegative(row.band, endpoint, true),
+        reason: requiredString(row.reason, endpoint),
+        coverage: probability(row.coverage, endpoint),
+        token_rate: probability(row.token_rate, endpoint),
+        samples: nonnegative(row.samples, endpoint, true),
+        sessions: nonnegative(row.sessions, endpoint, true),
       }
     }),
   }

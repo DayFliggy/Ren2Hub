@@ -44,6 +44,7 @@ export interface AdminChannelInfo {
 export interface AdminChannel extends Record<string, unknown> {
   channel_ratio: string
   max_concurrency: number
+  routing_quality?: { model: string; band: number; reason: string }
   in_flight: number
   lab: { id: string; name: string; source: string }
   channel_info?: AdminChannelInfo

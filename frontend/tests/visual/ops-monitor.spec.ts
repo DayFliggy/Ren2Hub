@@ -40,7 +40,42 @@ function routing() {
   const data = routingFixture()
   data.channels[0]!.id = 11
   data.observations[0]!.channel_id = 11
-  return data
+  return {
+    ...data,
+    quality: [
+      {
+        channel_id: 11,
+        model: 'quality-model',
+        operation: 1,
+        stream: true,
+        band: 1,
+        reason: 'speed',
+        samples: 50,
+        latency_samples: 32,
+        speed_samples: 25,
+      },
+    ],
+    cache: {
+      free_requests: 200,
+      explorations: 10,
+      bands: [
+        {
+          channel_id: 11,
+          model: 'quality-model',
+          operation: 1,
+          stream: true,
+          mode: 'explicit',
+          known: true,
+          band: 1,
+          reason: 'comparable',
+          coverage: 0.8,
+          token_rate: 0.7,
+          samples: 56,
+          sessions: 15,
+        },
+      ],
+    },
+  }
 }
 async function mockOps(page: Page) {
   await page.route('**/api/performance/stats?*', (route) => {
@@ -407,6 +442,8 @@ test('overview failure shows an inline retry while other sections load', async (
   await expect(status.getByRole('alert')).toContainText('overview unavailable')
   await expect(status.getByRole('alert')).toContainText('尚未成功加载')
   await expect(section(page, 'quality')).toContainText('样本最多的观察')
+  await expect(section(page, 'quality')).toContainText('quality-model')
+  await expect(section(page, 'quality')).toContainText('探索占比')
   failing = false
   await status.getByRole('button', { name: '重试', exact: true }).click()
   await expect(status.getByRole('alert')).toHaveCount(0)

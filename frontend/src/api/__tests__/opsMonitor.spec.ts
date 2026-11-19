@@ -213,6 +213,34 @@ describe('native ops monitoring', () => {
       latency_samples: null,
     })
   })
+  it('keeps explicit zero cache reuse and distinguishes unreported cache quality', () => {
+    const fields = {
+      channel_id: 9,
+      model: 'test',
+      operation: 1,
+      stream: true,
+      mode: 'explicit',
+      known: false,
+      band: 0,
+      reason: 'insufficient_evidence',
+      coverage: 0,
+      token_rate: 0,
+      samples: 0,
+      sessions: 0,
+    }
+    const value = {
+      ...routingFixture(),
+      cache: { free_requests: 20, explorations: 1, bands: [fields] },
+    }
+    expect(parseRoutingSnapshot(value).cache?.bands[0]).toMatchObject({
+      known: false,
+      coverage: 0,
+      token_rate: 0,
+    })
+    expect(parseRoutingSnapshot(routingFixture()).cache).toBeUndefined()
+    value.cache.bands[0]!.coverage = 2
+    expect(() => parseRoutingSnapshot(value)).toThrow('Invalid API response')
+  })
   it('rejects invalid concurrency and observation metrics', () => {
     const data = routingFixture()
     data.channels[0]!.in_flight = -1

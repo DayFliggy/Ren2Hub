@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -15,9 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -191,57 +187,11 @@ func routeLoadBucket(active int) int {
 	return max(1, int(math.Log2(float64(active))))
 }
 
-func orderAutomaticRoutes(rows []*model.Channel, requestID, modelName string, operation int, stream bool) {
-	type ranking struct {
-		health, load, latency int
-		rank                  float64
-	}
-	ranks := make(map[int]ranking, len(rows))
-	for _, c := range rows {
-		r := ranking{load: routeLoadBucket(ChannelInFlight(c.Id))}
-		upstreamModel, _, mappingErr := relaycommon.ResolveMappedModelName(modelName, c.GetModelMapping())
-		if mappingErr != nil {
-			upstreamModel = ""
-		}
-		// 健康档来自熔断状态（B7），错误率只保留在快照里供观测，不再参与排序。
-		health, weightFactor := routeObservations.routeHealth(c.Id, upstreamModel)
-		r.health = health
-		if upstreamModel != "" {
-			if ob := routeObservations.get(c.Id, upstreamModel, operation, stream); ob.LatencyKnown {
-				r.latency = observationBand(ob.LatencyMS, 3000, 10000)
-			}
-		}
-		hash := sha256.Sum256([]byte(requestID + ":" + strconv.Itoa(c.Id)))
-		uniform := (float64(binary.BigEndian.Uint64(hash[:8])>>11) + 1) / (float64(uint64(1)<<53) + 1)
-		r.rank = -math.Log(uniform) / (float64(max(c.GetWeight(), 1)) * weightFactor)
-		ranks[c.Id] = r
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := rows[i], rows[j]
-		x, y := ranks[a.Id], ranks[b.Id]
-		if a.GetPriority() != b.GetPriority() {
-			return a.GetPriority() > b.GetPriority()
-		}
-		if x.health != y.health {
-			return x.health < y.health
-		}
-		if (a.GetWeight() > 0) != (b.GetWeight() > 0) {
-			return a.GetWeight() > 0
-		}
-		if x.load != y.load {
-			return x.load < y.load
-		}
-		if x.latency != y.latency {
-			return x.latency < y.latency
-		}
-		if x.rank != y.rank {
-			return x.rank < y.rank
-		}
-		return a.Id < b.Id
-	})
-}
-
 func ReleaseRouteChannel(c *gin.Context) {
+	if probe := currentRouteProbe(c); probe != nil {
+		routeObservations.releaseProbe(probe)
+		c.Set("route_probe", (*routeProbe)(nil))
+	}
 	if value, ok := c.Get("route_channel_permit"); ok {
 		if permit, ok := value.(*ConcurrencyPermit); ok {
 			permit.Release()
@@ -256,6 +206,9 @@ type routeScan struct {
 	Candidates int   `json:"candidates"`
 	FullSkips  int   `json:"full_skips"`
 	DurationUS int64 `json:"duration_us"`
+	Cooling    int   `json:"cooling,omitempty"`
+	Open       int   `json:"open,omitempty"`
+	ProbeBusy  int   `json:"probe_busy,omitempty"`
 }
 
 func (s *routeScan) record(c *gin.Context, channel *model.Channel, err error) {
@@ -286,7 +239,7 @@ func (s *routeScan) record(c *gin.Context, channel *model.Channel, err error) {
 		if err != nil {
 			message = common.LogText("%s: %v", message, err)
 		}
-		logger.LogError(c, message)
+		common.SysError(common.LogText("%s | %s", c.GetString(common.RequestIdKey), message))
 	}
 }
 
@@ -306,10 +259,34 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 	var selected *model.Channel
 	if err == nil {
 		scan.Candidates = len(rows)
-		if !manual {
-			orderAutomaticRoutes(rows, c.GetString(common.RequestIdKey), modelName, routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream))
+		used := make(map[int]bool)
+		for _, value := range c.GetStringSlice("use_channel") {
+			id, _ := strconv.Atoi(value)
+			used[id] = true
 		}
-		selected, err = scan.acquire(c, rows, pin.ChannelId, pinned)
+		available := rows[:0]
+		for _, channel := range rows {
+			if !used[channel.Id] && (!pinned || channel.Id == pin.ChannelId) {
+				available = append(available, channel)
+			}
+		}
+		automatic := !manual && !pinned
+		if automatic {
+			orderRuntimeRoutes(c, available, modelName, routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream))
+		}
+		selected, err = scan.acquire(c, available, modelName, automatic)
+		if selected != nil {
+			source := "auto"
+			if manual {
+				source = "manual"
+			}
+			if pinned {
+				source = "pin"
+			}
+			if !routePreselecting(c) {
+				setRouteDecision(c, selected.Id, source)
+			}
+		}
 	}
 	if !manual && !pinned {
 		scan.DurationUS = time.Since(started).Microseconds()
@@ -320,35 +297,16 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 	return selected, err
 }
 
-func (s *routeScan) acquire(c *gin.Context, rows []*model.Channel, pinID int, pinned bool) (*model.Channel, error) {
-	used := make(map[int]bool)
-	for _, value := range c.GetStringSlice("use_channel") {
-		id, _ := strconv.Atoi(value)
-		used[id] = true
-	}
-	for _, channel := range rows {
-		if used[channel.Id] || pinned && channel.Id != pinID {
-			continue
-		}
-		selected, err := acquireRouteChannel(c, channel)
-		if errors.Is(err, ErrConcurrencyFull) {
-			s.FullSkips++
-			continue
-		}
-		if errors.Is(err, errConcurrencyResourceDeleted) {
-			// 候选读出后渠道被删除：它已不是候选，继续尝试下一个。
-			continue
-		}
-		return selected, err
-	}
-	if s.FullSkips > 0 {
-		return nil, ErrConcurrencyFull
-	}
-	return nil, nil
-}
-
 // AcquirePinnedRouteChannel revalidates a continuation without selecting another channel.
 func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, error) {
+	row, err := acquireBoundRouteChannel(c, channelID, modelName, false)
+	if row != nil {
+		setRouteDecision(c, row.Id, "pin")
+	}
+	return row, err
+}
+
+func acquireBoundRouteChannel(c *gin.Context, channelID int, modelName string, healthy bool) (*model.Channel, error) {
 	ReleaseRouteChannel(c)
 	BeginRouteObservation(c)
 	scope, err := requestRouteScope(c)
@@ -362,6 +320,9 @@ func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) 
 	for _, channel := range rows {
 		if channel.Id != channelID {
 			continue
+		}
+		if healthy {
+			return acquireHealthyRoute(c, channel, modelName, false)
 		}
 		return acquireRouteChannel(c, channel)
 	}
@@ -393,8 +354,12 @@ func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName stri
 		scan, state.scan = state.scan, nil
 	}
 	started := time.Now()
-	channel, err := AcquirePinnedRouteChannel(c, channelID, modelName)
-	if errors.Is(err, ErrConcurrencyFull) || errors.Is(err, model.ErrTokenRouteForbidden) {
+	_, pinned, _ := GetChannelConstraints(c).ResolvedPin()
+	affinityInfo, _ := c.Get(ginKeyChannelAffinityLogInfo)
+	healthy := !pinned && !HasPrivateTokenRoute(c) && !(RequestPolicy(c).SessionMode == "strict" && affinityInfo != nil)
+	channel, err := acquireBoundRouteChannel(c, channelID, modelName, healthy)
+	var pause *routePauseError
+	if errors.As(err, &pause) || errors.Is(err, ErrConcurrencyFull) || errors.Is(err, model.ErrTokenRouteForbidden) {
 		// The caller selects again, which records affinity use afresh.
 		forgetChannelAffinityUse(c)
 		return nil, nil
@@ -408,6 +373,7 @@ func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName stri
 	if err != nil {
 		return nil, classifyRouteLoadFailure(err)
 	}
+	setRouteDecision(c, channel.Id, "plugin")
 	return channel, nil
 }
 
@@ -478,6 +444,9 @@ func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int, modelName stri
 		return nil, &originTaskFilterError{kind: kind}
 	}
 	selected, err := acquireRouteChannel(c, channel)
+	if selected != nil {
+		setRouteDecision(c, selected.Id, "pin")
+	}
 	if errors.Is(err, errConcurrencyResourceDeleted) {
 		return nil, fmt.Errorf("%w: %w", errOriginTaskChannelUnavailable, err)
 	}

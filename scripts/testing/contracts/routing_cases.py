@@ -78,9 +78,52 @@ def retry_after(e):
     return {'retry_after_seconds':30, 'assertion':'后续请求在冷却内顺延，不等待墙钟30秒'}
 
 
+def automatic_breaker_admission(e):
+    # Populate the model breaker through the same relay used by clients.
+    e.configure('a', priority=10)
+    e.configure('b', priority=1)
+    e.status('c', 2)
+    e.route(['a'])
+    e.sim.scenario('a', steps=[{'kind': 'http_error', 'status': 502}])
+    for _ in range(5):
+        e.check(['a'], status=502, amount=0)
+    e.route(mode='auto')
+    e.check(['b'])
+    e.status('b', 2)
+    raw, _ = e.check([], status=503, amount=0)
+    require(json.loads(raw)['error']['code'] == 'channel_temporarily_unavailable',
+            'all_open_breakers_require_temporary_refusal')
+    delay = e.exchanges[-1].get('retry_after')
+    require(isinstance(delay, str) and delay.isdigit() and 1 <= int(delay) <= 60,
+            'all_open_refusal_missing_probe_deadline')
+
+
+def prefer_escapes_cooling_channel(e):
+    rules = [{'name': 'routing-cache-escape', 'model_regex': ['^route-test$'],
+              'path_regex': ['/v1/chat/completions'], 'session_mode': 'prefer',
+              'key_sources': [{'type': 'request_header', 'key': 'X-Routing-Session'}]}]
+    e.policy(**{'channel_affinity_setting.enabled': 'true',
+                'channel_affinity_setting.rules': json.dumps(rules),
+                'channel_affinity_setting.switch_on_success': 'true'})
+    e.status('b', 2)
+    e.status('c', 2)
+    e.configure('a', priority=10)
+    e.route(mode='auto')
+    headers = {'X-Routing-Session': 'cooldown-' + e.suffix}
+    e.check(['a'], headers=headers)
+    e.status('b', 1)
+    e.sim.scenario('a', steps=[{'kind': 'http_error', 'status': 429, 'retry_after': '30'}])
+    e.check(['a'], status=429, amount=0, headers=headers)
+    e.check(['b'], headers=headers)
+    # Publish A's configuration, clearing its pause. The successful escape wrote B.
+    e.sim.scenario('a')
+    e.configure('a', priority=11)
+    e.check(['b'], headers=headers)
+
+
 def automatic_nonfull_load(e):
     e.route(['a'])
-    e.configure('a',weight=1000000,max_concurrency=8)
+    e.configure('a',weight=1000000,max_concurrency=2)
     e.configure('b',weight=1,max_concurrency=8)
     e.status('c',2)
     e.sim.scenario('a',steps=[{'kind':'hold'}])
@@ -92,7 +135,7 @@ def automatic_nonfull_load(e):
             state=e.routing_observations(('a','b'))
             channels={row['id']:row for row in state['channels']}
             require(channels[e.channel_map['a']]['in_flight']==1
-                    and channels[e.channel_map['a']]['limit']==8
+                    and channels[e.channel_map['a']]['limit']==2
                     and channels[e.channel_map['b']]['in_flight']==0, 'nonfull_load_fixture_missing')
             e.route(mode='auto')
             for _ in range(3):
@@ -327,7 +370,8 @@ def error_privacy(e):
 
 CASES = [('manual_unavailable_no_auto_fallback',manual_unavailable),
          ('route_version_ownership_edit_mode',route_management),('nonretryable_no_replay',nonretryable),
-         ('retry_after_cooldown',retry_after),('expensive_retry_insufficient_reserve',expensive_retry),
+         ('retry_after_cooldown',retry_after),('automatic_breaker_admission',automatic_breaker_admission),
+         ('prefer_escapes_cooling_channel',prefer_escapes_cooling_channel),('expensive_retry_insufficient_reserve',expensive_retry),
          ('delivered_stream_not_replayed',delivered_stream),('disconnect_retry',disconnect_retry),
          ('client_disconnect_settles_once_and_releases',client_disconnect_settles_once_and_releases),
          ('automatic_busy_hot_limit',automatic_busy),('automatic_nonfull_load_bucket',automatic_nonfull_load),

@@ -29,6 +29,7 @@ func GeminiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	logger.LogDebug(c, "Gemini responses response body: %s", responseBody)
 
 	var geminiResponse dto.GeminiChatResponse
+	service.ObserveRouteUsage(c, "gemini", responseBody)
 	if err := common.Unmarshal(responseBody, &geminiResponse); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}

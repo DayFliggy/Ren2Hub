@@ -13,9 +13,40 @@ import release_scope
 class ScopeRuleTests(unittest.TestCase):
     def test_parts_cover_exactly_the_candidate_stages_except_routing(self):
         self.assertEqual(release_scope.PART_STAGES['upgrade'], candidate.UPGRADE_STAGES)
-        base = tuple(stage for part in release_scope.PARTS if part != 'upgrade'
+        base = tuple(stage for part in release_scope.PARTS if part not in ('upgrade', 'routing-workload')
                      for stage in release_scope.PART_STAGES[part])
         self.assertEqual((*base, 'routing'), candidate.STAGES)
+
+    def test_routing_change_requires_named_source_workload(self):
+        self.assertEqual(release_scope.required_parts(['service/route_breaker.go']), ['upgrade', 'routing-workload'])
+        self.assertEqual(release_scope.required_parts(['service/route_cache_quality_test.go']), ['routing-workload'])
+        self.assertEqual(release_scope.required_parts(['docs/routing/UNIFIED_ROUTING.md']), [])
+        self.assertEqual(release_scope.stages(['routing-workload']), ('routing-workload',))
+
+    def test_source_workload_requires_every_named_case_and_nonempty_execution(self):
+        import run
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            expected = release_scope.ROUTING_WORKLOAD_TESTS
+            with patch('run.go_unit', return_value={'success': True, 'batches': []}) as unit:
+                with self.assertRaisesRegex(RuntimeError, '路由负载用例没有执行'):
+                    run.routing_workload(path, path, {})
+                package = run.ROUTING_SERVICE_PACKAGE
+                pattern = unit.call_args.args[4][package]
+                with self.assertRaisesRegex(RuntimeError, expected[-1]):
+                    run.select_tests(package, list(expected[:-1]), {}, pattern, True)
+
+    def test_candidate_records_source_workload_as_a_scoped_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = object.__new__(candidate.Candidate)
+            runner.source = Path(tmp)
+            runner.output = Path(tmp)
+            runner.report = {'stages': {}}
+            expected = {'success': True, 'tests': ['TestAutomaticRoutingWorkload'], 'batches': [{'passed': 1}]}
+            with patch('run.routing_workload', return_value=expected):
+                runner.stage('routing-workload')
+            self.assertEqual(runner.report['stages']['routing-workload'], expected)
+            self.assertEqual(json.loads((Path(tmp) / 'routing-workload.json').read_text()), expected)
 
     def test_anything_that_reaches_the_server_binary_requires_the_upgrade_rehearsal(self):
         # 启动路径上读写已有数据的代码：迁移、已存配置解析及其共享解码、内置角色策略重置、

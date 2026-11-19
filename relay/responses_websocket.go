@@ -568,6 +568,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 					}
 				}
 				accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
+				service.ObserveRouteUsage(c, "openai", incoming.body)
 				service.ObserveRouteStreamOutput(c, string(incoming.body))
 			}
 			switch event.Type {

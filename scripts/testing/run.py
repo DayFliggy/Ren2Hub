@@ -144,8 +144,21 @@ def select_tests(package: str, found: list[str], deferred: dict[str, str], patte
     return selected, handed_over
 
 
+ROUTING_SERVICE_PACKAGE = 'github.com/QuantumNous/new-api/service'
+
+
+def routing_workload(source: Path, output: Path, env: dict) -> dict:
+    from release_scope import ROUTING_WORKLOAD_TESTS
+    pattern = '^(' + '|'.join(ROUTING_WORKLOAD_TESTS) + ')$'
+    result = go_unit(source, output, env, {ROUTING_SERVICE_PACKAGE}, {ROUTING_SERVICE_PACKAGE: pattern},
+                     named=True, routing_required=True)
+    if not result['batches']:
+        raise RuntimeError('路由负载用例没有执行')
+    return {**result, 'tests': list(ROUTING_WORKLOAD_TESTS)}
+
+
 def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | None = None,
-            patterns: dict[str, str] | None = None, named: bool = False) -> dict:
+            patterns: dict[str, str] | None = None, named: bool = False, routing_required: bool = False) -> dict:
     """only 限定包；patterns 再按顶层测试名正则筛选；named 表示这些包是 targeted 点名的。"""
     from database import REQUIRED_TESTS
     deferred = dict(DEFERRED)
@@ -172,6 +185,12 @@ def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | No
             if not found:
                 raise RuntimeError('声明了测试源码但发现清单为空: ' + package)
             selected, handed_over = select_tests(package, found, deferred, (patterns or {}).get(package), named)
+            if routing_required and package == ROUTING_SERVICE_PACKAGE:
+                from release_scope import ROUTING_WORKLOAD_TESTS
+                required, forwarded = select_tests(package, found, deferred, '^(' + '|'.join(ROUTING_WORKLOAD_TESTS) + ')$', True)
+                if forwarded:
+                    raise RuntimeError('路由负载必测项被转交其他层：' + ', '.join(forwarded))
+                selected = sorted(set(selected) | set(required))
             excluded.extend({'package': package, 'test': test, 'reason': deferred[test]} for test in handed_over)
             binary_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
             for batch_index in range(0, len(selected), 20):
@@ -183,6 +202,8 @@ def go_unit(source: Path, output: Path, env: dict[str, str], only: set[str] | No
                 results.append({'package': package, 'inventory_count': len(found),
                                 'binary_sha256': binary_hash, **go_result(log, batch)})
             binary.unlink()
+    if routing_required and not any(batch['package'] == ROUTING_SERVICE_PACKAGE for batch in results):
+        raise RuntimeError('路由负载用例没有执行')
     if not results and only is None:
         raise RuntimeError('Go 测试清单为空')
     return {'success': True, 'batches': results, 'deferred': excluded}
@@ -435,8 +456,12 @@ def run_selection(source: Path, output: Path, env: dict[str, str], selection: di
         stage('python', lambda d: python_unit(source, d, env))
     if go['vet_modules']:
         stage('go-vet', lambda d: go_vet(source, d, env, go['vet_modules']))
+    needs_workload = bool(selection.get('routing_workload_inputs'))
+    covered_by_unit = needs_workload and ROUTING_SERVICE_PACKAGE in go['tested'] and 'go-unit' not in skip
     if go['tested']:
-        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested']), go.get('patterns'), named))
+        stage('go-unit', lambda d: go_unit(source, d, env, set(go['tested']), go.get('patterns'), named, covered_by_unit))
+    if needs_workload and not covered_by_unit:
+        stage('routing-workload', lambda d: routing_workload(source, d, env))
     if databases:
         from database import run as database_matrix
         packages, tests = databases['packages'], databases['tests']
@@ -533,6 +558,9 @@ def affected(source: Path, output: Path, env: dict[str, str], base: str | None, 
     selection['whole_layers'] = whole
     (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
     if plan_only:
+        if selection.get('routing_workload_inputs'):
+            from release_scope import ROUTING_WORKLOAD_TESTS
+            print('  路由负载必测：' + '、'.join(ROUTING_WORKLOAD_TESTS), flush=True)
         skipped = print_plan(selection, len(list((source / 'frontend/tests/visual').glob('*.spec.ts'))), skip, tuple(whole))
         print(f'  完整选择及原因：{output / "selection.json"}', flush=True)
         return {'success': True, 'release_evidence': False, 'plan_only': True, 'base': base,
@@ -557,6 +585,9 @@ def targeted(source: Path, output: Path, env: dict[str, str], request: dict) -> 
     packages = selector.go_packages(source, env) if request['go'] else {}
     selection = selector.targeted(source, packages, request, set(REQUIRED_TESTS),
                                   {group['package'] for group in race_selection(source)[1]})
+    from release_scope import routing_workload_inputs
+    selection['routing_workload_inputs'] = routing_workload_inputs(
+        selector.changed_files(source, selector.default_base(source)))
     (output / 'selection.json').write_text(json.dumps(selection, ensure_ascii=False, indent=2) + '\n')
     stages, _ = run_selection(source, output, env, selection, 'targeted')
     return {'success': True, 'release_evidence': False, 'request': request, 'stages': {'registry': registry, **stages}}

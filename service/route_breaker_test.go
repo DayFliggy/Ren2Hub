@@ -16,6 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func recordRouteBreaker(epoch uint64, channelID int, model string, success bool) {
+	routeObservations.recordBreaker(epoch, routeBreakerKey{channelID, model}, nil, success)
+}
+
 func recordBreaker(channelID int, modelName string, success bool) {
 	routeObservations.mu.Lock()
 	epoch := routeObservations.epoch
@@ -80,28 +84,35 @@ func TestRouteBreakerHalfOpenWeightAndRecovery(t *testing.T) {
 	health, weight := routeObservations.routeHealth(11, "m")
 	require.Zero(t, health)
 	require.Equal(t, routeHalfOpenWeight, weight)
-	recordBreaker(11, "m", false)
+	finishProbe := func(success bool) {
+		epoch := routeObservations.epoch
+		probe, class, _ := routeObservations.claimProbe(key, epoch, false, false)
+		require.Equal(t, routeAvailable, class)
+		require.NotNil(t, probe)
+		routeObservations.recordBreaker(epoch, key, probe, success)
+	}
+	finishProbe(false)
 	health, _ = routeObservations.routeHealth(11, "m")
 	require.Equal(t, routeWorstHealth, health, "a half-open failure reopens immediately")
 
 	expireBreakerCooldown(t, 11, "m")
 	for range routeBreakerCloseSuccesses - 1 {
-		recordBreaker(11, "m", true)
+		finishProbe(true)
 		_, weight = routeObservations.routeHealth(11, "m")
 		require.Equal(t, routeHalfOpenWeight, weight)
 	}
-	recordBreaker(11, "m", true)
+	finishProbe(true)
 	health, weight = routeObservations.routeHealth(11, "m")
 	require.Zero(t, health)
 	require.Equal(t, 1.0, weight)
-	require.Empty(t, routeObservations.breakers, "a closed breaker keeps no state")
+	require.Zero(t, routeObservations.breakers[key].failures)
 
 	open()
 	state := routeObservations.breakers[key]
 	state.updatedAt = time.Now().Add(-routeObservationTTL - time.Second).UnixMilli()
 	routeObservations.breakers[key] = state
 	health, _ = routeObservations.routeHealth(11, "m")
-	require.Zero(t, health, "breaker state expires with the observation TTL")
+	require.Equal(t, routeWorstHealth, health, "an active breaker cannot be cleared by evicting its samples")
 }
 
 func TestRouteBreakerCountsPerActualModelAndStreamOutputIsSuccess(t *testing.T) {
@@ -125,7 +136,7 @@ func TestRouteBreakerCountsPerActualModelAndStreamOutputIsSuccess(t *testing.T) 
 	}
 	require.Equal(t, routeBreakerOpenFailures-1, routeObservations.breakers[routeBreakerKey{11, "actual"}].failures)
 	attempt(`{"choices":[{"delta":{"content":"partial"}}]}`)
-	require.NotContains(t, routeObservations.breakers, routeBreakerKey{11, "actual"}, "a stream that delivered content was served")
+	require.Zero(t, routeObservations.breakers[routeBreakerKey{11, "actual"}].failures, "a stream that delivered content was served")
 	for range routeBreakerOpenFailures {
 		attempt(`{"type":"response.created"}`)
 	}

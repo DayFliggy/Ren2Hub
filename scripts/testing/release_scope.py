@@ -15,6 +15,7 @@ PART_STAGES = {
     'plugin': ('plugin-before', 'plugin-after'),
     'management': ('upstream_sync',),
     'sdk': ('sdk',),
+    'routing-workload': ('routing-workload',),
 }
 PARTS = tuple(PART_STAGES)
 # plugin 阶段复用 billing 初始化的实例凭据；升级演练在 management 阶段回读旧版写入的工单附件。
@@ -26,6 +27,24 @@ IMPLIED = {'plugin': ('billing',), 'upgrade': ('management',)}
 STARTUP_NEUTRAL = re.compile(r'(?:frontend|docs|scripts|\.github|\.agents)/.*|[^/]*\.md|.*_test\.go')
 
 
+# Shared trigger for the development runner and the scoped release verifier.
+ROUTING_WORKLOAD_PATHS = re.compile(
+    r'(?:service/(?:route_[^/]+|channel_select|channel_affinity|token_route_preview|concurrency|relay_error|usage_helpr)'
+    r'|controller/(?:relay|relay_route_selection|routing_lifecycle)|middleware/(?:distributor|task_plugin)'
+    r'|relay/responses_websocket|relay/channel/(?:openai/(?:relay-openai|relay_responses(?:_compact)?|'
+    r'chat_via_responses|responses_via_chat)|claude/(?:relay-claude|relay_responses)|gemini/(?:relay-gemini(?:-native)?|'
+    r'relay_responses)))(?:_test)?\.go|scripts/testing/contracts/routing(?:_[^/]+)?\.py'
+)
+ROUTING_WORKLOAD_TESTS = (
+    'TestAutomaticRoutingWorkload', 'TestRouteQualityWindowAndRecovery', 'TestRouteRankCapacityPriceAndUnknownSeats',
+    'TestRouteCacheQualityComparableSessions', 'TestRouteCacheStatefulWorkload', 'TestRouteCacheExplorationBudget',
+)
+
+
+def routing_workload_inputs(files):
+    return sorted(path for path in files if ROUTING_WORKLOAD_PATHS.fullmatch(path))
+
+
 def required_parts(files) -> list[str]:
     """部署候选的最低范围；其余部分按改动模块由执行者追加，不在这里强制。
 
@@ -33,7 +52,11 @@ def required_parts(files) -> list[str]:
     重置内置角色策略、注册 OAuth 提供方并编译已有插件，这些代码分布在 model、setting、service、oauth、
     controller、common、types 等包；按路径逐个列举会漏，所以按“是否进入服务端程序”划分。
     """
-    return ['upgrade'] if any(not STARTUP_NEUTRAL.fullmatch(path) for path in files) else []
+    files = list(files)
+    required = ['upgrade'] if any(not STARTUP_NEUTRAL.fullmatch(path) for path in files) else []
+    if routing_workload_inputs(files):
+        required.append('routing-workload')
+    return required
 
 
 def expand(parts) -> list[str]:

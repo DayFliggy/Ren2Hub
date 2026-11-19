@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
@@ -165,11 +166,17 @@ export function buildContentRequest() { return {}; }
 	}
 	// Unknown observations deliberately rank the reverse way from submits.
 	require.NoError(t, db.Model(&model.Channel{}).Where("id = 11").Update("weight", 1000000).Error)
-	for range routeMinimumSamples {
-		RecordRouteObservation(11, "task-model", relayconstant.RelayModeVideoSubmit, false, true, 12000)
-		RecordRouteObservation(22, "task-model", relayconstant.RelayModeVideoSubmit, false, true, 100)
-		RecordRouteObservation(22, "task-model", relayconstant.RelayModeUnknown, false, true, 12000)
+	now := time.Now()
+	for _, id := range []int{11, 22} {
+		routeQualities.invalidate(id)
+		t.Cleanup(func() { routeQualities.invalidate(id) })
 	}
+	for range routeMinimumSamples {
+		routeQualities.add(routeQualityKey{"task-model", routeObservationKey{11, "task-model", relayconstant.RelayModeVideoSubmit, false}}, true, 12000, 0, 0, now)
+		routeQualities.add(routeQualityKey{"task-model", routeObservationKey{22, "task-model", relayconstant.RelayModeVideoSubmit, false}}, true, 100, 0, 0, now)
+		routeQualities.add(routeQualityKey{"task-model", routeObservationKey{22, "task-model", relayconstant.RelayModeUnknown, false}}, true, 12000, 0, 0, now)
+	}
+	routeQualities.evaluate(now)
 	for _, path := range []string{"/v1/tasks/" + key, "/v1/videos"} {
 		p, err := PreviewTokenRouting(context.Background(), 17, 7, TokenRoutePreviewQuery{Model: "task-model", Path: path})
 		require.NoError(t, err)

@@ -10,7 +10,9 @@ import (
 // attachChannelInFlight 用实时准入状态填充管理端的 in_flight 投影。
 // 只有管理端渠道响应调用它，数据库查询不再隐式填充。
 func attachChannelInFlight(channels []*model.Channel) {
+	summaries := service.RouteChannelQualitySummaries()
 	for _, channel := range channels {
+		channel.RoutingQuality = summaries[channel.Id]
 		channel.InFlight = service.ChannelInFlight(channel.Id)
 	}
 }
@@ -18,6 +20,7 @@ func attachChannelInFlight(channels []*model.Channel) {
 // clearChannelProjections 丢弃客户端提交的 in_flight 和 lab 只读投影，避免写入路径误用。
 func clearChannelProjections(channel *model.Channel) {
 	channel.InFlight = 0
+	channel.RoutingQuality = nil
 	channel.Lab = modellab.Classification{}
 }
 

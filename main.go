@@ -80,6 +80,8 @@ func main() {
 			common.FatalLog(common.LogText("failed to close database: %s", err.Error()))
 		}
 	}()
+	stopRoutingEvaluation := service.StartRoutingEvaluation()
+	defer stopRoutingEvaluation()
 	stopObservation := service.StartPerformanceObserver()
 	defer stopObservation()
 

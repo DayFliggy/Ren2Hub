@@ -233,6 +233,13 @@ export const opsMonitorMessages = {
       },
     },
     native: {
+      routeQuality: '渠道路由质量',
+      routeBand: '档位 {band} · {reason}',
+      sampleCoverage:
+        '有效样本 {samples} · 延迟 {latency_samples} · 速度 {speed_samples}',
+      cacheCoverage: '缓存复用 {rate}% · 字段覆盖 {coverage}% · 样本 {samples}',
+      cacheUnknown: '缓存档位未知',
+      routeExploration: '探索占比 {rate}%（{count}/{total}）',
       userInFlight: '用户在途请求',
       logicalRequests: '逻辑请求，包含内部重试',
       channelInFlight: '渠道在途尝试',
@@ -547,6 +554,14 @@ export const opsMonitorMessages = {
       },
     },
     native: {
+      routeQuality: 'Channel routing quality',
+      routeBand: 'Band {band} · {reason}',
+      sampleCoverage:
+        'Samples {samples} · latency {latency_samples} · speed {speed_samples}',
+      cacheCoverage:
+        'Cache reuse {rate}% · coverage {coverage}% · samples {samples}',
+      cacheUnknown: 'Unknown cache band',
+      routeExploration: 'Exploration {rate}% ({count}/{total})',
       userInFlight: 'User requests in flight',
       logicalRequests: 'Logical requests, including internal retries',
       channelInFlight: 'Channel attempts in flight',

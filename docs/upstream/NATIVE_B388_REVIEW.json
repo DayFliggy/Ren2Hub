@@ -33319,42 +33319,147 @@
       "regression": "relay/channel/xunfei/route_scan_test.go:TestRouteScanBeforeAndAfterXunfeiDial"
     },
     "service/request_policy.go": {
-      "local_sha256": "ba98da85ac3df904b82806d5eb95e16232ad4336a4f3a819fef8beae2adbd976",
+      "local_sha256": "71c24497195a55c712a3c4b558a25c7311a41aa45ca59900cb51026fad0d890f",
       "hunks": [
         {
-          "header": "@@ -25,7 +25,6 @@",
-          "sha256": "ac7ed9e857e1c025372e483f5a3d5f54f5567e8aacab0f39c0a9530beb45766e",
-          "basis": "移除 PolicyEvent.Group，日志延续平台渠道身份。"
+          "header": "@@ -23,16 +23,17 @@",
+          "sha256": "c3d388b934964ba88fb5be0d8cdc26a94873b90cedee19c1c3b49d4c594f2508",
+          "basis": "逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 自动扫描记录及移除 Group 继续遵循既有合同。"
         },
         {
-          "header": "@@ -33,6 +32,7 @@",
-          "sha256": "1fcd9c0b21c08878b278b689d15175bd4092dbdbc674266dd08a740fd5245ef8",
-          "basis": "PolicyEvent.Scan 仅在自动扫描事件中序列化，随管理员请求策略导出。"
-        },
-        {
-          "header": "@@ -42,7 +42,6 @@",
-          "sha256": "399e37831da74b7e60d5929d990a3a41f0fdb4e19683d907df526b78b530831e",
+          "header": "@@ -42,7 +43,6 @@",
+          "sha256": "3b1f10fe51e6dac5950c6b2a18d2d0e0ca29f2757c34f263ff3a8e51580397a5",
           "basis": "移除按业务分组选择渠道的 SelectedGroup 状态。"
         },
         {
-          "header": "@@ -50,6 +49,7 @@",
-          "sha256": "022f92772810f4b659d3fbbac23c5adcd510276ef6255cbfe688f9fe0f1f201f",
+          "header": "@@ -50,6 +50,7 @@",
+          "sha256": "14d14162092d616237b153912dad4256de91207e66e165737604a444cc25910b",
           "basis": "routeScanState 为每个请求保存轮次和已选择但尚未发送的渠道。"
         },
         {
-          "header": "@@ -67,14 +67,14 @@",
-          "sha256": "0b4753aef5443520c60f470136db0fc8979aaa561aeceb734025a090e3c94277",
+          "header": "@@ -67,14 +68,14 @@",
+          "sha256": "e8bb656f5e7a251c102d0af47a439a40bec97f70da718a796a8b9f201cce7b4c",
           "basis": "AddEvent 在策略事件锁内跟踪扫描结果和轮次，沿用事件上限，取消业务分组的默认填充。"
         },
         {
-          "header": "@@ -86,11 +86,10 @@",
-          "sha256": "d7a51414384dfbdac0b4ea372d5fbc389ec946e3f2f4e6100c184d9152c33e4d",
+          "header": "@@ -86,11 +87,10 @@",
+          "sha256": "d126dba2fc52c64d7dfc511f9915e82525693105468502898c5f27a5ec13e324",
           "basis": "BeginAttempt 仍按渠道记录中继尝试，省去分组参数及写回。"
         },
         {
-          "header": "@@ -175,6 +174,7 @@",
-          "sha256": "03479f7c3d460ef77b9ac417ae29c529f56d170fdf5cf02c5ede3714fdad061a",
+          "header": "@@ -175,6 +175,7 @@",
+          "sha256": "9491b5360e4278ef01e47d137546344fe9570d56bce803de6ccbb7418923b3a5",
           "basis": "首次终止时输出选中后、上游发送前遭拒的扫描摘要，保留原生终止决策和错误码。"
+        }
+      ]
+    },
+    "relay/channel/claude/relay_responses.go": {
+      "local_sha256": "e660049e989de2673d6431b5884fd24c9c3a13b0cddb1a3c25dda1868c7849a1",
+      "hunks": [
+        {
+          "header": "@@ -83,6 +83,7 @@",
+          "sha256": "44e10ba6b909198c239fbd8df58b3b474c1b9b808be48d32326a62ab7cb868d8",
+          "basis": "在 ClaudeResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/gemini/relay-gemini-native.go": {
+      "local_sha256": "675c97ad894fff69926c13ec50c92f5803237fb2a7e9e9d875222632ce6702d1",
+      "hunks": [
+        {
+          "header": "@@ -31,6 +31,7 @@",
+          "sha256": "34969b9dab174a2d3319c231746b0720b1c60ab51278a75dd6fed62bf1af5ae5",
+          "basis": "在 GeminiTextGenerationHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/gemini/relay-gemini.go": {
+      "local_sha256": "63730cd490fd15a64e195438486f53fbf2293b5682ba172bda9654ade4241de1",
+      "hunks": [
+        {
+          "header": "@@ -211,6 +211,7 @@",
+          "sha256": "f7e68ae6c16e815b1257169878e31a7d34e9a5a2a31e550af9a7a08e800c0af7",
+          "basis": "在 geminiStreamHandler、GeminiChatHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        },
+        {
+          "header": "@@ -417,6 +418,7 @@",
+          "sha256": "2e464ed74c50aece0cdf0054d9c2bf4ae7381fbcb48a838902389843b73617e6",
+          "basis": "在 geminiStreamHandler、GeminiChatHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/gemini/relay_responses.go": {
+      "local_sha256": "557448be578f8898332533926341d821b9b848f93f860231b81e98b646d7f79f",
+      "hunks": [
+        {
+          "header": "@@ -29,6 +29,7 @@",
+          "sha256": "e40f7f80bf23ccae0715dd5aa516b714aa6a66e8e475f26ffd60acd9b5b954de",
+          "basis": "在 GeminiResponsesHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/openai/relay-openai.go": {
+      "local_sha256": "b2f8f37dcd26e3bcd1b1679760f3aff9ab2e56d19fc8e3109174d67faf77dab7",
+      "hunks": [
+        {
+          "header": "@@ -124,6 +124,7 @@",
+          "sha256": "d0addbda52a4eb7627d7774e6825dcb2b73458fc38c447595c8b411b60373439",
+          "basis": "在 OaiStreamHandler、OpenaiHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        },
+        {
+          "header": "@@ -275,6 +276,7 @@",
+          "sha256": "975b032331c48103b56e7cd2ef803e1c2a7874591120a272447ecd8b5c413d02",
+          "basis": "在 OaiStreamHandler、OpenaiHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/openai/relay_responses.go": {
+      "local_sha256": "d9ea53912d2f12a2dff7e1db133de61977ac74fec73d69ee0b113223bddd08fb",
+      "hunks": [
+        {
+          "header": "@@ -27,6 +27,7 @@",
+          "sha256": "f170a66b8c444aca9627006257e3f1d8890bdd612fdf08de1ade4716040f8fac",
+          "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        },
+        {
+          "header": "@@ -77,6 +78,7 @@",
+          "sha256": "596ef608f5eec739a1facdb8c507eea94919282f0f109c5d8e5cda26acdd37cc",
+          "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/openai/relay_responses_compact.go": {
+      "local_sha256": "49e1caf986f20356d582f672fce29e8f93c6f90959e7a91765973623e6d6bc82",
+      "hunks": [
+        {
+          "header": "@@ -21,6 +21,7 @@",
+          "sha256": "b160ce6dbee9da448b51958d7369bf457be91405f55eb9c3a6463edeeeeaf781",
+          "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "relay/channel/openai/responses_via_chat.go": {
+      "local_sha256": "f556e1180daade1526b12dec97f440b388ed6d06bf001d38411a6cc9ed62b771",
+      "hunks": [
+        {
+          "header": "@@ -28,6 +28,7 @@",
+          "sha256": "c02e4bf7544e8805ae3cde59f34303c95e6f882040e2808d173deac9136a2b5a",
+          "basis": "在 OaiChatToResponsesHandler、OaiChatToResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        },
+        {
+          "header": "@@ -121,6 +122,7 @@",
+          "sha256": "07a65e5827361085912fae60e82dd46331e827ad348655af79bae97f9d4e8478",
+          "basis": "在 OaiChatToResponsesHandler、OaiChatToResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+        }
+      ]
+    },
+    "service/usage_helpr.go": {
+      "local_sha256": "ab2faeff396e4816e0156bbbeb6c68bdc6d1ba7ac2730be868370519cb600293",
+      "hunks": [
+        {
+          "header": "@@ -26,6 +26,10 @@",
+          "sha256": "19235b30b0cf4bffacabb1ad45de73f200da2869c5f1a1bda529669fddd57c9d",
+          "basis": "估算输出 token 时只标记本轮的估算来源，原生结算数量沿用。"
         }
       ]
     }

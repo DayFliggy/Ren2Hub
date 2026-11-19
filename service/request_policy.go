@@ -23,16 +23,17 @@ type PolicyDecision struct {
 }
 
 type PolicyEvent struct {
-	Attempt     int            `json:"attempt"`
-	ChannelID   int            `json:"channel_id,omitempty"`
-	Rule        string         `json:"rule,omitempty"`
-	Status      int            `json:"status,omitempty"`
-	ErrorCode   string         `json:"error_code,omitempty"`
-	ErrorSource string         `json:"error_source,omitempty"`
-	ElapsedMS   int64          `json:"elapsed_ms"`
-	Decision    PolicyDecision `json:"decision"`
-	Health      string         `json:"health,omitempty"`
-	Scan        *routeScan     `json:"scan,omitempty"`
+	Attempt      int                   `json:"attempt"`
+	ChannelID    int                   `json:"channel_id,omitempty"`
+	Rule         string                `json:"rule,omitempty"`
+	Status       int                   `json:"status,omitempty"`
+	ErrorCode    string                `json:"error_code,omitempty"`
+	ErrorSource  string                `json:"error_source,omitempty"`
+	ElapsedMS    int64                 `json:"elapsed_ms"`
+	Decision     PolicyDecision        `json:"decision"`
+	Health       string                `json:"health,omitempty"`
+	RouteAttempt *RouteAttemptEvidence `json:"route_attempt,omitempty"`
+	Scan         *routeScan            `json:"scan,omitempty"`
 }
 
 // RequestPolicyState records how one request was routed so administrators can

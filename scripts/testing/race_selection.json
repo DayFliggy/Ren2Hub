@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "total_selected_top_level_executions": 148,
+  "total_selected_top_level_executions": 149,
   "groups": [
     {
       "id": "original-model",
@@ -19,7 +19,7 @@
     {
       "id": "original-service",
       "package": "service",
-      "pattern": "^(TestConcurrencyUnlimitedHotUpdateAndOnceRelease|TestConcurrencySlowPublicationDoesNotBlockUnrelatedAdmission|TestConcurrencyPendingPublicationCannotAdmitWithStaleLimit|TestConcurrencyParallelNeverExceedsLimit|TestConcurrencyRefreshUsesCommittedValueAndKeepsBorrowers|TestConcurrencyCommittedPublicationSurvivesCallerCancellation|TestConcurrencyFailedPublicationRepairsBeforeAdmission|TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure|TestDeletedChannelRejectsStaleAdmission|TestReleaseDeletedUserForgetsConcurrency|TestConcurrencyAdmissionErrorClassifiesRealFailures|TestEvaluateTopUpBonusFormula|TestResolveTopUpBonusFromHourlyWindows|TestResolveTopUpBonusFailureRules|TestTopUpBonusDayIsStableAndRollsOver|TestTopUpBonusSiteTotalFollowsConfigVersion|TestResolveTopUpBonusConcurrentAcrossMidnight|TestTopUpBonusConcurrentFirstReadsShareOneQuery|TestTopUpBonusSelfViewHidesSiteTotalAndShadow|TestEstimateTopUpBonusReplaysEverySource|TestEstimateTopUpBonusBucketsOrdersByLocalMidnights|TestObservationTrafficConcurrentSampleAndRead|TestChannelLimitReadFailureIsConcurrencyUnavailable|TestTaskPollAdmissionFailuresAreNotUpstreamFailures|TestTaskPollAdmissionDeletionSkipsWithoutSideEffects)$",
+      "pattern": "^(TestConcurrencyUnlimitedHotUpdateAndOnceRelease|TestConcurrencySlowPublicationDoesNotBlockUnrelatedAdmission|TestConcurrencyPendingPublicationCannotAdmitWithStaleLimit|TestConcurrencyParallelNeverExceedsLimit|TestConcurrencyRefreshUsesCommittedValueAndKeepsBorrowers|TestConcurrencyCommittedPublicationSurvivesCallerCancellation|TestConcurrencyFailedPublicationRepairsBeforeAdmission|TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure|TestDeletedChannelRejectsStaleAdmission|TestReleaseDeletedUserForgetsConcurrency|TestConcurrencyAdmissionErrorClassifiesRealFailures|TestEvaluateTopUpBonusFormula|TestResolveTopUpBonusFromHourlyWindows|TestResolveTopUpBonusFailureRules|TestTopUpBonusDayIsStableAndRollsOver|TestTopUpBonusSiteTotalFollowsConfigVersion|TestResolveTopUpBonusConcurrentAcrossMidnight|TestTopUpBonusConcurrentFirstReadsShareOneQuery|TestTopUpBonusSelfViewHidesSiteTotalAndShadow|TestEstimateTopUpBonusReplaysEverySource|TestEstimateTopUpBonusBucketsOrdersByLocalMidnights|TestObservationTrafficConcurrentSampleAndRead|TestChannelLimitReadFailureIsConcurrencyUnavailable|TestTaskPollAdmissionFailuresAreNotUpstreamFailures|TestTaskPollAdmissionDeletionSkipsWithoutSideEffects|TestRouteProbeLeaseLifecycle)$",
       "names": [
         "TestConcurrencyUnlimitedHotUpdateAndOnceRelease",
         "TestConcurrencySlowPublicationDoesNotBlockUnrelatedAdmission",
@@ -45,7 +45,8 @@
         "TestObservationTrafficConcurrentSampleAndRead",
         "TestChannelLimitReadFailureIsConcurrencyUnavailable",
         "TestTaskPollAdmissionFailuresAreNotUpstreamFailures",
-        "TestTaskPollAdmissionDeletionSkipsWithoutSideEffects"
+        "TestTaskPollAdmissionDeletionSkipsWithoutSideEffects",
+        "TestRouteProbeLeaseLifecycle"
       ]
     },
     {

@@ -16,13 +16,21 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 	if !found {
 		return nil, nil, false
 	}
-	row, err := AcquirePinnedRouteChannel(c, preferred, modelName)
+	strict := RequestPolicy(c).SessionMode == "strict"
+	row, err := acquireBoundRouteChannel(c, preferred, modelName, !strict)
 	if err == nil {
 		MarkChannelAffinityUsed(c, row.Id)
+		if !routePreselecting(c) {
+			source := "prefer"
+			if strict {
+				source = "strict"
+			}
+			setRouteDecision(c, row.Id, source)
+		}
 		return row, nil, true
 	}
 	full := errors.Is(err, ErrConcurrencyFull)
-	if RequestPolicy(c).SessionMode == "strict" {
+	if strict {
 		// An unreadable limit says nothing about the bound channel; keep the binding.
 		if errors.Is(err, errConcurrencyLimitUnavailable) {
 			return nil, routeLoadFailure(c, err), true
@@ -36,7 +44,8 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		}
 		return nil, &ChannelSelectError{StatusCode: status, Message: "strict_session_binding_unavailable"}, true
 	}
-	if full {
+	var pause *routePauseError
+	if full || errors.As(err, &pause) {
 		return nil, nil, false
 	}
 	if !errors.Is(err, model.ErrTokenRouteForbidden) {

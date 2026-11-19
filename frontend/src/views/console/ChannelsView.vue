@@ -744,6 +744,15 @@ async function runBulkStatus(
     clearSelection()
   }
 }
+function routeQualitySummary(row: AdminChannelTableRow) {
+  const quality = channelFromRow(row).routing_quality
+  return quality
+    ? t('channels.qualitySummary', {
+        ...quality,
+        reason: t('channels.qualityReasons.' + quality.reason),
+      })
+    : ''
+}
 </script>
 
 <template>
@@ -1284,6 +1293,12 @@ async function runBulkStatus(
             <span v-else class="tabular-nums">
               {{ channelFromRow(row as AdminChannelTableRow).priority }}
             </span>
+            <small
+              v-if="channelFromRow(row as AdminChannelTableRow).routing_quality"
+              class="block text-[var(--text-tertiary)]"
+            >
+              {{ routeQualitySummary(row as AdminChannelTableRow) }}
+            </small>
           </template>
           <template #cell-weight="{ row }">
             <ChannelInlineNumber

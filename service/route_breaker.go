@@ -3,6 +3,7 @@ package service
 import (
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -10,11 +11,11 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
-// 熔断按“渠道×实际模型”计数，只影响自动排序的健康档：打开时降到最差档，半开时权重乘
-// routeHalfOpenWeight。渠道从不因此被剔除，手动列表也不读它。状态只在进程内，沿用观察表的
-// 过期时间和容量上限。做法借鉴 AxonHub 的模型熔断，没有搬代码。
+// 渠道级限流冷却和按实际模型的熔断分别计时。
 const (
 	routeBreakerOpenFailures   = 5
+	routeBreakerBucketDuration = 10 * time.Second
+	routeBreakerWindowSamples  = 20
 	routeBreakerCooldown       = time.Minute
 	routeHeaderless429Cooldown = 5 * time.Second
 	routeBreakerCloseSuccesses = 3
@@ -31,76 +32,225 @@ type routeBreakerKey struct {
 	model string
 }
 
+type routeFailureBucket struct {
+	tick            int64
+	total, failures uint32
+}
+
 // openUntil 为 0 表示闭合；非 0 时 openUntil 之前是打开，之后是半开。
 type routeBreakerState struct {
 	failures, successes  int
 	openUntil, updatedAt int64
+	probe                *routeProbe
+	window               [6]routeFailureBucket
 }
 
-// recordRouteBreaker 记录一次真实发出的尝试。epoch 规则与观察样本相同：配置变更后，
-// 旧选择的结果不能写进新配置。
-func recordRouteBreaker(epoch uint64, channelID int, model string, success bool) {
-	if channelID <= 0 || model == "" {
+// 每个许可是唯一对象，旧许可的完成或释放不会影响其它探测或其它配置代际。
+type routeProbe struct {
+	key   routeBreakerKey
+	epoch uint64
+}
+
+func (s *routeBreakerState) count(now int64, success bool) bool {
+	tick := now / routeBreakerBucketDuration.Milliseconds()
+	bucket := &s.window[tick%int64(len(s.window))]
+	if bucket.tick != tick {
+		*bucket = routeFailureBucket{tick: tick}
+	}
+	bucket.total++
+	if success {
+		s.failures = 0
+	} else {
+		s.failures++
+		bucket.failures++
+	}
+	var total, failed uint64
+	for _, b := range s.window {
+		if b.tick > tick-int64(len(s.window)) {
+			total += uint64(b.total)
+			failed += uint64(b.failures)
+		}
+	}
+	return s.failures >= routeBreakerOpenFailures || total >= routeBreakerWindowSamples && 2*failed >= total
+}
+
+func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey, probe *routeProbe, success bool) {
+	if key.id <= 0 || key.model == "" {
 		return
 	}
-	s := &routeObservations
-	now := time.Now().UnixMilli()
-	key := routeBreakerKey{channelID, model}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.staleLocked(epoch, channelID) {
+	now := time.Now().UnixMilli()
+	if s.staleLocked(epoch, key.id) {
 		return
 	}
 	s.pruneLocked(now)
 	state, present := s.breakers[key]
-	if present && now-state.updatedAt > routeObservationTTL.Milliseconds() {
+	if present && state.openUntil == 0 && now-state.updatedAt > routeObservationTTL.Milliseconds() {
 		state = routeBreakerState{}
 	}
-	if now < state.openUntil {
-		// 打开期间不计数：冷却按时结束，既不提前闭合，也不被持续失败无限延长。
-		return
-	}
-	switch {
-	case success && state.openUntil == 0:
-		delete(s.breakers, key)
-		return
-	case success:
-		state.successes++
-		if state.successes >= routeBreakerCloseSuccesses {
-			delete(s.breakers, key)
+	if state.openUntil != 0 {
+		if probe == nil || probe != state.probe || probe.epoch != epoch {
 			return
 		}
-	case state.openUntil != 0:
-		state = routeBreakerState{openUntil: now + routeBreakerCooldown.Milliseconds()}
-	default:
-		state.failures++
-		if state.failures >= routeBreakerOpenFailures {
+		state.probe = nil
+		if success {
+			state.successes++
+			if state.successes == routeBreakerCloseSuccesses {
+				state = routeBreakerState{}
+				state.count(now, true)
+			}
+		} else {
+			state = routeBreakerState{openUntil: now + routeBreakerCooldown.Milliseconds()}
+		}
+	} else {
+		if probe != nil {
+			return
+		}
+		if !present && len(s.breakers) >= routeObservationCapacity && !s.makeBreakerRoomLocked(now) {
+			return
+		}
+		if state.count(now, success) {
 			state.openUntil = now + routeBreakerCooldown.Milliseconds()
 		}
-	}
-	if !present {
-		evictForInsertLocked(s, s.breakers, func(v routeBreakerState) int64 { return v.updatedAt }, now)
 	}
 	state.updatedAt = now
 	s.breakers[key] = state
 }
 
-// routeHealth 返回自动排序用的健康档和权重系数。model 为空时只看渠道级的 429 冷却。
-func (s *routeObservationStore) routeHealth(channelID int, model string) (int, float64) {
-	now := time.Now().UnixMilli()
+// 表满时只淘汰闭合渠道的样本。撤掉仍在生效的熔断会重新放入故障流量。
+func (s *routeObservationStore) makeBreakerRoomLocked(now int64) bool {
+	var oldest routeBreakerKey
+	oldestAt := int64(math.MaxInt64)
+	for k, v := range s.breakers {
+		if v.openUntil == 0 && v.updatedAt < oldestAt {
+			oldest, oldestAt = k, v.updatedAt
+		}
+	}
+	if oldestAt != math.MaxInt64 {
+		delete(s.breakers, oldest)
+	}
+	s.logEvictionLocked(now)
+	return len(s.breakers) < routeObservationCapacity
+}
+
+type routeAvailability int
+
+const (
+	routeAvailable routeAvailability = iota
+	routeCooling
+	routeOpen
+	routeProbeBusy
+)
+
+// 必须先判断熔断，以免冷却兜底放行一个同时处于熔断中的渠道。
+func (s *routeObservationStore) availabilityLocked(key routeBreakerKey, now int64) (routeAvailability, int64) {
+	state := s.breakers[key]
+	switch {
+	case now < state.openUntil:
+		return routeOpen, state.openUntil
+	case state.probe != nil:
+		return routeProbeBusy, 0
+	case now < s.cooldowns[key.id]:
+		return routeCooling, s.cooldowns[key.id]
+	default:
+		return routeAvailable, 0
+	}
+}
+
+func (s *routeObservationStore) availability(key routeBreakerKey) (routeAvailability, int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if now < s.cooldowns[channelID] {
+	return s.availabilityLocked(key, time.Now().UnixMilli())
+}
+
+func (s *routeObservationStore) routeHealth(channelID int, model string) (int, float64) {
+	key := routeBreakerKey{channelID, model}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	class, _ := s.availabilityLocked(key, time.Now().UnixMilli())
+	if class != routeAvailable {
 		return routeWorstHealth, 1
 	}
-	state, ok := s.breakers[routeBreakerKey{channelID, model}]
-	if !ok || state.openUntil == 0 || now-state.updatedAt > routeObservationTTL.Milliseconds() {
-		return 0, 1
+	if s.breakers[key].openUntil != 0 {
+		return 0, routeHalfOpenWeight
 	}
-	if now < state.openUntil {
-		return routeWorstHealth, 1
+	return 0, 1
+}
+
+func (s *routeObservationStore) claimProbe(key routeBreakerKey, epoch uint64, allowCooling bool, preview bool) (*routeProbe, routeAvailability, int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	class, until := s.availabilityLocked(key, time.Now().UnixMilli())
+	if class != routeAvailable && !(class == routeCooling && allowCooling) {
+		return nil, class, until
 	}
-	return 0, routeHalfOpenWeight
+	state := s.breakers[key]
+	if state.openUntil == 0 || preview {
+		return nil, routeAvailable, 0
+	}
+	if s.staleLocked(epoch, key.id) {
+		return nil, routeProbeBusy, 0
+	}
+	state.probe = &routeProbe{key: key, epoch: epoch}
+	s.breakers[key] = state
+	return state.probe, routeAvailable, 0
+}
+
+func (s *routeObservationStore) releaseProbe(probe *routeProbe) {
+	if probe == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.breakers[probe.key]
+	if state.probe == probe {
+		state.probe = nil
+		s.breakers[probe.key] = state
+	}
+}
+
+type RouteBreakerSnapshot struct {
+	ChannelID     int    `json:"channel_id"`
+	Model         string `json:"model"`
+	State         string `json:"state"`
+	OpenUntil     int64  `json:"open_until"`
+	ProbeInFlight bool   `json:"probe_in_flight"`
+}
+type RouteCooldownSnapshot struct {
+	ChannelID int   `json:"channel_id"`
+	Until     int64 `json:"until"`
+}
+
+func (s *routeObservationStore) healthSnapshot() ([]RouteBreakerSnapshot, []RouteCooldownSnapshot) {
+	now := time.Now().UnixMilli()
+	breakers := []RouteBreakerSnapshot{}
+	cooldowns := []RouteCooldownSnapshot{}
+	s.mu.Lock()
+	for key, state := range s.breakers {
+		if state.openUntil == 0 {
+			continue
+		}
+		label := "open"
+		if now >= state.openUntil {
+			label = "half_open"
+		}
+		breakers = append(breakers, RouteBreakerSnapshot{key.id, key.model, label, state.openUntil, state.probe != nil})
+	}
+	for id, until := range s.cooldowns {
+		if until > now {
+			cooldowns = append(cooldowns, RouteCooldownSnapshot{id, until})
+		}
+	}
+	s.mu.Unlock()
+	sort.Slice(breakers, func(i, j int) bool {
+		if breakers[i].ChannelID != breakers[j].ChannelID {
+			return breakers[i].ChannelID < breakers[j].ChannelID
+		}
+		return breakers[i].Model < breakers[j].Model
+	})
+	sort.Slice(cooldowns, func(i, j int) bool { return cooldowns[i].ChannelID < cooldowns[j].ChannelID })
+	return breakers, cooldowns
 }
 
 // coolDown 只延长不缩短渠道的 429 冷却。
@@ -109,6 +259,18 @@ func (s *routeObservationStore) coolDown(epoch uint64, channelID int, until int6
 	defer s.mu.Unlock()
 	if channelID <= 0 || s.staleLocked(epoch, channelID) || until <= s.cooldowns[channelID] {
 		return
+	}
+	if _, ok := s.cooldowns[channelID]; !ok && len(s.cooldowns) >= routeObservationCapacity {
+		now := time.Now().UnixMilli()
+		for id, end := range s.cooldowns {
+			if end <= now {
+				delete(s.cooldowns, id)
+			}
+		}
+		if len(s.cooldowns) >= routeObservationCapacity {
+			s.logEvictionLocked(now)
+			return
+		}
 	}
 	s.cooldowns[channelID] = until
 }
@@ -163,9 +325,13 @@ func evictForInsertLocked[K comparable, V any](s *routeObservationStore, rows ma
 		return
 	}
 	delete(rows, oldest)
+	s.logEvictionLocked(now)
+}
+
+func (s *routeObservationStore) logEvictionLocked(now int64) {
 	s.evicted++
 	if now-s.lastEvictionLog >= routeEvictionLogInterval.Milliseconds() {
-		common.SysLog(common.LogText("route observation store reached %d keys: evicted %d oldest entries since the last report", routeObservationCapacity, s.evicted))
+		common.SysLog(common.LogText("route observation store reached %d keys: evicted or skipped %d entries since the last report", routeObservationCapacity, s.evicted))
 		s.evicted, s.lastEvictionLog = 0, now
 	}
 }

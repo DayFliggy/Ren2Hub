@@ -26,6 +26,10 @@ func ResponseText2Usage(c *gin.Context, responseText string, modeName string, pr
 	usage.PromptTokens = promptTokens
 	usage.CompletionTokens = tokenkit.Estimate(modeName, responseText)
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	if a := currentRouteAttempt(c); a != nil && a.bound {
+		a.estimatedCount.Store(int64(usage.CompletionTokens))
+		a.estimated.Store(true)
+	}
 	return usage
 }
 
