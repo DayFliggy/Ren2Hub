@@ -2,6 +2,7 @@ package service
 
 import (
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // strict session affinity treats an open breaker as "bound channel
@@ -46,6 +48,29 @@ func TestStrictAffinityHonorsOpenBreaker(t *testing.T) {
 			require.Equal(t, tc.keep, found)
 		})
 	}
+
+	// Two requests of the session read the binding to 22. The first clears it
+	// and another request binds 11 before the second clears: the late clear
+	// must keep the newer binding.
+	t.Run("a late clear keeps a newer binding", func(t *testing.T) {
+		db := setupAffinityChannels(t)
+		resetRouteObservations(t)
+		c, key := enableRouteAffinity(t, "strict", 22)
+		openBreaker()
+		var rebound atomic.Bool
+		require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:rebind-after-read", func(tx *gorm.DB) {
+			if tx.Statement.Table == "channels" && rebound.CompareAndSwap(false, true) {
+				require.NoError(t, getChannelAffinityCache().SetWithTTL(key, 11, time.Minute))
+			}
+		}))
+		_, selectErr := SelectChannelForRequest(c, "route-model", nil)
+		require.True(t, rebound.Load(), "the binding moved after this request read it")
+		require.NotNil(t, selectErr)
+		require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
+		bound, found := affinityBinding(t, key)
+		require.True(t, found, "the newer binding survives the late clear")
+		require.Equal(t, 11, bound)
+	})
 
 	t.Run("half-open probe busy rejects", func(t *testing.T) {
 		setupAffinityChannels(t)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
@@ -39,7 +40,7 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 			return nil, routeLoadFailure(c, err), true
 		}
 		if !full && !ShouldKeepChannelAffinityOnChannelDisabled() {
-			ClearCurrentChannelAffinityCache(c)
+			clearAffinityIfStillBound(c, preferred)
 		}
 		setRouteRetryAfter(c, err, true)
 		status := http.StatusServiceUnavailable
@@ -56,7 +57,31 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		return nil, routeLoadFailure(c, err), true
 	}
 	if !ShouldKeepChannelAffinityOnChannelDisabled() {
-		ClearCurrentChannelAffinityCache(c)
+		clearAffinityIfStillBound(c, preferred)
 	}
 	return nil, nil, false
+}
+
+// clearAffinityIfStillBound clears the session binding only while it still
+// points at the channel this request found unavailable: another request of the
+// same session may have bound a working channel since this one read the
+// binding. Reading and deleting are two cache operations, not one atomic
+// compare-and-delete, so a binding written between them can still be lost; the
+// window shrinks from the whole request to that gap.
+func clearAffinityIfStillBound(c *gin.Context, channelID int) {
+	cacheKey, _, ok := getChannelAffinityContext(c)
+	if !ok {
+		return
+	}
+	current, found, err := getChannelAffinityCache().Get(cacheKey)
+	if err != nil {
+		common.SysError(common.LogText("channel affinity cache get before clear failed: key=%s, err=%v", cacheKey, err))
+		return
+	}
+	if !found || current != channelID {
+		// The binding this request used is gone; it no longer limits retries.
+		c.Set(ginKeyChannelAffinitySkipRetry, false)
+		return
+	}
+	ClearCurrentChannelAffinityCache(c)
 }
