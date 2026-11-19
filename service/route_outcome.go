@@ -8,6 +8,7 @@ import (
 
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 )
@@ -32,28 +33,35 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 	if outcome == perfmetrics.OutcomeFailure && a.requestContextOverflow(apiErr) {
 		return perfmetrics.OutcomeIgnored, routeReasonContextOverflow
 	}
-	if outcome == perfmetrics.OutcomeSuccess && info.IsStream && a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
+	// A realtime connection is not one generation: connecting and closing
+	// without asking for a response is not an empty stream.
+	if outcome == perfmetrics.OutcomeSuccess && info.IsStream && info.RelayMode != relayconstant.RelayModeRealtime &&
+		a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
 		return a.emptyStreamOutcome()
 	}
 	return outcome, ""
 }
 
-// emptyStreamOutcome judges a stream that ended normally after observed events
-// without one content event. Streams whose handler never reports events keep
-// the native result, so an unobserved handler is not mistaken for empty.
+// emptyStreamOutcome judges a stream that ended natively successful after
+// observed events without one content event. It fails the channel only when
+// the upstream marked a normal completion and reported no output tokens;
+// otherwise the content check may have missed a payload kind, and a wrong
+// failure would open a healthy channel's breaker, so the attempt is neither
+// punished nor credited. Streams whose handler never reports events keep the
+// native result.
 func (a *routeAttempt) emptyStreamOutcome() (perfmetrics.Outcome, string) {
 	a.usageMu.Lock()
 	u := a.usage
 	a.usageMu.Unlock()
 	switch {
-	case !u.conflict && (u.output.value > 0 || u.thinking.value > 0):
-		// The content check may have missed a payload kind; neither punish
-		// nor credit the channel.
+	case u.output.value > 0 || u.thinking.value > 0:
 		return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput
 	case a.requestEnded.Load():
 		return perfmetrics.OutcomeIgnored, routeReasonRequestTerminate
+	case a.completed.Load():
+		return perfmetrics.OutcomeFailure, routeReasonEmptyStream
 	}
-	return perfmetrics.OutcomeFailure, routeReasonEmptyStream
+	return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput
 }
 
 // requestContextOverflow recognizes a context overflow that the upstream

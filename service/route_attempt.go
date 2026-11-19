@@ -29,6 +29,7 @@ type routeAttempt struct {
 	lastOutput     atomic.Int64
 	streamEvents   atomic.Int64
 	requestEnded   atomic.Bool
+	completed      atomic.Bool
 	breakerOnce    sync.Once
 	status         atomic.Int64
 	cooldown       atomic.Int64
@@ -75,9 +76,15 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 		attempt.markOutput(time.Now())
 		return
 	}
-	// The end reason only matters while the stream has produced nothing.
-	if attempt.firstOutput.Load() == 0 && streamEventEndsForRequest(data) {
+	// The end only matters while the stream has produced nothing.
+	if attempt.firstOutput.Load() != 0 {
+		return
+	}
+	switch streamEventEnd(data) {
+	case streamEndRequest:
 		attempt.requestEnded.Store(true)
+	case streamEndNormal:
+		attempt.completed.Store(true)
 	}
 }
 

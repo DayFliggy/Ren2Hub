@@ -190,6 +190,9 @@ func TestEmptyCompletedStreamIsRouteFailure(t *testing.T) {
 		{name: "claude refusal", dialect: "claude", usage: `{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}`, outcome: "ignored", reason: "request_terminated",
 			frames: []string{`{"type":"message_start","message":{"role":"assistant","content":[]}}`, `{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}`, `{"type":"message_stop"}`}},
 		{name: "gemini safety block", outcome: "ignored", reason: "request_terminated", frames: []string{`{"candidates":[{"content":{"parts":[]},"finishReason":"SAFETY"}]}`}},
+		{name: "gemini stop without output", outcome: "failure", reason: "empty_stream", frames: []string{`{"candidates":[{"content":{"parts":[]},"finishReason":"STOP"}]}`}},
+		{name: "claude without an end marker", dialect: "claude", usage: `{"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}`, outcome: "ignored", reason: "no_visible_output",
+			frames: []string{`{"type":"message_start","message":{"role":"assistant","content":[]}}`, `{"type":"ping"}`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := routeOutcomeTestContext(t)
