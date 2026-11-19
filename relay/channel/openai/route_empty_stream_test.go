@@ -125,7 +125,8 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 }
 
 // Only the raw upstream terminal can prove an empty response: an output that
-// is missing, an empty array, or only messages with no text. Listed items the
+// is missing, an empty array, or only messages with no text and nothing else
+// in their text parts (a citation is output). Listed items the
 // content check does not recognize, such as encrypted reasoning, are payload,
 // also when the stream is converted to chat and the converter makes up a
 // stop frame. response.done with status completed is the same completion as
@@ -139,6 +140,8 @@ func TestRouteEvidenceResponsesTerminals(t *testing.T) {
 	unknown := `{"type":"future_output","id":"fo_1","status":"completed"}`
 	emptyMessage := `{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[]}`
 	emptyText := `{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"","annotations":[]}]}`
+	// An empty text part that carries a citation still gives the client output.
+	citation := `{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"","annotations":[{"type":"file_citation","file_id":"file_example","filename":"result.csv","index":0}]}]}`
 	for _, entry := range []struct {
 		name    string
 		path    string
@@ -151,17 +154,20 @@ func TestRouteEvidenceResponsesTerminals(t *testing.T) {
 		for _, tc := range []struct {
 			name, outcome, reason string
 			frames                []string
+			client                string
 		}{
-			{"empty response.completed", "failure", "empty_stream", []string{created, terminal("response.completed", "[]")}},
-			{"empty response.done", "failure", "empty_stream", []string{created, terminal("response.done", "[]")}},
-			{"message without content", "failure", "empty_stream", []string{created, terminal("response.completed", "["+emptyMessage+"]")}},
-			{"message with empty text", "failure", "empty_stream", []string{created, terminal("response.completed", "["+emptyText+"]")}},
+			{"empty response.completed", "failure", "empty_stream", []string{created, terminal("response.completed", "[]")}, ""},
+			{"empty response.done", "failure", "empty_stream", []string{created, terminal("response.done", "[]")}, ""},
+			{"message without content", "failure", "empty_stream", []string{created, terminal("response.completed", "["+emptyMessage+"]")}, ""},
+			{"message with empty text", "failure", "empty_stream", []string{created, terminal("response.completed", "["+emptyText+"]")}, ""},
+			{"empty text with a citation", "ignored", "no_visible_output", []string{created, terminal("response.completed", "["+citation+"]")}, "file_example"},
 			{"encrypted reasoning only", "ignored", "no_visible_output", []string{created,
-				`{"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":` + encrypted + `}`, terminal("response.completed", "["+encrypted+"]")}},
-			{"unknown output item", "ignored", "no_visible_output", []string{created, terminal("response.completed", "["+unknown+"]")}},
+				`{"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":` + encrypted + `}`, terminal("response.completed", "["+encrypted+"]")}, ""},
+			{"unknown output item", "ignored", "no_visible_output", []string{created, terminal("response.completed", "["+unknown+"]")}, ""},
 		} {
 			t.Run(entry.name+" "+tc.name, func(t *testing.T) {
-				_, ev := runRouteStream(t, entry.path, entry.format, entry.handler, tc.frames, false)
+				body, ev := runRouteStream(t, entry.path, entry.format, entry.handler, tc.frames, false)
+				require.Contains(t, body, tc.client, "the client receives the output")
 				require.Equal(t, tc.outcome, ev.Get("outcome").String())
 				require.Equal(t, tc.reason, ev.Get("outcome_reason").String())
 			})

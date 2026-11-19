@@ -301,24 +301,38 @@ func streamEventEnd(data string) streamEnd {
 
 // responsesOutputEmpty reports a Responses output that is proven empty:
 // missing, an empty array, or only message items whose content is empty or
-// holds only text parts with empty text, the common shape of an empty answer
-// from a reseller.
+// holds only text parts that carry nothing (emptyTextPart), the common shape
+// of an empty answer from a reseller.
 func responsesOutputEmpty(output []json.RawMessage) bool {
 	for _, raw := range output {
 		var item struct {
-			Type    string `json:"type"`
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
+			Type    string            `json:"type"`
+			Content []json.RawMessage `json:"content"`
 		}
 		if common.Unmarshal(raw, &item) != nil || item.Type != "message" {
 			return false
 		}
 		for _, part := range item.Content {
-			if part.Type != "output_text" && part.Type != "text" || part.Text != "" {
+			if !emptyTextPart(part) {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+// emptyTextPart reports a text part whose every member other than its type
+// is empty: an empty text with annotations, such as a file citation, or any
+// other filled member is output the client receives.
+func emptyTextPart(raw json.RawMessage) bool {
+	var part map[string]json.RawMessage
+	var kind string
+	if common.Unmarshal(raw, &part) != nil || common.Unmarshal(part["type"], &kind) != nil || kind != "output_text" && kind != "text" {
+		return false
+	}
+	for field := range part {
+		if field != "type" && objectHasValue(raw, field) {
+			return false
 		}
 	}
 	return true
