@@ -50,6 +50,19 @@ func TestPluginLoginRoutesUseExpectedPermissions(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodGet, "/:id/plugin_credentials", authz.ChannelRead, controller.GetPluginCredentials)
 }
 
+// Channels hold one key; the multi-key management endpoint is gone.
+func TestMultiKeyManageRouteIsGone(t *testing.T) {
+	for _, route := range channelPermissionRoutes {
+		assert.NotEqual(t, "/multi_key/manage", route.path)
+	}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	registerChannelRoutes(engine.Group("/api"))
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/channel/multi_key/manage", nil))
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
 func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

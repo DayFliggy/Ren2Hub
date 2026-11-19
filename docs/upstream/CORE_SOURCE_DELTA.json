@@ -3,10 +3,10 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 869,
+    "upstream_equal": 868,
     "adapted": 295,
     "extension": 417,
-    "removed": 45
+    "removed": 46
   },
   "files": [
     {
@@ -902,7 +902,7 @@
       "path": "controller/audit.go",
       "status": "adapted",
       "upstream_sha256": "74d63a6666915d0aa0d97f269e2300e028342083d99ff75871015d27bc8b80b2",
-      "local_sha256": "95cf02846b625641c62d0a37d1bc4313d8270621d422de95ac7d169c8f61b967",
+      "local_sha256": "a204c62be7107d50c52507f8ab53b8ed308e8672e5b7147421c90a0e080fa143",
       "reasons": [
         "retired"
       ],
@@ -994,7 +994,7 @@
       "path": "controller/channel.go",
       "status": "adapted",
       "upstream_sha256": "acd8081b1208f6bba858062a6b248a602c78aa5124e913a143ec69ab53126c6f",
-      "local_sha256": "9610c3718c1e1d20e18dd2c4552b62c2f100cf4a0941b18003088e5c5f2a2e4b",
+      "local_sha256": "283b10f92649db4b8c8591e9f12ea9bca9a5bea0ca94916b783e6968b0591c56",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -1064,7 +1064,7 @@
       "path": "controller/channel_authz.go",
       "status": "adapted",
       "upstream_sha256": "b12bfb34de9dfd7c646c09e50a2dee79ffce74766236f777ef34b41dd8359672",
-      "local_sha256": "cca7c5cbf59a65a7020656ed2e459d3bfaa9ef0cd7dfce8b0c578476505c63a1",
+      "local_sha256": "e8a51b9e58c53a6801364cd44548393cb0f0b6b9a06b05dcd06672c0afeccc36",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -1132,7 +1132,7 @@
       "path": "controller/channel_create_test.go",
       "status": "adapted",
       "upstream_sha256": "7ca5b1093dbee35de297784aa7c99dc56025cdf7c53ffb39496ceaa95d1ad884",
-      "local_sha256": "66795b9e13035a51c535319a37d51a4383216a13f701de7836b0822f61a558e6"
+      "local_sha256": "7227da1fdc88a0d851dfcb801f0d38dbb48d378fc6f8520a90da6f56df6add2d"
     },
     {
       "path": "controller/channel_inference.go",
@@ -1191,9 +1191,9 @@
     },
     {
       "path": "controller/channel_multi_key_test.go",
-      "status": "adapted",
+      "status": "removed",
       "upstream_sha256": "68b844e47d3a5df08c0893bf9f6054bdbddf7f8ba2e2857bb1923394d3e21720",
-      "local_sha256": "fb8dcbe8450bf5fa4992901b5d49a4b66b5da8bd7171b96a324159b1430fd675"
+      "local_sha256": null
     },
     {
       "path": "controller/channel_pin_retry_test.go",
@@ -2132,7 +2132,7 @@
       "path": "controller/provider_plugin_test.go",
       "status": "adapted",
       "upstream_sha256": "1d1e206dca999b9772dfafb92c7a0c0f6699be7dc10202c21c6ae381a650195d",
-      "local_sha256": "dda94827f38f7353374a1581a257919393fb11862cc305b24f59aa8e1b1ddeec"
+      "local_sha256": "64fb5ce9719ef665c24b933cab80b38e130a66215b1cb2d7b045f06c8f3a5c94"
     },
     {
       "path": "controller/rankings.go",
@@ -11111,7 +11111,7 @@
       "path": "router/channel-router.go",
       "status": "adapted",
       "upstream_sha256": "1348d7ba466b1a62be8e291f017fce72b11b19cc2f0a929226b9aabd3dcac240",
-      "local_sha256": "aadea500d350ca2d41e2e48cacc936ac809d2c68647c3af7211fef8e338f0d4d",
+      "local_sha256": "0c6a5dbb06c26df305e141adbe420afabc792b38ecb48a0a1ccd05282d77bcc7",
       "reasons": [
         "catalog-stats",
         "retired"
@@ -11129,9 +11129,9 @@
     },
     {
       "path": "router/channel_router_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "e43b4287de7dca2d09f1fe818ffbf2a4873e867a01c26e3c4cf945358f9a62f6",
-      "local_sha256": "e43b4287de7dca2d09f1fe818ffbf2a4873e867a01c26e3c4cf945358f9a62f6"
+      "local_sha256": "8ad9e005429922dcb3ca25ed0cf28ae1253a5a95782baccfdccb00fd4f7e3eae"
     },
     {
       "path": "router/dashboard.go",

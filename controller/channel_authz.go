@@ -30,9 +30,6 @@ func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, re
 	if _, ok := requestData["settings"]; ok && channel.OtherSettings != origin.OtherSettings {
 		return true
 	}
-	if _, ok := requestData["key_mode"]; ok && channel.KeyMode != nil {
-		return true
-	}
 	// 渠道倍率直接决定所有用户的计费，与上游的分组倍率一样只允许敏感写权限修改
 	if _, ok := requestData["channel_ratio"]; ok && channel.ChannelRatio != origin.ChannelRatio {
 		return true
@@ -74,7 +71,6 @@ var channelSensitiveFields = map[string]struct{}{
 	"setting":             {},
 	"other":               {},
 	"settings":            {},
-	"key_mode":            {},
 	"channel_ratio":       {},
 }
 
@@ -97,6 +93,14 @@ var channelReadOnlyFields = map[string]struct{}{
 	"balance_updated_time": {},
 	"used_quota":           {},
 	"balance_detail":       {},
+}
+
+// rejectsMultiKeyFields reports a request that still sends the key list modes
+// of multi-key channels: append or replace, and random or polling selection.
+func rejectsMultiKeyFields(requestData map[string]any) bool {
+	_, keyMode := requestData["key_mode"]
+	_, multiKeyMode := requestData["multi_key_mode"]
+	return keyMode || multiKeyMode
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {
@@ -145,5 +149,4 @@ var channelNonSensitiveFields = map[string]struct{}{
 	"tag":                 {},
 	"remark":              {},
 	"channel_info":        {},
-	"multi_key_mode":      {},
 }

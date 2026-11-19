@@ -75,7 +75,7 @@ SECURITY_TESTS = (
 CHANNEL_TESTS = (
     "TestAddChannelReturnsCreatedIDs", "TestAddChannelInvalidVertexBatchDoesNotReturnResults",
     "TestAddChannelRollbackDoesNotReturnIDs", "TestAddChannelPanicRollsBackWithoutSuccess",
-    "TestMultiKeyEnableRestoresOnlyExhaustedChannels",
+    "TestAddChannelRejectsMultiKeyMode", "TestUpdateChannelRejectsMultiKeyFields",
 )
 TASK_TESTS = (
     "TestDoubaoRelayedImageStreamSettlement", "TestImmediateTaskSettlementDatabase",

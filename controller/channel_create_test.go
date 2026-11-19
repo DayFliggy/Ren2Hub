@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -79,13 +81,9 @@ func TestAddChannelReturnsCreatedIDs(t *testing.T) {
 		{name: "batch duplicate keys", mode: "batch", key: "\n" + firstKey + "\n\n" + firstKey + "\n" + secondKey, wantKeys: []string{firstKey, firstKey, secondKey}, wantInputIndices: []int{1, 3, 4}},
 		{name: "batch one channel", mode: "batch", key: firstKey + "\n", wantKeys: []string{firstKey}, wantInputIndices: []int{0}},
 		{name: "batch preserves whitespace", mode: "batch", key: "\n \n" + firstKey, wantKeys: []string{" ", firstKey}, wantInputIndices: []int{1, 2}},
-		{name: "multi to single", mode: "multi_to_single", key: "\n " + firstKey + " \n\n" + secondKey + "\n", wantKeys: []string{firstKey + "\n" + secondKey}, wantInputIndices: []int{1, 3}},
-		{name: "multi preserves trimmed blank", mode: "multi_to_single", key: firstKey + "\n \n" + secondKey, wantKeys: []string{firstKey + "\n\n" + secondKey}, wantInputIndices: []int{0, 1, 2}},
-		{name: "multi whitespace only", mode: "multi_to_single", key: " ", wantKeys: []string{}, wantInputIndices: []int{}},
 		{name: "multiple chunks", mode: "batch", key: "\n" + strings.Join(batchKeys, "\n"), wantKeys: batchKeys, wantInputIndices: batchIndices},
 		{name: "empty batch", mode: "batch", key: "\n", wantKeys: []string{}, wantInputIndices: []int{}},
 		{name: "vertex array", mode: "batch", key: vertexArray, channelType: constant.ChannelTypeVertexAi, wantKeys: vertexKeys, wantInputIndices: []int{1, 3, 4, 5, 6}},
-		{name: "vertex multi", mode: "multi_to_single", key: vertexArray, channelType: constant.ChannelTypeVertexAi, wantKeys: []string{strings.Join(vertexKeys, "\n")}, wantInputIndices: []int{1, 3, 4, 5, 6}},
 		{name: "single multiline json", mode: "single", key: vertexSingle, channelType: constant.ChannelTypeVertexAi, wantKeys: []string{vertexSingle}, wantInputIndices: []int{0}},
 		{name: "vertex api key batch", mode: "batch", key: "\n" + firstKey + "\n\n" + secondKey, channelType: constant.ChannelTypeVertexAi, settings: `{"vertex_key_type":"api_key"}`, wantKeys: []string{firstKey, secondKey}, wantInputIndices: []int{1, 3}},
 	} {
@@ -135,22 +133,14 @@ func TestAddChannelReturnsCreatedIDs(t *testing.T) {
 				assert.Positive(t, result.Data.IDs[i])
 				assert.Equal(t, channel.Id, result.Data.IDs[i])
 				assert.Equal(t, tc.wantKeys[i], channel.Key)
-				assert.Equal(t, tc.mode == "multi_to_single", channel.ChannelInfo.IsMultiKey)
 			}
 			require.NotNil(t, result.Data.Results, "empty creations must return an empty results array")
 			require.Len(t, result.Data.Results, len(tc.wantInputIndices))
 			results := make([]map[string]int, 0, len(tc.wantInputIndices))
 			for i, inputIndex := range tc.wantInputIndices {
-				channelIndex := i
-				if tc.mode == "multi_to_single" {
-					channelIndex = 0
-				}
 				assert.Equal(t, inputIndex, result.Data.Results[i].InputIndex)
-				assert.Equal(t, created[channelIndex].Id, result.Data.Results[i].ChannelID)
-				results = append(results, map[string]int{"input_index": inputIndex, "channel_id": created[channelIndex].Id})
-			}
-			if tc.mode == "multi_to_single" && len(created) == 1 {
-				assert.Equal(t, len(tc.wantInputIndices), created[0].ChannelInfo.MultiKeySize)
+				assert.Equal(t, created[i].Id, result.Data.Results[i].ChannelID)
+				results = append(results, map[string]int{"input_index": inputIndex, "channel_id": created[i].Id})
 			}
 			data := map[string]any{"ids": result.Data.IDs, "results": results}
 			if len(created) == 1 {
@@ -169,7 +159,7 @@ func TestAddChannelReturnsCreatedIDs(t *testing.T) {
 
 func TestAddChannelInvalidVertexBatchDoesNotReturnResults(t *testing.T) {
 	rootID := setupChannelCreateTest(t)
-	for _, mode := range []string{"batch", "multi_to_single"} {
+	for _, mode := range []string{"batch"} {
 		for _, key := range []string{"[]", `["", "  "]`, "[{"} {
 			t.Run(mode+"/"+key, func(t *testing.T) {
 				request, err := common.Marshal(AddChannelRequest{Mode: mode, Channel: &model.Channel{
@@ -189,6 +179,52 @@ func TestAddChannelInvalidVertexBatchDoesNotReturnResults(t *testing.T) {
 				assert.Zero(t, count)
 			})
 		}
+	}
+}
+
+// A channel holds one key: the retired multi-key add mode creates nothing.
+func TestAddChannelRejectsMultiKeyMode(t *testing.T) {
+	rootID := setupChannelCreateTest(t)
+	request := `{"mode":"multi_to_single","multi_key_mode":"polling","channel":{"name":"multi-key-add","type":1,"key":"sk-a\nsk-b","channel_ratio":"1","models":"test-model"}}`
+	response := postAddChannel(t, rootID, common.RoleRootUser, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	var result map[string]any
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+	assert.Equal(t, false, result["success"], response.Body.String())
+	assert.NotContains(t, result, "data")
+	var count int64
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("name = ?", "multi-key-add").Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+// An edit that still sends a key list mode is refused whole: append would
+// otherwise turn into replacing the stored key.
+func TestUpdateChannelRejectsMultiKeyFields(t *testing.T) {
+	rootID := setupChannelCreateTest(t)
+	channel := &model.Channel{Name: "multi-key-edit", Type: constant.ChannelTypeOpenAI, Key: "sk-stored", ChannelRatio: "1", Models: "test-model"}
+	require.NoError(t, channel.Insert())
+	t.Cleanup(func() {
+		_, err := model.BatchDeleteChannels([]int{channel.Id})
+		require.NoError(t, err)
+	})
+	for name, field := range map[string]string{"key mode": `"key_mode":"append"`, "multi-key mode": `"multi_key_mode":"polling"`} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			context, _ := gin.CreateTestContext(recorder)
+			context.Set("id", rootID)
+			context.Set("role", common.RoleRootUser)
+			body := fmt.Sprintf(`{"id":%d,"name":"renamed","key":"sk-new",%s}`, channel.Id, field)
+			context.Request = httptest.NewRequest(http.MethodPut, "/api/channel", strings.NewReader(body))
+			context.Request.Header.Set("Content-Type", "application/json")
+			UpdateChannel(context)
+			var result map[string]any
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &result))
+			assert.Equal(t, false, result["success"], recorder.Body.String())
+			stored, err := model.GetChannelById(channel.Id, true)
+			require.NoError(t, err)
+			assert.Equal(t, "sk-stored", stored.Key)
+			assert.Equal(t, "multi-key-edit", stored.Name)
+		})
 	}
 }
 

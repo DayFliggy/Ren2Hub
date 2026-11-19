@@ -241,10 +241,6 @@ func TestChannelKeyShowsCredentialSummaries(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(lines[1]), &summary))
 	assert.Equal(t, map[string]any{"type": "plugin_credential", "plugin": "ctl-reveal", "account_id": "acct-secret-token", "label": "secret-token@example.com", "expires_at": float64(0), "needs_login": false}, summary)
 
-	response, raw = callChannelAPI(t, ManageMultiKeys, http.MethodPost, "/api/channel/multi_key/manage", fmt.Sprintf(`{"channel_id":%d,"action":"get_key_status"}`, channel.Id))
-	require.True(t, response.Success, raw)
-	assert.Contains(t, raw, `"key_preview":"secret-token@example.com"`)
-	assert.NotContains(t, raw, "Bearer secret-token")
 }
 
 func TestCopyChannelDropsCredentials(t *testing.T) {
@@ -310,17 +306,6 @@ func TestRemovingCredentialsRevokesThem(t *testing.T) {
 		waitForRevokes("/revoke removed")
 	})
 
-	t.Run("multi-key delete", func(t *testing.T) {
-		first := pluginCredentialLine(t, "ctl-revoke", "first")
-		channel := insertPluginChannel(t, "ctl-revoke", server.URL, first+"\n"+pluginCredentialLine(t, "ctl-revoke", "second"), true)
-		response, raw := callChannelAPI(t, ManageMultiKeys, http.MethodPost, "/api/channel/multi_key/manage", fmt.Sprintf(`{"channel_id":%d,"action":"delete_key","key_index":1}`, channel.Id))
-		require.True(t, response.Success, raw)
-		waitForRevokes("/revoke second")
-		stored, err := model.GetChannelById(channel.Id, true)
-		require.NoError(t, err)
-		assert.Equal(t, first, stored.Key)
-		assert.Equal(t, 1, stored.ChannelInfo.MultiKeySize)
-	})
 }
 
 func TestPluginLoginAPI(t *testing.T) {
@@ -646,10 +631,6 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 			// stored the rotated credential, or reading the channel before
 			// the refresh stored it and writing after. The rotated
 			// credential and the write's change both survive.
-			manageKeys := func(t *testing.T, channel *model.Channel, action string) {
-				response, raw := callChannelAPI(t, ManageMultiKeys, http.MethodPost, "/api/channel/multi_key/manage", fmt.Sprintf(`{"channel_id":%d,"action":%q,"key_index":1}`, channel.Id, action))
-				assert.True(t, response.Success, raw)
-			}
 			for _, race := range []struct {
 				name  string
 				write func(t *testing.T, channel *model.Channel)
@@ -663,20 +644,6 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 					assert.True(t, response.Success, raw)
 				}, rest: []string{"sk-static"}, check: func(t *testing.T, stored *model.Channel) {
 					assert.Equal(t, "renamed", stored.Name)
-				}},
-				{name: "an edit that appends a key", write: func(t *testing.T, channel *model.Channel) {
-					response, raw := callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel", fmt.Sprintf(`{"id":%d,"key":"sk-new","key_mode":"append"}`, channel.Id))
-					assert.True(t, response.Success, raw)
-				}, rest: []string{"sk-static", "sk-new"}},
-				{name: "a key disabled by hand", write: func(t *testing.T, channel *model.Channel) {
-					manageKeys(t, channel, "disable_key")
-				}, rest: []string{"sk-static"}, check: func(t *testing.T, stored *model.Channel) {
-					assert.Equal(t, common.ChannelStatusManuallyDisabled, stored.ChannelInfo.MultiKeyStatusList[1])
-				}},
-				{name: "a key deleted", write: func(t *testing.T, channel *model.Channel) {
-					manageKeys(t, channel, "delete_key")
-				}, rest: []string{}, check: func(t *testing.T, stored *model.Channel) {
-					assert.Equal(t, 1, stored.ChannelInfo.MultiKeySize)
 				}},
 				{name: "a key status write", write: func(t *testing.T, channel *model.Channel) {
 					model.UpdateChannelStatus(channel.Id, "sk-static", common.ChannelStatusAutoDisabled, "upstream rejected the key")
