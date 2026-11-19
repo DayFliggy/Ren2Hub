@@ -13012,7 +13012,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e41bbb116d8690348031a4492ee661bf32dd9679e4750d251028267c269b1e21",
+      "local_sha256": "a5b0c25399818b1eb5d33ae21d4f153172b1af427687bfe7cc0203c7ce13e9d3",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13043,7 +13043,7 @@
       "path": "service/route_breaker.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5130e4d70a26c91604c6fa2dcc504821a5c692870025a36ff489b54e075f2d7c",
+      "local_sha256": "4e4d56883e74b7684f4ac8c025cfabc96bcc37d86ae86868fcf8981f136d94f7",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13156,7 +13156,7 @@
       "path": "service/route_cooled_429_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9c4afe008ac1c964a735b8bc804444492bd1c41ab41f570bf36d11130978f760"
+      "local_sha256": "d02682c9ac77656999f6204ae3594ea28130634c12b3cf77ee397ecb0fc7ab6c"
     },
     {
       "path": "service/route_error.go",

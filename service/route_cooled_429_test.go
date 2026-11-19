@@ -128,3 +128,53 @@ func TestHalfOpenProbeCooled429ReturnsThePermit(t *testing.T) {
 	require.Zero(t, after.successes, "a 429 is no evidence of recovery")
 	require.Zero(t, ChannelInFlight(11))
 }
+
+// A 429 the full cooldown table could not hold leaves the channel without a
+// cooldown, so it still counts toward the breaker: the channel is not left
+// both uncooled and exempt.
+func TestUnstored429CooldownStillCountsTowardTheBreaker(t *testing.T) {
+	db := setupRouteTest(t)
+	resetRouteObservations(t)
+	previous := routeObservationCapacity
+	routeObservationCapacity = 2
+	t.Cleanup(func() { routeObservationCapacity = previous })
+	future := time.Now().Add(time.Minute).UnixMilli()
+	routeObservations.mu.Lock()
+	for _, id := range []int{901, 902} {
+		routeObservations.cooldowns[id] = routeCooldown{until: future, source: "retry_after"}
+	}
+	routeObservations.mu.Unlock()
+	createRouteChannel(t, db, 11, "full-table-model")
+	for range routeBreakerOpenFailures {
+		_, selErr := rateLimitedAttempt(t, "full-table-model", http.Header{"Retry-After": []string{"30"}})
+		require.Nil(t, selErr)
+	}
+	_, cooled := routeObservations.cooldowns[11]
+	require.False(t, cooled, "the full table held no cooldown for the channel")
+	_, selErr := rateLimitedAttempt(t, "full-table-model", nil)
+	require.NotNil(t, selErr, "the uncooled 429s opened the breaker")
+	require.Equal(t, http.StatusServiceUnavailable, selErr.StatusCode)
+}
+
+// A shorter Retry-After while a longer cooldown is in effect marks the attempt
+// with the cooldown that is in effect.
+func TestShorterRetryAfterMarksTheCooldownInEffect(t *testing.T) {
+	db := setupRouteTest(t)
+	resetRouteObservations(t)
+	createRouteChannel(t, db, 11, "route-model")
+	longer := time.Now().Add(time.Minute).UnixMilli()
+	routeObservations.mu.Lock()
+	routeObservations.cooldowns[11] = routeCooldown{until: longer, source: "retry_after"}
+	routeObservations.mu.Unlock()
+
+	c := routeTestContext(t)
+	ch, selErr := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, selErr, "a cooling channel still serves when it is the only one")
+	common.SetContextKey(c, constant.ContextKeyChannelId, ch.Id)
+	info := &relaycommon.RelayInfo{OriginModelName: "route-model", RelayMode: 1, StartTime: time.Now()}
+	MarkRouteAttemptSent(c, info)
+	ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Retry-After": []string{"1"}}})
+	require.Equal(t, longer, currentRouteAttempt(c).cooldown.Load())
+	require.Equal(t, longer, routeObservations.cooldowns[11].until, "the cooldown is not shortened")
+	FinishRouteAttempt(c, info, types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests))
+}

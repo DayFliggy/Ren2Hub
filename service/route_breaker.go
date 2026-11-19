@@ -307,12 +307,17 @@ func (s *routeObservationStore) healthSnapshot() ([]RouteBreakerSnapshot, []Rout
 	return breakers, cooldowns
 }
 
-// coolDown 只延长不缩短渠道的 429 冷却；来源随生效的那次冷却。
-func (s *routeObservationStore) coolDown(epoch uint64, channelID int, cooldown routeCooldown) {
+// coolDown 只延长不缩短渠道的 429 冷却；来源随生效的那次冷却。返回渠道此刻生效的
+// 冷却截止：已有更长的冷却时是它，否则是这次写入的；没有写入也没有生效的冷却时
+// （渠道无效、配置代际已过期、表满且无过期项可删）ok 为 false。
+func (s *routeObservationStore) coolDown(epoch uint64, channelID int, cooldown routeCooldown) (until int64, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if channelID <= 0 || s.staleLocked(epoch, channelID) || cooldown.until <= s.cooldowns[channelID].until {
-		return
+	if channelID <= 0 || s.staleLocked(epoch, channelID) {
+		return 0, false
+	}
+	if existing := s.cooldowns[channelID].until; cooldown.until <= existing {
+		return existing, true
 	}
 	if _, ok := s.cooldowns[channelID]; !ok && len(s.cooldowns) >= routeObservationCapacity {
 		now := time.Now().UnixMilli()
@@ -323,10 +328,11 @@ func (s *routeObservationStore) coolDown(epoch uint64, channelID int, cooldown r
 		}
 		if len(s.cooldowns) >= routeObservationCapacity {
 			s.logEvictionLocked(now)
-			return
+			return 0, false
 		}
 	}
 	s.cooldowns[channelID] = cooldown
+	return cooldown.until, true
 }
 
 // retryAfterUntil 计算上游 429 的冷却。缺头使用短冷却，显式值仅接受有效的等待期。
