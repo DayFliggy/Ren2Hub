@@ -39,6 +39,7 @@ for (const [theme, width] of [
       icon: 'text:FD',
       description: { en: 'Image and video tasks', zh: '图片与视频任务' },
       routes: [{ method: 'POST', path: '/v1/video/generate', type: 'submit' }],
+      scope: { models: ['fixture-model'], channelTypes: [1, 14] },
     }
     let enabled = false
     const statusWrites: unknown[] = []
@@ -175,6 +176,14 @@ for (const [theme, width] of [
     await expect(
       sheet.getByText('/v1/video/generate', { exact: true })
     ).toBeVisible()
+    // The overview tab shows the scope the plugin declares: its channels and
+    // models, each spelled out.
+    const scopeSummary = sheet
+      .getByRole('region', { name: '按插件建议' })
+      .locator('[data-plugin-scope]')
+    await expect(scopeSummary).toContainText('OpenAI')
+    await expect(scopeSummary).toContainText('Anthropic')
+    await expect(scopeSummary).toContainText('fixture-model')
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
       path: test.info().outputPath('route-conflict.png'),
