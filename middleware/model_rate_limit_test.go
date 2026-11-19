@@ -143,6 +143,7 @@ func TestModelMemoryRateLimitRejectionsReturnOpenAIError(t *testing.T) {
 }
 
 func TestModelRateLimitSharesUserBudgetAcrossModels(t *testing.T) {
+	require.NoError(t, i18n.Init())
 	previousEnabled, previousCount, previousSuccess, previousRedis := setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, common.RedisEnabled
 	t.Cleanup(func() {
 		setting.ModelRequestRateLimitEnabled = previousEnabled

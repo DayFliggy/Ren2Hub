@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -97,6 +98,12 @@ func TestStrictAffinityOpenBreakerRejectsBeforeBilling(t *testing.T) {
 	status, body := send()
 	require.Equal(t, http.StatusOK, status, body)
 	require.Equal(t, int64(1), primaryHits.Load(), "the higher priority primary serves and is bound")
+	// The first request settled its real usage; this is the stable balance the
+	// failed attempts' pre-consumption and refund must return to.
+	var settledUser model.User
+	require.NoError(t, model.DB.First(&settledUser, fixture.user.Id).Error)
+	var settledToken model.Token
+	require.NoError(t, model.DB.First(&settledToken, fixture.token.Id).Error)
 	primaryFails.Store(true)
 	for range 5 {
 		status, body = send()
@@ -104,6 +111,18 @@ func TestStrictAffinityOpenBreakerRejectsBeforeBilling(t *testing.T) {
 	}
 	require.Equal(t, int64(6), primaryHits.Load())
 	require.Zero(t, backupHits.Load(), "strict never leaves the bound channel")
+
+	// Each failed attempt refunds its pre-consumption on a background goroutine
+	// (service.BillingSession.Refund). Wait for every refund to land so a late
+	// one cannot fall between the before and after reads below.
+	require.Eventually(t, func() bool {
+		var u model.User
+		var tk model.Token
+		if model.DB.First(&u, fixture.user.Id).Error != nil || model.DB.First(&tk, fixture.token.Id).Error != nil {
+			return false
+		}
+		return u.Quota == settledUser.Quota && tk.RemainQuota == settledToken.RemainQuota
+	}, 3*time.Second, 10*time.Millisecond, "the failed attempts' async refunds settle")
 
 	var before model.User
 	require.NoError(t, model.DB.First(&before, fixture.user.Id).Error)
