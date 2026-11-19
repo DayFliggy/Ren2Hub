@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 867,
-    "adapted": 295,
-    "extension": 398,
+    "upstream_equal": 864,
+    "adapted": 298,
+    "extension": 400,
     "removed": 45
   },
   "files": [
@@ -9018,18 +9018,20 @@
       "path": "relay/common/override.go",
       "status": "adapted",
       "upstream_sha256": "f11f928a9b34fd0bdf9f8a16fcc4a71650c457e9a9e6a4e503deb2fb0f60671f",
-      "local_sha256": "230b0ee3cdc54f7eadc10e40ab18e5567cc2f519f0fa4d5ee6d66fd3bb0925e3",
+      "local_sha256": "a8985387820df71618ad741b6f4c0a9e6f7c84e3a221c73f6a690d1989b1137c",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "upstream-1c63cc8c9"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2 另含提前吸收的上游 1c63cc8c9，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "relay/common/override.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -9206,7 +9208,7 @@
       "path": "relay/convert_request_error_test.go",
       "status": "adapted",
       "upstream_sha256": "bf4fb017fa16eb879b88f679ca543b5effabd9ff21e7e706073f87cd9861f89a",
-      "local_sha256": "caf530a2435cead3dc6bf645cd18aafd86ed71359b6e03aa9351c918c17da383"
+      "local_sha256": "91e9cfd1013d82549455332ece6938d2f42a15859e796ca4f523ec9a29b8ae89"
     },
     {
       "path": "relay/deepseek_tools_handler.go",
@@ -9444,9 +9446,17 @@
     },
     {
       "path": "relay/image_handler.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "480b358f96c3d9fb02809dc5bfa845853cb452f373322e45c5fde8a6e41d9797",
-      "local_sha256": "480b358f96c3d9fb02809dc5bfa845853cb452f373322e45c5fde8a6e41d9797"
+      "local_sha256": "55dbf397d89288556769fc40db328195858d3be068f695cb2fb3ddba863288a3",
+      "reasons": [
+        "upstream-1c63cc8c9"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "照上游 1c63cc8c9 原文：图像转换失败使用共用不重试错误。逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "relay/mjproxy_handler.go",
@@ -9507,9 +9517,23 @@
     },
     {
       "path": "relay/param_override_error.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "f0b6e5a734c87cca3a3ae3fe07ffbf4f90b90ff281a8f5cdd0d7993744a7e6e8",
-      "local_sha256": "f0b6e5a734c87cca3a3ae3fe07ffbf4f90b90ff281a8f5cdd0d7993744a7e6e8"
+      "local_sha256": "59466b21ac6c8631cd55f209c726be95e08b414de1e179600f1856922c5538dc",
+      "reasons": [
+        "upstream-1c63cc8c9"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "照上游 1c63cc8c9 原文：请求值类型不符返回 400 不重试。逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "current_hunk_review": true
+      }
+    },
+    {
+      "path": "relay/param_override_error_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e1582e99b582486d9c176d0a280a72b275fd44dea95c97aeab1439c093d8cf94"
     },
     {
       "path": "relay/plugin_protocol.go",
@@ -11647,9 +11671,17 @@
     },
     {
       "path": "service/channel.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "ad965578496918b6c9f6e8c9bd70bdb5808b71ff035fe751deeec5cc50d7f49c",
-      "local_sha256": "ad965578496918b6c9f6e8c9bd70bdb5808b71ff035fe751deeec5cc50d7f49c"
+      "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
+      "reasons": [
+        "upstream-1c63cc8c9"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "照上游 1c63cc8c9 原文：ShouldDisableChannel 按 RelayErrorSource 分类。逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "service/channel_affinity.go",
@@ -12768,10 +12800,16 @@
       }
     },
     {
+      "path": "service/relay_error_source_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ce89053efcf7ad9d6cc80cd2e259ef6070c56be43ae11adfac8ac0afff42ca5f"
+    },
+    {
       "path": "service/relay_error_test.go",
       "status": "adapted",
       "upstream_sha256": "ffe8c8fa4f53c1f2ec0bedc0d1de2d39dd3e42dee8625981d52a66cafe967748",
-      "local_sha256": "eb6dffc9feb06a2d2c0f73dc76a6a8a029959e308d3e99b5b4902deeac3c1939"
+      "local_sha256": "99994c57cad54863fd0fae727bf4722c69cca12014450e37cedd92b2a5e679a4"
     },
     {
       "path": "service/request_converter.go",
@@ -12783,14 +12821,15 @@
       "path": "service/request_policy.go",
       "status": "adapted",
       "upstream_sha256": "0d9b8b91e5ad0eec7926520ce82fa4a70a6ea949496850b524ba404f0cf51e32",
-      "local_sha256": "71c24497195a55c712a3c4b558a25c7311a41aa45ca59900cb51026fad0d890f",
+      "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
       "reasons": [
         "group-removal",
-        "token-routing"
+        "token-routing",
+        "upstream-1c63cc8c9"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 另含提前吸收的上游 1c63cc8c9，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -14706,6 +14745,11 @@
     "backup-payment-links": {
       "basis": "钱包备用支付：原生 TopUpLink 之外由管理员维护最多 10 个名称加 http(s) 链接，保存时校验；/api/user/topup/info 返回合并列表，支付合规未确认时为空；逻辑在扩展文件。",
       "authority": "SYNC_LEDGER.md#备用支付接点",
+      "kind": "approved_contract"
+    },
+    "upstream-1c63cc8c9": {
+      "basis": "提前吸收冻结目标之后的上游 1c63cc8c9（#8345）：请求触发的本地错误不禁用渠道、不换渠重试；下一个同步窗口不再重复处置该提交。",
+      "authority": "SYNC_LEDGER.md#上游基线与同步范围",
       "kind": "approved_contract"
     }
   },

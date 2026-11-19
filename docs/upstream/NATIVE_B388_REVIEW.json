@@ -33319,36 +33319,51 @@
       "regression": "relay/channel/xunfei/route_scan_test.go:TestRouteScanBeforeAndAfterXunfeiDial"
     },
     "service/request_policy.go": {
-      "local_sha256": "71c24497195a55c712a3c4b558a25c7311a41aa45ca59900cb51026fad0d890f",
+      "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
       "hunks": [
         {
-          "header": "@@ -23,16 +23,17 @@",
-          "sha256": "c3d388b934964ba88fb5be0d8cdc26a94873b90cedee19c1c3b49d4c594f2508",
+          "header": "@@ -1,6 +1,7 @@",
+          "sha256": "ebcbafd72ca574a0e8d1a2c0185671e6ec3d0a65d5ebfabf6dddd214213e3787",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：RelayErrorSource 需要 errors 包。"
+        },
+        {
+          "header": "@@ -23,16 +24,17 @@",
+          "sha256": "1de3aa5be11cce5995e5aeb958856242d8fe82c24ebaf6f340d0fc6948140beb",
           "basis": "逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 自动扫描记录及移除 Group 继续遵循既有合同。"
         },
         {
-          "header": "@@ -42,7 +43,6 @@",
-          "sha256": "3b1f10fe51e6dac5950c6b2a18d2d0e0ca29f2757c34f263ff3a8e51580397a5",
+          "header": "@@ -42,7 +44,6 @@",
+          "sha256": "1a79efbb258d08ee781dfce722bf6d43e5799704caa2f26ec4b784474593727c",
           "basis": "移除按业务分组选择渠道的 SelectedGroup 状态。"
         },
         {
-          "header": "@@ -50,6 +50,7 @@",
-          "sha256": "14d14162092d616237b153912dad4256de91207e66e165737604a444cc25910b",
+          "header": "@@ -50,6 +51,7 @@",
+          "sha256": "c1a412f5d71829fe6ed0627c71dfb48d82a09e9367dd37eb08846afd0c0173f7",
           "basis": "routeScanState 为每个请求保存轮次和已选择但尚未发送的渠道。"
         },
         {
-          "header": "@@ -67,14 +68,14 @@",
-          "sha256": "e8bb656f5e7a251c102d0af47a439a40bec97f70da718a796a8b9f201cce7b4c",
+          "header": "@@ -67,14 +69,14 @@",
+          "sha256": "b7212003353fbe22c9578fb4d8997ac0f4589e7eaf88be4a2800541cbfc81b03",
           "basis": "AddEvent 在策略事件锁内跟踪扫描结果和轮次，沿用事件上限，取消业务分组的默认填充。"
         },
         {
-          "header": "@@ -86,11 +87,10 @@",
-          "sha256": "d126dba2fc52c64d7dfc511f9915e82525693105468502898c5f27a5ec13e324",
-          "basis": "BeginAttempt 仍按渠道记录中继尝试，省去分组参数及写回。"
+          "header": "@@ -86,12 +88,39 @@",
+          "sha256": "87750248f04212ff9550aeb79d840ac27267d1a729ace12c781d7935a1c763ba",
+          "basis": "BeginAttempt 仍按渠道记录中继尝试，省去分组参数及写回；提前吸收上游 1c63cc8c9（#8345）：其后新增的 RelayErrorSource 照上游原文。"
         },
         {
-          "header": "@@ -175,6 +175,7 @@",
-          "sha256": "9491b5360e4278ef01e47d137546344fe9570d56bce803de6ccbb7418923b3a5",
+          "header": "@@ -101,15 +130,7 @@",
+          "sha256": "8dd61f2d3af91dba596f6c497901f184960f9c829c310b320ca4a485db457ca6",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：RecordPolicyFailure 改用 RelayErrorSource。"
+        },
+        {
+          "header": "@@ -117,7 +138,7 @@",
+          "sha256": "5ad4e32512e1443b895c0478aa1bf99b1ba285ba38dcb3ff1295eb95052055f7",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：健康条目与 ShouldDisableChannel 的判定一致，不再单独排除 local。"
+        },
+        {
+          "header": "@@ -175,6 +196,7 @@",
+          "sha256": "223edb5fac4fb5f9b2ddbf59e6f75ec897bcb37be36c820c3f4d600d87f8fe5e",
           "basis": "首次终止时输出选中后、上游发送前遭拒的扫描摘要，保留原生终止决策和错误码。"
         }
       ]
@@ -33460,6 +33475,66 @@
           "header": "@@ -26,6 +26,10 @@",
           "sha256": "19235b30b0cf4bffacabb1ad45de73f200da2869c5f1a1bda529669fddd57c9d",
           "basis": "估算输出 token 时只标记本轮的估算来源，原生结算数量沿用。"
+        }
+      ]
+    },
+    "service/channel.go": {
+      "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
+      "hunks": [
+        {
+          "header": "@@ -69,8 +69,15 @@",
+          "sha256": "ec3be8aea6b6929f12fd4c5a70a597d236024b603422c5ed8920ce9af4ddcd29",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：ShouldDisableChannel 先按 RelayErrorSource 分类，channel 禁用、local 不禁用；其余照上游原文。"
+        }
+      ]
+    },
+    "relay/param_override_error.go": {
+      "local_sha256": "59466b21ac6c8631cd55f209c726be95e08b414de1e179600f1856922c5538dc",
+      "hunks": [
+        {
+          "header": "@@ -1,13 +1,25 @@",
+          "sha256": "7e3f56aefe16fba1c96737d9c4d57ac2362bd77571ff83eabbc06b74f7cf6d6d",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：请求值类型不符的参数覆盖条件返回 400 invalid_request 且不重试，规则本身无效仍为渠道错误。"
+        }
+      ]
+    },
+    "relay/image_handler.go": {
+      "local_sha256": "55dbf397d89288556769fc40db328195858d3be068f695cb2fb3ddba863288a3",
+      "hunks": [
+        {
+          "header": "@@ -123,7 +123,7 @@",
+          "sha256": "da22f492664fd32f26a555b7a50cff5ef67e55c0224556c64e6198bb49b424c5",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：图像转换失败改用共用的 newConvertRequestFailedError，不再换渠重试。"
+        }
+      ]
+    },
+    "relay/common/override.go": {
+      "local_sha256": "a8985387820df71618ad741b6f4c0a9e6f7c84e3a221c73f6a690d1989b1137c",
+      "hunks": [
+        {
+          "header": "@@ -107,6 +107,21 @@",
+          "sha256": "ccf4ed76c8b46390cb56c0c7df1093407f39a8d624e06fa8acd37d2ac99b7775",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：新增 ParamOverrideRequestValueError。"
+        },
+        {
+          "header": "@@ -690,6 +705,11 @@",
+          "sha256": "a5edd2cf5d3c3c3e46f28501992e8573967156baf4655e0191c61a8fadfdf6b5",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：条件比较遇到请求值类型错误时保留该类型并补路径。"
+        },
+        {
+          "header": "@@ -777,7 +797,7 @@",
+          "sha256": "77f472f55409a213a4e0aa72f0dbafa55d5dc6d2f02274299e56adf0271f95a3",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：相等比较的类型不符归为请求值错误。"
+        },
+        {
+          "header": "@@ -793,9 +813,13 @@",
+          "sha256": "b71953fe95d9a871e3686e0c6eeece413a6e4b33a404bacd69d5fa3f7a3c2fe2",
+          "basis": "提前吸收上游 1c63cc8c9（#8345）：数值比较区分规则值非数字（配置错误）与请求值非数字（请求错误）。"
+        },
+        {
+          "header": "@@ -2187,9 +2211,6 @@",
+          "sha256": "eecf70ffc95faade9dfeadcebc04ae565f9dfd745edcc6a09a733f113906f2bf",
+          "basis": "移除条件上下文里的业务分组字段（user_group、token_group、using_group），对应原审查 relay/common/override.go#2。"
         }
       ]
     }
