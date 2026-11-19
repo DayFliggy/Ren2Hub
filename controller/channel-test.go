@@ -96,17 +96,24 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (outcome testResult) {
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, keyUnderTest ...channelKeyUnderTest) (outcome testResult) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	service.BeginRouteObservation(c)
+	if len(keyUnderTest) == 0 {
+		service.BeginRouteObservation(c)
+	}
 	var err error
 	channel, err = model.GetChannelById(channel.Id, true)
 	if err != nil {
 		return testResult{localErr: err}
+	}
+	if len(keyUnderTest) > 0 {
+		if channel, err = keyUnderTest[0].apply(channel); err != nil {
+			return testResult{localErr: err}
+		}
 	}
 	tik := time.Now()
 	var unsupportedTestChannelTypes = []int{
@@ -1161,6 +1168,7 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
 	concurrency := operation_setting.GetMonitorSetting().ChannelTestConcurrency
 	summary := performChannelTests(ctx, selected, testUserID, allowDisable, concurrency, report)
+	recoverAutoDisabledKeys(ctx, channels, testUserID, concurrency)
 	if notify && (ctx == nil || ctx.Err() == nil) {
 		service.NotifyChannelWatchers(dto.NotifyTypeChannelTest, func(lang string) (string, string) {
 			return i18n.Translate(lang, i18n.MsgChannelTestCompletedSubject), i18n.Translate(lang, i18n.MsgChannelTestCompletedContent)

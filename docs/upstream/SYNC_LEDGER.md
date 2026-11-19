@@ -22,7 +22,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 现行本地差异
 
-后端对齐固定 b388，只保留用户批准的独有功能、明确改造和 Vue 实际对接所需的最小接点；历史 `verified_fix` 不构成保留理由。346 个生产差异文件的 1,109 段逐段裁定，现为保留 873、恢复原生 169、拆分 67，见 `NATIVE_B388_REVIEW.json`；测试迁移见 `NATIVE_B388_TEST_MIGRATIONS.json`。产品合同摘要见 [AGENTS.md](../../AGENTS.md)，30 项合同的目录在 `CORE_SOURCE_DELTA.json` 的 `contracts`。
+后端对齐固定 b388，只保留用户批准的独有功能、明确改造和 Vue 实际对接所需的最小接点；历史 `verified_fix` 不构成保留理由。346 个生产差异文件的 1,109 段逐段裁定，现为保留 873、恢复原生 169、拆分 67，见 `NATIVE_B388_REVIEW.json`；测试迁移见 `NATIVE_B388_TEST_MIGRATIONS.json`。产品合同摘要见 [AGENTS.md](../../AGENTS.md)，31 项合同的目录在 `CORE_SOURCE_DELTA.json` 的 `contracts`。
 
 | 模块           | 保留的差异                                                                                                                                                                                                                                            | 依据                                                                                                               |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -39,6 +39,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 - `service/route_request.go` 的 `TaskPluginEndpointFilter`、`LookupTaskPluginEndpoint`、`NormalizeTaskPluginSubmitModel`、`taskPluginIdentities` 是从上游 `RouteTaskPluginEndpoint`、`lookupTaskPluginEndpoint`、`PrepareTaskPluginSubmit`、`pinnedTaskPluginIdentities` 迁出的逻辑。上游改这四处时把变化移植到这里。
 - 上游 `ada15c050`（保留人工禁用）的守卫在扩展文件 `model/channel_status.go`。
+- 定时渠道测试恢复自动停用的 Key（合同 `scheduled-key-recovery`）：`controller/channel-test.go` 只有两个接点，`testChannel` 的可选参数 `keyUnderTest`（存在时不开始路由观测，并把重读的渠道收窄到被测 Key），以及 `runChannelTestTask` 在渠道测试之后调用 `recoverAutoDisabledKeys`。选取和测试在扩展文件 `controller/channel_key_recovery.go`，写入在 `service/channel_key_recovery.go`，经上游的 `UpdateScheduledChannelLocked` 与 `SetScheduledChannelKeyStatus` 只把仍是自动停用的同一 Key 改回启用。不用 `EnableChannel`：它和上游 `UpdateChannelStatus` 一样，渠道已启用时不写库。上游改 `testChannel` 的签名、渠道重读或 `runChannelTestTask` 时对照这两个接点。
 - 带 `no-builtin-prices` 理由的文件（如 `setting/ratio_setting/model_ratio.go`、`relay/helper/price.go`、`service/text_quota.go`）逐提交手工合并：丢弃模型默认价格和内置表达式的增删，只吸收计费维度和计算逻辑。`setting/operation_setting/tools.go` 与上游一致，照常吸收。
 - 退役前缀在 `router/web-router.go` 的 `retiredAPIPrefixes`，上游在这些前缀下新增路由时不注册。
 - `router/web-router.go` 在原生 `ServeFrontendFiles` 之前挂 `ServeFrontendBrotliFiles`（扩展文件 `middleware/frontend_static_brotli.go`）：`scripts/prepare-frontend-embed.mjs` 构建时给 js、mjs、css、svg、json、webmanifest、txt 写入更小的 `<文件>.br`（质量 11）并一同嵌入；请求接受 `br`（合法 q 值大于 0）且该文件存在时由 `http.ServeContent` 原样发送，条件请求、HEAD 和单段 Range 按该文件应答；多段 Range 的 multipart 正文不是 brotli 流，所以忽略 Range、返回完整 `.br`（200），条件请求照常；服务端不压缩，其余请求照原生走 gzip 或原文件。上游改 `ServeFrontendFiles` 的路径判断、响应头或缓存时对照这里。

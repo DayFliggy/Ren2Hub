@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 407,
+    "extension": 410,
     "removed": 45
   },
   "files": [
@@ -962,17 +962,18 @@
       "path": "controller/channel-test.go",
       "status": "adapted",
       "upstream_sha256": "2854ae6987e4f6d458de553dca6a06c48c0f88cced1ed608e5bb29f0f382a4d0",
-      "local_sha256": "a333a78bbe1beec6396554f95f60999bf7d5b1cd3a463485995bfbccf20c89eb",
+      "local_sha256": "6ee1d1230b4f1ee53e562bf2fd774767cba35ed3357dcc0ac8e8b7fba2ac302c",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "retired",
+        "scheduled-key-recovery",
         "token-routing"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9 另含定时 Key 恢复的两个接点，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -985,7 +986,8 @@
           "controller/channel-test.go#7",
           "controller/channel-test.go#8",
           "controller/channel-test.go#9"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -1143,6 +1145,25 @@
       "status": "upstream_equal",
       "upstream_sha256": "ad5d4127f7adac4b386660b552b3424c668caa0200554909dc1c5dab50e4c30b",
       "local_sha256": "ad5d4127f7adac4b386660b552b3424c668caa0200554909dc1c5dab50e4c30b"
+    },
+    {
+      "path": "controller/channel_key_recovery.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "853d3aeec553a905ab0f04ff315fe53dcf151ed09c8759e3dfd370cd85fa214a",
+      "reasons": [
+        "scheduled-key-recovery"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "定时 Key 恢复：选取每渠道最久没测过的至多 3 个自动停用 Key，经原生 testChannel 用该 Key 单独测试，成功后调用 service.EnableRecoveredChannelKey。"
+      }
+    },
+    {
+      "path": "controller/channel_key_recovery_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "215122fe706951f10bad7eed75148ffb4f330decce9ca63428cb54e1a867b868"
     },
     {
       "path": "controller/channel_lab.go",
@@ -11742,6 +11763,19 @@
       "local_sha256": "2d506e2c492cb9108ee6f326b72ba95df470a49b53e719be1adef4ab55d027d9"
     },
     {
+      "path": "service/channel_key_recovery.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8732836e9272c781b4d945907c5f49e0df49968da4bae628ea2b926becb4adaf",
+      "reasons": [
+        "scheduled-key-recovery"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "定时 Key 恢复的写入：经上游的 UpdateScheduledChannelLocked 与 SetScheduledChannelKeyStatus 在行锁内只把仍是自动停用的同一 Key 改回启用，并按 EnableChannel 的方式通知。"
+      }
+    },
+    {
       "path": "service/channel_request.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -14800,6 +14834,11 @@
     "upstream-1c63cc8c9": {
       "basis": "提前吸收冻结目标之后的上游 1c63cc8c9（#8345）：请求触发的本地错误不禁用渠道、不换渠重试；下一个同步窗口不再重复处置该提交。",
       "authority": "SYNC_LEDGER.md#上游基线与同步范围",
+      "kind": "approved_contract"
+    },
+    "scheduled-key-recovery": {
+      "basis": "定时渠道测试在开启自动启用时，用被测 Key 发一次与渠道测试相同的真实请求，恢复多 Key 渠道里被自动停用的 Key；每轮每渠道最多 3 个，失败不改状态，不写路由健康；人工禁用的 Key 和渠道不碰。",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }
   },
