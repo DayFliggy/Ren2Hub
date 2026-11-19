@@ -33239,6 +33239,101 @@
   },
   "round5_adjudication_count": 1,
   "current_file_reviews": {
+    "controller/channel-test.go": {
+      "local_sha256": "b42d03ed347874f16cd7acbd443fc5829694f02009ba270de5f80d2496318c68",
+      "hunks": [
+        {
+          "header": "@@ -48,9 +48,6 @@",
+          "sha256": "555e6b9b49fa5fe684bd50546eb89814abda8640fc224b3bf31b14a39b661913",
+          "basis": "专用 Codex/type57 退役：删除端点与强制 stream 测试特殊分支，对应原审查 controller/channel-test.go#1。"
+        },
+        {
+          "header": "@@ -99,9 +96,24 @@",
+          "sha256": "3881bfaf969631df7c83f5974920cfb8b69545bcccef4a62faeaebcb6c0ae19b",
+          "basis": "真实渠道测试纳入本地路由观测，重新读渠道配置避免使用过期并发和倍率（原审查 #2）；另加定时 Key 恢复的接点：可选的 keyUnderTest 存在时不开始路由观测，并把重读的渠道收窄到被测 Key（逻辑在扩展文件 controller/channel_key_recovery.go）。"
+        },
+        {
+          "header": "@@ -124,9 +136,6 @@",
+          "sha256": "7312c841ead63da79dd99d69f3cf9781eac21383d6616c4eba9b2e63b8cbb89f",
+          "basis": "真实渠道测试纳入本地路由观测，对应原审查 controller/channel-test.go#3。"
+        },
+        {
+          "header": "@@ -203,13 +212,24 @@",
+          "sha256": "2b5b3db310cf744d1d56b7cd22a2274a760eaf0b8a09ee200b23957c4a159ca9",
+          "basis": "无业务组且用户与渠道无等待并发上限同时覆盖管理测试，对应原审查 controller/channel-test.go#4。"
+        },
+        {
+          "header": "@@ -282,6 +302,7 @@",
+          "sha256": "ba655d47ab1c569640fda6c77ec8895975b24b821acf5c0e59568f131eb4a6a2",
+          "basis": "真实渠道测试纳入本地路由观测，对应原审查 controller/channel-test.go#5。"
+        },
+        {
+          "header": "@@ -556,7 +577,6 @@",
+          "sha256": "c11074ddff02ad098da9cb3396e9f552bc681ff89b761660c2edd8d5c8113a9b",
+          "basis": "渠道测试日志去组并按基础价×渠道倍率记录，对应原审查 controller/channel-test.go#6。"
+        },
+        {
+          "header": "@@ -604,8 +624,8 @@",
+          "sha256": "15af339a45faac1fb3d52eb239d3a62430f9b27b1194f6a778e661da1bb9688f",
+          "basis": "渠道测试日志去组并按基础价×渠道倍率记录，对应原审查 controller/channel-test.go#7。"
+        },
+        {
+          "header": "@@ -707,10 +727,6 @@",
+          "sha256": "6427d979e0dcd11c4cd7cdae4ef5ac8468f9f00e594ac9662447b0cf2a13c2fe",
+          "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#8。"
+        },
+        {
+          "header": "@@ -965,7 +981,7 @@",
+          "sha256": "de5604ead9c34a915826101250aee6c820f81b53a872fed50cd99c4441a6efe3",
+          "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#9。"
+        },
+        {
+          "header": "@@ -1145,6 +1161,7 @@",
+          "sha256": "242d2a799b93ef5c93a7ee1bf534baceb940d687ee318d42bb79608a52f102d8",
+          "basis": "定时 Key 恢复的接点：记录本次运行是否由调度发起（载荷 Mode 为空）；管理员“测试全部”入队时 Mode=scheduled_all，不执行 Key 恢复。"
+        },
+        {
+          "header": "@@ -1152,6 +1169,9 @@",
+          "sha256": "70d5cc02f0229e3aeae98cc5a68a26769f23159c2dc61d3fd710c5ca10351068",
+          "basis": "定时 Key 恢复的接点：只有调度发起的运行在渠道测试之后调用扩展文件 controller/channel_key_recovery.go 的 recoverAutoDisabledKeys，三种测试模式都执行，只在开启自动启用时发请求；提供商插件渠道和文本重复的 Key 不参与。"
+        }
+      ]
+    },
+    "controller/model.go": {
+      "local_sha256": "fb835c6974aad5078f975063a776fb07d4f63d6ece295f0b9d1a0ca5d2dac656",
+      "hunks": [
+        {
+          "header": "@@ -2,7 +2,6 @@",
+          "sha256": "4c8a4f4b417f0f92473295da3aebf728fcf3607d388e0284202adf0b153f27cb",
+          "basis": "统一可用模型目录、无组：移除旧group解析/过滤导入，owner查询不依组（对应原审查 controller/model.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -22,7 +21,6 @@",
+          "sha256": "abfccfc3ed063b0c052196cb52b7519c2591e7f3e65a3a83fc747b15406868c9",
+          "basis": "统一可用模型目录、无组：移除旧group解析/过滤导入，owner查询不依组（对应原审查 controller/model.go#2）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -36,7 +34,7 @@",
+          "sha256": "d40145b4d6a679c4825c5b2cf09e01a2714f4ce4ad6175d5f4fe7967ac4c9b15",
+          "basis": "type57 adaptor退役后初始化跳过对应类型（对应原审查 controller/model.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -153,8 +151,8 @@",
+          "sha256": "9a9ecc82e261244318cdec1fa53c1d05ef1504a2a6112a906543c159a11a19ad",
+          "basis": "统一可用模型目录、无组：移除旧group解析/过滤导入，owner查询不依组（对应原审查 controller/model.go#4）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -192,42 +190,6 @@",
+          "sha256": "467df1e302549840708faf504f2f80d2fde414518e5f5482327f650aaed709f1",
+          "basis": "统一可用模型目录、无组：移除旧group解析/过滤导入，owner查询不依组（对应原审查 controller/model.go#5）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -242,48 +204,25 @@",
+          "sha256": "67bf8b04a2aaf4b7fbbe14b84b90666eac31f048dd42504795461d168b7dbd5a",
+          "basis": "统一目录是本地合同：API模型列表和Vue目录共用授权/路由可用性，端点取可用渠道聚合（对应原审查 controller/model.go#6）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
     "controller/plugin_protocol.go": {
       "local_sha256": "e8687f997ac8ac19eacaece27d9341746a5c28e83f82a9a0b7004476fab40e99",
       "hunks": [
@@ -33271,100 +33366,323 @@
       ],
       "regression": "controller/plugin_protocol_test.go:TestDisconnectedTaskProtocolsLogLocalSubmissionRejection"
     },
-    "relay/channel/providerplugin/chain.go": {
-      "local_sha256": "c58f5a459a8ad8e337a85c63159cdd1f708ca24d8ecdf779f5d633e2ff8b507a",
+    "controller/request_plugin.go": {
+      "local_sha256": "7da24d88abaff9fa0bae109047bed82e8c81b8606378397ecab2b0777553eee0",
       "hunks": [
         {
-          "header": "@@ -19,6 +19,7 @@",
-          "sha256": "54c3b6c71ff4b43c840b71745788ed3c429fd6aa5ccc80e44e10975f0120d5d5",
-          "basis": "引入 service 以调用选渠诊断的发送标记。"
+          "header": "@@ -117,14 +117,6 @@",
+          "sha256": "afdceb01b30dbb931b99179cf30074ba004d9114a93bf6e82e891d8a349ad9b4",
+          "basis": "请求处理插件无业务组；明确拒绝不支持的group试运行（对应原审查 controller/request_plugin.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         },
         {
-          "header": "@@ -358,6 +359,7 @@",
-          "sha256": "c726e1350d3b95ebee5152f431697d2dc40f85c6a8a34e9d88c8086a1821ae57",
-          "basis": "提供商插件完成本地校验后，在直连 WebSocket 握手前清除尚未发送的扫描摘要。"
+          "header": "@@ -164,7 +156,7 @@",
+          "sha256": "b6679b6da3dba6ac4d336075f358bb18d9fee98e0526e9f67df9637da72a0832",
+          "basis": "删除业务分组：上游 #8335 确认插件作用范围时清空 global、groups、models；本地 Instance 没有 Groups 字段，只清 global 与 models。"
+        },
+        {
+          "header": "@@ -188,13 +180,30 @@",
+          "sha256": "3440a1ef83426e47b328a92c7529ea20f5940b2cbfb07badc0efac2b98f0ddcf",
+          "basis": "请求处理插件无业务组；明确拒绝不支持的group试运行（对应原审查 controller/request_plugin.go#2）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -219,7 +228,6 @@",
+          "sha256": "f9256f626a43dc0cd761dd8802cb1308e661d76a066cdc89e4068cf7d4dfb833",
+          "basis": "请求处理插件无业务组；明确拒绝不支持的group试运行（对应原审查 controller/request_plugin.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         }
-      ],
-      "regression": "router/provider_plugin_gaps_test.go:TestGapsUpstreamWebSocket/rejected_handshake"
+      ]
     },
-    "relay/channel/xunfei/relay-xunfei.go": {
-      "local_sha256": "97a881a8dbd471aba77ef13ca1fbd001d02b3ad028567920b988c4fbb473c6db",
+    "middleware/auth.go": {
+      "local_sha256": "36cd6e9838c79a18833934618db48997fb8554d46ba2a8240a822253d770c336",
       "hunks": [
         {
-          "header": "@@ -16,6 +16,7 @@",
-          "sha256": "ecd8ccc0a3ef7cc6f527c9009de17a7a15bf579cb4a3d189f0f0bac6da34afc4",
-          "basis": "引入 service 记录流首输出及发送标记。"
+          "header": "@@ -9,7 +9,6 @@",
+          "sha256": "503556d1d6909e3525bac31ef16c706c29647f2b9d04d2e85f7f1a76d5d816d3",
+          "basis": "无业务分组。（对应原审查 middleware/auth.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         },
         {
-          "header": "@@ -130,7 +131,7 @@",
-          "sha256": "6fe0588411b9bc5bcddbfa0357a24d4377dc35697309645b47c7aa104cf5266b",
-          "basis": "流式入口将请求上下文传至拨号函数。"
+          "header": "@@ -17,7 +16,6 @@",
+          "sha256": "97da20e724a287b3b8344b3099a40328b0e76d32ed60190da9199e19ba8972d8",
+          "basis": "无业务分组。（对应原审查 middleware/auth.go#2）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         },
         {
-          "header": "@@ -149,6 +150,7 @@",
-          "sha256": "88b6ac358fe6edf9edd26bb16c786c18ff8a23c7dfe70b36f1e56b741b4fcb0e",
-          "basis": "已写出的供应商流输出参与渠道性能观察。"
+          "header": "@@ -361,8 +359,6 @@",
+          "sha256": "01f084938704001c5f2881bd2660a141401b1c4b1661870f0797dd98fab023f9",
+          "basis": "无业务分组。（对应原审查 middleware/auth.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         },
         {
-          "header": "@@ -160,7 +162,7 @@",
-          "sha256": "32eb26029d376cf710be617c39e9c0c3a51d9293afa88699e7be4e5b2ff162dc",
-          "basis": "普通入口使用相同的上下文传递。"
+          "header": "@@ -630,25 +626,6 @@",
+          "sha256": "1e9fcda1a39b8719b2a5fac62e8dd52224510b240e4d006a8b1fe79b459b40a4",
+          "basis": "无业务分组。（对应原审查 middleware/auth.go#4）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         },
         {
-          "header": "@@ -200,10 +202,11 @@",
-          "sha256": "d05e924807208ad42f37b411ceb2bbeb923a8bf0d9ff79bf482e5f36889397ba",
-          "basis": "直连拨号前清除待发送扫描记录，握手失败归为已发送。"
+          "header": "@@ -698,18 +675,6 @@",
+          "sha256": "4c588d143ce241d17928ea3b5098d3fde72c28a3b8426b3c0e3bdbf962ee166a",
+          "basis": "无业务分组。（对应原审查 middleware/auth.go#5）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         }
-      ],
-      "regression": "relay/channel/xunfei/route_scan_test.go:TestRouteScanBeforeAndAfterXunfeiDial"
+      ]
     },
-    "service/request_policy.go": {
-      "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
+    "middleware/distributor.go": {
+      "local_sha256": "427f38de3e25bce5275e349abbbe79b43e11ffc44ffee56a90e2f36989f78b29",
       "hunks": [
         {
-          "header": "@@ -1,6 +1,7 @@",
-          "sha256": "ebcbafd72ca574a0e8d1a2c0185671e6ec3d0a65d5ebfabf6dddd214213e3787",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：RelayErrorSource 需要 errors 包。"
+          "header": "@@ -17,18 +17,17 @@",
+          "sha256": "a18011bb0f89138f5a15d2db93c8cd8d1be4403288754ecb37963d3be2f30556",
+          "basis": "删除业务分组：删除 Playground 与分组校验所用导入；ModelRequest 去掉 group，加 stream 与 stream_format 供路由观测按流式桶记录（token-routing）。"
         },
         {
-          "header": "@@ -23,16 +24,17 @@",
-          "sha256": "1de3aa5be11cce5995e5aeb958856242d8fe82c24ebaf6f340d0fc6948140beb",
-          "basis": "逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 自动扫描记录及移除 Group 继续遵循既有合同。"
+          "header": "@@ -50,8 +49,21 @@",
+          "sha256": "685fee41b2e3b3136e555efeae21623f88ec53947903b049c534bc4fb59d9260",
+          "basis": "Distribute 在选路前确定流式维度（插件端点预选保留原请求的流式字段，Gemini 按路径和 alt=sse 判断），原任务续作的固定渠道也走本地准入（origin-task-continuation、token-routing）。"
         },
         {
-          "header": "@@ -42,7 +44,6 @@",
-          "sha256": "1a79efbb258d08ee781dfce722bf6d43e5799704caa2f26ec4b784474593727c",
-          "basis": "移除按业务分组选择渠道的 SelectedGroup 状态。"
+          "header": "@@ -78,40 +90,40 @@",
+          "sha256": "56ba9a558d8341e82b684d299c9ff3196c88b2f84eabef8aa0461ae3290a657c",
+          "basis": "删除业务分组：删除 Playground 分组切换；加用户并发准入与路由槽释放（concurrency）。"
         },
         {
-          "header": "@@ -50,6 +51,7 @@",
-          "sha256": "c1a412f5d71829fe6ed0627c71dfb48d82a09e9367dd37eb08846afd0c0173f7",
-          "basis": "routeScanState 为每个请求保存轮次和已选择但尚未发送的渠道。"
+          "header": "@@ -120,18 +132,15 @@",
+          "sha256": "d6eceb927a20d5d3dced84e21b96120288902c132b97d2ef356883bd86b90289",
+          "basis": "插件端点预选的渠道经 ReacquireSelectedRouteChannel 正式重取并核对准入，选路错误统一由 abortWithChannelSelectError 输出（token-routing、concurrency）。"
         },
         {
-          "header": "@@ -67,14 +69,14 @@",
-          "sha256": "b7212003353fbe22c9578fb4d8997ac0f4589e7eaf88be4a2800541cbfc81b03",
-          "basis": "AddEvent 在策略事件锁内跟踪扫描结果和轮次，沿用事件上限，取消业务分组的默认填充。"
+          "header": "@@ -142,7 +151,7 @@",
+          "sha256": "2d7af478bb222514483a569065ac7e097956b5074d63a2f4aca6027b6bdcb957",
+          "basis": "删除业务分组：noAvailableChannelMessage 去掉 group 参数。"
         },
         {
-          "header": "@@ -86,12 +88,39 @@",
-          "sha256": "87750248f04212ff9550aeb79d840ac27267d1a729ace12c781d7935a1c763ba",
-          "basis": "BeginAttempt 仍按渠道记录中继尝试，省去分组参数及写回；提前吸收上游 1c63cc8c9（#8345）：其后新增的 RelayErrorSource 照上游原文。"
+          "header": "@@ -155,10 +164,10 @@",
+          "sha256": "71d12e34a70a2446aeb97bb5dbc596750b832bacf2d196e9ba338fd42b16410f",
+          "basis": "删除业务分组：无可用渠道的日志与提示不带分组。"
         },
         {
-          "header": "@@ -101,15 +130,7 @@",
-          "sha256": "8dd61f2d3af91dba596f6c497901f184960f9c829c310b320ca4a485db457ca6",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：RecordPolicyFailure 改用 RelayErrorSource。"
+          "header": "@@ -316,7 +325,7 @@",
+          "sha256": "e0102792056a7dd4e2ab21b3885b4391cc1d9bf881e4f8790f7f4f8390c6c90a",
+          "basis": "删除业务分组：请求体只读 model，另读 stream、stream_format 供流式桶（token-routing）。"
         },
         {
-          "header": "@@ -117,7 +138,7 @@",
-          "sha256": "5ad4e32512e1443b895c0478aa1bf99b1ba285ba38dcb3ff1295eb95052055f7",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：健康条目与 ShouldDisableChannel 的判定一致，不再单独排除 local。"
+          "header": "@@ -324,10 +333,6 @@",
+          "sha256": "13b37e4e327ad0c7c03791307cb1f2d1ada27b25941986d3c6059d30659ef394",
+          "basis": "删除业务分组：删除 group 字段读取。"
         },
         {
-          "header": "@@ -175,6 +196,7 @@",
-          "sha256": "223edb5fac4fb5f9b2ddbf59e6f75ec897bcb37be36c820c3f4d600d87f8fe5e",
-          "basis": "首次终止时输出选中后、上游发送前遭拒的扫描摘要，保留原生终止决策和错误码。"
+          "header": "@@ -335,8 +340,9 @@",
+          "sha256": "9f712bda2045c472073c0ee5f8552a4a13d85a074ca7b67b5689f424e5a694e6",
+          "basis": "删除业务分组：ModelRequest 不带 Group，带流式维度（token-routing）。"
+        },
+        {
+          "header": "@@ -418,6 +424,16 @@",
+          "sha256": "4b699f5e68f051d88cb6e77cee657d781ef246f56a7759fbd339f239daf5df5e",
+          "basis": "新增 abortWithChannelSelectError，HTTP 与插件端点共用选路错误输出（token-routing）。"
+        },
+        {
+          "header": "@@ -452,6 +468,9 @@",
+          "sha256": "6cdc8a3889157d2b50e75439ca91c16a97ce2a2c1e7b44720b7aeb2cf288c3cc",
+          "basis": "Midjourney 原任务查找固定原渠道（origin-task-continuation）。"
+        },
+        {
+          "header": "@@ -472,7 +491,7 @@",
+          "sha256": "41ec9c8cc12ee98400bc2a118656b31c6697d5613ba6dca9017c263a8cc74020",
+          "basis": "解析出的请求整体保留（含流式维度）而不只取 model（token-routing）。"
+        },
+        {
+          "header": "@@ -487,7 +506,7 @@",
+          "sha256": "a3f5f203c359cb7faeacc835bb4da1e7cf870f3bfa508a5b8b637f7b6cc2a924",
+          "basis": "同上：解析出的请求整体保留（token-routing）。"
+        },
+        {
+          "header": "@@ -501,6 +520,14 @@",
+          "sha256": "6c14ee7733d417f0999a493b18b43391650f88592fbd9a36f17bc0e104e06502",
+          "basis": "原生计数路径（Gemini countTokens）按路径解析模型并标为 NativeCount，不占生成样本（native-count）。"
+        },
+        {
+          "header": "@@ -510,7 +537,7 @@",
+          "sha256": "852cb3838a44fa6d7e76d97ebf14095e2474162be4ebd90f6e3dbb1bec64c885",
+          "basis": "同上：解析出的请求整体保留（token-routing）。"
+        },
+        {
+          "header": "@@ -541,7 +568,7 @@",
+          "sha256": "4dd148433fab882aeda63df29c265370bedc5693b07d81091259a4db418b2f3d",
+          "basis": "同上：解析出的请求整体保留（token-routing）。"
+        },
+        {
+          "header": "@@ -553,29 +580,19 @@",
+          "sha256": "41a8dff3c6cff959f536466a8639251103130cf4dbac87ab15da23d36c93c6b1",
+          "basis": "删除业务分组：解析出的请求整体保留；删除 Playground 路径（retired）。"
+        },
+        {
+          "header": "@@ -586,13 +603,7 @@",
+          "sha256": "57675262eb7b0487f08e2ff2f83e013abd0683cb2a90a87ec62fe98bd13b09b6",
+          "basis": "Token 模型限制改用 service.TokenModelLimitAllows，去掉依赖内置价格表的模型名归一（catalog-stats、retired）。"
+        },
+        {
+          "header": "@@ -617,6 +628,10 @@",
+          "sha256": "c8e61e4c2c399db284a7d07936a826a3ea068425b7ffc9bfc4492f636e24db39",
+          "basis": "选定渠道后在上下文写入渠道倍率与选中渠道，供计费按基础价×渠道倍率和路由决策使用（channel-ratio、token-routing）。"
+        }
+      ]
+    },
+    "model/channel.go": {
+      "local_sha256": "ea2ffafd254f8c6b5f3f70197b5dd35f26894278a0c5420d68469ba4f309b52c",
+      "hunks": [
+        {
+          "header": "@@ -15,12 +15,10 @@",
+          "sha256": "8abed598c5550159b9a219c936463ecf34ff9ac0385e9020a59f2f6d424f517d",
+          "basis": "删除业务分组：删除日志、jsplugin、lo 导入；加模型实验室分类导入（catalog-stats）。"
+        },
+        {
+          "header": "@@ -42,7 +40,6 @@",
+          "sha256": "1a5ce956e83d8536d0b0fdeeaf29dbc5e47f170679c57d9ac5765241fc3a7712",
+          "basis": "删除业务分组：Channel 删除 Group 字段。"
+        },
+        {
+          "header": "@@ -62,6 +59,13 @@",
+          "sha256": "7edae336b01f53405645ccb188a7e7aee638dd44966e18f17104495b7c5d7f05",
+          "basis": "渠道倍率、即时并发上限及只读投影 InFlight、RoutingQuality、Lab（channel-ratio、concurrency、catalog-stats）。"
+        },
+        {
+          "header": "@@ -144,38 +148,6 @@",
+          "sha256": "f70f0f756531d832f5946438299879375aa21fe6e4006a363cf8c674ea0190c4",
+          "basis": "删除业务分组：删除分组过滤的规范化函数。"
+        },
+        {
+          "header": "@@ -265,37 +237,11 @@",
+          "sha256": "2feca0d5db7ac8cfa5e9fbc20bce1e48f795ab371db64292f9e216cb8d7334f3",
+          "basis": "多 Key 轮询游标移到扩展文件 model/channel_polling.go 的 advanceChannelPolling（concurrency）；T3 删除多 Key 时随之删除。"
+        },
+        {
+          "header": "@@ -311,17 +257,6 @@",
+          "sha256": "f925f0d3492275466ef868dacf3245627797278618bf052cc3372ae87c9d76a5",
+          "basis": "删除业务分组：删除 GetGroups 等分组读取。"
+        },
+        {
+          "header": "@@ -446,7 +381,7 @@",
+          "sha256": "cb2bdf8dee9f2346ec2f54c7176fd96aa7a380b2cdfea29e9c5b6bfbc816b055",
+          "basis": "删除业务分组：SearchChannels 去掉 group 参数。"
+        },
+        {
+          "header": "@@ -469,7 +404,7 @@",
+          "sha256": "26e58b840ab4cdea05af0fa71a5402081aef675fd2d333fc30ba88948d45109d",
+          "basis": "删除业务分组：搜索查询不加分组过滤。"
+        },
+        {
+          "header": "@@ -538,32 +473,42 @@",
+          "sha256": "f19fcc7d5ce94c8864952e6f6fad341fb2602c9b1418735db1b7aadc19b4c90a",
+          "basis": "批量删除按有序行锁返回快照并发布路由变更（token-routing、concurrency）。"
+        },
+        {
+          "header": "@@ -620,7 +565,18 @@",
+          "sha256": "b8f9d736498da3739484c1fff7295d48c41f5664bfc3cdac31e63209c6af2240",
+          "basis": "编辑未带 channel_ratio 时沿用库内倍率，避免回落默认值（channel-ratio）。"
+        },
+        {
+          "header": "@@ -654,14 +610,25 @@",
+          "sha256": "672b91217a902e1bb0639aa9ef13ae9ee93c129f0ed9855075b1d66cb92e4b29",
+          "basis": "编辑在事务内写入并重建能力，提交后发布路由变更（token-routing）。"
+        },
+        {
+          "header": "@@ -685,13 +652,7 @@",
+          "sha256": "abea55b7c62826963c2f9d2e432924d9f4b6f96707a89f233009ba36406572e3",
+          "basis": "删除渠道经本地有序删除并发布路由变更（token-routing、concurrency）。"
+        },
+        {
+          "header": "@@ -858,135 +819,16 @@",
+          "sha256": "36dc8761aa829b3f4061a5951b9aafe781c12e11071673161c5ecacf22c527ce",
+          "basis": "渠道状态写入移到扩展文件 model/channel_status.go 的 UpdateChannelStatusDetailed（token-routing）。"
+        },
+        {
+          "header": "@@ -1003,23 +845,18 @@",
+          "sha256": "593e0a19de9455536fb2ea71f79527a237ade8f3703a55f81608011aeaee4601",
+          "basis": "按标签禁用经行锁事务并发布路由变更（token-routing、concurrency）。"
+        },
+        {
+          "header": "@@ -1028,10 +865,6 @@",
+          "sha256": "0c653b5f6f901988693da63f67cb7c726e07065e951706ee606d6d44fff3364a",
+          "basis": "删除业务分组：按标签编辑不再改分组。"
+        },
+        {
+          "header": "@@ -1045,28 +878,12 @@",
+          "sha256": "ae604647a04438b0d8d790d791ae8e904b9a968252407af1b77ba5e7e2acbb2f",
+          "basis": "按标签编辑经行锁事务写入并发布路由变更（token-routing、concurrency）。"
+        },
+        {
+          "header": "@@ -1113,7 +930,7 @@",
+          "sha256": "dc093b508be560068eec836572a50eeec257eb35375f2738496052fb9f8a771d",
+          "basis": "删除业务分组：SearchTags 去掉 group 参数。"
+        },
+        {
+          "header": "@@ -1139,7 +956,7 @@",
+          "sha256": "7a3d68e9cf2bef34886e1d626d6cc3afd24837a82e012a1b5ef5eda16cdfb8c8",
+          "basis": "删除业务分组：标签搜索不加分组过滤。"
+        },
+        {
+          "header": "@@ -1281,41 +1098,20 @@",
+          "sha256": "9917047f4bac7ec50c78ad34533f1413988f01ffb33e66669c02994e96c20fb7",
+          "basis": "BatchSetChannelTag 用本地行锁事务（lockChannels 与 updateLockedChannels，在同一事务内加锁重读后重建能力）实现渠道变更锁顺序与路由发布；上游 ce8fc49e4 改为事务内读回，生产行为等价，保留本地实现并带入上游 TestBatchSetChannelTagDatabaseMatrix（去掉 Group，能力数按本地 2）。"
+        }
+      ]
+    },
+    "model/pricing.go": {
+      "local_sha256": "22907fa2c0aea5779fe2a0d93f156a366ea846ddb591464964f82c929e2ad53e",
+      "hunks": [
+        {
+          "header": "@@ -13,7 +13,6 @@",
+          "sha256": "5d25bb779a7d158930f2b354929a8da301325a1888904d671c30a9a25693d701",
+          "basis": "删除业务分组：删除只为分组集合使用的导入。"
+        },
+        {
+          "header": "@@ -43,7 +42,6 @@",
+          "sha256": "82c5e71363524b58b96e164782bb7287245754b5329fe29ebb17e7c9a79faa9e",
+          "basis": "删除业务分组：Pricing 删除 enable_groups。"
+        },
+        {
+          "header": "@@ -70,10 +68,9 @@",
+          "sha256": "8e01e239d39af4c62b333215d77cc6bf2845419e22fbf2ad9f1f70b23ef6a47b",
+          "basis": "删除业务分组：模型缓存只保留计费类型映射。"
+        },
+        {
+          "header": "@@ -252,19 +249,13 @@",
+          "sha256": "3fc240807467b1536cb50b3f9c8e911f0a6f406ee7d50c96f2a37e2b030cbc89",
+          "basis": "删除业务分组：按能力收集模型名，不再收集分组集合。"
+        },
+        {
+          "header": "@@ -362,10 +353,9 @@",
+          "sha256": "3b850c4e5a5ca08aa340f97faa407f6b49a6e9ba13c94449726873f33cae824a",
+          "basis": "删除业务分组：定价行不带启用分组。"
+        },
+        {
+          "header": "@@ -447,8 +437,7 @@",
+          "sha256": "319d6d82ecbf6a5e5492a6931ef4cbb3795ebce530a1ade023278516eadfb024",
+          "basis": "按次计费只看 QuotaType，不读内置默认价格表（代码不内置模型默认价格）。"
+        },
+        {
+          "header": "@@ -484,14 +473,12 @@",
+          "sha256": "83b6bdb350899f433266fb14b1743d336bdb0c3412b1cc02501cf7a3e2219a06",
+          "basis": "删除业务分组：刷新缓存时只写计费类型映射。"
+        }
+      ]
+    },
+    "pkg/jsplugin/routing.go": {
+      "local_sha256": "7ed9121094bae30396ae7ee025f8cbdcbe10114f2bca03c2c6d93277c11ba1c4",
+      "hunks": [
+        {
+          "header": "@@ -450,6 +450,15 @@",
+          "sha256": "1aa2b1118aabbb7029edf1b52a34a7ed7ad68f24ffafa216398f294e1c7c7b4d",
+          "basis": "Vue 前端与通用插件路由共存。（对应原审查 pkg/jsplugin/routing.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
+    "pkg/jsplugin/transform.go": {
+      "local_sha256": "c149fc6602f928fdfbf07abc82f607776dc8d0c69a6944264074ff7f62f9e982",
+      "hunks": [
+        {
+          "header": "@@ -156,7 +156,6 @@",
+          "sha256": "2a8a590ed61f638065694c1ed591938d389bbc0956abca22ccd8dfa839fa7513",
+          "basis": "无业务分组。（对应原审查 pkg/jsplugin/transform.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -359,7 +358,6 @@",
+          "sha256": "f48f3a8876d104a5d1802ab94c8acf4b45787df5e10a42ba02d6fcb685b3c0c6",
+          "basis": "无业务分组。（对应原审查 pkg/jsplugin/transform.go#2）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         }
       ]
     },
@@ -33468,133 +33786,220 @@
         }
       ]
     },
-    "service/usage_helpr.go": {
-      "local_sha256": "ab2faeff396e4816e0156bbbeb6c68bdc6d1ba7ac2730be868370519cb600293",
+    "relay/channel/providerplugin/chain.go": {
+      "local_sha256": "c58f5a459a8ad8e337a85c63159cdd1f708ca24d8ecdf779f5d633e2ff8b507a",
       "hunks": [
         {
-          "header": "@@ -26,6 +26,10 @@",
-          "sha256": "19235b30b0cf4bffacabb1ad45de73f200da2869c5f1a1bda529669fddd57c9d",
-          "basis": "估算输出 token 时只标记本轮的估算来源，原生结算数量沿用。"
+          "header": "@@ -19,6 +19,7 @@",
+          "sha256": "54c3b6c71ff4b43c840b71745788ed3c429fd6aa5ccc80e44e10975f0120d5d5",
+          "basis": "引入 service 以调用选渠诊断的发送标记。"
+        },
+        {
+          "header": "@@ -358,6 +359,7 @@",
+          "sha256": "c726e1350d3b95ebee5152f431697d2dc40f85c6a8a34e9d88c8086a1821ae57",
+          "basis": "提供商插件完成本地校验后，在直连 WebSocket 握手前清除尚未发送的扫描摘要。"
         }
-      ]
+      ],
+      "regression": "router/provider_plugin_gaps_test.go:TestGapsUpstreamWebSocket/rejected_handshake"
     },
-    "service/channel.go": {
-      "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
+    "relay/channel/xunfei/relay-xunfei.go": {
+      "local_sha256": "97a881a8dbd471aba77ef13ca1fbd001d02b3ad028567920b988c4fbb473c6db",
       "hunks": [
         {
-          "header": "@@ -69,8 +69,15 @@",
-          "sha256": "ec3be8aea6b6929f12fd4c5a70a597d236024b603422c5ed8920ce9af4ddcd29",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：ShouldDisableChannel 先按 RelayErrorSource 分类，channel 禁用、local 不禁用；其余照上游原文。"
-        }
-      ]
-    },
-    "relay/param_override_error.go": {
-      "local_sha256": "59466b21ac6c8631cd55f209c726be95e08b414de1e179600f1856922c5538dc",
-      "hunks": [
+          "header": "@@ -16,6 +16,7 @@",
+          "sha256": "ecd8ccc0a3ef7cc6f527c9009de17a7a15bf579cb4a3d189f0f0bac6da34afc4",
+          "basis": "引入 service 记录流首输出及发送标记。"
+        },
         {
-          "header": "@@ -1,13 +1,25 @@",
-          "sha256": "7e3f56aefe16fba1c96737d9c4d57ac2362bd77571ff83eabbc06b74f7cf6d6d",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：请求值类型不符的参数覆盖条件返回 400 invalid_request 且不重试，规则本身无效仍为渠道错误。"
-        }
-      ]
-    },
-    "relay/image_handler.go": {
-      "local_sha256": "55dbf397d89288556769fc40db328195858d3be068f695cb2fb3ddba863288a3",
-      "hunks": [
+          "header": "@@ -130,7 +131,7 @@",
+          "sha256": "6fe0588411b9bc5bcddbfa0357a24d4377dc35697309645b47c7aa104cf5266b",
+          "basis": "流式入口将请求上下文传至拨号函数。"
+        },
         {
-          "header": "@@ -123,7 +123,7 @@",
-          "sha256": "da22f492664fd32f26a555b7a50cff5ef67e55c0224556c64e6198bb49b424c5",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：图像转换失败改用共用的 newConvertRequestFailedError，不再换渠重试。"
+          "header": "@@ -149,6 +150,7 @@",
+          "sha256": "88b6ac358fe6edf9edd26bb16c786c18ff8a23c7dfe70b36f1e56b741b4fcb0e",
+          "basis": "已写出的供应商流输出参与渠道性能观察。"
+        },
+        {
+          "header": "@@ -160,7 +162,7 @@",
+          "sha256": "32eb26029d376cf710be617c39e9c0c3a51d9293afa88699e7be4e5b2ff162dc",
+          "basis": "普通入口使用相同的上下文传递。"
+        },
+        {
+          "header": "@@ -200,10 +202,11 @@",
+          "sha256": "d05e924807208ad42f37b411ceb2bbeb923a8bf0d9ff79bf482e5f36889397ba",
+          "basis": "直连拨号前清除待发送扫描记录，握手失败归为已发送。"
         }
-      ]
+      ],
+      "regression": "relay/channel/xunfei/route_scan_test.go:TestRouteScanBeforeAndAfterXunfeiDial"
     },
     "relay/common/override.go": {
       "local_sha256": "a8985387820df71618ad741b6f4c0a9e6f7c84e3a221c73f6a690d1989b1137c",
       "hunks": [
         {
-          "header": "@@ -107,6 +107,21 @@",
-          "sha256": "ccf4ed76c8b46390cb56c0c7df1093407f39a8d624e06fa8acd37d2ac99b7775",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：新增 ParamOverrideRequestValueError。"
-        },
-        {
-          "header": "@@ -690,6 +705,11 @@",
-          "sha256": "a5edd2cf5d3c3c3e46f28501992e8573967156baf4655e0191c61a8fadfdf6b5",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：条件比较遇到请求值类型错误时保留该类型并补路径。"
-        },
-        {
-          "header": "@@ -777,7 +797,7 @@",
-          "sha256": "77f472f55409a213a4e0aa72f0dbafa55d5dc6d2f02274299e56adf0271f95a3",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：相等比较的类型不符归为请求值错误。"
-        },
-        {
-          "header": "@@ -793,9 +813,13 @@",
-          "sha256": "b71953fe95d9a871e3686e0c6eeece413a6e4b33a404bacd69d5fa3f7a3c2fe2",
-          "basis": "提前吸收上游 1c63cc8c9（#8345）：数值比较区分规则值非数字（配置错误）与请求值非数字（请求错误）。"
-        },
-        {
-          "header": "@@ -2187,9 +2211,6 @@",
-          "sha256": "eecf70ffc95faade9dfeadcebc04ae565f9dfd745edcc6a09a733f113906f2bf",
-          "basis": "移除条件上下文里的业务分组字段（user_group、token_group、using_group），对应原审查 relay/common/override.go#2。"
+          "header": "@@ -2211,9 +2211,6 @@",
+          "sha256": "5b48804c8620a6cac02a2051fb660fc45e2533c0d2b9afe06846b67aef6c2c0f",
+          "basis": "移除条件上下文里的业务分组字段（user_group、token_group、using_group），对应原审查 relay/common/override.go#2。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         }
       ]
     },
-    "controller/channel-test.go": {
-      "local_sha256": "b42d03ed347874f16cd7acbd443fc5829694f02009ba270de5f80d2496318c68",
+    "relay/requestplugin/plan.go": {
+      "local_sha256": "adccf40cda2a4754ee9c2c534066e18714e00fe4926352032deb98ab3e5d8265",
       "hunks": [
         {
-          "header": "@@ -48,9 +48,6 @@",
-          "sha256": "555e6b9b49fa5fe684bd50546eb89814abda8640fc224b3bf31b14a39b661913",
-          "basis": "专用 Codex/type57 退役：删除端点与强制 stream 测试特殊分支，对应原审查 controller/channel-test.go#1。"
+          "header": "@@ -196,13 +196,13 @@",
+          "sha256": "2f8d5b04fa0fcf831d4f78e7f6f26c978cd29fbae398f02e668f16653de6fc25",
+          "basis": "删除业务分组：scope 签名去掉 group，保留上游 #8335/#8341 的 channelType 参数与插件作用范围说明。"
         },
         {
-          "header": "@@ -99,9 +96,24 @@",
-          "sha256": "3881bfaf969631df7c83f5974920cfb8b69545bcccef4a62faeaebcb6c0ae19b",
-          "basis": "真实渠道测试纳入本地路由观测，重新读渠道配置避免使用过期并发和倍率（原审查 #2）；另加定时 Key 恢复的接点：可选的 keyUnderTest 存在时不开始路由观测，并把重读的渠道收窄到被测 Key（逻辑在扩展文件 controller/channel_key_recovery.go）。"
+          "header": "@@ -239,13 +239,6 @@",
+          "sha256": "2e0d522083e8d049629b316599d9117f47a8abe08884c644a8a1ec2d9f05dba9",
+          "basis": "删除业务分组：删除按请求分组加入实例的分支；插件作用范围实例与全局、渠道绑定实例的选择照上游。"
         },
         {
-          "header": "@@ -124,9 +136,6 @@",
-          "sha256": "7312c841ead63da79dd99d69f3cf9781eac21383d6616c4eba9b2e63b8cbb89f",
-          "basis": "真实渠道测试纳入本地路由观测，对应原审查 controller/channel-test.go#3。"
+          "header": "@@ -270,15 +263,15 @@",
+          "sha256": "07427577d92b20ef8b8e7cccba5bc98076aafa2f7ac958516725b2927934578d",
+          "basis": "无业务分组，保留请求/响应插件全部原生阶段。（对应原审查 relay/requestplugin/plan.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         },
         {
-          "header": "@@ -203,13 +212,24 @@",
-          "sha256": "2b5b3db310cf744d1d56b7cd22a2274a760eaf0b8a09ee200b23957c4a159ca9",
-          "basis": "无业务组且用户与渠道无等待并发上限同时覆盖管理测试，对应原审查 controller/channel-test.go#4。"
+          "header": "@@ -349,7 +342,7 @@",
+          "sha256": "d2a18860ce49378967a010be15b2f9b1085547bd69c4a01ff2cab381af9b9014",
+          "basis": "删除业务分组：Run 调用 scope 时不传 group，channelType 照上游。"
         },
         {
-          "header": "@@ -282,6 +302,7 @@",
-          "sha256": "ba655d47ab1c569640fda6c77ec8895975b24b821acf5c0e59568f131eb4a6a2",
-          "basis": "真实渠道测试纳入本地路由观测，对应原审查 controller/channel-test.go#5。"
+          "header": "@@ -469,12 +462,12 @@",
+          "sha256": "cfae2888a32d762ab14e8ce1fa69796a2b22e37f586a393a61fa7f6100f23d45",
+          "basis": "无业务分组，保留请求/响应插件全部原生阶段。（对应原审查 relay/requestplugin/plan.go#5）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
+    "relay/requestplugin/relay.go": {
+      "local_sha256": "aeb9516af39c8ce801c2736e0e8bd99cac7026c1e77187cfb4f53b658829fd2c",
+      "hunks": [
+        {
+          "header": "@@ -73,9 +73,8 @@",
+          "sha256": "1332a6711dc7e028be5dc315ffb1740ef28493972b290235be6a908939eff8af",
+          "basis": "删除业务分组：Ingress 选实例不读请求分组。"
         },
         {
-          "header": "@@ -556,7 +577,6 @@",
-          "sha256": "c11074ddff02ad098da9cb3396e9f552bc681ff89b761660c2edd8d5c8113a9b",
-          "basis": "渠道测试日志去组并按基础价×渠道倍率记录，对应原审查 controller/channel-test.go#6。"
+          "header": "@@ -85,11 +84,11 @@",
+          "sha256": "62c581f92c6317547f7c3e6eaf35d6eda8ad34e5d9a6c38a3f77b279c9669b9a",
+          "basis": "删除业务分组：Ingress 的 Call 不带 Group。"
         },
         {
-          "header": "@@ -604,8 +624,8 @@",
-          "sha256": "15af339a45faac1fb3d52eb239d3a62430f9b27b1194f6a778e661da1bb9688f",
-          "basis": "渠道测试日志去组并按基础价×渠道倍率记录，对应原审查 controller/channel-test.go#7。"
+          "header": "@@ -138,9 +137,9 @@",
+          "sha256": "8c363b5b969840956ff9d3ca5e8d1c16c73852a6d0f8507b3bfea44d598cc3ad",
+          "basis": "删除业务分组：渠道选定后的迟到 ingress 选实例不传 group。"
         },
         {
-          "header": "@@ -707,10 +727,6 @@",
-          "sha256": "6427d979e0dcd11c4cd7cdae4ef5ac8468f9f00e594ac9662447b0cf2a13c2fe",
-          "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#8。"
+          "header": "@@ -177,7 +176,7 @@",
+          "sha256": "10096be7d0017673e636fcfd744a6c9ae1300fabe379cca52d2bd88e88491825",
+          "basis": "删除业务分组：egress 选实例不传 group。"
         },
         {
-          "header": "@@ -965,7 +981,7 @@",
-          "sha256": "de5604ead9c34a915826101250aee6c820f81b53a872fed50cd99c4441a6efe3",
-          "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#9。"
+          "header": "@@ -315,7 +314,7 @@",
+          "sha256": "b7d0fe554fa76a89340af5141737abf3dfdf23339e8969ed0ca1c84e36fb369d",
+          "basis": "删除业务分组：request 阶段选实例不传 group。"
         },
         {
-          "header": "@@ -1145,6 +1161,7 @@",
-          "sha256": "242d2a799b93ef5c93a7ee1bf534baceb940d687ee318d42bb79608a52f102d8",
-          "basis": "定时 Key 恢复的接点：记录本次运行是否由调度发起（载荷 Mode 为空）；管理员“测试全部”入队时 Mode=scheduled_all，不执行 Key 恢复。"
+          "header": "@@ -405,7 +404,7 @@",
+          "sha256": "4e7c8965a4e6ea8badfd086c1fd7a4d0eaea81eeedc5206a080df756dfb76e06",
+          "basis": "删除业务分组：egress 重放判断不传 group。"
         },
         {
-          "header": "@@ -1152,6 +1169,9 @@",
-          "sha256": "70d5cc02f0229e3aeae98cc5a68a26769f23159c2dc61d3fd710c5ca10351068",
-          "basis": "定时 Key 恢复的接点：只有调度发起的运行在渠道测试之后调用扩展文件 controller/channel_key_recovery.go 的 recoverAutoDisabledKeys，三种测试模式都执行，只在开启自动启用时发请求；提供商插件渠道和文本重复的 Key 不参与。"
+          "header": "@@ -422,10 +421,10 @@",
+          "sha256": "6d62363d58974b139bc4b0eb2d8776b2b4ba076f5457280483199b008d845b0b",
+          "basis": "删除业务分组：attemptCall 不带 Group。"
+        },
+        {
+          "header": "@@ -438,16 +437,6 @@",
+          "sha256": "b4020acf5922153080ba19c06bd2bc412be14f7b5947b6e105223a8f8a34c484",
+          "basis": "删除业务分组：删除 requestGroup（按 Token 分组或自动分组结算选实例）。"
+        },
+        {
+          "header": "@@ -580,10 +569,10 @@",
+          "sha256": "62f70626a8620d64cb8da0b8121bcf0c6ccb582df91735847d7f381004ed26ac",
+          "basis": "删除业务分组：Call 结构删除 Group 字段。"
+        },
+        {
+          "header": "@@ -651,7 +640,7 @@",
+          "sha256": "3bc87da2ff2ea12ea71a0b301911008acfa79193f79753bf97e52c96420340a8",
+          "basis": "删除业务分组：试运行的 Call 不带 Group；带 group 的试运行请求由 controller/request_plugin.go 拒绝。"
+        },
+        {
+          "header": "@@ -715,7 +704,7 @@",
+          "sha256": "a4098a87b7e00f1dfce12ae8da090deae2a0bca5a684ea8887e4958e86411b26",
+          "basis": "删除业务分组：回复阶段选实例不传 group。"
+        }
+      ]
+    },
+    "relay/requestplugin/reply.go": {
+      "local_sha256": "3bdf35f96a9cd374e081d0d90a998cb96c61124c439e5853e5b03a7cae99f639",
+      "hunks": [
+        {
+          "header": "@@ -79,21 +79,20 @@",
+          "sha256": "70cd132503ac94614b2022625b3c3ef1e0591ce299b048c7986fcc970b594e2a",
+          "basis": "删除业务分组：reply 不再读取请求分组；渠道类型照上游取自 ChannelMeta，用于插件作用范围。"
+        },
+        {
+          "header": "@@ -381,13 +380,13 @@",
+          "sha256": "2105543b03bdfb46fa31f077ef23be3b8d3f3b1b25172308a012e2ec855a1f35",
+          "basis": "无业务分组。（对应原审查 relay/requestplugin/reply.go#2）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
+    "relay/requestplugin/report.go": {
+      "local_sha256": "175b9a629aeefc597257319489ce1254f1a48607d50314673b453cbd7129fb35",
+      "hunks": [
+        {
+          "header": "@@ -105,8 +105,8 @@",
+          "sha256": "08bdbcf389d4a7623a8b809837beec4e9aa5f222ad0f5c2f7112d125df1936df",
+          "basis": "删除业务分组：capture 签名去掉 group，保留上游的 channelType。"
+        },
+        {
+          "header": "@@ -231,14 +231,14 @@",
+          "sha256": "274f0e19348116b10a2422c4a25eb2fcf52f2508b611fcf66fd925f4b78e9f11",
+          "basis": "删除业务分组：Report 的 Call 不再带 Group，scope 调用不传 group。"
+        },
+        {
+          "header": "@@ -280,7 +280,7 @@",
+          "sha256": "86e50eab59591803e4b3f99c0cdb62146f8ee74cb138192e228f0f49f16435fc",
+          "basis": "无业务分组与观测插件保留。（对应原审查 relay/requestplugin/report.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
+    "relay/requestplugin/socket.go": {
+      "local_sha256": "4a0084023d1fbcda44207ba37ef2399ba82beb664607c28e37ba2e013b65db0c",
+      "hunks": [
+        {
+          "header": "@@ -66,10 +66,10 @@",
+          "sha256": "6ed2efa170d926ae6ddcec65381cf6989e57de25e87af6a24e936dfe9406e344",
+          "basis": "删除业务分组：WebSocket 会话的 capture 与 reply 选择不传 group。"
+        },
+        {
+          "header": "@@ -232,12 +232,12 @@",
+          "sha256": "2dece996769c5fec7bc516b0ebf3ce3661e3f559dee8aab92cd9a659de2538f8",
+          "basis": "删除业务分组：WebSocket 每次 create 的 ingress、reply、report 实例选择不传 group。"
+        },
+        {
+          "header": "@@ -246,7 +246,7 @@",
+          "sha256": "5fc44dc9f288b97ef087fa8866cee9f567fb9f82062e37b0e62ddb9aeacd5242",
+          "basis": "无业务分组，保留双向插件。（对应原审查 relay/requestplugin/socket.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
+    "relay/requestplugin/task_report.go": {
+      "local_sha256": "38b875ebceefb6675ddd947d79c703d390e54f9eb13913d8402dfdede0e9052c",
+      "hunks": [
+        {
+          "header": "@@ -63,7 +63,7 @@",
+          "sha256": "49c5cdb55bda7803632a9e1d8f7516b2931724fca5d67388515493526048ba3f",
+          "basis": "删除业务分组：任务报告的实例选择不传 group。"
+        },
+        {
+          "header": "@@ -156,7 +156,6 @@",
+          "sha256": "38bb998cd61bb6bb3e6a4b3a362bbc7e57157903ffcd92c602e063b84baeddf3",
+          "basis": "无业务分组，保留任务观测。（对应原审查 relay/requestplugin/task_report.go#2）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
         }
       ]
     },
@@ -33685,6 +34090,111 @@
           "header": "@@ -1092,7 +1113,7 @@",
           "sha256": "51412c94863b227e88648af7983f23702a8ca1e32a4c0daf6389b5ffbcf9f211",
           "basis": "SelectChannel 调用使用无组本地路由签名。（原审查 relay/responses_websocket.go#16）"
+        }
+      ]
+    },
+    "service/channel_select.go": {
+      "local_sha256": "adba2f1d268a4333288aefed7df4c9229b9ffff4eec7a492e07b60793de9f467",
+      "hunks": [
+        {
+          "header": "@@ -1,7 +1,6 @@",
+          "sha256": "7059adc48688614134e49403bfcf8fc38a89dd662576d186aa68a9b94f563d5e",
+          "basis": "删除业务分组：删除只为分组重试使用的导入。"
+        },
+        {
+          "header": "@@ -47,12 +46,10 @@",
+          "sha256": "04cbc1ebbc87377bd82a0cff916b4455d6c860f02fdb997dd79066b1274dd843",
+          "basis": "删除业务分组：RetryParam 删除 TokenGroup 及分组轮换游标。"
+        },
+        {
+          "header": "@@ -67,149 +64,10 @@",
+          "sha256": "293f80df4bd61e07045a9fd0dad65d0ad5d651b09bc64613df68b5b5ca68f01a",
+          "basis": "删除业务分组：删除按分组轮换的重试逻辑（自动选路在扩展文件 service/route_*.go）。"
+        },
+        {
+          "header": "@@ -221,10 +79,9 @@",
+          "sha256": "e597645b23f16df7b0d30403174aa4c483ca295672329900f82659a07573c3c9",
+          "basis": "插件端点身份统一经 taskPluginEndpointIdentities（扩展文件 service/route_request.go），预览与派发共用（token-routing）。"
+        },
+        {
+          "header": "@@ -236,28 +93,8 @@",
+          "sha256": "15578016988a970cebf06730392de3ad8cc4dbbc659c104e50ec3720daf31f57",
+          "basis": "同上：共享端点的候选身份逻辑迁到 taskPluginIdentities；上游 #8335 的“多插件共享渠道类型”在那里实现（token-routing）。"
+        },
+        {
+          "header": "@@ -265,14 +102,7 @@",
+          "sha256": "0b161ee4d9de215bf2ca0c7d16fafea66cfa670106bd8ec561a154223cf6b90e",
+          "basis": "同上：单插件固定身份经 taskPluginIdentities（token-routing）。"
+        },
+        {
+          "header": "@@ -289,120 +119,62 @@",
+          "sha256": "60b7df68588d4cdaf32cd03f1d5a7e56f5cb1731b228de0d150f40ee9c065f1a",
+          "basis": "删除业务分组：ChannelSelectError 与 SelectChannelForRequest 改为渠道级自动/手动路由（token-routing、concurrency、origin-task-continuation）。"
+        }
+      ]
+    },
+    "service/request_policy.go": {
+      "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
+      "hunks": [
+        {
+          "header": "@@ -24,16 +24,17 @@",
+          "sha256": "86b265aadcf99cc6af3d1eecb4d811e251ecdee39982cff60f847d1c359031eb",
+          "basis": "逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 自动扫描记录及移除 Group 继续遵循既有合同。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -43,7 +44,6 @@",
+          "sha256": "81a7fef40da3fc9c957554a9d00a3b13e4d4f6fde866c2de97d8a1796d5a469a",
+          "basis": "移除按业务分组选择渠道的 SelectedGroup 状态。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -51,6 +51,7 @@",
+          "sha256": "31adf2f85432d371b4a06373814c48c48f1d1e36c89dac47ed36d1064907283e",
+          "basis": "routeScanState 为每个请求保存轮次和已选择但尚未发送的渠道。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -68,14 +69,14 @@",
+          "sha256": "e1d35fbc56b8ae65371d8cb9ef00756bb2f38ab0d0d254b4926601712ec615a2",
+          "basis": "AddEvent 在策略事件锁内跟踪扫描结果和轮次，沿用事件上限，取消业务分组的默认填充。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -87,11 +88,10 @@",
+          "sha256": "2f4ad91988a89d37801eccd47790c96cbae3cf73807c161b0a1eb592c09e8a03",
+          "basis": "BeginAttempt 去掉 group 参数并删除 SelectedGroup（无业务分组），对应原审查 service/request_policy.go 的去组段；上游 1c63cc8c9 已在冻结目标内，本段只剩去组差异。"
+        },
+        {
+          "header": "@@ -196,6 +196,7 @@",
+          "sha256": "484ec39ac771edac7153bc464e7a3a91062263c303d9b7d732355f6e7affc072",
+          "basis": "首次终止时输出选中后、上游发送前遭拒的扫描摘要，保留原生终止决策和错误码。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        }
+      ]
+    },
+    "service/usage_helpr.go": {
+      "local_sha256": "ab2faeff396e4816e0156bbbeb6c68bdc6d1ba7ac2730be868370519cb600293",
+      "hunks": [
+        {
+          "header": "@@ -26,6 +26,10 @@",
+          "sha256": "19235b30b0cf4bffacabb1ad45de73f200da2869c5f1a1bda529669fddd57c9d",
+          "basis": "估算输出 token 时只标记本轮的估算来源，原生结算数量沿用。"
+        }
+      ]
+    },
+    "setting/request_plugin_setting/config.go": {
+      "local_sha256": "d5692c02b46c9c8962d8c5194d1ea3ecd8151ca33afa48c4fd04abbc3a22677b",
+      "hunks": [
+        {
+          "header": "@@ -13,8 +13,8 @@",
+          "sha256": "2e5c4cf789e3ac281c86b27e233243260bc046441f01c1e3cec899e37c7f0a5e",
+          "basis": "无业务组合同。（对应原审查 setting/request_plugin_setting/config.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+        },
+        {
+          "header": "@@ -30,7 +30,6 @@",
+          "sha256": "69db10549e184377724e2bdb9570ecf048b1dd6bd1572baf54cbaf8c112721d1",
+          "basis": "删除业务分组：Instance 不再有 Groups 字段，对应原审查 setting/request_plugin_setting/config.go#2。"
+        },
+        {
+          "header": "@@ -43,6 +42,24 @@",
+          "sha256": "df60e7af21b8401ae71e39fb10305aa3826746ae05912a2c2666532f8e14f847",
+          "basis": "删除业务分组：导入的实例带非空 groups 时拒绝，不静默变成全局实例；对应原审查 setting/request_plugin_setting/config.go#2。新增的 plugin_scope 字段与上游一致，不在本段差异内。"
         }
       ]
     }

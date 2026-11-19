@@ -1,11 +1,11 @@
 {
-  "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "upstream_sha": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 864,
-    "adapted": 298,
-    "extension": 418,
+    "upstream_equal": 869,
+    "adapted": 295,
+    "extension": 417,
     "removed": 45
   },
   "files": [
@@ -96,7 +96,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/api_type.go#1, common/api_type.go#2, common/api_type.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -146,7 +146,7 @@
         "branding"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/constants.go#1, common/constants.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -165,7 +165,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/container_usage.go#1, common/container_usage.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -256,7 +256,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/embed-file-system.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -280,7 +280,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/endpoint_type.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -334,7 +334,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/init.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -520,7 +520,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/str.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -544,7 +544,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/system_monitor.go#1, common/system_monitor.go#2, common/system_monitor.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -591,7 +591,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/topup-ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -615,7 +615,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/traffic.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -633,7 +633,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：common/traffic_host.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -729,7 +729,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：constant/cache_key.go#1, constant/cache_key.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -748,7 +748,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：constant/channel.go#1, constant/channel.go#2, constant/channel.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -774,7 +774,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：constant/context_key.go#1, constant/context_key.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -871,7 +871,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/affiliate.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -907,7 +907,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/audit.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -972,7 +972,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9 另含定时 Key 恢复的两个接点，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1004,7 +1004,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1050,7 +1050,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_affinity_cache.go#1, controller/channel_affinity_cache.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1072,7 +1072,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1119,7 +1119,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_capacity.go#1 管理员渠道列表读取已发布的质量摘要，清除写入载荷中的投影。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1155,7 +1155,7 @@
         "scheduled-key-recovery"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "定时 Key 恢复：选取每渠道最久没测过的至多 3 个自动停用 Key，经原生 testChannel 用该 Key 单独测试，成功后调用 service.EnableRecoveredChannelKey。"
       }
     },
@@ -1174,7 +1174,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_lab.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1216,7 +1216,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_priority.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1234,7 +1234,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_retired.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1264,8 +1264,8 @@
     {
       "path": "controller/channel_test_request_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "336edede6fc2f20178eb7a56d202a23796ce5566c4864cf51c2faba24ff91150",
-      "local_sha256": "336edede6fc2f20178eb7a56d202a23796ce5566c4864cf51c2faba24ff91150"
+      "upstream_sha256": "346cdd1c8daf607810b0bef7575503252dc58418b5fac695b15d9f47ccbe3e47",
+      "local_sha256": "346cdd1c8daf607810b0bef7575503252dc58418b5fac695b15d9f47ccbe3e47"
     },
     {
       "path": "controller/channel_upstream_ratio.go",
@@ -1276,7 +1276,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_upstream_ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1296,7 +1296,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_upstream_update.go#1, controller/channel_upstream_update.go#15, controller/channel_upstream_update.go#18, controller/channel_upstream_update.go#5, controller/channel_upstream_update.go#8",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1330,7 +1330,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/checkin.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1354,7 +1354,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/codex_usage.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1378,7 +1378,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/dashboard_summary.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1402,7 +1402,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/dashboard_system_status.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1420,7 +1420,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/deployment.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1457,7 +1457,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1493,7 +1493,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/group.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1511,7 +1511,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/home_metrics.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1535,7 +1535,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1573,7 +1573,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/midjourney.go#1, controller/midjourney.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1593,7 +1593,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/misc.go#1, controller/misc.go#2, controller/misc.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1619,8 +1619,8 @@
     {
       "path": "controller/model.go",
       "status": "adapted",
-      "upstream_sha256": "e6badccdf56e0a54725cdb389b7b535e4cdd485181f31403e99b564f7bbbaa02",
-      "local_sha256": "c859f940e267478a9bb66c10e1a0b40eee220ce2ce1056b57c94ef08b5d8e511",
+      "upstream_sha256": "1d2dca97817ccd056edcdecaed9092eb1bc118629abc496a2f2986fae617f469",
+      "local_sha256": "fb835c6974aad5078f975063a776fb07d4f63d6ece295f0b9d1a0ca5d2dac656",
       "reasons": [
         "catalog-stats",
         "group-removal",
@@ -1628,8 +1628,8 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model.go#1, controller/model.go#2, controller/model.go#3, controller/model.go#4, controller/model.go#5, controller/model.go#6",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model.go#1, controller/model.go#2, controller/model.go#3, controller/model.go#4, controller/model.go#5, controller/model.go#6；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -1639,7 +1639,8 @@
           "controller/model.go#4",
           "controller/model.go#5",
           "controller/model.go#6"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -1651,7 +1652,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_catalog.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1687,7 +1688,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1732,7 +1733,7 @@
         "native-count"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/native_count.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1810,7 +1811,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1839,7 +1840,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/option.go#2, controller/option.go#3, controller/option.go#5, controller/option.go#6, controller/option.go#7",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1903,7 +1904,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/perf_metrics.go#1, controller/perf_metrics.go#2, controller/perf_metrics.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1923,7 +1924,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/performance.go#1, controller/performance.go#2, controller/performance.go#3, controller/performance.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1944,7 +1945,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/performance_extension.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1968,7 +1969,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/performance_quality.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -1992,7 +1993,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/playground.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2013,7 +2014,7 @@
       "upstream_sha256": "e44dcc9d9fc3369890abe2153b2edfa340009a0b4e84f046d947546302b2beff",
       "local_sha256": "ae393bf4ea8e4bd6566edaaeab384c940fff096325c28d503bb33bda0de8ea9f",
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "TestTaskSubmissionRunsRequestPlugins 验证任务入口插件拒绝及必需插件失败时落库的终止决策。"
       }
     },
@@ -2026,7 +2027,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "断连后记录实际任务提交结果的最小接点，见 SYNC_LEDGER.md#自动选渠诊断接点 及 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "current_hunk_review": true
@@ -2041,7 +2042,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "断连后记录实际任务提交结果的最小接点，见 SYNC_LEDGER.md#自动选渠诊断接点 及 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "current_hunk_review": true
@@ -2086,7 +2087,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/price_source.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2112,7 +2113,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/pricing.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2154,7 +2155,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/ratio_sync.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2179,7 +2180,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/redemption.go#1, controller/redemption.go#2；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2222,7 +2223,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2338,21 +2339,22 @@
     {
       "path": "controller/request_plugin.go",
       "status": "adapted",
-      "upstream_sha256": "09a6166de5a6908e983a389e7be3028b69913431ae8002f1ed1bba879f620c07",
-      "local_sha256": "6ed75a21ad3ba19050e930d3aaad0c7c9e75968cb34b17b57757154629fc6b4e",
+      "upstream_sha256": "6aad217b6890b5e238327573e17f55091eb488b023b3d677f810bbe6a13ba0a8",
+      "local_sha256": "7da24d88abaff9fa0bae109047bed82e8c81b8606378397ecab2b0777553eee0",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/request_plugin.go#1, controller/request_plugin.go#2, controller/request_plugin.go#3",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/request_plugin.go#1, controller/request_plugin.go#2, controller/request_plugin.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "controller/request_plugin.go#1",
           "controller/request_plugin.go#2",
           "controller/request_plugin.go#3"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -2376,7 +2378,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "Responses WebSocket 预热（generate:false）不判空流的判别测试；同一入口下要求生成的空完成仍是 empty_stream。"
       }
     },
@@ -2386,7 +2388,7 @@
       "upstream_sha256": "9edba2c470bae2cc70309c8cc9e1458e5eaabc9ea7d2822e14337007fd8b8866",
       "local_sha256": "2ccf8ac242b1a9f2f229778336230d0c64d03a481b7cdc06666f243bf826209d",
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "TestResponsesWebSocketRunsRequestPlugins 验证入口拒绝和必需出站插件失败时，错误行包含唯一终止决策且错误码一致。"
       }
     },
@@ -2435,7 +2437,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/secure_verification.go#1, controller/secure_verification.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2466,7 +2468,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/setup.go#1, controller/setup.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2491,7 +2493,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/subscription.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2509,7 +2511,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/subscription_payment_creem.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2527,7 +2529,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/subscription_payment_epay.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2545,7 +2547,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/subscription_payment_stripe.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2563,7 +2565,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/subscription_payment_waffo_pancake.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2581,7 +2583,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/system_info.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2605,7 +2607,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/system_task_handlers.go#1, controller/system_task_handlers.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2642,8 +2644,8 @@
     {
       "path": "controller/task_plugin.go",
       "status": "upstream_equal",
-      "upstream_sha256": "3f018e3f476c460613fa7a886ca4cc81db3caa4bdea967a66383159c0b653e9b",
-      "local_sha256": "3f018e3f476c460613fa7a886ca4cc81db3caa4bdea967a66383159c0b653e9b"
+      "upstream_sha256": "bdfe9d15c5dc63f70291761c4f3db08b432fcc5e4a101b02b26f10d63211d486",
+      "local_sha256": "bdfe9d15c5dc63f70291761c4f3db08b432fcc5e4a101b02b26f10d63211d486"
     },
     {
       "path": "controller/task_plugin_debug.go",
@@ -2660,8 +2662,8 @@
     {
       "path": "controller/task_plugin_test.go",
       "status": "adapted",
-      "upstream_sha256": "d6542e96a6c3db192a2c09a9f77a0736b73e1b9c70c2ade162c2db03e566edb8",
-      "local_sha256": "7e052dc6e50d5e256294c287ca70cc94d02bd5d2af22ebaee9b21a46894e3191"
+      "upstream_sha256": "edb745d3062e5ecc02e6cc8c7615a861810b91f0bf8be77c8d47198fe2f2a7d3",
+      "local_sha256": "4ec32bb916985d4be5686fd52324abe1872444fdc19b6836901c1fe5cad0160c"
     },
     {
       "path": "controller/telegram.go",
@@ -2690,7 +2692,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/tickets.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2708,7 +2710,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/tickets_admin.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2726,7 +2728,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/tickets_attachment.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2756,7 +2758,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/tickets_attachment_cleanup.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2780,7 +2782,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/tickets_attachment_lock_linux.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2798,7 +2800,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/tickets_attachment_lock_other.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2816,7 +2818,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-17 工单附件 24 小时预算、进程内预留与可用空间下限的扩展文件，属合同 ticket（SYNC_LEDGER.md#现行本地差异）；不改上游文件",
         "method": "本轮实现逐文件审查；计划经 PLAN-REVIEW 裁定"
       }
@@ -2836,7 +2838,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-17 工单附件 24 小时预算、进程内预留与可用空间下限的扩展文件，属合同 ticket（SYNC_LEDGER.md#现行本地差异）；不改上游文件",
         "method": "本轮实现逐文件审查；计划经 PLAN-REVIEW 裁定"
       }
@@ -2850,7 +2852,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-17 工单附件 24 小时预算、进程内预留与可用空间下限的扩展文件，属合同 ticket（SYNC_LEDGER.md#现行本地差异）；不改上游文件",
         "method": "本轮实现逐文件审查；计划经 PLAN-REVIEW 裁定"
       }
@@ -2889,7 +2891,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/token.go#1, controller/token.go#10, controller/token.go#11, controller/token.go#12, controller/token.go#2, controller/token.go#3, controller/token.go#4, controller/token.go#5, controller/token.go#6, controller/token.go#7, controller/token.go#8, controller/token.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2924,7 +2926,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/token_route_permission.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2948,7 +2950,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/token_routing.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -2983,7 +2985,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup.go#10, controller/topup.go#13, controller/topup.go#15, controller/topup.go#2, controller/topup.go#3, controller/topup.go#4, controller/topup.go#5, controller/topup.go#6, controller/topup.go#7, controller/topup.go#8, controller/topup.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）；2026-11-17 备用支付接点见 SYNC_LEDGER.md#备用支付接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3017,7 +3019,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -3037,7 +3039,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -3066,7 +3068,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3087,7 +3089,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_query.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3121,7 +3123,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3152,7 +3154,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3180,7 +3182,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3242,7 +3244,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3282,7 +3284,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user_publication.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3301,7 +3303,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user_quota.go#1, controller/user_quota.go#2, controller/user_quota.go#3, controller/user_quota.go#4；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3352,7 +3354,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/wechat.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3370,7 +3372,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：dto/channel_constraints.go#1, dto/channel_constraints.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3413,7 +3415,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：dto/task.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3480,7 +3482,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：i18n/locales/en.yaml#1, i18n/locales/en.yaml#2, i18n/locales/en.yaml#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3501,7 +3503,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：i18n/locales/zh-CN.yaml#1, i18n/locales/zh-CN.yaml#2, i18n/locales/zh-CN.yaml#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3522,7 +3524,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：i18n/locales/zh-TW.yaml#1, i18n/locales/zh-TW.yaml#2, i18n/locales/zh-TW.yaml#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3542,7 +3544,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：i18n/ticket_keys.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3573,7 +3575,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：main.go#10, main.go#11, main.go#12, main.go#2, main.go#3, main.go#4, main.go#5, main.go#6, main.go#7, main.go#8, main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） 服务生命周期启动并关闭本地单节点路由质量评估器。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3620,7 +3622,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/access_token_extensions.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3647,7 +3649,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/access_token_routes.go#1, middleware/access_token_routes.go#2, middleware/access_token_routes.go#3, middleware/access_token_routes.go#4, middleware/access_token_routes.go#5, middleware/access_token_routes.go#6, middleware/access_token_routes.go#7, middleware/access_token_routes.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3673,7 +3675,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/audit.go#1, middleware/audit.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3686,14 +3688,14 @@
     {
       "path": "middleware/auth.go",
       "status": "adapted",
-      "upstream_sha256": "6b6e6f518e080c579a2553678afc071839a68d92490cfcd62f6bb5835ff8b98e",
-      "local_sha256": "b1f58fdf989e1454525cd8da884fd4f1b6b53fa5ff9651ff864c7ccf8eca7be8",
+      "upstream_sha256": "997e3a9b5d1388daca317be12a45ba483babab81ab2a033c74b0689e6c3ac9ba",
+      "local_sha256": "36cd6e9838c79a18833934618db48997fb8554d46ba2a8240a822253d770c336",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/auth.go#1, middleware/auth.go#2, middleware/auth.go#3, middleware/auth.go#4, middleware/auth.go#5",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/auth.go#1, middleware/auth.go#2, middleware/auth.go#3, middleware/auth.go#4, middleware/auth.go#5；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3702,7 +3704,8 @@
           "middleware/auth.go#3",
           "middleware/auth.go#4",
           "middleware/auth.go#5"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -3720,8 +3723,8 @@
     {
       "path": "middleware/auth_test.go",
       "status": "adapted",
-      "upstream_sha256": "8e4b9ab4d7a3ff43c2e59b6edee68d6a1c935a674eee718303d1eb69c68a9b3b",
-      "local_sha256": "95f7e0fc547930a34c178207ad043d0515e31573927a9d27c4b6841ffe010b7b"
+      "upstream_sha256": "eb4e128d3b79003f0d54c68c0315bb673c9f884084e3e3c899fdba8df2d3f87c",
+      "local_sha256": "34d853f56001d1e90700fec838d4c55c4b526f4276ebc699af7279d30962f92c"
     },
     {
       "path": "middleware/body_cleanup.go",
@@ -3750,7 +3753,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/dashboard_status_rate_limit.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3768,8 +3771,8 @@
     {
       "path": "middleware/distributor.go",
       "status": "adapted",
-      "upstream_sha256": "2c88d6af026b67e2305e315184fa6e059673aca928ce56292d4c76fd1d88e8e9",
-      "local_sha256": "827555414446eaff8d061ef4e2a100a5af6b9f2c50d45e40a03a5f618a92bd12",
+      "upstream_sha256": "07368d97236b38126701028a043e1121dba421c1a262637c616c0f6d81fba9fe",
+      "local_sha256": "427f38de3e25bce5275e349abbbe79b43e11ffc44ffee56a90e2f36989f78b29",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -3780,8 +3783,8 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/distributor.go#1, middleware/distributor.go#10, middleware/distributor.go#11, middleware/distributor.go#12, middleware/distributor.go#13, middleware/distributor.go#14, middleware/distributor.go#15, middleware/distributor.go#16, middleware/distributor.go#17, middleware/distributor.go#18, middleware/distributor.go#19, middleware/distributor.go#2, middleware/distributor.go#3, middleware/distributor.go#4, middleware/distributor.go#5, middleware/distributor.go#6, middleware/distributor.go#7, middleware/distributor.go#8, middleware/distributor.go#9",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/distributor.go#1, middleware/distributor.go#10, middleware/distributor.go#11, middleware/distributor.go#12, middleware/distributor.go#13, middleware/distributor.go#14, middleware/distributor.go#15, middleware/distributor.go#16, middleware/distributor.go#17, middleware/distributor.go#18, middleware/distributor.go#19, middleware/distributor.go#2, middleware/distributor.go#3, middleware/distributor.go#4, middleware/distributor.go#5, middleware/distributor.go#6, middleware/distributor.go#7, middleware/distributor.go#8, middleware/distributor.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3804,7 +3807,8 @@
           "middleware/distributor.go#7",
           "middleware/distributor.go#8",
           "middleware/distributor.go#9"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -3816,8 +3820,8 @@
     {
       "path": "middleware/distributor_test.go",
       "status": "adapted",
-      "upstream_sha256": "37c104745ec7b0b651692e8d22845a866224d1e771f6ecf2c075d3379ab381ef",
-      "local_sha256": "11ba89043ca2e51c933f5af707826f008c3600916c0de19c97babebd1c9c8581"
+      "upstream_sha256": "0e4193191878e070f778f15bf4f5872e6381653f2ec86578876040b7ce0000b3",
+      "local_sha256": "ff238ec65e7fe8747edcc4d454324f26464d0dca9b2a88ef81e82afd0fa6323c"
     },
     {
       "path": "middleware/email-verification-rate-limit.go",
@@ -3840,7 +3844,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "Vue 构建文件的 brotli 扩展，接点见 SYNC_LEDGER.md#现行本地差异；原生 ServeFrontendFiles 不改",
         "method": "本轮实现逐文件审查"
       }
@@ -3909,7 +3913,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/mj_origin_task.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -3928,7 +3932,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/model-rate-limit.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4012,7 +4016,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/retired_groups.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4069,7 +4073,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/task_plugin.go#1, middleware/task_plugin.go#2, middleware/task_plugin.go#3, middleware/task_plugin.go#4, middleware/task_plugin.go#7, middleware/task_plugin.go#8。共享端点试选调用延迟记录的选择器，见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4147,7 +4151,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/ability.go#1, model/ability.go#2, model/ability.go#3, model/ability.go#4, model/ability.go#5, model/ability.go#6",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4171,7 +4175,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/account_owner.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4195,7 +4199,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/affiliate.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4243,7 +4247,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/affiliate_query.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4267,7 +4271,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-17 用户决定：拒付按订单回收返利，管理员在订单详情执行，见 docs/billing/API.md 的回收返利；记账口径与 model/affiliate.go 的 reverseAdminAffiliateRewardsTx 一致",
         "method": "本轮实现逐文件审查；计划 PLAN-F5B 由主会话定稿"
       }
@@ -4354,7 +4358,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/catalog_prices.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4372,7 +4376,7 @@
     {
       "path": "model/channel.go",
       "status": "adapted",
-      "upstream_sha256": "0be8b50a95f88bc460507f4d000d6cdc5b21acadab00f8e7f22d7fed11ff0ae7",
+      "upstream_sha256": "427962e1109534ae14701076dd2c430d1ffec08db04b0a0f5a14e0f2214db3fc",
       "local_sha256": "ea2ffafd254f8c6b5f3f70197b5dd35f26894278a0c5420d68469ba4f309b52c",
       "reasons": [
         "catalog-stats",
@@ -4382,8 +4386,8 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel.go#1, model/channel.go#10, model/channel.go#11, model/channel.go#12, model/channel.go#13, model/channel.go#14, model/channel.go#15, model/channel.go#16, model/channel.go#17, model/channel.go#18, model/channel.go#19, model/channel.go#2, model/channel.go#3, model/channel.go#4, model/channel.go#5, model/channel.go#6, model/channel.go#7, model/channel.go#8, model/channel.go#9 管理端可选质量摘要仅作响应投影，gorm 忽略。",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel.go#1, model/channel.go#10, model/channel.go#11, model/channel.go#12, model/channel.go#13, model/channel.go#14, model/channel.go#15, model/channel.go#16, model/channel.go#17, model/channel.go#18, model/channel.go#19, model/channel.go#2, model/channel.go#3, model/channel.go#4, model/channel.go#5, model/channel.go#6, model/channel.go#7, model/channel.go#8, model/channel.go#9 管理端可选质量摘要仅作响应投影，gorm 忽略。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4406,7 +4410,8 @@
           "model/channel.go#7",
           "model/channel.go#8",
           "model/channel.go#9"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -4425,7 +4430,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4448,7 +4453,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_constraint.go#1, model/channel_constraint.go#2, model/channel_constraint.go#3, model/channel_constraint.go#4, model/channel_constraint.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4476,7 +4481,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_delete.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4500,7 +4505,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_lab.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4524,7 +4529,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_lock.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4555,7 +4560,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_plugin_credential.go#1, model/channel_plugin_credential.go#6, model/channel_plugin_credential.go#8, model/channel_plugin_credential.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4582,7 +4587,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_polling.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4619,7 +4624,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_ratio.go#1 管理端质量摘要的模型与档位投影类型。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4644,7 +4649,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_satisfy.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4668,7 +4673,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4680,8 +4685,8 @@
     {
       "path": "model/channel_status_test.go",
       "status": "adapted",
-      "upstream_sha256": "be1abe021579c2dd4bfa21d3ba0e0ad363f217de477e50f8cd76d17665afbd20",
-      "local_sha256": "bee1a3ed32408b5a0dac1751f849837444cd64f5725c3d155e9a2c9a36ff5e1f"
+      "upstream_sha256": "547dddbdf2435b470988c0b65c8be631950a0b8ac49cd37a65f4affc0a9c991e",
+      "local_sha256": "b45797af5e1d210a293653c2e79d9884ebef8742a325789d08c2e3d02dc4d925"
     },
     {
       "path": "model/channel_upstream_ratio.go",
@@ -4692,7 +4697,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_upstream_ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4740,7 +4745,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/dashboard_summary.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4807,7 +4812,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/gmpay.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4825,7 +4830,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/gmpay_config.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4867,7 +4872,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/home_metrics.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4897,7 +4902,7 @@
         "install-guard"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/install_guard.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -4945,7 +4950,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5005,7 +5010,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5057,7 +5062,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/model_extra.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5075,7 +5080,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/model_meta.go#1, model/model_meta.go#2, model/model_meta.go#3, model/model_meta.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5109,7 +5114,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/model_pricing_config.go#1, model/model_pricing_config.go#3, model/model_pricing_config.go#4, model/model_pricing_config.go#5, model/model_pricing_config.go#6, model/model_pricing_config.go#7, model/model_pricing_config.go#8, model/model_pricing_config.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5135,7 +5140,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/model_pricing_conversion.go#1, model/model_pricing_conversion.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5205,7 +5210,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/option.go#1, model/option.go#10, model/option.go#11, model/option.go#12, model/option.go#13, model/option.go#14, model/option.go#15, model/option.go#16, model/option.go#17, model/option.go#18, model/option.go#2, model/option.go#3, model/option.go#4, model/option.go#5, model/option.go#6, model/option.go#7, model/option.go#8；2026-11-17 备用支付接点见 SYNC_LEDGER.md#备用支付接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5293,7 +5298,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/perf_metric.go#1, model/perf_metric.go#2, model/perf_metric.go#3, model/perf_metric.go#4, model/perf_metric.go#5, model/perf_metric.go#6",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5328,15 +5333,15 @@
     {
       "path": "model/pricing.go",
       "status": "adapted",
-      "upstream_sha256": "a39a08008553700746a0a49a1cb06741e7fc2c5e65d356fd80491886cdcbef48",
-      "local_sha256": "808aab4c05db896112a7a41a969ec17d725e010b71b64dfc8a6a690fc47d777a",
+      "upstream_sha256": "baab1b5266ee722cf6959bd8fd251d56d8b8259c697764b7472739e203ea2384",
+      "local_sha256": "22907fa2c0aea5779fe2a0d93f156a366ea846ddb591464964f82c929e2ad53e",
       "reasons": [
         "catalog-stats",
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/pricing.go#11, model/pricing.go#13, model/pricing.go#14, model/pricing.go#15, model/pricing.go#2, model/pricing.go#3, model/pricing.go#5",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/pricing.go#11, model/pricing.go#13, model/pricing.go#14, model/pricing.go#15, model/pricing.go#2, model/pricing.go#3, model/pricing.go#5；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5347,7 +5352,8 @@
           "model/pricing.go#2",
           "model/pricing.go#3",
           "model/pricing.go#5"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -5359,7 +5365,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/pricing_default.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5414,7 +5420,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/redemption.go#2, model/redemption.go#3, model/redemption.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5440,7 +5446,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/redemption_sort.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5464,7 +5470,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -5490,7 +5496,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/route_candidates.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5514,7 +5520,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/sensitive_word_migration.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5544,7 +5550,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/subscription.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5574,7 +5580,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/system_instance.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5592,7 +5598,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/system_sync_task.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5610,7 +5616,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/system_task.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5636,7 +5642,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/task.go#1, model/task.go#2, model/task.go#3, model/task.go#4, model/task.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5694,7 +5700,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/ticket.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5726,7 +5732,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5754,7 +5760,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token_cache.go#1, model/token_cache.go#2, model/token_cache.go#3, model/token_cache.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5787,7 +5793,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token_route.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5832,7 +5838,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5856,7 +5862,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -5876,7 +5882,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -5902,7 +5908,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -5916,7 +5922,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -5936,7 +5942,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -5963,7 +5969,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_query.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -5996,7 +6002,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6032,7 +6038,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/usedata.go#1, model/usedata.go#2, model/usedata.go#3, model/usedata.go#4, model/usedata.go#5, model/usedata.go#6",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6055,7 +6061,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/usedata_flow.go#1, model/usedata_flow.go#2, model/usedata_flow.go#3, model/usedata_flow.go#4, model/usedata_flow.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6094,7 +6100,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6141,7 +6147,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_auth_cache.go#1, model/user_auth_cache.go#2, model/user_auth_cache.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6169,7 +6175,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6209,7 +6215,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6297,7 +6303,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：oauth/linuxdo.go#1, oauth/linuxdo.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6388,7 +6394,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/billingexpr/reference.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6424,7 +6430,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/billingexpr/settle.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6460,7 +6466,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/billingexpr/types.go#1, pkg/billingexpr/types.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6497,7 +6503,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/gmpay/gmpay.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6521,7 +6527,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/ionet/client.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6539,7 +6545,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/ionet/container.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6557,7 +6563,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/ionet/deployment.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6575,7 +6581,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/ionet/hardware.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6593,7 +6599,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/ionet/jsonutil.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6611,7 +6617,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/ionet/types.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6731,8 +6737,8 @@
     {
       "path": "pkg/jsplugin/registry.go",
       "status": "upstream_equal",
-      "upstream_sha256": "33db8989ae5d046202a9a840151c47929d3a58626206268cabad286e2afacb88",
-      "local_sha256": "33db8989ae5d046202a9a840151c47929d3a58626206268cabad286e2afacb88"
+      "upstream_sha256": "c5e8b68e791f9bdecb9abaf180c05f0bf42ef435383485bed6a1d0154b06ed4b",
+      "local_sha256": "c5e8b68e791f9bdecb9abaf180c05f0bf42ef435383485bed6a1d0154b06ed4b"
     },
     {
       "path": "pkg/jsplugin/registry_disabled_factory_test.go",
@@ -6749,8 +6755,8 @@
     {
       "path": "pkg/jsplugin/registry_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "431e11d4b23f452e1f3bbd211ec5fce367f3314d8b10aa61a7559484f9673359",
-      "local_sha256": "431e11d4b23f452e1f3bbd211ec5fce367f3314d8b10aa61a7559484f9673359"
+      "upstream_sha256": "fa1ada6efb3f6487257b2a47d4d8ebae0a698f0f91f9a22c54dc70acab37ce90",
+      "local_sha256": "fa1ada6efb3f6487257b2a47d4d8ebae0a698f0f91f9a22c54dc70acab37ce90"
     },
     {
       "path": "pkg/jsplugin/request.go",
@@ -6761,27 +6767,28 @@
     {
       "path": "pkg/jsplugin/routing.go",
       "status": "adapted",
-      "upstream_sha256": "712ba8263848d9dcc9743501df3b6f11bbb7270b59e20e14d8025b0235f0a5eb",
-      "local_sha256": "c3f948bab3a3724bc2b1b222d93e18b8b98927182f4432b371d956351c70a92a",
+      "upstream_sha256": "81cb4c6db2aaeaa19fbdd8c2a480ebe67c9bca4f4cce6e3ed35cb6827f03cff0",
+      "local_sha256": "7ed9121094bae30396ae7ee025f8cbdcbe10114f2bca03c2c6d93277c11ba1c4",
       "reasons": [
         "retired",
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/jsplugin/routing.go#1",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/jsplugin/routing.go#1；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "pkg/jsplugin/routing.go#1"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
       "path": "pkg/jsplugin/routing_test.go",
       "status": "adapted",
-      "upstream_sha256": "7cda7f0a009ce9004eccbdabfd8c025d6f747fe217e327ee5a18f2d365f053f7",
-      "local_sha256": "2ea6c09364b825ee2adb577279858db531f37820489b0953ed07f4041121560b"
+      "upstream_sha256": "05b91e4131cf3eff655a059c70fc9d7d1677105d8085a04ccaea3a9a529d8f54",
+      "local_sha256": "a47ed392ccf84158abf462be293fd8ff7e7468d23f91551664cf87f391f51a26"
     },
     {
       "path": "pkg/jsplugin/sample.go",
@@ -6792,20 +6799,21 @@
     {
       "path": "pkg/jsplugin/transform.go",
       "status": "adapted",
-      "upstream_sha256": "0a31d30fcb7119aff403bb660e5668636a09c666a42ee99639fe68210c96aa7e",
-      "local_sha256": "139cba050387f8680afe7cc65c6234cd55a436f2e3f5775d2666eb36556cba8b",
+      "upstream_sha256": "a4e4ca4dee8c0b692b0ff23da46a5d9dfb55e825b03aebfd49632df23f1b2d3c",
+      "local_sha256": "c149fc6602f928fdfbf07abc82f607776dc8d0c69a6944264074ff7f62f9e982",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/jsplugin/transform.go#1, pkg/jsplugin/transform.go#2",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/jsplugin/transform.go#1, pkg/jsplugin/transform.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "pkg/jsplugin/transform.go#1",
           "pkg/jsplugin/transform.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -6823,7 +6831,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/modellab/catalog.json#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6841,7 +6849,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/modellab/resolver.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6865,7 +6873,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/perf_metrics/flush.go#1, pkg/perf_metrics/flush.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6884,7 +6892,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/perf_metrics/hourly.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6908,7 +6916,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/perf_metrics/metrics.go#1, pkg/perf_metrics/metrics.go#10, pkg/perf_metrics/metrics.go#11, pkg/perf_metrics/metrics.go#12, pkg/perf_metrics/metrics.go#13, pkg/perf_metrics/metrics.go#14, pkg/perf_metrics/metrics.go#2, pkg/perf_metrics/metrics.go#3, pkg/perf_metrics/metrics.go#4, pkg/perf_metrics/metrics.go#5, pkg/perf_metrics/metrics.go#6, pkg/perf_metrics/metrics.go#7, pkg/perf_metrics/metrics.go#8, pkg/perf_metrics/metrics.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6951,7 +6959,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/perf_metrics/types.go#1, pkg/perf_metrics/types.go#2, pkg/perf_metrics/types.go#3, pkg/perf_metrics/types.go#4, pkg/perf_metrics/types.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6973,7 +6981,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/pricesource/catalog.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -6991,7 +6999,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/pricesource/expression.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7009,7 +7017,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/pricesource/source.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7033,7 +7041,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：pkg/pricesource/sub2api.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7093,8 +7101,8 @@
     {
       "path": "plugins/builtin_plugins_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "10e33216c43b889a92f71917b3e1e1880b30f69ef15167791c39dada032c63dd",
-      "local_sha256": "10e33216c43b889a92f71917b3e1e1880b30f69ef15167791c39dada032c63dd"
+      "upstream_sha256": "da74988e21995aca47e8d84e84a7681bf8f818592d2f731226afb023bb57210c",
+      "local_sha256": "da74988e21995aca47e8d84e84a7681bf8f818592d2f731226afb023bb57210c"
     },
     {
       "path": "plugins/doubao_duration_validation_test.go",
@@ -7381,7 +7389,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/alpha_search_handler.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7411,7 +7419,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/adapter.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7513,7 +7521,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7575,7 +7583,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/aws/relay-aws.go#1, relay/channel/aws/relay-aws.go#2, relay/channel/aws/relay-aws.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7667,7 +7675,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/claude/relay-claude.go#1 在 ClaudeStreamHandler、HandleClaudeResponseData 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7691,7 +7699,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 ClaudeResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -7705,7 +7713,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "chat 转 Claude 的停止串结束不判空流的判别测试；无自定义停止串的 end_turn 空完成仍是 empty_stream。"
       }
     },
@@ -7754,7 +7762,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/codex/adaptor.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7778,7 +7786,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/codex/constants.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7796,7 +7804,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/codex/oauth_key.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7832,7 +7840,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/cohere/relay-cohere.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -7970,7 +7978,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 GeminiTextGenerationHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -7984,7 +7992,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 geminiStreamHandler、GeminiChatHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -8004,7 +8012,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 GeminiResponsesHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -8228,7 +8236,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/chat_via_responses.go#1 在 OaiResponsesToChatHandler、OaiResponsesToChatBufferedStreamHandler、OaiResponsesToChatStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8258,7 +8266,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/helper.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8294,7 +8302,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 OaiStreamHandler、OpenaiHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -8314,7 +8322,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8332,7 +8340,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -8352,7 +8360,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -8366,7 +8374,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "在 OaiChatToResponsesHandler、OaiChatToResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
@@ -8446,7 +8454,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/palm/relay-palm.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8494,7 +8502,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "current_hunk_review": true,
         "basis": "直接 WebSocket 拨号的选渠诊断及当前逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。"
@@ -8612,7 +8620,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/task/jsplugin/adaptor.go#11, relay/channel/task/jsplugin/adaptor.go#3, relay/channel/task/jsplugin/adaptor.go#4, relay/channel/task/jsplugin/adaptor.go#5, relay/channel/task/jsplugin/adaptor.go#6, relay/channel/task/jsplugin/adaptor.go#7, relay/channel/task/jsplugin/adaptor.go#8, relay/channel/task/jsplugin/adaptor.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8812,7 +8820,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/volcengine/tts.go#1, relay/channel/volcengine/tts.go#2, relay/channel/volcengine/tts.go#3, relay/channel/volcengine/tts.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8899,7 +8907,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/xunfei/relay-xunfei.go#1, relay/channel/xunfei/relay-xunfei.go#2 直接 WebSocket 拨号的选渠诊断及当前逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -8943,7 +8951,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/zhipu/relay-zhipu.go#1, relay/channel/zhipu/relay-zhipu.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9052,7 +9060,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/model_mapping.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9094,15 +9102,14 @@
     {
       "path": "relay/common/override.go",
       "status": "adapted",
-      "upstream_sha256": "f11f928a9b34fd0bdf9f8a16fcc4a71650c457e9a9e6a4e503deb2fb0f60671f",
+      "upstream_sha256": "c0f7750d83564891277a27ba9f26087eb9a1b94a002667688d050dad517d9f8b",
       "local_sha256": "a8985387820df71618ad741b6f4c0a9e6f7c84e3a221c73f6a690d1989b1137c",
       "reasons": [
-        "group-removal",
-        "upstream-1c63cc8c9"
+        "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2 另含提前吸收的上游 1c63cc8c9，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -9130,7 +9137,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/relay_info.go#1, relay/common/relay_info.go#10, relay/common/relay_info.go#11, relay/common/relay_info.go#2, relay/common/relay_info.go#3, relay/common/relay_info.go#4, relay/common/relay_info.go#5, relay/common/relay_info.go#6, relay/common/relay_info.go#7, relay/common/relay_info.go#8, relay/common/relay_info.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9236,7 +9243,7 @@
         "native-count"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/constant/native_count.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9260,7 +9267,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/constant/relay_mode.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9284,7 +9291,7 @@
     {
       "path": "relay/convert_request_error_test.go",
       "status": "adapted",
-      "upstream_sha256": "bf4fb017fa16eb879b88f679ca543b5effabd9ff21e7e706073f87cd9861f89a",
+      "upstream_sha256": "fff22a296102d89edfb50f27bf351be51b92b8a7e98a66e2e9f95984f302645a",
       "local_sha256": "91e9cfd1013d82549455332ece6938d2f42a15859e796ca4f523ec9a29b8ae89"
     },
     {
@@ -9339,7 +9346,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/common.go#1, relay/helper/common.go#2, relay/helper/common.go#3, relay/helper/common.go#4, relay/helper/common.go#5, relay/helper/common.go#6, relay/helper/common.go#7",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9369,7 +9376,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/model_mapped.go#1, relay/helper/model_mapped.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9420,7 +9427,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/price.go#1, relay/helper/price.go#10, relay/helper/price.go#2, relay/helper/price.go#3, relay/helper/price.go#4, relay/helper/price.go#5, relay/helper/price.go#6, relay/helper/price.go#7, relay/helper/price.go#8, relay/helper/price.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9477,7 +9484,7 @@
         "stream-output-observation"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_result.go#1, relay/helper/stream_result.go#2, relay/helper/stream_result.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9497,7 +9504,7 @@
         "stream-output-observation"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9523,17 +9530,9 @@
     },
     {
       "path": "relay/image_handler.go",
-      "status": "adapted",
-      "upstream_sha256": "480b358f96c3d9fb02809dc5bfa845853cb452f373322e45c5fde8a6e41d9797",
-      "local_sha256": "55dbf397d89288556769fc40db328195858d3be068f695cb2fb3ddba863288a3",
-      "reasons": [
-        "upstream-1c63cc8c9"
-      ],
-      "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "照上游 1c63cc8c9 原文：图像转换失败使用共用不重试错误。逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "current_hunk_review": true
-      }
+      "status": "upstream_equal",
+      "upstream_sha256": "55dbf397d89288556769fc40db328195858d3be068f695cb2fb3ddba863288a3",
+      "local_sha256": "55dbf397d89288556769fc40db328195858d3be068f695cb2fb3ddba863288a3"
     },
     {
       "path": "relay/mjproxy_handler.go",
@@ -9548,7 +9547,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/mjproxy_handler.go#1, relay/mjproxy_handler.go#10, relay/mjproxy_handler.go#11, relay/mjproxy_handler.go#12, relay/mjproxy_handler.go#2, relay/mjproxy_handler.go#3, relay/mjproxy_handler.go#4, relay/mjproxy_handler.go#5, relay/mjproxy_handler.go#6, relay/mjproxy_handler.go#7, relay/mjproxy_handler.go#8, relay/mjproxy_handler.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9577,7 +9576,7 @@
         "native-count"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/native_count.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9594,22 +9593,14 @@
     },
     {
       "path": "relay/param_override_error.go",
-      "status": "adapted",
-      "upstream_sha256": "f0b6e5a734c87cca3a3ae3fe07ffbf4f90b90ff281a8f5cdd0d7993744a7e6e8",
-      "local_sha256": "59466b21ac6c8631cd55f209c726be95e08b414de1e179600f1856922c5538dc",
-      "reasons": [
-        "upstream-1c63cc8c9"
-      ],
-      "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "照上游 1c63cc8c9 原文：请求值类型不符返回 400 不重试。逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "current_hunk_review": true
-      }
+      "status": "upstream_equal",
+      "upstream_sha256": "59466b21ac6c8631cd55f209c726be95e08b414de1e179600f1856922c5538dc",
+      "local_sha256": "59466b21ac6c8631cd55f209c726be95e08b414de1e179600f1856922c5538dc"
     },
     {
       "path": "relay/param_override_error_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
+      "status": "upstream_equal",
+      "upstream_sha256": "e1582e99b582486d9c176d0a280a72b275fd44dea95c97aeab1439c093d8cf94",
       "local_sha256": "e1582e99b582486d9c176d0a280a72b275fd44dea95c97aeab1439c093d8cf94"
     },
     {
@@ -9634,7 +9625,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/relay_adaptor.go#1, relay/relay_adaptor.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9663,7 +9654,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/relay_task.go#10, relay/relay_task.go#11, relay/relay_task.go#5, relay/relay_task.go#6, relay/relay_task.go#7, relay/relay_task.go#8, relay/relay_task.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9747,7 +9738,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/param_override.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -9771,14 +9762,14 @@
     {
       "path": "relay/requestplugin/plan.go",
       "status": "adapted",
-      "upstream_sha256": "3294d507948d99c654949d285ee2fce6b7992b6d9d74d9164a5c879f3c44ab49",
-      "local_sha256": "44ca4700b363c5f0491176cd461a3ed3d384f9c3b801a160030aa7c797ccfeaa",
+      "upstream_sha256": "f9f20cd3790f2ae123ade87d7fe6b9d97c70b3234ca309c7666400c20211e046",
+      "local_sha256": "adccf40cda2a4754ee9c2c534066e18714e00fe4926352032deb98ab3e5d8265",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/plan.go#1, relay/requestplugin/plan.go#2, relay/requestplugin/plan.go#3, relay/requestplugin/plan.go#4, relay/requestplugin/plan.go#5",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/plan.go#1, relay/requestplugin/plan.go#2, relay/requestplugin/plan.go#3, relay/requestplugin/plan.go#4, relay/requestplugin/plan.go#5；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -9787,7 +9778,8 @@
           "relay/requestplugin/plan.go#3",
           "relay/requestplugin/plan.go#4",
           "relay/requestplugin/plan.go#5"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -9799,14 +9791,14 @@
     {
       "path": "relay/requestplugin/relay.go",
       "status": "adapted",
-      "upstream_sha256": "e6193aaf2bcdc3dea75230f368b98e875b4203e90ed03fbfeb2122db006afdd0",
-      "local_sha256": "6a6b1f36da341f72b14c053b57ba3d1ff639ccd987cb9f1fa3489cd146c3521a",
+      "upstream_sha256": "db1212128fbee0971a06044771d60695165898e1770cee22a339813957b56ce1",
+      "local_sha256": "aeb9516af39c8ce801c2736e0e8bd99cac7026c1e77187cfb4f53b658829fd2c",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -9821,72 +9813,76 @@
           "relay/requestplugin/relay.go#7",
           "relay/requestplugin/relay.go#8",
           "relay/requestplugin/relay.go#9"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
       "path": "relay/requestplugin/reply.go",
       "status": "adapted",
-      "upstream_sha256": "3883dc21357d6f899d7debbe105cd3b26946a6cf7a792925c07b2ed9cf2c5f3f",
-      "local_sha256": "446232fd56c5f8007e5d1f7150159c592672ee01acabcc04a2a691a563bfe040",
+      "upstream_sha256": "d913a33aba25421a678313ddaa96eaa4718c188fdada08971bd7f1a898e3614c",
+      "local_sha256": "3bdf35f96a9cd374e081d0d90a998cb96c61124c439e5853e5b03a7cae99f639",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/reply.go#1, relay/requestplugin/reply.go#2",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/reply.go#1, relay/requestplugin/reply.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "relay/requestplugin/reply.go#1",
           "relay/requestplugin/reply.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
       "path": "relay/requestplugin/report.go",
       "status": "adapted",
-      "upstream_sha256": "75af7fa41d30c49c9f86ff2e053c215184298142a9ed44289d935446eb71e76b",
-      "local_sha256": "bf11a96b6c5b7840564c3ca95c62c39464c9ae2be793b14cedfde05a6ccfefb7",
+      "upstream_sha256": "83bf15663e91132fa9c124785cfc9e025791f39062df6f690fa279566f482053",
+      "local_sha256": "175b9a629aeefc597257319489ce1254f1a48607d50314673b453cbd7129fb35",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "relay/requestplugin/report.go#1",
           "relay/requestplugin/report.go#2",
           "relay/requestplugin/report.go#3"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
       "path": "relay/requestplugin/requestplugin_test.go",
       "status": "adapted",
-      "upstream_sha256": "d2098dc4c1a060ed7cb47feaaa1a0de291bcc2b31cfc67b6fc32a5f0471a8755",
-      "local_sha256": "dfe2c7afddbe68363598d7cb9e342703bf591b96c83878ed6c232db87508c8d9"
+      "upstream_sha256": "0e23ba2c640a6b6affd4678c9695e1b4e508a3de99c440b8b7f88ae9789b2d70",
+      "local_sha256": "9bf908b2e448772c426844a11ea6f8569fce83031de0de079a90245bd1eea347"
     },
     {
       "path": "relay/requestplugin/socket.go",
       "status": "adapted",
-      "upstream_sha256": "e51025f3e4f3867704b512bb5e905c8d159b6f6889cacfdb345173bf1feb1feb",
-      "local_sha256": "812aee28a50bf4a8404e1a59a3c7be16a4f650ef8800973e95011ff0696bc199",
+      "upstream_sha256": "dd59da53364aa35554cd8e49e9cdd197095f90dfdaa2e85457acdbd1b37260cb",
+      "local_sha256": "4a0084023d1fbcda44207ba37ef2399ba82beb664607c28e37ba2e013b65db0c",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/socket.go#1, relay/requestplugin/socket.go#2, relay/requestplugin/socket.go#3",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/socket.go#1, relay/requestplugin/socket.go#2, relay/requestplugin/socket.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "relay/requestplugin/socket.go#1",
           "relay/requestplugin/socket.go#2",
           "relay/requestplugin/socket.go#3"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -9898,20 +9894,21 @@
     {
       "path": "relay/requestplugin/task_report.go",
       "status": "adapted",
-      "upstream_sha256": "ac7e2adfa31c968c35b4af5342f66a6fadd3e036e0ce48e027d66ad252b8e15a",
-      "local_sha256": "ee15aa3ea964320023569392866cce7e6eba6802a92a0dbc3f6b9e7b8eef8a29",
+      "upstream_sha256": "79a73337f5dfcac9ed376c25c29ac2d77a270927931e83591ad30310f7f087a0",
+      "local_sha256": "38b875ebceefb6675ddd947d79c703d390e54f9eb13913d8402dfdede0e9052c",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/task_report.go#1, relay/requestplugin/task_report.go#2",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/task_report.go#1, relay/requestplugin/task_report.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "relay/requestplugin/task_report.go#1",
           "relay/requestplugin/task_report.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -9956,7 +9953,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 buildResponsesWSCreatePayload 把最终出站事件交给 service.ObserveRouteGenerate（实际不要求生成且没有输出的请求在路由上记 ignored），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -10144,8 +10141,8 @@
     {
       "path": "relaykit/dto/openai_request.go",
       "status": "upstream_equal",
-      "upstream_sha256": "1f87548cb2aeaf2d77ff08266e41e013315a34230e235e951e0c3cd94ee20fbd",
-      "local_sha256": "1f87548cb2aeaf2d77ff08266e41e013315a34230e235e951e0c3cd94ee20fbd"
+      "upstream_sha256": "04f1787f75c440ce52ece19af1e64db4405749256467ac139253317c46a595d4",
+      "local_sha256": "04f1787f75c440ce52ece19af1e64db4405749256467ac139253317c46a595d4"
     },
     {
       "path": "relaykit/dto/openai_request_zero_value_test.go",
@@ -10240,7 +10237,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relaykit/dto/user_settings.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -10270,7 +10267,7 @@
         "toolchain-security"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relaykit/go.mod#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -10396,8 +10393,8 @@
     {
       "path": "relaykit/relayconvert/internal/gemini_chat/grounding.go",
       "status": "upstream_equal",
-      "upstream_sha256": "08fc05b119e2496ddae07edcb6f1efaf69d934ce6edee4d37a85eb23fa386e58",
-      "local_sha256": "08fc05b119e2496ddae07edcb6f1efaf69d934ce6edee4d37a85eb23fa386e58"
+      "upstream_sha256": "70a0107b368a91790a5249700aa803483d0eaa0f94f7736a6a788280636258ed",
+      "local_sha256": "70a0107b368a91790a5249700aa803483d0eaa0f94f7736a6a788280636258ed"
     },
     {
       "path": "relaykit/relayconvert/internal/gemini_chat/to_oai_chat_req.go",
@@ -10408,8 +10405,14 @@
     {
       "path": "relaykit/relayconvert/internal/gemini_chat/to_oai_chat_resp.go",
       "status": "upstream_equal",
-      "upstream_sha256": "1c579051af645080cb79d55c43bd7a25c560b76f89c5e03c2dcc82e504e63d64",
-      "local_sha256": "1c579051af645080cb79d55c43bd7a25c560b76f89c5e03c2dcc82e504e63d64"
+      "upstream_sha256": "f310180c0cc0d7250e31596052a35de42df63503517d2c60d8e2eff881de5ecd",
+      "local_sha256": "f310180c0cc0d7250e31596052a35de42df63503517d2c60d8e2eff881de5ecd"
+    },
+    {
+      "path": "relaykit/relayconvert/internal/gemini_chat/to_oai_chat_resp_test.go",
+      "status": "upstream_equal",
+      "upstream_sha256": "ea43969d1f28dae60a6e5a2dbd313d905c6c65ec859a3b6724f4080bd711cd3f",
+      "local_sha256": "ea43969d1f28dae60a6e5a2dbd313d905c6c65ec859a3b6724f4080bd711cd3f"
     },
     {
       "path": "relaykit/relayconvert/internal/gemini_chat/to_oai_responses_hosted_stream.go",
@@ -10750,14 +10753,14 @@
     {
       "path": "relaykit/relayconvert/reasoning/gemini.go",
       "status": "upstream_equal",
-      "upstream_sha256": "088bff3ed94cb4117b1ec6dbc2b250b986bffd248c77db96aab20ee48ec73cf5",
-      "local_sha256": "088bff3ed94cb4117b1ec6dbc2b250b986bffd248c77db96aab20ee48ec73cf5"
+      "upstream_sha256": "ee64365ec0a2f70213d8b4c19982902d4572c45ad68d64db43f05dd47f93e4c8",
+      "local_sha256": "ee64365ec0a2f70213d8b4c19982902d4572c45ad68d64db43f05dd47f93e4c8"
     },
     {
       "path": "relaykit/relayconvert/reasoning/gemini_test.go",
       "status": "adapted",
-      "upstream_sha256": "9946bfa8e6a2475e36c8f8394a3d87f0fce1705745762f531be674130b19dbfc",
-      "local_sha256": "ac882f52d9b7b1295099528cc391a9eb1bc784314e3df4efc10f66e0cd4cb22f"
+      "upstream_sha256": "5c3e882734fa4cb744d717df3eb21d6befce646c7b3a72bec8e56084cbaf8cd1",
+      "local_sha256": "43e496199af83e4ee452560a0e21aa0739198e40a33d96beda17020a81551167"
     },
     {
       "path": "relaykit/relayconvert/reasoning/intent.go",
@@ -11044,7 +11047,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relaykit/types/request_meta.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11079,7 +11082,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/api-router.go#1, router/api-router.go#10, router/api-router.go#11, router/api-router.go#2, router/api-router.go#3, router/api-router.go#4, router/api-router.go#5, router/api-router.go#6, router/api-router.go#7, router/api-router.go#8, router/api-router.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11114,7 +11117,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/channel-router.go#1, router/channel-router.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11159,7 +11162,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/extensions.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11285,7 +11288,7 @@
       "upstream_sha256": "45242601d3d67663f18b7b87fd03a969c4d40a53bf0ca3bbf21619a97fa30db7",
       "local_sha256": "a7461993ccb4c8f0d6b34a436bf217db10d8646df72fbd9261bb0f55bbe51ca2",
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "TestGapsUpstreamWebSocket 的 rejected_handshake 子例验证提供商插件拨号失败时已经清除待发送扫描记录。"
       }
     },
@@ -11305,7 +11308,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/relay-router.go#1, router/relay-router.go#2, router/relay-router.go#3, router/relay-router.go#4, router/relay-router.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11375,7 +11378,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/token-routing.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11430,7 +11433,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/web-router.go#1；ServeFrontendBrotliFiles 接点见 SYNC_LEDGER.md#现行本地差异",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11457,7 +11460,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/access_token_scope.go#1, service/access_token_scope.go#2, service/access_token_scope.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11526,7 +11529,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/authz/assignment.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11592,7 +11595,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/authz/resources_routing.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11622,7 +11625,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/authz/resources_ticket.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11641,7 +11644,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/authz/role.go#1, service/authz/role.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11667,7 +11670,7 @@
         "strict-preconsume"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/billing.go#1, service/billing.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11686,7 +11689,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/billing_channel_ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11718,7 +11721,7 @@
         "strict-preconsume"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/billing_session.go#1, service/billing_session.go#10, service/billing_session.go#11, service/billing_session.go#12, service/billing_session.go#13, service/billing_session.go#14, service/billing_session.go#15, service/billing_session.go#2, service/billing_session.go#3, service/billing_session.go#4, service/billing_session.go#5, service/billing_session.go#6, service/billing_session.go#7, service/billing_session.go#8, service/billing_session.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11749,17 +11752,9 @@
     },
     {
       "path": "service/channel.go",
-      "status": "adapted",
-      "upstream_sha256": "ad965578496918b6c9f6e8c9bd70bdb5808b71ff035fe751deeec5cc50d7f49c",
-      "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
-      "reasons": [
-        "upstream-1c63cc8c9"
-      ],
-      "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "照上游 1c63cc8c9 原文：ShouldDisableChannel 按 RelayErrorSource 分类。逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "current_hunk_review": true
-      }
+      "status": "upstream_equal",
+      "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
+      "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4"
     },
     {
       "path": "service/channel_affinity.go",
@@ -11770,7 +11765,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_affinity.go#1, service/channel_affinity.go#10, service/channel_affinity.go#11, service/channel_affinity.go#12, service/channel_affinity.go#13, service/channel_affinity.go#14, service/channel_affinity.go#15, service/channel_affinity.go#16, service/channel_affinity.go#17, service/channel_affinity.go#2, service/channel_affinity.go#3, service/channel_affinity.go#4, service/channel_affinity.go#5, service/channel_affinity.go#6, service/channel_affinity.go#7, service/channel_affinity.go#8, service/channel_affinity.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11816,7 +11811,7 @@
         "scheduled-key-recovery"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "定时 Key 恢复的写入：经上游的 UpdateScheduledChannelLocked 与 SetScheduledChannelKeyStatus 在行锁内只把仍是自动停用的同一 Key 改回启用，并按 EnableChannel 的方式通知。"
       }
     },
@@ -11829,7 +11824,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_request.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11847,8 +11842,8 @@
     {
       "path": "service/channel_select.go",
       "status": "adapted",
-      "upstream_sha256": "aa425048996ac7f7d1b35e777717d705b3fef3aa44e8b196a048d3acfce35c60",
-      "local_sha256": "ce71efb2795f57f37e9140445204ef2bab25a1d70c3a1222dbbef87b2eaae06b",
+      "upstream_sha256": "3a4ef404f7390e81125ab6a2e474534e36025ed86b45ea650b6b9c556067a090",
+      "local_sha256": "adba2f1d268a4333288aefed7df4c9229b9ffff4eec7a492e07b60793de9f467",
       "reasons": [
         "concurrency",
         "group-removal",
@@ -11856,8 +11851,8 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_select.go#1, service/channel_select.go#2, service/channel_select.go#3, service/channel_select.go#4, service/channel_select.go#5, service/channel_select.go#6, service/channel_select.go#7。读取 Token 路由策略失败时保留配置阶段的错误来源，见 SYNC_LEDGER.md#自动选渠诊断接点。 首次选渠失败时附已知的熔断到期时间。",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_select.go#1, service/channel_select.go#2, service/channel_select.go#3, service/channel_select.go#4, service/channel_select.go#5, service/channel_select.go#6, service/channel_select.go#7。读取 Token 路由策略失败时保留配置阶段的错误来源，见 SYNC_LEDGER.md#自动选渠诊断接点。 首次选渠失败时附已知的熔断到期时间。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11868,7 +11863,8 @@
           "service/channel_select.go#5",
           "service/channel_select.go#6",
           "service/channel_select.go#7"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -11892,7 +11888,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11910,7 +11906,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_http.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11928,7 +11924,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_newapi.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11946,7 +11942,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_record.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11964,7 +11960,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_sub2api.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -11988,7 +11984,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/codex_channel_models.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12006,7 +12002,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/codex_credential_refresh.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12024,7 +12020,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/codex_credential_refresh_task.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12042,7 +12038,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/codex_models.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12060,7 +12056,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/codex_oauth.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12078,7 +12074,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/codex_wham_usage.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12096,7 +12092,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/concurrency.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12132,7 +12128,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/dashboard_summary.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12156,7 +12152,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/dashboard_system_load_unix.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12174,7 +12170,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/dashboard_system_load_windows.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12192,7 +12188,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/dashboard_system_status.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12258,7 +12254,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/funding_source.go#1, service/funding_source.go#2, service/funding_source.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12278,7 +12274,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/gmpay_config.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12296,7 +12292,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/gmpay_order.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12314,7 +12310,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/gmpay_settlement.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12338,7 +12334,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/group.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12362,7 +12358,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/home_metrics.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12422,7 +12418,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/image_billing.go#1, service/image_billing.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12450,7 +12446,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/log_info_generate.go#1, service/log_info_generate.go#2, service/log_info_generate.go#3, service/log_info_generate.go#4, service/log_info_generate.go#5, service/log_info_generate.go#6。普通中继与任务消费日志共用请求策略的管理员字段，见 SYNC_LEDGER.md#自动选渠诊断接点。 管理员日志走本轮证据投影，覆盖先结算记日志后结束尝试的原生时序。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12482,7 +12478,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/midjourney.go#1, service/midjourney.go#2, service/midjourney.go#3, service/midjourney.go#4, service/midjourney.go#5, service/midjourney.go#7",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12505,7 +12501,7 @@
         "origin-task-continuation"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/midjourney_origin.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12523,7 +12519,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/model_catalog.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12571,7 +12567,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/node_sync.go#1, service/node_sync.go#2, service/node_sync.go#3, service/node_sync.go#4, service/node_sync.go#5, service/node_sync.go#6",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12654,7 +12650,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/performance_observation.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12672,7 +12668,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/performance_observation_health.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12690,7 +12686,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/performance_observation_probes.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12708,7 +12704,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/performance_observation_series.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12732,7 +12728,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/performance_observation_types.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12750,7 +12746,7 @@
         "price-source"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/price_source.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12832,7 +12828,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/quota.go#1, service/quota.go#10, service/quota.go#11, service/quota.go#12, service/quota.go#13, service/quota.go#14, service/quota.go#15, service/quota.go#16, service/quota.go#17, service/quota.go#18, service/quota.go#19, service/quota.go#2, service/quota.go#3, service/quota.go#4, service/quota.go#5, service/quota.go#6, service/quota.go#7, service/quota.go#8, service/quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12880,7 +12876,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/relay_error.go#1, service/relay_error.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -12899,7 +12895,7 @@
     {
       "path": "service/relay_error_test.go",
       "status": "adapted",
-      "upstream_sha256": "ffe8c8fa4f53c1f2ec0bedc0d1de2d39dd3e42dee8625981d52a66cafe967748",
+      "upstream_sha256": "968428cae7e49a5dde6dfadde47b876adf9677a2bb8ab26056ffc7c9ff32e12f",
       "local_sha256": "99994c57cad54863fd0fae727bf4722c69cca12014450e37cedd92b2a5e679a4"
     },
     {
@@ -12911,16 +12907,15 @@
     {
       "path": "service/request_policy.go",
       "status": "adapted",
-      "upstream_sha256": "0d9b8b91e5ad0eec7926520ce82fa4a70a6ea949496850b524ba404f0cf51e32",
+      "upstream_sha256": "f4c0eb4c06c5489bb359004dc0eadc71dde5a4cc2c7fae2a588072cdeadeacd3",
       "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
       "reasons": [
         "group-removal",
-        "token-routing",
-        "upstream-1c63cc8c9"
+        "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 另含提前吸收的上游 1c63cc8c9，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12972,7 +12967,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "真实派发在占槽后复核健康并领取半开许可，预选和预览保持只读。"
       }
     },
@@ -12992,7 +12987,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_affinity.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13023,7 +13018,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_attempt.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13054,7 +13049,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_breaker.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13085,7 +13080,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本地入站缓存模式和租户隔离的复访证据，排除具名上游资源。"
       }
     },
@@ -13099,7 +13094,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "比较共同流量分层及会话置信区间，按驻留期和新样本更新缓存质量档。"
       }
     },
@@ -13113,7 +13108,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "真实自由选渠请求的探索预算及可识别缓存会话的复访安排。"
       }
     },
@@ -13133,7 +13128,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "渠道与模型维度累计缓存回执和字段覆盖，维护有界的进程内观测。"
       }
     },
@@ -13148,7 +13143,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_candidates.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13172,7 +13167,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_error.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13191,7 +13186,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "自动路由读取的错误码表：原生分类器点名的上游码（按原生类别）、本网关生成的 relaykit 错误码和路由原因。上下文超长收窄据此识别凭据、额度、限流、权限类错误；Root 熔断快照只保存表内的码，其余记 unrecognized。客户响应、重试和原生分类不变。"
       }
     },
@@ -13217,7 +13212,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_observation.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13242,7 +13237,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "自动路由证据的结果收窄与判定：上游把上下文超长包成无可识别错误码的失败时改记 ignored；流式正常结束但没有内容事件时按上游输出用量和请求级结束原因记 ignored 或 failure。只影响熔断、质量和观测样本；重试、原生性能统计和客户响应不变。"
       }
     },
@@ -13274,7 +13269,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "真实尝试成功率、速度、延迟的滚动统计和诊断，后台定期发布不可变档位。"
       }
     },
@@ -13294,7 +13289,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "按资格、健康、质量档、默认优先级、负载和末级价格排序并保持缓存未知席位。"
       }
     },
@@ -13302,12 +13297,12 @@
       "path": "service/route_request.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b70e045c6daff570080f8246c7fe4933f3d021cc6e24ed35a6fbcba774445090",
+      "local_sha256": "aceb87e73fb1fa349c188685e5c16eebe737860768faafbe3b62171f484770cd",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_request.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13320,7 +13315,7 @@
       "path": "service/route_request_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "827fa721b0302d5f2c64ea28f75626bc55f4b23730dfda4f743e29384679b3e8"
+      "local_sha256": "36f8063625e30fca10a65865e2eedbef8f3d2fe455580825cb1d7b547ff62e48"
     },
     {
       "path": "service/route_scan_rejection.go",
@@ -13331,7 +13326,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "自动选渠后、本地拒绝发送的请求级诊断扩展。同一扩展也提供本地终止错误的写入点，先记录策略终止，再写错误日志。见 SYNC_LEDGER.md#自动选渠诊断接点。"
       }
     },
@@ -13351,7 +13346,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_stream_output.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13376,7 +13371,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/route_task_poll.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13407,7 +13402,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "按单轮真实回执区分明确零值与缺失，记录流式首尾及解码协议。"
       }
     },
@@ -13450,7 +13445,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/subscription_reset_task.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13468,7 +13463,7 @@
         "single-node"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/system_instance.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13531,7 +13526,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_billing.go#1, service/task_billing.go#10, service/task_billing.go#2, service/task_billing.go#3, service/task_billing.go#4, service/task_billing.go#5, service/task_billing.go#6, service/task_billing.go#7, service/task_billing.go#8, service/task_billing.go#9。LogTaskConsumption 将本次请求的策略事件接入管理员消费日志，见 SYNC_LEDGER.md#自动选渠诊断接点。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13595,7 +13590,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13634,7 +13629,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13683,7 +13678,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/ticket_notify.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13708,7 +13703,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/tiered_settle.go#1, service/tiered_settle.go#2, service/tiered_settle.go#3, service/tiered_settle.go#4",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13741,7 +13736,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/token_route.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13765,7 +13760,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/token_route_preview.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13795,7 +13790,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -13809,7 +13804,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -13829,7 +13824,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-16 充值加赠扩展文件，见 SYNC_LEDGER.md#充值加赠接点；替换充值折扣扩展文件，不改上游文件行为",
         "method": "本轮实现逐文件审查；计划与实现经 Codex gpt-6-astra 交叉审计"
       }
@@ -13855,7 +13850,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-17 加赠窗口只统计同步计费路径的写入包装，见 SYNC_LEDGER.md#充值加赠接点；model/user.go 两个函数恢复上游原文",
         "method": "本轮实现逐文件审查；设计经主会话与 Codex gpt-6-astra 定稿"
       }
@@ -13881,7 +13876,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "估算输出 token 时只标记本轮的估算来源，原生结算数量沿用。",
         "current_hunk_review": true
       }
@@ -13895,7 +13890,7 @@
         "ticket"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/user_notify.go#1, service/user_notify.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13920,7 +13915,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/viewer_location.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13947,7 +13942,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -13969,7 +13964,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14000,7 +13995,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/auto_group.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14024,7 +14019,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/billing_setting/builtin_billing.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14052,7 +14047,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/billing_setting/tiered_billing.go#1, setting/billing_setting/tiered_billing.go#2, setting/billing_setting/tiered_billing.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14156,7 +14151,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/operation_setting/affiliate_setting.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14180,7 +14175,7 @@
         "backup-payment-links"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "2026-11-17 备用支付扩展文件，见 SYNC_LEDGER.md#备用支付接点；不改上游 TopUpLink 行为",
         "method": "本轮实现逐文件审查；钱包交互经 Gemini 4 Argon 交叉设计"
       }
@@ -14200,7 +14195,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/operation_setting/channel_affinity_setting.go#1, setting/operation_setting/channel_affinity_setting.go#2, setting/operation_setting/channel_affinity_setting.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14256,7 +14251,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/operation_setting/payment_setting.go#1, setting/operation_setting/payment_setting.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14282,7 +14277,7 @@
         "strict-preconsume"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/operation_setting/quota_setting.go#1, setting/operation_setting/quota_setting.go#2",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14343,7 +14338,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/payment_gmpay.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14367,7 +14362,7 @@
         "retired"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/payment_waffo.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14404,7 +14399,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/rate_limit.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14428,7 +14423,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/ratio_setting/cache_ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14464,7 +14459,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/ratio_setting/group_ratio.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14488,7 +14483,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/ratio_setting/model_ratio.go#1, setting/ratio_setting/model_ratio.go#2, setting/ratio_setting/model_ratio.go#3, setting/ratio_setting/model_ratio.go#4, setting/ratio_setting/model_ratio.go#5",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14516,20 +14511,21 @@
     {
       "path": "setting/request_plugin_setting/config.go",
       "status": "adapted",
-      "upstream_sha256": "a2da0cfeef8d689714bd326d128ecf2a8b5ef08272ec4b5380621a4e665987ca",
-      "local_sha256": "e210cbec307add3b19d91f370ff562d187758f87a974f07f6baebef24c45a009",
+      "upstream_sha256": "16e829ecfe7ca21599f03ef4be7a171e783de0bdb94a7fcac9e6adb08b718f7d",
+      "local_sha256": "d5692c02b46c9c8962d8c5194d1ea3ecd8151ca33afa48c4fd04abbc3a22677b",
       "reasons": [
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/request_plugin_setting/config.go#1, setting/request_plugin_setting/config.go#2",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/request_plugin_setting/config.go#1, setting/request_plugin_setting/config.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "setting/request_plugin_setting/config.go#1",
           "setting/request_plugin_setting/config.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -14542,7 +14538,7 @@
         "topup-bonus"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/retired_business_options.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14656,7 +14652,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：setting/user_usable_group.go#1",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14723,7 +14719,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
         "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：types/price_data.go#1, types/price_data.go#2, types/price_data.go#3",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
@@ -14755,7 +14751,7 @@
   ],
   "candidate_sha": null,
   "history_baseline_sha": "9a63062227c31ba54a6346e07ee8b4fd8802f22f",
-  "reference_newapi_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "reference_newapi_sha": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
   "contracts": {
     "affiliate": {
       "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。",
@@ -14902,11 +14898,6 @@
       "authority": "SYNC_LEDGER.md#备用支付接点",
       "kind": "approved_contract"
     },
-    "upstream-1c63cc8c9": {
-      "basis": "提前吸收冻结目标之后的上游 1c63cc8c9（#8345）：请求触发的本地错误不禁用渠道、不换渠重试；下一个同步窗口不再重复处置该提交。",
-      "authority": "SYNC_LEDGER.md#上游基线与同步范围",
-      "kind": "approved_contract"
-    },
     "scheduled-key-recovery": {
       "basis": "定时渠道测试在开启自动启用时，用被测 Key 发一次与渠道测试相同的真实请求，恢复多 Key 渠道里被自动停用的 Key；每轮每渠道最多 3 个，失败不改状态，不写路由健康；只在调度发起的运行里执行，人工禁用的 Key 和渠道、提供商插件渠道、文本重复的 Key 不碰。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
@@ -14915,8 +14906,8 @@
   },
   "review_scope": {
     "local_start": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-    "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-    "target_rule": "所有1109段原始生产差异及清单外新增/缺失文件重新审查；仅保留批准合同最小接点，具体裁定和最终文件身份见NATIVE_B388_REVIEW.json。",
+    "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+    "target_rule": "所有1109段原始生产差异及清单外新增/缺失文件重新审查；仅保留批准合同最小接点，具体裁定和最终文件身份见NATIVE_B388_REVIEW.json。冻结目标推进到 3a407cc9b 时，窗口改动且仍有本地差异的已审查文件按新上游逐段重新登记在 current_file_reviews。",
     "production_reason_required": [
       "adapted",
       "extension",

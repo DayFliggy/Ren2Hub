@@ -93,7 +93,7 @@ func pinnedTaskPluginIdentities(c *gin.Context, expected string) ([]int, []strin
 		}
 	}
 	if generation != nil {
-		if channelTypes, keys := taskPluginIdentities(generation, candidates, expected, true); len(keys) > 0 {
+		if channelTypes, keys := taskPluginIdentities(generation, candidates, expected); len(keys) > 0 {
 			return channelTypes, keys
 		}
 	}
@@ -102,7 +102,7 @@ func pinnedTaskPluginIdentities(c *gin.Context, expected string) ([]int, []strin
 	if !exists || !ok || pinned.Generation == nil || pinned.Plugin == nil || pinned.Plugin.Meta.Key != expected {
 		return nil, nil
 	}
-	return taskPluginIdentities(pinned.Generation, []*jsplugin.LoadedPlugin{pinned.Plugin}, expected, false)
+	return taskPluginIdentities(pinned.Generation, []*jsplugin.LoadedPlugin{pinned.Plugin}, expected)
 }
 
 // ChannelSelectError explains why SelectChannelForRequest found no channel.

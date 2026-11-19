@@ -61,7 +61,9 @@ func NormalizeTaskPluginSubmitModel(g *jsplugin.RoutingGeneration, plugin *jsplu
 	return name
 }
 
-func taskPluginIdentities(g *jsplugin.RoutingGeneration, candidates []*jsplugin.LoadedPlugin, expected string, shared bool) ([]int, []string) {
+// taskPluginIdentities lists the channel types and plugin keys that may serve
+// expected; a built-in channel type serves every plugin that declares it.
+func taskPluginIdentities(g *jsplugin.RoutingGeneration, candidates []*jsplugin.LoadedPlugin, expected string) ([]int, []string) {
 	if expected == "" || g == nil {
 		return nil, nil
 	}
@@ -76,9 +78,6 @@ func taskPluginIdentities(g *jsplugin.RoutingGeneration, candidates []*jsplugin.
 		keys = append(keys, plugin.Meta.Key)
 		for _, typ := range plugin.Meta.ChannelTypes {
 			if typ == 0 || typ == constant.ChannelTypeTaskPlugin || slices.Contains(types, typ) {
-				continue
-			}
-			if owner, ok := g.GetByChannelType(typ); shared && (!ok || owner != plugin) {
 				continue
 			}
 			types = append(types, typ)
@@ -97,11 +96,11 @@ func taskPluginEndpointIdentities(endpoint jsplugin.PinnedEndpoint, expected str
 		for _, candidate := range endpoint.Candidates {
 			plugins = append(plugins, candidate.Plugin)
 		}
-		if types, keys := taskPluginIdentities(endpoint.Generation, plugins, expected, true); len(keys) > 0 {
+		if types, keys := taskPluginIdentities(endpoint.Generation, plugins, expected); len(keys) > 0 {
 			return types, keys
 		}
 	}
-	return taskPluginIdentities(endpoint.Generation, []*jsplugin.LoadedPlugin{endpoint.Plugin}, expected, false)
+	return taskPluginIdentities(endpoint.Generation, []*jsplugin.LoadedPlugin{endpoint.Plugin}, expected)
 }
 
 type previewFallback struct {
@@ -145,7 +144,7 @@ func resolvePreviewRequest(query TokenRoutePreviewQuery) (TokenRoutePreviewQuery
 			return query, nil, previewFallback{}, ErrPreviewPathUnsupported
 		}
 		query.Model = NormalizeTaskPluginSubmitModel(generation, plugin, query.Model)
-		types, keys := taskPluginIdentities(generation, []*jsplugin.LoadedPlugin{plugin}, key, false)
+		types, keys := taskPluginIdentities(generation, []*jsplugin.LoadedPlugin{plugin}, key)
 		return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path, TaskPluginKey: key,
 			TaskPluginChannelTypes: types, TaskPluginKeys: keys}), previewFallback{}, nil
 	}

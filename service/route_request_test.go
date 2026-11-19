@@ -214,3 +214,45 @@ func TestRoutePreviewProviderUsesDeclaredPathAndModel(t *testing.T) {
 		require.Zero(t, ChannelInFlight(11), "preview does not acquire capacity")
 	}
 }
+
+// #8335: several plugins may declare one built-in channel type. Preview and
+// dispatch derive the same identity filter for a shared endpoint: the first
+// candidate in key order executes, and a channel of the shared type serves it.
+func TestSharedChannelTypePluginsPreviewAndDispatchAgree(t *testing.T) {
+	db := setupRouteTest(t)
+	for _, key := range []string{"shared-beta", "shared-alpha"} {
+		_, err := jsplugin.DefaultRegistry.Register(channelSelectEndpointPluginSource(key, constant.ChannelTypeGemini), jsplugin.Options{})
+		require.NoError(t, err, "a second plugin may declare the same channel type")
+		t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(key)) })
+	}
+	createRouteChannel(t, db, 11, "task-model")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("type", constant.ChannelTypeGemini).Error)
+
+	q := TokenRoutePreviewQuery{Model: "task-model", Path: "/v1/responses"}
+	_, _, fallback, err := resolvePreviewRequest(q)
+	require.NoError(t, err)
+	previewed := fallback.filters[len(fallback.filters)-1]
+	require.Equal(t, "shared-alpha", previewed.TaskPluginKey)
+	require.Equal(t, []int{constant.ChannelTypeGemini}, previewed.TaskPluginChannelTypes)
+	require.Equal(t, []string{"shared-alpha", "shared-beta"}, previewed.TaskPluginKeys)
+	preview, err := PreviewTokenRouting(context.Background(), 17, 7, q)
+	require.NoError(t, err)
+	require.Len(t, preview.Entries, 1)
+	require.True(t, preview.Entries[0].Eligible)
+
+	generation := jsplugin.DefaultRegistry.Generation()
+	endpoint, ok := LookupTaskPluginEndpoint(generation, "POST", q.Path, q.Model)
+	require.True(t, ok)
+	c := routeTestContext(t)
+	c.Set(jsplugin.ContextKeyPinnedPlugin, jsplugin.PinnedPlugin{Generation: generation, Plugin: endpoint.Plugin})
+	c.Set(jsplugin.ContextKeyPinnedEndpoint, endpoint)
+	AppendTaskPluginIdentityFilter(c, endpoint.Plugin.Meta.Key)
+	filters := GetChannelConstraints(c).Filters
+	dispatched := filters[len(filters)-1]
+	require.Equal(t, previewed.TaskPluginKey, dispatched.TaskPluginKey)
+	require.Equal(t, previewed.TaskPluginChannelTypes, dispatched.TaskPluginChannelTypes)
+	require.Equal(t, previewed.TaskPluginKeys, dispatched.TaskPluginKeys)
+	selected, selErr := SelectChannelForRequest(c, q.Model, nil)
+	require.Nil(t, selErr)
+	require.Equal(t, 11, selected.Id)
+}

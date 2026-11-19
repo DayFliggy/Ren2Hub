@@ -73,8 +73,8 @@ func SubmitIngress(c *gin.Context, format types.RelayFormat, model string) (bool
 
 func (p *Plan) ingress(c *gin.Context, format types.RelayFormat, model string) (bool, []relaycommon.RequestPluginStep, []relaycommon.RequestPluginRecord, *types.NewAPIError) {
 	c.Set(planContextKey, p)
-	p.capture(c, model, nil)
-	if len(p.scope(StageIngress, model, nil)) == 0 {
+	p.capture(c, model, 0, nil)
+	if len(p.scope(StageIngress, model, 0, nil)) == 0 {
 		return false, nil, nil, nil
 	}
 	read := readStageBody(c)
@@ -137,9 +137,9 @@ func TaskAttempt(c *gin.Context, info *relaycommon.RelayInfo) (bool, *types.NewA
 		changed = true
 	}
 	call := attemptCall(c, info)
-	plan.capture(c, call.Model, call.Bound)
+	plan.capture(c, call.Model, call.channelType(), call.Bound)
 	call.Stage, call.Late, call.Unpriced = StageIngress, true, true
-	if !slices.ContainsFunc(plan.scope(StageIngress, call.Model, call.Bound), func(instance *request_plugin_setting.Instance) bool {
+	if !slices.ContainsFunc(plan.scope(StageIngress, call.Model, call.channelType(), call.Bound), func(instance *request_plugin_setting.Instance) bool {
 		return !plan.ingressRan[instance.ID]
 	}) {
 		return changed, nil
@@ -176,7 +176,7 @@ func TaskEgress(c *gin.Context, info *relaycommon.RelayInfo, body io.Reader) (io
 	call := attemptCall(c, info)
 	// The upstream body is the vendor's, whatever protocol the client used.
 	call.Stage, call.Format = StageEgress, string(types.RelayFormatTask)
-	if len(plan.scope(StageEgress, call.Model, call.Bound)) == 0 {
+	if len(plan.scope(StageEgress, call.Model, call.channelType(), call.Bound)) == 0 {
 		return body, nil
 	}
 	var raw []byte
@@ -314,7 +314,7 @@ func Request(c *gin.Context, info *relaycommon.RelayInfo, modifierEffort string)
 		return nil, nil
 	}
 	call := attemptCall(c, info)
-	if len(plan.scope(StageRequest, call.Model, call.Bound)) == 0 {
+	if len(plan.scope(StageRequest, call.Model, call.channelType(), call.Bound)) == 0 {
 		return nil, nil
 	}
 	body, err := common.Marshal(info.Request)
@@ -404,7 +404,7 @@ func PassThrough(c *gin.Context, info *relaycommon.RelayInfo, storage common.Bod
 	call := attemptCall(c, info)
 	for _, attempt := range attemptStages {
 		call.Stage, call.Late = attempt.stage, attempt.late
-		if attempt.stage == StageEgress && storage != nil && jsonRequest(c) && len(plan.scope(StageEgress, call.Model, call.Bound)) > 0 {
+		if attempt.stage == StageEgress && storage != nil && jsonRequest(c) && len(plan.scope(StageEgress, call.Model, call.channelType(), call.Bound)) > 0 {
 			if body, err := storage.Bytes(); err == nil && gjson.ValidBytes(body) {
 				call.Body = body
 			}
@@ -633,8 +633,8 @@ func DryRun(ctx context.Context, input DryRunInput) DryRunResult {
 	plan := NewPlan()
 	if input.Instance != nil {
 		instance := *input.Instance
-		// An unsaved instance runs on every model.
-		instance.Enabled, instance.Global, instance.Models = true, true, nil
+		// An unsaved instance runs on every model and channel.
+		instance.Enabled, instance.Global, instance.Models, instance.PluginScope = true, true, nil, nil
 		plan = newPlanOf([]request_plugin_setting.Instance{instance})
 	}
 	if plan == nil {
@@ -704,7 +704,7 @@ func DryRun(ctx context.Context, input DryRunInput) DryRunResult {
 func dryRunReply(ctx context.Context, plan *Plan, call Call, text string, result *DryRunResult) DryRunReply {
 	reply := DryRunReply{Text: text}
 	format := types.RelayFormat(call.Format)
-	instances := plan.scope(StageReply, call.Model, call.Bound)
+	instances := plan.scope(StageReply, call.Model, call.channelType(), call.Bound)
 	answer := replyAnswer(format, call.UpstreamModel, text)
 	if len(instances) == 0 || answer == nil {
 		return reply
