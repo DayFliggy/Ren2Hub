@@ -209,7 +209,7 @@ const (
 	// streamEndNormal: the upstream says the generation completed normally.
 	streamEndNormal
 	// streamEndRequest: the request caused the end (filtering, safety,
-	// refusal or a length limit).
+	// refusal, a length limit or a stop sequence the request named).
 	streamEndRequest
 	// streamEndUnproven: a completed Responses terminal lists output items
 	// that are neither recognized content nor known empty messages, such as
@@ -217,19 +217,23 @@ const (
 	streamEndUnproven
 )
 
-// requestEndReasons are end reasons the request caused. Matching is
-// case-insensitive because Gemini reports reasons in upper case.
+// requestEndReasons are end reasons the request caused. Claude stop_sequence
+// means a stop sequence the request named was hit, so a stream without text
+// that ends there is legitimate. Matching is case-insensitive because Gemini
+// reports reasons in upper case.
 var requestEndReasons = map[string]bool{
 	"content_filter": true, "content_policy_violation": true, "safety": true, "refusal": true,
 	"length": true, "max_tokens": true, "max_output_tokens": true, "model_context_window_exceeded": true,
 	"recitation": true, "blocklist": true, "prohibited_content": true, "spii": true, "image_safety": true,
+	"stop_sequence": true,
 }
 
 // normalEndReasons are the normal completions: chat stop and tool calls,
-// Claude end_turn, stop_sequence and tool_use, Gemini STOP.
+// Claude end_turn and tool_use, Gemini STOP. A chat stop or Gemini STOP does
+// not tell a natural end from a hit stop sequence.
 var normalEndReasons = map[string]bool{
 	"stop": true, "tool_calls": true, "function_call": true,
-	"end_turn": true, "stop_sequence": true, "tool_use": true,
+	"end_turn": true, "tool_use": true,
 }
 
 // streamEventEnd reads the end of the supported wire formats: chat

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 416,
+    "extension": 417,
     "removed": 45
   },
   "files": [
@@ -7697,6 +7697,19 @@
       }
     },
     {
+      "path": "relay/channel/claude/route_empty_stream_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8effa76dca0540a4d4b690f141f32aa74cdf6414fa9f1d36f935d2cb0025fd96",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "chat 转 Claude 的停止串结束不判空流的判别测试；无自定义停止串的 end_turn 空完成仍是 empty_stream。"
+      }
+    },
+    {
       "path": "relay/channel/claude/stream_observe_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -13326,7 +13339,7 @@
       "path": "service/route_stream_output.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6b9fcbaf1711c1d4ae399340583ac217b4ff7424dbb60bbc788a8d065e3b794c",
+      "local_sha256": "75dec2c0c6091fd5d772a0da77c76955b8779058e016bcde636b46ec71a617d6",
       "reasons": [
         "concurrency",
         "token-routing"
