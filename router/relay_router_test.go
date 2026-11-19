@@ -181,4 +181,5 @@ func setupRelayRouterTestDB(t *testing.T) {
 			require.NoError(t, os.Unsetenv("SQL_DSN"))
 		}
 	})
+	releaseTestRoutingState(t)
 }

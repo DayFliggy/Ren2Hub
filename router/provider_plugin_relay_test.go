@@ -116,13 +116,19 @@ type relayHarness struct {
 	active   atomic.Int64
 }
 
+// permanentGopoolWorkers is the notification limit's cleanup task
+// (service/notify-limit.go), which holds one gopool worker for the rest of the
+// process once any notification is checked. newRelayHarness starts it, so the
+// count does not depend on which earlier test sent the first notification.
+const permanentGopoolWorkers = 1
+
 // waitIdle waits for the gateway's handlers and the background work they
 // started, such as a refund, to finish: a client may read a whole reply
 // before its handler settled the bill.
 func (h *relayHarness) waitIdle(t *testing.T) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for h.active.Load() > 0 || gopool.WorkerCount() > 0 {
+	for h.active.Load() > 0 || gopool.WorkerCount() > permanentGopoolWorkers {
 		if time.Now().After(deadline) {
 			t.Fatal("the gateway did not finish its work")
 		}
@@ -133,6 +139,8 @@ func (h *relayHarness) waitIdle(t *testing.T) {
 func newRelayHarness(t *testing.T) *relayHarness {
 	t.Helper()
 	setupRelayRouterTestDB(t)
+	_, err := service.CheckNotificationLimit(0, "relay-harness")
+	require.NoError(t, err)
 	require.NoError(t, i18n.Init())
 	ratio_setting.InitRatioSettings()
 	previousModes, err := common.Marshal(billing_setting.GetBillingModeCopy())

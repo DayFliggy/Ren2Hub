@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 847,
     "adapted": 315,
-    "extension": 412,
+    "extension": 413,
     "removed": 47
   },
   "files": [
@@ -11349,7 +11349,7 @@
       "path": "router/provider_plugin_relay_test.go",
       "status": "adapted",
       "upstream_sha256": "3a4d55b86f1d1aa719e3118a177dc1a4fbfdd7b8771443a4e64a47126caa00e4",
-      "local_sha256": "d1e517c4cedc44b52f48007161c7a8d53d0a08908f0d19e80cc6dde51061a3fd"
+      "local_sha256": "398e718491677b25132a3302bae2e2b005929e22897a31af240abda56d02d60f"
     },
     {
       "path": "router/relay-router.go",
@@ -11378,13 +11378,19 @@
       "path": "router/relay_router_test.go",
       "status": "adapted",
       "upstream_sha256": "e06e35018de4d9cec4ac6ed64105e5f79ecea73137fa33e06385a1a5172884a8",
-      "local_sha256": "8f1415a5da5039198062c08edea5a784b4b914c0f7caa01291856579c73630ec"
+      "local_sha256": "088a405394c73645587865bba87bc739dd2f65eef133f5c64ad78e3b3e6811cd"
     },
     {
       "path": "router/retired_routes_test.go",
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "1a19ba02deb1fe5fdadfd064b58f94f449f3afc1187b5b1d96dbb82dd05e2cea"
+    },
+    {
+      "path": "router/routing_state_isolation_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c280c7e42933bd5a5a2459385e122f6232cc387a8a3760bf6a84755d176a4071"
     },
     {
       "path": "router/task-plugin-protocol-router.go",
