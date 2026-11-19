@@ -14909,7 +14909,7 @@
       "kind": "approved_contract"
     },
     "origin-task-continuation": {
-      "basis": "本地原渠道准入合同：只豁免手动列表，不豁免当前Key倍率上限；保留显式过滤器和即时容量。MJ找到原任务后复用准备结果，只占槽和轮换Key一次。共有错误优先级、remix上下文/动作/ID/平台/继承倍率不在本地修复范围。",
+      "basis": "本地原渠道准入合同：只豁免手动列表，不豁免当前Key倍率上限；保留显式过滤器和即时容量。MJ找到原任务后复用准备结果，只占一次槽。共有错误优先级、remix上下文/动作/ID/平台/继承倍率不在本地修复范围。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },

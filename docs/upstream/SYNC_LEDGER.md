@@ -17,6 +17,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 模型默认价格和内置计费表达式的增删。
 - 上游 `payment_setting.amount_discount`。
 - 上游 #8247：本地已在 `InsertWithTx` 的同一事务里写入 OAuth 邀请人。
+- 单渠道多 Key：多 Key 模式、Key 选择、按 Key 停用与 Key 级状态，见“单 Key 渠道接点”。
 
 来源清单 `CORE_SOURCE_DELTA.json` 按文件登记状态、哈希、合同理由和审查依据，各分类的当前文件数见清单的 `counts`。改动核心目录后用 `scripts/refresh-core-source-delta.py --upstream-repo <含冻结目标对象的只读 NewAPI 检出>` 重算；`--check-local` 只核对本地哈希，不需要上游检出。
 
@@ -81,6 +82,10 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 写入口：`POST /api/channel/` 没有 `multi_to_single` 和 `multi_key_mode`，`PUT /api/channel/` 拒绝 `key_mode` 与 `multi_key_mode`，没有 `/api/channel/multi_key/manage`；批量创建（每行一条渠道）照旧。
 - 运行时：`middleware/distributor.go` 直接取渠道 Key；`ChannelMeta`、上下文、`admin_info` 和请求策略事件都没有多 Key 字段；`types.NewChannelError` 不带多 Key 标记；Responses WebSocket 锁定连接只比较 Key 文本；Vertex 令牌缓存按渠道 ID；原任务续作、上游模型拉取、上游倍率识别和推理服务状态都用渠道 Key。
 - 插件凭据：登录替换渠道里的凭据，已存凭据属于本插件时把它交给 `login` 并要求同一账号；请求不再带 `add` 和 `key_index`（被拒绝），`plugin_credentials` 不带 `index`。刷新、`relogin` 停用、`scheduled` 和余额都按渠道进行；一个账号在同一插件只登录在一条渠道上，任务轮询仍按提交任务的账号分批。
+- 存储与状态：`model.Channel` 没有 `channel_info` 和 `Keys`，新安装不建 `channel_info` 列；`UpdateChannelStatusDetailed` 只写渠道状态，`DisableChannelByTag` 直接按标签停用，渠道缓存不预解析 Key。没有每渠道轮询锁：状态写入经 `UpdateChannelOtherInfo` 对 `other_info` 做比较写入（每次状态变化都改 `status_time`），Key 与凭据写入经 `UpdateChannelLocked`、`UpdateTaskPluginChannelLocked`、`UpdateScheduledChannelLocked` 的行锁事务；SQLite 上这四处共用每渠道 Key 锁。
+- Vue：渠道表单只有单密钥和批量密钥，编辑时一个字段替换 Key；插件凭据面板只有登录和重新登录。
+
+同步上游时，上游对多 Key 代码的改动（`channel_info`、`GetNextEnabledKey`、`handlerMultiKeyUpdate`、`multi_key/manage`、`key_index`、`MultiKeyMode` 及 Key 级状态）按“不吸收”在窗口文件里逐项写明；同一文件里与多 Key 无关的改动照常吸收，并保持本节的接点。
 
 ## 与上游相同、未在本地修复的已知问题
 

@@ -9,7 +9,7 @@
 | 59                                                    | `sub2api`     | 调度自动探测                             |
 | 60                                                    | `newapi`      | 调度自动探测                             |
 | 1、14、24、48、20、15、17、25、26、31、35、40、43、45 | `detect`      | 主流协议，需管理员点击“识别上游”后才探测 |
-| 多 Key 渠道及其他类型                                 | `unsupported` | 只能手动填写倍率                         |
+| 其他类型                                              | `unsupported` | 只能手动填写倍率                         |
 
 `detect` 只包含正常转发时把保存的 Key 全部内容作为凭据发给渠道地址的类型（OpenAI 兼容类型用 `Authorization: Bearer`，Anthropic 用 `x-api-key`，Gemini 用 `x-goog-api-key`，百度 v1 在请求头里同样带整串 Key；火山引擎的对话发送整串 Key，语音合成把 `appid|token` 拆开发送，两段都发给渠道地址），识别请求改用 Bearer 发送也不会把 Key 交给原本收不到它的地址。智谱 v3（16，由 `id.secret` 生成 JWT）、讯飞（18，用 `appid|secret|key` 签名连接地址）、腾讯（23，复合 Key 走 TC3 签名）和百度 v2（46，只把第一段作为 Bearer，`appid` 另放请求头）由复合 Key 派生凭据，按 `unsupported` 处理，不发送任何请求。
 
