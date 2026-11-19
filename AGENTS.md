@@ -4,19 +4,19 @@
 
 ## 产品与来源
 
-- NewAPI（QuantumNous/new-api）是唯一上游；Sub2API 和 AxonHub 仅为参考。冻结同步目标为 `b388140acfd80369ec6243b16869daff1b4051f4`（固定 NewAPI main，rc.51 后两个提交），本地差异和未修复的已知问题见 docs/upstream/SYNC_LEDGER.md。
+- NewAPI（QuantumNous/new-api）是唯一上游；Sub2API 和 AxonHub 仅为参考。冻结同步目标为 `3a407cc9b064fe79a4ffac4146b2690c465dc929`（固定 NewAPI main，rc.51 后第 16 个提交），本地差异和未修复的已知问题见 docs/upstream/SYNC_LEDGER.md。
 - 单节点核心网关，仅交付 Go 服务和 Vue Web。保留 Ren2Hub / DayFliggy 品牌及上游许可。
 - 后端钱包、预扣结算、协议和权限采用 NewAPI。本地合同是渠道级自动/手动路由、无等待并发及模型基础价 × 渠道倍率；业务分组已删除。不要恢复旧 schema 5 账本、冻结报价、加密重放、等待队列或第二套权限模型。
 - 扩展包括工单、每个 Token 的自动/有序手动路由、GMPay、邀请返利、统一模型目录与统计。平台渠道由管理员维护，用户选择不等于 BYOK。Vue 日间保留原视觉，夜间为 B1 Studio（frontend/docs/THEMES.md），按真实原生接口接通；排除历史协议诊断、权限增强、JS 插件增强、任务产物增强、独立商城、会员等级、新人任务、七日签到阶梯。当前原生对应能力继续保留。
 - 充值加赠：单笔入账阶梯、固定加赠、全站阶梯与个人日/周/月阶梯相加封顶，实付不变，按本金另赠额度；覆盖六个在线充值渠道、兑换码和管理员加额，跟随同一启用设置；调用计价与上游一致，见 docs/billing/TOPUP_BONUS.md。它不是会员等级，不附带权益，不复制基础价，不建资金账务。
-- 旧 Codex/type 57 专用账号接入、站内订阅套餐、io.net 部署、Playground、React、Electron 均已退役。通用提供商插件登录、刷新和凭据管理开放；普通 API Key 接入、站点 OAuth 和钱包充值继续保留。请求处理插件仅有全局、渠道与模型作用域，无业务分组。
+- 旧 Codex/type 57 专用账号接入、站内订阅套餐、io.net 部署、Playground、React、Electron 均已退役。通用提供商插件登录、刷新和凭据管理开放；普通 API Key 接入、站点 OAuth 和钱包充值继续保留。请求处理插件有全局、渠道、模型作用域和插件声明的作用范围，无业务分组。
 - 新安装使用空数据库，不迁移旧独立账本或业务分组数据，迁移前守卫继续保留。已初始化实例的普通更新保持现有数据库、Redis、附件、配置与在途任务，不重建数据。
 - 代码不内置模型默认价格与计费表达式；工具单价、音频倍率表和 Gemini 音频输入固定价沿用上游。
 
 ## 实现
 
 - Go 1.26；独立 relaykit/ 和 tokenkit/ 不得依赖根模块，受影响时以 GOWORK=off 单独验证。
-- 保持 Router → Controller → Service → Model 分层。后端对齐固定 b388：原生文件保持上游原文，本地逻辑写在扩展文件里，只保留批准的产品合同及 Vue 实际对接的最小接点，历史 `verified_fix` 不构成保留理由。混合文件逐段拆分，来源及裁定见 `docs/upstream/NATIVE_B388_REVIEW.json`；新的必要差异记入 docs/upstream/SYNC_LEDGER.md。
+- 保持 Router → Controller → Service → Model 分层。后端对齐冻结目标 3a407cc9b：原生文件保持上游原文，本地逻辑写在扩展文件里，只保留批准的产品合同及 Vue 实际对接的最小接点，历史 `verified_fix` 不构成保留理由。混合文件逐段拆分，来源及裁定见 `docs/upstream/NATIVE_B388_REVIEW.json`；新的必要差异记入 docs/upstream/SYNC_LEDGER.md。
 - 与上游相同的已知缺陷不在本地修复，登记在同步账本或 docs/upstream/WAITING_UPSTREAM.md。
 - JSON 使用 common.Marshal / Unmarshal 等共享封装。数据库支持 SQLite、MySQL、PostgreSQL；保持上游锁和事务习惯。
 - 不吞掉异常、不添加假成功或无依据回退；支付回调和人工补单必须保证最多入账一次。
