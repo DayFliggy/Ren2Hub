@@ -57,7 +57,16 @@ func TestRouteAttemptCountsNonStreamResponseAfterConnectionClose(t *testing.T) {
 	MarkRouteAttemptSent(c, info)
 	cancel()
 	FinishRouteAttempt(c, info, nil)
-	require.NotContains(t, routeObservations.breakers, routeBreakerKey{11, "model"}, "the served response is a success")
+	state := routeObservations.breakers[routeBreakerKey{11, "model"}]
+	require.Zero(t, state.failures, "a completed response resets consecutive failures")
+	require.Zero(t, state.openUntil)
+	var total, failed uint32
+	for _, bucket := range state.window {
+		total += bucket.total
+		failed += bucket.failures
+	}
+	require.Equal(t, uint32(2), total)
+	require.Equal(t, uint32(1), failed)
 	row := routeObservations.get(11, "model", 1, false)
 	require.Equal(t, 2, row.Samples)
 	require.InDelta(t, 0.8, row.ErrorRate, 1e-9)

@@ -12906,7 +12906,7 @@
       "path": "service/route_attempt_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1c79e0d43669eafb7e4b667644bafc6cc6f99aad691dfc2239a2cb27918facc3"
+      "local_sha256": "bc2cefc241aa1e806ae4f841d499aeb0a3a1ed14248ec5639f456aeb20166b6e"
     },
     {
       "path": "service/route_breaker.go",
