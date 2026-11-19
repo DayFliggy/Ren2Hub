@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
@@ -50,12 +51,13 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 	// held keys pause at the upstream: the request is in flight until release.
 	type hold struct{ arrived, release chan struct{} }
 	held := map[string]hold{}
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	serve := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		mu.Lock()
 		hits[key]++
 		ok := healthy[key]
 		h, isHeld := held[key]
+		delete(held, key)
 		mu.Unlock()
 		if isHeld {
 			close(h.arrived)
@@ -68,7 +70,8 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 			return
 		}
 		_, _ = fmt.Fprint(w, `{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"gpt-4o","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
-	}))
+	})
+	upstream := httptest.NewServer(serve)
 	t.Cleanup(upstream.Close)
 	hitsOf := func(key string) int {
 		mu.Lock()
@@ -281,6 +284,52 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 		require.Equal(t, auto, stored(t, channel.Id).ChannelInfo.MultiKeyStatusList[1])
 	})
 
+	t.Run("a result from the address before an edit is not written back", func(t *testing.T) {
+		var notices []string
+		watcher := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload service.WebhookPayload
+			require.NoError(t, common.DecodeJson(r.Body, &payload))
+			mu.Lock()
+			notices = append(notices, payload.Title)
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		t.Cleanup(watcher.Close)
+		watchChannelNotices(t, fixture.user.Id, watcher.URL)
+		noticeCount := func() int {
+			mu.Lock()
+			defer mu.Unlock()
+			return len(notices)
+		}
+		var otherHits int
+		other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			otherHits++
+			mu.Unlock()
+			serve(w, r)
+		}))
+		t.Cleanup(other.Close)
+		channel := newChannel(t, "late-address", 2, map[int]int{1: auto}, common.ChannelStatusEnabled)
+		summary := recoverWhileInFlight(t, channel, "late-address-k1", func() {
+			editChannel(t, fixture.user.Id, fmt.Sprintf(`{"id":%d,"base_url":%q}`, channel.Id, other.URL))
+		})
+		require.Equal(t, 1, hitsOf("late-address-k1"), "the test request went to the old address")
+		require.Zero(t, summary.Enabled, "no recovery is reported")
+		require.Zero(t, noticeCount(), "no recovery is notified")
+		after := stored(t, channel.Id)
+		require.Equal(t, other.URL, *after.BaseURL)
+		require.Equal(t, auto, after.ChannelInfo.MultiKeyStatusList[1])
+
+		plans := keyRecoveryPlans([]*model.Channel{&after})
+		testUserID, err := resolveChannelTestUserID(nil)
+		require.NoError(t, err)
+		summary = recoverChannelKeys(context.Background(), &after, plans[channel.Id], testUserID)
+		require.Equal(t, 1, otherHits, "the independent test goes to the new address")
+		require.Equal(t, 1, summary.Enabled)
+		require.Equal(t, 1, noticeCount())
+		require.NotContains(t, stored(t, channel.Id).ChannelInfo.MultiKeyStatusList, 1)
+	})
+
 	t.Run("an out-of-range stored slot does not stop the round", func(t *testing.T) {
 		broken := newChannel(t, "broken-slots", 2, map[int]int{-1: auto, 1: auto, 7: auto}, common.ChannelStatusEnabled)
 		healthyChannel := newChannel(t, "next-channel", 2, map[int]int{0: auto}, common.ChannelStatusEnabled)
@@ -390,3 +439,35 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 // routeBreakerOpenFailuresForTest is the consecutive failure count that opens
 // a breaker (service.routeBreakerOpenFailures).
 const routeBreakerOpenFailuresForTest = 5
+
+// editChannel saves a channel edit through the administrator handler.
+func editChannel(t *testing.T, userID int, body string) {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("id", userID)
+	c.Set("role", common.RoleRootUser)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/channel/", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	UpdateChannel(c)
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
+// watchChannelNotices sends the channel notices of the user to a webhook at
+// url for the rest of the test.
+func watchChannelNotices(t *testing.T, userID int, url string) {
+	t.Helper()
+	fetch := system_setting.GetFetchSetting()
+	previousFetch, previousWorker, previousLimit := *fetch, system_setting.WorkerUrl, constant.NotifyLimitCount
+	var user model.User
+	require.NoError(t, model.DB.First(&user, userID).Error)
+	t.Cleanup(func() {
+		*fetch, system_setting.WorkerUrl, constant.NotifyLimitCount = previousFetch, previousWorker, previousLimit
+		require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Update("setting", user.Setting).Error)
+	})
+	fetch.EnableSSRFProtection, system_setting.WorkerUrl, constant.NotifyLimitCount = false, "", 100
+	service.InitHttpClient()
+	setting, err := common.Marshal(dto.UserSetting{NotifyType: dto.NotifyTypeWebhook, WebhookUrl: url})
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Update("setting", string(setting)).Error)
+}

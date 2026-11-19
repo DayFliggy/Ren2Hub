@@ -1150,7 +1150,7 @@
       "path": "controller/channel_key_recovery.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c68569e93045d37638dfda4da705be32f3eba9c32b6fb3a32e6e6fccd777aede",
+      "local_sha256": "983db3de9b5694d607e7d08fe66f769897118da2ac862b7fda68ad5ea0dd9f96",
       "reasons": [
         "scheduled-key-recovery"
       ],
@@ -1163,7 +1163,7 @@
       "path": "controller/channel_key_recovery_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aaaf5e141da50668a4268483be4847033d6f9eabb109153ecd33ca429468f245"
+      "local_sha256": "81ea1fb44ed1fd0d5f1c31af32f0c2ffe5f85d61c68ebeac7069e40c5b1b2070"
     },
     {
       "path": "controller/channel_lab.go",
@@ -11784,7 +11784,7 @@
       "path": "service/channel_key_recovery.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c1f6188dde9d2b5c19c7c36bb148f29e20f5da9a82b8032fe72a136c15dd383e",
+      "local_sha256": "a575dd417ee872aca194b98b68d25b6b5c40f73ad2948824b632ad9ade031b49",
       "reasons": [
         "scheduled-key-recovery"
       ],
@@ -13178,7 +13178,7 @@
       "path": "service/route_observation.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7778660e707664d4ce2e41cfb2f7aabd7e8c3eb08ad16a92ceaf9892b4a97c35",
+      "local_sha256": "f749ef36b51b78337f9525827fe2a34c089142441599161efcb72129caa40488",
       "reasons": [
         "concurrency",
         "token-routing"

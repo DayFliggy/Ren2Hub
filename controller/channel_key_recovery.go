@@ -107,6 +107,9 @@ func recoverChannelKeys(ctx context.Context, channel *model.Channel, keys []chan
 		keyRecoveryTested.Lock()
 		keyRecoveryTested.at[keyRecoverySlot{channel.Id, k.index}] = time.Now()
 		keyRecoveryTested.Unlock()
+		// Read before testChannel reloads the channel: an edit published
+		// after this read makes the result stale.
+		epoch := service.RouteConfigEpoch()
 		result := testChannel(ctx, channel, testUserID, "", "", false, k)
 		if ctx.Err() != nil {
 			return summary
@@ -117,7 +120,7 @@ func recoverChannelKeys(ctx context.Context, channel *model.Channel, keys []chan
 			continue
 		}
 		summary.Succeeded++
-		enabled, err := service.EnableRecoveredChannelKey(ctx, channel.Id, k.index, k.key)
+		enabled, err := service.EnableRecoveredChannelKey(ctx, channel.Id, k.index, k.key, epoch)
 		if err != nil {
 			common.SysError(common.LogText("failed to enable recovered key: channel_id=%d, key_index=%d, error=%v", channel.Id, k.index, err))
 			continue
