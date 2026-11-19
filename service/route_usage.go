@@ -1,12 +1,10 @@
 package service
 
 import (
-	"context"
 	"math"
 	"strconv"
 	"time"
 
-	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
@@ -20,6 +18,7 @@ type RouteAttemptEvidence struct {
 	Operation       int     `json:"operation"`
 	Stream          bool    `json:"stream"`
 	Outcome         string  `json:"outcome"`
+	OutcomeReason   string  `json:"outcome_reason,omitempty"`
 	DurationMS      int64   `json:"duration_ms"`
 	FirstOutputMS   int64   `json:"first_output_ms,omitempty"`
 	GenerationMS    int64   `json:"generation_ms,omitempty"`
@@ -198,12 +197,10 @@ func (a *routeAttempt) evidence(now time.Time, outcome string, stream bool) Rout
 }
 
 func (a *routeAttempt) finalEvidence(c *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError, now time.Time) RouteAttemptEvidence {
-	outcome := perfmetrics.OutcomeIgnored
-	if c.Request.Context().Err() != context.DeadlineExceeded {
-		outcome = perfmetrics.ClassifyRelayOutcome(c.Request.Context(), info, apiErr)
-	}
+	outcome, reason := a.routeOutcome(c, info, apiErr)
 	stream := info.StreamStatus.OutcomeSnapshot()
 	ev := a.evidence(now, string(outcome), info.IsStream)
+	ev.OutcomeReason = reason
 	if info.IsStream && info.StreamStatus == nil || stream.Response == relaycommon.ResponseOutcomeIncomplete || stream.Response == relaycommon.ResponseOutcomeCancelled {
 		ev.CacheKnown, ev.CacheReason = false, "incomplete"
 	}

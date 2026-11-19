@@ -80,7 +80,7 @@
 
 ## 渠道选择与倍率
 
-- 调度变更必跑 `service:^TestAutomaticRoutingWorkload$`；快速熔断、并发探测、质量恢复和未知渠道固定位置分别由 `TestRouteProbeLeaseLifecycle`、`TestRouteQualityWindowAndRecovery`、`TestRouteRankCapacityPriceAndUnknownSeats` 保护。缓存字段存在性覆盖 `TestRouteCacheUsagePresence`；监控权限走真实入口 `router:^TestPerformanceObservationRemainsRootOnly$`。
+- 调度变更必跑 `service:^TestAutomaticRoutingWorkload$`；快速熔断、并发探测、质量恢复和未知渠道固定位置分别由 `TestRouteProbeLeaseLifecycle`、`TestRouteQualityWindowAndRecovery`、`TestRouteRankCapacityPriceAndUnknownSeats` 保护。缓存字段存在性覆盖 `TestRouteCacheUsagePresence`；包装成 5xx 的上下文超长不计健康由 `TestRouteOutcomeIgnoresWrappedContextOverflow` 保护；监控权限走真实入口 `router:^TestPerformanceObservationRemainsRootOnly$`。
 
 - 自动选渠与上游限流：`--go 'service:^(TestAutomaticRouteScanSummaries|TestBoundAndManualRoutesDoNotEmitScan|TestHeaderless429CooldownExpiresAfterFiveSeconds)$' 'controller:^(TestRelayFullScanIsTraceableWithoutErrorLog|TestRelayScanSummaryIsAdminOnly|TestRelayHeaderless429DemotesChannelForNextRequest|TestRelayRetryWithoutCandidateKeepsUpstreamError)$'`。覆盖缺头降档、满载跳过、首轮拒绝的请求 ID 和日志角色边界。
 - 选渠诊断的出口：`--go 'controller:^(TestTaskSubmissionLogsAutomaticScanForAdmins|TestRelayPrechargeRejectionKeepsSelectedScan|TestResponsesWSPrechargeRejectionKeepsSelectedScan|TestDisconnectedTaskProtocolsLogLocalSubmissionRejection|TestRelayRoutingStorageFailuresAreTraceable)$' --db TestTaskPluginEndpointScanDiagnostics`。覆盖任务消费日志的角色可见范围、发送前预扣拒绝、配置和候选存储故障，以及共享端点预选后实际采用的渠道。直连 WebSocket 的拨号前拒绝和供应商握手失败用 `--go 'relay/channel/xunfei:^TestRouteScanBeforeAndAfterXunfeiDial$' 'router:^TestGapsUpstreamWebSocket$'`。插件终止时错误日志中的最终决定见 `controller.TestResponsesWebSocketRunsRequestPlugins` 和 `controller.TestTaskSubmissionRunsRequestPlugins`。
