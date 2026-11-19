@@ -71,6 +71,7 @@
   "Only quota redemption codes are supported": "仅支持额度兑换码",
   "Override plugin version not found; factory plugins cannot be deleted": "未找到自定义插件版本；出厂插件不可删除",
   "Payment compliance is not confirmed, so the rebate order cannot be created": "支付合规状态无效，无法创建返利订单",
+  "Plugin {{plugin}} changed where it runs; review it again before saving": "插件 {{plugin}} 调整了作用范围，请复核后再保存",
   "Plugin dry run failed: {{error}}": "插件干跑失败：{{error}}",
   "Plugin routing check failed: {{error}}": "插件路由检查失败：{{error}}",
   "Plugin source SHA-256 does not match": "插件源码 SHA-256 校验不一致",

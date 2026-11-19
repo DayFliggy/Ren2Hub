@@ -216,6 +216,24 @@ export function setTaskPluginEnabledOption(enabled: boolean) {
   })
 }
 
+function parseRequestPluginScope(
+  value: unknown
+): import('./types').RequestPluginScope {
+  const scope = value as Record<string, unknown>
+  const models = scope?.models ?? []
+  const channelTypes = scope?.channel_types ?? []
+  if (
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    !Array.isArray(models) ||
+    models.some((model) => typeof model !== 'string') ||
+    !Array.isArray(channelTypes) ||
+    channelTypes.some((type) => !Number.isInteger(type))
+  )
+    throw new Error('Invalid request plugin instance')
+  return { models: [...models], channel_types: [...channelTypes] }
+}
+
 function parseRequestPluginInstances(
   result: unknown
 ): import('./types').RequestPluginInstance[] {
@@ -244,7 +262,7 @@ function parseRequestPluginInstances(
     )
       throw new Error('Invalid request plugin instance')
     // Non-root bind reads redact config; Go may also encode absent maps/lists as null.
-    return {
+    const parsed: import('./types').RequestPluginInstance = {
       id: row.id,
       name: row.name,
       plugin: row.plugin,
@@ -253,6 +271,11 @@ function parseRequestPluginInstances(
       models: (row.models ?? []) as string[],
       config: (row.config ?? {}) as Record<string, unknown>,
     }
+    // A save sends the whole list back: dropping plugin_scope here would turn
+    // a plugin scope instance into one that runs nowhere.
+    if (row.plugin_scope != null)
+      parsed.plugin_scope = parseRequestPluginScope(row.plugin_scope)
+    return parsed
   })
 }
 export async function listRequestPluginInstances(signal?: AbortSignal) {

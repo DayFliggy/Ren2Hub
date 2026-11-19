@@ -44,6 +44,8 @@ export type TaskPluginMeta = {
     models?: string[]
   }>
   configSchema?: RequestPluginConfigSchema
+  /** The models and channel types a request processing plugin is made for. */
+  scope?: { models?: string[] | null; channelTypes?: number[] | null } | null
   samples?: RequestPluginSample[]
   sortPriority?: number
   website?: string
@@ -141,6 +143,8 @@ export type TaskPluginOption = TaskPluginParts & {
   checkKey?: boolean
   /** A request processing plugin whose failure is skipped instead of refusing. */
   optional?: boolean
+  /** The models and channel types the plugin is made for, if it names them. */
+  scope?: { models?: string[] | null; channelTypes?: number[] | null } | null
 
   configSchema?: RequestPluginConfigSchema
   name_i18n?: LocalizedTextValue
@@ -300,9 +304,16 @@ export type RequestPluginConfigSchema = {
   required?: string[]
 }
 
+/** A plugin's scope as an administrator confirmed it. */
+export type RequestPluginScope = {
+  models: string[]
+  channel_types: number[]
+}
+
 /**
  * One configured use of a request processing plugin. `global` is its own scope; channels bind instances by id. `models` limits it to the
- * models clients ask for; empty means every model.
+ * models clients ask for; empty means every model. An instance with
+ * `plugin_scope` runs where its plugin's scope says instead.
  */
 export type RequestPluginInstance = {
   id: string
@@ -312,6 +323,8 @@ export type RequestPluginInstance = {
   global: boolean
   models: string[]
   config: Record<string, unknown>
+  /** Set when the instance runs where its plugin's scope says. */
+  plugin_scope?: RequestPluginScope | null
 }
 
 /**

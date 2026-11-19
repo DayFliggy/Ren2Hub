@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // Upstream request-plugin-instance-editor.tsx: a plugin picker for new
 // instances, then the settings, where it runs and a try panel. Ren2Hub has no
-// business group, so an instance runs for all requests or for the channels
-// that add it.
+// business group, so an instance runs for all requests, for the channels
+// that add it, or where its plugin's meta.scope says once an administrator
+// confirms that scope.
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -12,6 +13,7 @@ import {
   ListChecks,
   Pencil,
   Plug,
+  Sparkles,
 } from 'lucide-vue-next'
 
 import ChipPicker from '@/components/common/ChipPicker.vue'
@@ -20,9 +22,15 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import { localizedText } from '@/utils/localizedText'
-import type { RequestPluginInstance, TaskPluginOption } from '../types'
+import { declaredPluginScope, samePluginScope } from '../lib/plugin-scope'
+import type {
+  RequestPluginInstance,
+  RequestPluginScope,
+  TaskPluginOption,
+} from '../types'
 import PluginConfigEditor from './PluginConfigEditor.vue'
 import PluginIcon from './PluginIcon.vue'
+import PluginScopeSummary from './PluginScopeSummary.vue'
 import RequestPluginPicker from './RequestPluginPicker.vue'
 import RequestPluginRunLine from './RequestPluginRunLine.vue'
 import RequestPluginTryPanel from './RequestPluginTryPanel.vue'
@@ -47,8 +55,14 @@ const emit = defineEmits<{
 const { t, locale } = useI18n()
 const formId = useId()
 
-type Scope = 'all' | 'channels'
+type Scope = 'plugin' | 'all' | 'channels'
 type ModelScope = 'all' | 'chosen'
+const PLUGIN_SCOPE = {
+  value: 'plugin',
+  icon: Sparkles,
+  title: 'scopePlugin',
+  hint: 'scopePluginHint',
+} as const
 const SCOPES = [
   { value: 'all', icon: Globe, title: 'scopeAll', hint: 'scopeAllHint' },
   {
@@ -91,7 +105,8 @@ watch(
     name.value = instance?.name ?? ''
     renaming.value = false
     enabled.value = instance?.enabled ?? true
-    scope.value = !instance || instance.global ? 'all' : 'channels'
+    if (instance?.plugin_scope) scope.value = 'plugin'
+    else scope.value = !instance || instance.global ? 'all' : 'channels'
     chosenModels.value = [...(instance?.models ?? [])]
     modelScope.value = chosenModels.value.length ? 'chosen' : 'all'
     config.value = { ...(instance?.config ?? {}) }
@@ -114,21 +129,55 @@ const pluginName = computed(() =>
 const hasSettings = computed(
   () => Object.keys(plugin.value?.configSchema?.properties ?? {}).length > 0
 )
+const declaredScope = computed(() => declaredPluginScope(plugin.value))
+const savedScope = computed(() => props.instance?.plugin_scope ?? null)
+// The scope the instance confirms: the plugin's current one, or the one a
+// saved instance confirmed when the plugin has none to offer any more.
+const confirmedScope = computed<RequestPluginScope | null>(
+  () => declaredScope.value ?? savedScope.value
+)
+const scopeChanged = computed(
+  () =>
+    savedScope.value !== null &&
+    declaredScope.value !== null &&
+    !samePluginScope(savedScope.value, declaredScope.value)
+)
+const followsPlugin = computed(
+  () => scope.value === 'plugin' && confirmedScope.value !== null
+)
+const scopeOptions = computed(() =>
+  confirmedScope.value ? [PLUGIN_SCOPE, ...SCOPES] : SCOPES
+)
 const modelsMissing = computed(
-  () => modelScope.value === 'chosen' && chosenModels.value.length === 0
+  () =>
+    !followsPlugin.value &&
+    modelScope.value === 'chosen' &&
+    chosenModels.value.length === 0
 )
 const modelOptions = computed(() => [
   ...new Set([...props.models, ...chosenModels.value]),
 ])
-const draft = computed<RequestPluginInstance>(() => ({
-  id: props.instance?.id ?? '',
-  name: name.value.trim() || pluginName.value,
-  plugin: pluginKey.value,
-  enabled: enabled.value,
-  global: scope.value === 'all',
-  models: modelScope.value === 'chosen' ? [...chosenModels.value] : [],
-  config: { ...config.value },
-}))
+const draft = computed<RequestPluginInstance>(() => {
+  const instance: RequestPluginInstance = {
+    id: props.instance?.id ?? '',
+    name: name.value.trim() || pluginName.value,
+    plugin: pluginKey.value,
+    enabled: enabled.value,
+    global: scope.value === 'all',
+    models: modelScope.value === 'chosen' ? [...chosenModels.value] : [],
+    config: { ...config.value },
+  }
+  if (!followsPlugin.value || !confirmedScope.value) return instance
+  return {
+    ...instance,
+    global: false,
+    models: [],
+    plugin_scope: {
+      models: [...confirmedScope.value.models],
+      channel_types: [...confirmedScope.value.channel_types],
+    },
+  }
+})
 
 function pick(key: string) {
   const next = props.plugins.find((item) => item.key === key)
@@ -136,6 +185,8 @@ function pick(key: string) {
   name.value = next
     ? localizedText(next.name_i18n, locale.value) || next.name
     : key
+  // A new instance takes the plugin's suggested place when it has one.
+  scope.value = declaredPluginScope(next) ? 'plugin' : 'all'
   config.value = {}
   configValid.value = true
   showAllErrors.value = false
@@ -309,10 +360,11 @@ function close() {
           <div
             role="radiogroup"
             :aria-labelledby="`${formId}-scope`"
-            class="grid gap-2 sm:grid-cols-2"
+            class="grid gap-2"
+            :class="confirmedScope ? 'sm:grid-cols-3' : 'sm:grid-cols-2'"
           >
             <label
-              v-for="item in SCOPES"
+              v-for="item in scopeOptions"
               :key="item.value"
               class="scope-card"
               :data-checked="scope === item.value || undefined"
@@ -342,6 +394,20 @@ function close() {
             </label>
           </div>
           <div
+            v-if="followsPlugin && confirmedScope"
+            class="sibling-space-y-2 rounded-xl border border-[var(--border-subtle)] p-3"
+            data-plugin-scope-confirm
+          >
+            <p v-if="scopeChanged" class="text-sm font-medium">
+              {{ t('pluginExtensions.rp.scopeChangedNotice') }}
+            </p>
+            <p v-if="plugin && !declaredScope" class="text-sm font-medium">
+              {{ t('pluginExtensions.rp.scopeDroppedNotice') }}
+            </p>
+            <PluginScopeSummary :scope="confirmedScope" />
+          </div>
+          <div
+            v-if="!followsPlugin"
             role="radiogroup"
             :aria-label="t('pluginExtensions.rp.models')"
             class="grid gap-2 pt-1 sm:grid-cols-2"
@@ -377,7 +443,7 @@ function close() {
             </label>
           </div>
           <ChipPicker
-            v-if="modelScope === 'chosen'"
+            v-if="!followsPlugin && modelScope === 'chosen'"
             v-model="chosenModels"
             :options="modelOptions"
             :placeholder="t('pluginExtensions.rp.modelsPlaceholder')"

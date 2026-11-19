@@ -14,8 +14,13 @@ import { useToast } from '@/composables/useToast'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
 import * as pluginApi from '../api'
+import PluginMetadataCard from '../components/PluginMetadataCard.vue'
 import RequestProcessing from '../RequestProcessing.vue'
-import type { RequestPluginInstance, TaskPluginOption } from '../types'
+import type {
+  RequestPluginInstance,
+  TaskPluginMeta,
+  TaskPluginOption,
+} from '../types'
 
 vi.mock('../api', () => ({
   dryRunRequestPlugins: vi.fn(),
@@ -33,6 +38,14 @@ const plugins: TaskPluginOption[] = [
     models: null,
   },
   { key: 'video', name: 'Video task', task: true, models: null },
+  {
+    key: 'scoped',
+    name: 'Scoped',
+    transform: true,
+    transform_hooks: ['outbound'],
+    models: null,
+    scope: { models: ['claude', 'gpt-4o'], channelTypes: [1] },
+  },
 ]
 const rows: RequestPluginInstance[] = [
   {
@@ -229,5 +242,111 @@ describe('request processing page', () => {
       body: { model: 'claude-sonnet-4-5', messages: [] },
     })
     expect(dialog.text()).toContain('No instance ran for this request.')
+  })
+})
+
+describe('request processing plugin scope', () => {
+  it('adds an instance where the plugin suggests by default', async () => {
+    const page = await mountPage()
+    await button(page, 'Add').trigger('click')
+    await flushPromises()
+    await page.get('[data-plugin-card="scoped"]').trigger('click')
+    await flushPromises()
+    expect(
+      (
+        page.get('input[type="radio"][value="plugin"]')
+          .element as HTMLInputElement
+      ).checked
+    ).toBe(true)
+    // The plugin's scope replaces the model choice.
+    expect(page.find('input[type="radio"][value="chosen"]').exists()).toBe(
+      false
+    )
+    expect(page.get('[data-plugin-scope-confirm]').text()).toContain('gpt-4o')
+    await page.get('[data-instance-editor] form').trigger('submit')
+    await flushPromises()
+    expect(savedLists()[0]!.at(-1)).toEqual({
+      id: '',
+      name: 'Scoped',
+      plugin: 'scoped',
+      enabled: true,
+      global: false,
+      models: [],
+      config: {},
+      plugin_scope: { models: ['claude', 'gpt-4o'], channel_types: [1] },
+    })
+  })
+
+  it('asks for a review when the plugin changed where it runs and saving confirms it', async () => {
+    vi.mocked(pluginApi.listRequestPluginInstances).mockResolvedValue([
+      {
+        id: 'c',
+        name: 'Confirmed',
+        plugin: 'scoped',
+        enabled: true,
+        global: false,
+        models: [],
+        config: {},
+        plugin_scope: { models: ['claude'], channel_types: [1] },
+      },
+      {
+        id: 'd',
+        name: 'Current',
+        plugin: 'scoped',
+        enabled: true,
+        global: false,
+        models: [],
+        config: {},
+        plugin_scope: { models: ['gpt-4o', 'claude'], channel_types: [1] },
+      },
+    ])
+    const page = await mountPage()
+    const [confirmed, current] = page.findAll('[data-request-plugin-row]')
+    expect(confirmed!.text()).toContain('Where the plugin suggests')
+    expect(confirmed!.text()).toContain('Plugin changed where it runs')
+    // The same scope in another order needs no review.
+    expect(current!.text()).not.toContain('Plugin changed where it runs')
+
+    await page.get('[data-scope-review]').trigger('click')
+    await flushPromises()
+    expect(page.get('[data-plugin-scope-confirm]').text()).toContain(
+      'Saving confirms the new range'
+    )
+    await page.get('[data-instance-editor] form').trigger('submit')
+    await flushPromises()
+    expect(savedLists()[0]![0]!.plugin_scope).toEqual({
+      models: ['claude', 'gpt-4o'],
+      channel_types: [1],
+    })
+  })
+})
+
+describe('plugin metadata scope', () => {
+  it('shows the scope a plugin declares and nothing for one without', () => {
+    const meta = {
+      key: 'scoped',
+      name: 'Scoped',
+      version: '1.0.0',
+      apiVersion: 1,
+      models: null,
+      plugin_enabled: true,
+      disabled_channels: 0,
+      unbound_channels: 0,
+      scope: { models: ['claude'], channelTypes: null },
+    } as TaskPluginMeta
+    const card = mount(PluginMetadataCard, {
+      props: { meta },
+      global: { plugins: [i18n] },
+    })
+    const section = card.get('[aria-label="Where the plugin suggests"]')
+    expect(section.text()).toContain('All channels')
+    expect(section.text()).toContain('claude')
+    card.unmount()
+    const plain = mount(PluginMetadataCard, {
+      props: { meta: { ...meta, scope: null } },
+      global: { plugins: [i18n] },
+    })
+    expect(plain.find('[data-plugin-scope]').exists()).toBe(false)
+    plain.unmount()
   })
 })

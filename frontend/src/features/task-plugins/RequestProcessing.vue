@@ -24,7 +24,9 @@ import {
 } from './api'
 import PluginIcon from './components/PluginIcon.vue'
 import RequestPluginDryRunDialog from './components/RequestPluginDryRunDialog.vue'
+import PluginScopeSummary from './components/PluginScopeSummary.vue'
 import RequestPluginInstanceEditor from './components/RequestPluginInstanceEditor.vue'
+import { pluginScopeNeedsReview } from './lib/plugin-scope'
 import type { RequestPluginInstance, TaskPluginOption } from './types'
 
 const { t, locale } = useI18n()
@@ -321,7 +323,38 @@ void loadModels()
                   >
                 </div>
               </td>
-              <td class="max-w-56 break-words px-3 py-2">
+              <td
+                v-if="instance.plugin_scope"
+                class="max-w-72 break-words px-3 py-2"
+              >
+                <div class="sibling-space-y-1.5">
+                  <span>{{ t('pluginExtensions.rp.scopePlugin') }}</span>
+                  <PluginScopeSummary
+                    :scope="instance.plugin_scope"
+                    class="text-xs"
+                  />
+                  <button
+                    v-if="
+                      pluginScopeNeedsReview(
+                        instance,
+                        findPlugin(instance.plugin)
+                      )
+                    "
+                    type="button"
+                    data-scope-review
+                    class="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:underline disabled:opacity-50"
+                    :disabled="busy"
+                    @click="openEditor(instance)"
+                  >
+                    <span
+                      class="rounded-md bg-[var(--status-warning-soft)] px-1.5 py-0.5 text-[var(--status-warning-text)]"
+                      >{{ t('pluginExtensions.rp.scopeChanged') }}</span
+                    >
+                    {{ t('pluginExtensions.rp.review') }}
+                  </button>
+                </div>
+              </td>
+              <td v-else class="max-w-56 break-words px-3 py-2">
                 {{ scopeText(instance) }}
                 <span
                   v-if="instance.models.length"

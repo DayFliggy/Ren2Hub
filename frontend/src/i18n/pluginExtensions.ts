@@ -62,7 +62,7 @@ export const pluginExtensionMessages = {
       dryRun: '试运行',
       add: '添加',
       orderNote:
-        '实例从上到下运行：先运行对所有请求生效的实例，再运行渠道添加的实例。',
+        '实例从上到下运行：先运行对所有请求生效和按插件建议运行的实例，再运行渠道添加的实例。',
       empty: '暂无请求处理',
       emptyHint: '添加实例，在请求到达模型前检查或修改请求。',
       order: '顺序',
@@ -111,6 +111,15 @@ export const pluginExtensionMessages = {
       scopeAllHint: '不论渠道',
       scopeChannels: '只在渠道添加',
       scopeChannelsHint: '在渠道设置里加上才生效',
+      scopePlugin: '按插件建议',
+      scopePluginHint: '插件声明的渠道和模型，之后新增的也包括在内',
+      scopeChannelsLabel: '渠道',
+      scopeAllChannels: '所有渠道',
+      scopeChanged: '插件调整了作用范围',
+      review: '复核',
+      scopeChangedNotice: '插件调整了作用范围，保存即确认新的范围。',
+      scopeDroppedNotice:
+        '插件不再建议作用范围，这个实例不会运行，请另选适用范围。',
       models: '模型',
       modelsAll: '所有模型',
       modelsAllHint: '不论请求哪个模型',
@@ -259,7 +268,7 @@ export const pluginExtensionMessages = {
       dryRun: 'Dry run',
       add: 'Add',
       orderNote:
-        'Instances run from top to bottom. Those for all requests run first, then those a channel adds.',
+        'Instances run from top to bottom. Those for all requests and those where their plugin suggests run first, then those a channel adds.',
       empty: 'No request processing yet',
       emptyHint:
         'Add an instance to check or change requests before they reach the model.',
@@ -311,6 +320,17 @@ export const pluginExtensionMessages = {
       scopeAllHint: 'Whatever the channel',
       scopeChannels: 'Channels that add it',
       scopeChannelsHint: 'Runs once a channel adds it in its settings',
+      scopePlugin: 'Where the plugin suggests',
+      scopePluginHint:
+        'The channels and models the plugin is made for, new ones included',
+      scopeChannelsLabel: 'Channels',
+      scopeAllChannels: 'All channels',
+      scopeChanged: 'Plugin changed where it runs',
+      review: 'Review',
+      scopeChangedNotice:
+        'The plugin changed where it runs. Saving confirms the new range.',
+      scopeDroppedNotice:
+        'The plugin no longer suggests where it runs, so this instance does not run. Choose another place for it.',
       models: 'Models',
       modelsAll: 'All models',
       modelsAllHint: 'Whatever model the request asks for',

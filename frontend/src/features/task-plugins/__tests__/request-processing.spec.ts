@@ -97,6 +97,34 @@ describe('request processing and plugin documents', () => {
     )
   })
 
+  it('keeps the confirmed plugin scope through a list and save round trip', async () => {
+    const scoped = {
+      id: 'scoped',
+      name: 'Scoped',
+      plugin: 'fixture',
+      enabled: true,
+      global: false,
+      models: [],
+      config: {},
+      plugin_scope: { models: ['claude'], channel_types: [1, 3] },
+    }
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ instances: [scoped] })
+    const put = vi.spyOn(api, 'put').mockResolvedValue({ instances: [scoped] })
+    const listed = await listRequestPluginInstances()
+    expect(listed).toEqual([scoped])
+    await saveRequestPluginInstances(listed)
+    expect(put.mock.calls[0]![1]).toEqual({ instances: [scoped] })
+
+    get.mockResolvedValue({
+      instances: [
+        { ...scoped, plugin_scope: { models: [], channel_types: ['1'] } },
+      ],
+    })
+    await expect(listRequestPluginInstances()).rejects.toThrow(
+      'Invalid request plugin instance'
+    )
+  })
+
   it('rejects malformed JSON without replacing the last good config', async () => {
     const wrapper = mount(PluginConfigEditor, {
       props: { modelValue: { known: true } },

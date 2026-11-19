@@ -52,6 +52,30 @@ const instances = [
     config: {},
   },
 ]
+const scopedPlugin = {
+  key: 'scoped-guard',
+  name: 'Scoped Guard',
+  description: { en: 'Checks Claude requests.', zh: '检查 Claude 请求。' },
+  icon: 'text:SG',
+  models: null,
+  transform: true,
+  transform_hooks: ['outbound'],
+  scope: {
+    models: ['claude-sonnet-4-5', 'gpt-4.1-mini'],
+    channelTypes: [1, 14],
+  },
+}
+// Confirmed before the plugin widened its scope, so it waits for review.
+const scopedInstance = {
+  id: 'c3',
+  name: 'Scoped guard',
+  plugin: 'scoped-guard',
+  enabled: true,
+  global: false,
+  models: [],
+  config: {},
+  plugin_scope: { models: ['claude-sonnet-4-5'], channel_types: [1] },
+}
 const longLine = `My email is alice@example.com. ${'Summarize the notes. '.repeat(12)}`
 const dryRun = {
   rejected: false,
@@ -82,7 +106,8 @@ async function openPage(
   page: Page,
   theme: 'light' | 'dark',
   width: number,
-  list: unknown[]
+  list: unknown[],
+  options: unknown[] = plugins
 ) {
   await page.setViewportSize({ width, height: 900 })
   await configureStablePage(page, {
@@ -91,7 +116,7 @@ async function openPage(
     locale: 'zh-CN',
   })
   await page.route('**/api/task_plugin_options', (route) =>
-    route.fulfill(ok(plugins))
+    route.fulfill(ok(options))
   )
   await page.route('**/api/request_plugin/instances', (route) =>
     route.fulfill(ok({ instances: list }))
@@ -194,3 +219,68 @@ for (const [theme, width] of [
     await captureEvidence(page, { path: test.info().outputPath('dry-run.png') })
   })
 }
+
+for (const [theme, width] of [
+  ['light', 1440],
+  ['dark', 1440],
+  ['light', 390],
+  ['dark', 390],
+] as const) {
+  test(`${theme} ${width} request processing follows and reviews a plugin scope`, async ({
+    page,
+  }) => {
+    await openPage(
+      page,
+      theme,
+      width,
+      [...instances, scopedInstance],
+      [...plugins, scopedPlugin]
+    )
+    const row = page.locator('[data-request-plugin-row]').nth(2)
+    await expect(row.getByText('按插件建议', { exact: true })).toBeVisible()
+    await expect(row.locator('[data-plugin-scope]')).toContainText('OpenAI')
+    const review = row.locator('[data-scope-review]')
+    await expect(review).toContainText('插件调整了作用范围')
+    await assertFits(page)
+    await captureEvidence(page, {
+      path: test.info().outputPath('scope-list.png'),
+    })
+
+    await review.click()
+    const editor = page.locator('[data-instance-editor]')
+    await expect(editor.locator('input[value="plugin"]')).toBeChecked()
+    // The model choice gives way to the plugin's scope.
+    await expect(editor.locator('input[value="chosen"]')).toHaveCount(0)
+    const confirm = editor.locator('[data-plugin-scope-confirm]')
+    await expect(confirm).toContainText('保存即确认新的范围')
+    await expect(confirm).toContainText('gpt-4.1-mini')
+    await confirm.scrollIntoViewIfNeeded()
+    await insideViewport(page, confirm)
+    await assertFits(page)
+    await captureEvidence(page, {
+      path: test.info().outputPath('scope-editor.png'),
+    })
+  })
+}
+
+for (const role of [10, 1])
+  test(`role ${role} gets neither the request processing page nor its instances`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await configureStablePage(page, {
+      theme: 'light',
+      locale: 'zh-CN',
+      user: { role },
+    })
+    const reads: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/api/request_plugin'))
+        reads.push(request.url())
+    })
+    await page.goto('/request-processing')
+    await waitForStablePage(page)
+    await expect(page).not.toHaveURL(/\/request-processing$/)
+    await expect(page.locator('[data-request-plugin-row]')).toHaveCount(0)
+    expect(reads).toEqual([])
+  })

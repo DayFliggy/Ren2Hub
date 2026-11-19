@@ -4,16 +4,19 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { channelTypeLabel } from '../lib/channel-type'
+import { declaredPluginScope } from '../lib/plugin-scope'
 import { getPluginWebsite } from '../lib/plugin-website'
 import type { TaskPluginMeta } from '../types'
 import CopyButton from './CopyButton.vue'
 import PluginEndpoints from './PluginEndpoints.vue'
 import PluginModelList from './PluginModelList.vue'
+import PluginScopeSummary from './PluginScopeSummary.vue'
 import PluginWebsiteLink from './PluginWebsiteLink.vue'
 
 const props = defineProps<{ meta: TaskPluginMeta; skippedRoutes?: string[] }>()
 const { t } = useI18n()
 const models = computed(() => props.meta.models ?? [])
+const scope = computed(() => declaredPluginScope({ scope: props.meta.scope }))
 const fields = computed(() => [
   {
     label: t('taskPlugins.sortPriority'),
@@ -102,6 +105,16 @@ const section = 'rounded-xl border border-[var(--border-subtle)] p-4'
           </dd>
         </div>
       </dl>
+    </section>
+    <section
+      v-if="scope"
+      :class="section"
+      :aria-label="t('pluginExtensions.rp.scopePlugin')"
+    >
+      <h3 class="mb-3 text-sm font-semibold">
+        {{ t('pluginExtensions.rp.scopePlugin') }}
+      </h3>
+      <PluginScopeSummary :scope="scope" />
     </section>
     <section :class="section" :aria-label="t('taskPlugins.models')">
       <div class="mb-3 flex items-center gap-2">

@@ -40,14 +40,18 @@ const lines = computed(() =>
     ? (props.pricing?.priceLines ?? [])
     : primary.value
 )
+// The base cache write price is the shortest duration of a TTL mode: 5 minutes
+// for Claude, 30 minutes for OpenAI.
+const ttlCacheWriteKeys: Record<string, string> = {
+  claude_ttl: 'cacheWrite5m',
+  openai_ttl: 'cacheWrite30m',
+}
 function label(line: MarketPriceLine) {
-  const key =
-    line.unit === 'per_image'
-      ? 'imageRequest'
-      : line.key === 'cacheWrite' &&
-          props.pricing?.cacheWriteMode === 'claude_ttl'
-        ? 'cacheWrite5m'
-        : line.key
+  const ttlKey =
+    line.key === 'cacheWrite'
+      ? ttlCacheWriteKeys[props.pricing?.cacheWriteMode ?? '']
+      : undefined
+  const key = line.unit === 'per_image' ? 'imageRequest' : (ttlKey ?? line.key)
   return te(`priceLabels.${key}`) ? t(`priceLabels.${key}`) : line.key
 }
 </script>
