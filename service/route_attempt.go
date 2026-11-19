@@ -262,13 +262,16 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 
 // recordAttemptBreaker 以第一个有内容的事件为流式请求的成功界：之后的中断、取消或
 // 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。已在首输出时
-// 结算的流式探测不再计入；结算仍在写时等它写完。
+// 结算的流式探测不再计入；结算仍在写时等它写完。已为本次 429 写入渠道冷却的失败
+// 由冷却处理，不写熔断样本：不计失败也不清零连续失败；探测许可由
+// ReleaseRouteChannel 归还，熔断既不推进也不重开。
 func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome, failure routeBreakerSample) {
 	attempt.breakerOnce.Do(func() {
 		key := routeBreakerKey{attempt.channelID, attempt.model}
 		switch {
 		case stream && attempt.firstOutput.Load() != 0, outcome == perfmetrics.OutcomeSuccess:
 			routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, routeBreakerSample{success: true})
+		case outcome == perfmetrics.OutcomeFailure && attempt.cooldown.Load() != 0:
 		case outcome == perfmetrics.OutcomeFailure:
 			routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, failure)
 		}

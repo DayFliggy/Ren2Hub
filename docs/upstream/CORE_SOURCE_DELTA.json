@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 417,
+    "extension": 418,
     "removed": 45
   },
   "files": [
@@ -13017,7 +13017,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ac9eb2fdb57af7b54ed09b8a51950c54899be1669a1d399b4460ad79bff807cf",
+      "local_sha256": "e41bbb116d8690348031a4492ee661bf32dd9679e4750d251028267c269b1e21",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13156,6 +13156,12 @@
           "service/route_candidates.go#1"
         ]
       }
+    },
+    {
+      "path": "service/route_cooled_429_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "9c4afe008ac1c964a735b8bc804444492bd1c41ab41f570bf36d11130978f760"
     },
     {
       "path": "service/route_error.go",
