@@ -23,6 +23,14 @@ async function load() {
     loading.value = false
   }
 }
+// Global instances and those that run where their plugin's scope says are not
+// placed on a channel: the run plan never runs them for a channel binding.
+function bindable(item: RequestPluginInstance) {
+  return !model.value.includes(item.id) && !item.global && !item.plugin_scope
+}
+function followsPlugin(id: string) {
+  return !!instances.value.find((item) => item.id === id)?.plugin_scope
+}
 function add() {
   if (selected.value && !model.value.includes(selected.value))
     model.value = [...model.value, selected.value]
@@ -56,10 +64,16 @@ void load()
       :key="id"
       class="flex flex-wrap items-center gap-2"
     >
-      <span class="min-w-0 flex-1 break-all text-sm">{{
-        instances.find((item) => item.id === id)?.name ||
-        `${id} · ${t('pluginExtensions.unavailable')}`
-      }}</span
+      <span class="min-w-0 flex-1 break-all text-sm"
+        >{{
+          instances.find((item) => item.id === id)?.name ||
+          `${id} · ${t('pluginExtensions.unavailable')}`
+        }}<span
+          v-if="followsPlugin(id)"
+          data-binding-follows-plugin
+          class="block text-xs text-[var(--text-tertiary)]"
+          >{{ t('pluginExtensions.bindingFollowsPlugin') }}</span
+        ></span
       ><ConsoleButton
         size="sm"
         variant="secondary"
@@ -87,9 +101,7 @@ void load()
       >
         <option value="" />
         <option
-          v-for="item in instances.filter(
-            (item) => !model.includes(item.id) && !item.global
-          )"
+          v-for="item in instances.filter(bindable)"
           :key="item.id"
           :value="item.id"
         >

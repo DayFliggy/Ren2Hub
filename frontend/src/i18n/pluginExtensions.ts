@@ -25,6 +25,7 @@ export const pluginExtensionMessages = {
     bindings: '渠道请求处理实例（按执行顺序）',
     bindingHint: '全局实例会自动执行，无需重复绑定。',
     unavailable: '已删除或不可用',
+    bindingFollowsPlugin: '按插件建议的范围运行，不受这里的绑定影响',
     login: '插件账号登录',
     signIn: '登录账号',
     addAccount: '添加账号',
@@ -229,6 +230,8 @@ export const pluginExtensionMessages = {
     bindings: 'Channel request processing instances (in order)',
     bindingHint: 'Global instances run automatically and do not need binding.',
     unavailable: 'Deleted or unavailable',
+    bindingFollowsPlugin:
+      'Runs where its plugin suggests; this binding has no effect',
     login: 'Plugin account login',
     signIn: 'Log in',
     addAccount: 'Add account',

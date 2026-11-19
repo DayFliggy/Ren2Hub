@@ -54,6 +54,8 @@ for (const [theme, width] of [
       setting: JSON.stringify({
         proxy: '',
         responses_websocket_enabled: false,
+        // Bound before its plugin declared a scope; the run plan ignores it.
+        request_plugins: ['rp_scoped'],
       }),
       settings: JSON.stringify({
         allow_speed: true,
@@ -162,6 +164,36 @@ for (const [theme, width] of [
       remove_models: [],
       ignore_models: [],
     })
+    await page.route('**/api/request_plugin/instances', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            instances: [
+              {
+                id: 'rp_scoped',
+                name: 'Scoped guard',
+                plugin: 'scoped-guard',
+                enabled: true,
+                global: false,
+                models: [],
+                config: {},
+                plugin_scope: { models: [], channel_types: [58] },
+              },
+              {
+                id: 'rp_plain',
+                name: 'Plain guard',
+                plugin: 'plain-guard',
+                enabled: true,
+                global: false,
+                models: [],
+                config: {},
+              },
+            ],
+          },
+        },
+      })
+    )
     await page.locator('[aria-label="编辑渠道"]:visible').first().click()
     const dialog = page.getByRole('dialog', { name: '编辑渠道', exact: true })
     await page.route('**/api/channel/fetch_models**', (route) =>
@@ -182,6 +214,23 @@ for (const [theme, width] of [
     expect(saved).toBeUndefined()
     await modelPicker.locator('[data-apply-fetched-models]').click()
     await dialog.getByRole('button', { name: '高级设置', exact: false }).click()
+    // A saved binding to an instance that follows its plugin's scope stays
+    // removable and says where it runs; it is not offered again.
+    const bindings = dialog.getByRole('group', {
+      name: '渠道请求处理实例（按执行顺序）',
+    })
+    await expect(bindings.locator('[data-binding-follows-plugin]')).toHaveText(
+      '按插件建议的范围运行，不受这里的绑定影响'
+    )
+    await expect(bindings.locator('option[value="rp_plain"]')).toHaveCount(1)
+    await expect(bindings.locator('option[value="rp_scoped"]')).toHaveCount(0)
+    await bindings
+      .locator('[data-binding-follows-plugin]')
+      .scrollIntoViewIfNeeded()
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: test.info().outputPath('scoped-binding.png'),
+    })
     const ratioInput = dialog.getByRole('textbox', {
       name: '渠道倍率',
       exact: true,
@@ -237,6 +286,7 @@ for (const [theme, width] of [
       proxy: '',
       responses_websocket_enabled: true,
       pass_through_body_enabled: true,
+      request_plugins: ['rp_scoped'],
     })
     expect(JSON.parse(saved!.settings as string)).toEqual({
       allow_speed: true,
