@@ -22,9 +22,11 @@ const (
 
 // nativeRouteErrorCodes are the codes and types the native classifier
 // (classifyFailure in pkg/perf_metrics/outcome.go) names, with the class that
-// classifier gives them. That file is upstream text and does not export its
-// list, so the names appear here once; TestRouteErrorCodesAgreeWithNativeClassifier
-// checks every class against the native verdict.
+// classifier gives them; account and server split the native failures. That
+// file is upstream text and does not export its list, so the names appear
+// here once: TestRouteErrorCodesListEveryNativeName compares them with the
+// native source and TestRouteErrorCodesAgreeWithNativeClassifier checks every
+// class against the native verdict.
 var nativeRouteErrorCodes = map[string]routeErrorClass{
 	"invalid_api_key": routeErrorAccount, "api_key_invalid": routeErrorAccount, "api_key_expired": routeErrorAccount,
 	"api_key_service_blocked": routeErrorAccount, "invalid_authentication": routeErrorAccount, "authentication_error": routeErrorAccount,
