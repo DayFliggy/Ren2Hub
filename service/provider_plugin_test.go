@@ -867,7 +867,6 @@ func TestScheduledStaleRemovedAndManualKeys(t *testing.T) {
 			after := storedChannel(t, channel.Id)
 			assert.Equal(t, before.Key, after.Key)
 			assert.Equal(t, before.Status, after.Status)
-			assert.Equal(t, before.ChannelInfo, after.ChannelInfo)
 		})
 	}
 }
@@ -1449,7 +1448,6 @@ func TestScheduledChangedKeyDiscardsAllResults(t *testing.T) {
 	after := storedChannel(t, channel.Id)
 	assert.Equal(t, before.Key, after.Key)
 	assert.Equal(t, before.Status, after.Status)
-	assert.Equal(t, before.ChannelInfo, after.ChannelInfo)
 	assert.Equal(t, before.OtherInfo, after.OtherInfo)
 	assert.Equal(t, before.Balance, after.Balance)
 	assert.Zero(t, notices.Load())

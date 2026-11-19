@@ -148,13 +148,6 @@ func mjUserQuota(t *testing.T) int {
 	return user.Quota
 }
 
-func mjPollingIndex(t *testing.T, channelID int) int {
-	t.Helper()
-	var stored model.Channel
-	require.NoError(t, model.DB.First(&stored, channelID).Error)
-	return stored.ChannelInfo.MultiKeyPollingIndex
-}
-
 // Every request below continues mj-origin with all of its fields present.
 // Like NewAPI, the simple-change path runs in change mode, so it carries the
 // change fields; content alone names no model there.

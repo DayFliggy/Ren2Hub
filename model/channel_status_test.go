@@ -136,34 +136,6 @@ func setupChannelStatusTest(t *testing.T) {
 	})
 }
 
-func TestUpdateChannelStatusPersistsMultiKeyState(t *testing.T) {
-	setupChannelStatusTest(t)
-
-	channel := Channel{
-		Name:   "multi-key-status",
-		Key:    "key-a\nkey-b",
-		Status: common.ChannelStatusEnabled,
-		ChannelInfo: ChannelInfo{
-			IsMultiKey:           true,
-			MultiKeySize:         2,
-			MultiKeyMode:         constant.MultiKeyModePolling,
-			MultiKeyPollingIndex: 1,
-		},
-	}
-	require.NoError(t, DB.Create(&channel).Error)
-
-	changed := UpdateChannelStatus(channel.Id, "key-a", common.ChannelStatusAutoDisabled, "provider rejected key")
-	require.True(t, changed)
-
-	var stored Channel
-	require.NoError(t, DB.First(&stored, channel.Id).Error)
-	assert.Equal(t, common.ChannelStatusEnabled, stored.Status)
-	assert.Equal(t, common.ChannelStatusAutoDisabled, stored.ChannelInfo.MultiKeyStatusList[0])
-	assert.Equal(t, "provider rejected key", stored.ChannelInfo.MultiKeyDisabledReason[0])
-	assert.NotZero(t, stored.ChannelInfo.MultiKeyDisabledTime[0])
-	assert.Equal(t, 1, stored.ChannelInfo.MultiKeyPollingIndex)
-}
-
 // writeAfterNextChannelRead stands for another node: right after the next
 // read of the channel, before the writer under test writes, it stores the
 // columns write returns for the channel it reads.
@@ -184,7 +156,7 @@ func writeAfterNextChannelRead(t *testing.T, channelID int, write func(stored *C
 // A writer of other_info writes back only while no other writer, on any node,
 // changed it since the read; otherwise it reads again, so both changes are
 // kept. It writes its own columns only, so a stale read never puts back the
-// key, counters, models or channel_info another writer stored.
+// key, counters or models another writer stored.
 func TestChannelOtherInfoWritesKeepConcurrentChanges(t *testing.T) {
 	useScheduledChannelDatabase(t)
 	common.MemoryCacheEnabled = false
@@ -192,7 +164,6 @@ func TestChannelOtherInfoWritesKeepConcurrentChanges(t *testing.T) {
 	t.Run("a status change and a balance query of another node", func(t *testing.T) {
 		channel := Channel{Name: "status-race", Key: "original-key", Status: common.ChannelStatusEnabled, Models: "original-model", UsedQuota: 100}
 		require.NoError(t, channel.Insert())
-		concurrentInfo := ChannelInfo{MultiKeyMode: constant.MultiKeyModePolling, MultiKeyPollingIndex: 1}
 		writeAfterNextChannelRead(t, channel.Id, func(stored *Channel) map[string]any {
 			info := stored.GetOtherInfo()
 			info[channelBalanceDetailKey] = map[string]any{"amount": 7, "currency": "USD"}
@@ -202,7 +173,6 @@ func TestChannelOtherInfoWritesKeepConcurrentChanges(t *testing.T) {
 				"key":          "rotated-key",
 				"used_quota":   gorm.Expr("used_quota + ?", 250),
 				"models":       "concurrent-model",
-				"channel_info": concurrentInfo,
 			}
 		})
 
@@ -219,7 +189,6 @@ func TestChannelOtherInfoWritesKeepConcurrentChanges(t *testing.T) {
 		assert.Equal(t, "rotated-key", stored.Key)
 		assert.Equal(t, int64(350), stored.UsedQuota)
 		assert.Equal(t, "concurrent-model", stored.Models)
-		assert.Equal(t, concurrentInfo, stored.ChannelInfo)
 	})
 
 	t.Run("a balance query and a status change of another node", func(t *testing.T) {
@@ -268,15 +237,12 @@ func TestAutoDisableKeepsManualDisable(t *testing.T) {
 	for _, cacheEnabled := range []bool{false, true} {
 		for _, tc := range []struct {
 			name          string
-			multiKey      bool
 			initialStatus int
 			wantChanged   bool
 			wantStatus    int
 		}{
-			{name: "single key manual disable is kept", initialStatus: common.ChannelStatusManuallyDisabled, wantStatus: common.ChannelStatusManuallyDisabled},
-			{name: "multi key manual disable is kept", multiKey: true, initialStatus: common.ChannelStatusManuallyDisabled, wantStatus: common.ChannelStatusManuallyDisabled},
-			{name: "single key enabled is auto disabled", initialStatus: common.ChannelStatusEnabled, wantChanged: true, wantStatus: common.ChannelStatusAutoDisabled},
-			{name: "multi key enabled is auto disabled", multiKey: true, initialStatus: common.ChannelStatusEnabled, wantChanged: true, wantStatus: common.ChannelStatusAutoDisabled},
+			{name: "manual disable is kept", initialStatus: common.ChannelStatusManuallyDisabled, wantStatus: common.ChannelStatusManuallyDisabled},
+			{name: "enabled is auto disabled", initialStatus: common.ChannelStatusEnabled, wantChanged: true, wantStatus: common.ChannelStatusAutoDisabled},
 		} {
 			t.Run(fmt.Sprintf("cache=%t/%s", cacheEnabled, tc.name), func(t *testing.T) {
 				setupChannelStatusTest(t)
@@ -284,11 +250,6 @@ func TestAutoDisableKeepsManualDisable(t *testing.T) {
 
 				channel := Channel{Name: t.Name(), Key: "key-a", Status: tc.initialStatus, Models: "test-model"}
 				usingKey := "key-a"
-				if tc.multiKey {
-					// key-b already failed, so a failure on key-a disables every key.
-					channel.Key = "key-a\nkey-b"
-					channel.ChannelInfo = ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyStatusList: map[int]int{1: common.ChannelStatusAutoDisabled}}
-				}
 				channel.SetOtherInfo(map[string]any{"status_reason": "manual operation", "status_time": int64(1234)})
 				require.NoError(t, channel.Insert())
 				InitChannelCache()
@@ -302,7 +263,6 @@ func TestAutoDisableKeepsManualDisable(t *testing.T) {
 				if !tc.wantChanged {
 					assert.Equal(t, "manual operation", stored.GetOtherInfo()["status_reason"])
 					assert.Equal(t, float64(1234), stored.GetOtherInfo()["status_time"])
-					assert.Equal(t, channel.ChannelInfo.MultiKeyStatusList, stored.ChannelInfo.MultiKeyStatusList)
 				}
 				var abilities []Ability
 				require.NoError(t, DB.Where("channel_id = ?", channel.Id).Find(&abilities).Error)
@@ -314,7 +274,6 @@ func TestAutoDisableKeepsManualDisable(t *testing.T) {
 					cached, err := CacheGetChannel(channel.Id)
 					require.NoError(t, err)
 					assert.Equal(t, tc.wantStatus, cached.Status)
-					assert.Equal(t, stored.ChannelInfo.MultiKeyStatusList, cached.ChannelInfo.MultiKeyStatusList)
 				}
 			})
 		}
@@ -331,9 +290,7 @@ func TestUpdateChannelStatusBumpsChannelsOnlyForChangesByHand(t *testing.T) {
 			common.MemoryCacheEnabled = cacheEnabled
 			revision := func() int64 { return channelsRevision(t) }
 			single := Channel{Name: "status-single", Key: "key-a", Status: common.ChannelStatusEnabled, Models: "status-model"}
-			multi := Channel{Name: "status-multi", Key: "key-a\nkey-b", Status: common.ChannelStatusEnabled, Models: "status-model", ChannelInfo: ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling}}
 			require.NoError(t, single.Insert())
-			require.NoError(t, multi.Insert())
 			InitChannelCache()
 
 			for _, step := range []struct {
@@ -343,13 +300,11 @@ func TestUpdateChannelStatusBumpsChannelsOnlyForChangesByHand(t *testing.T) {
 				status   int
 				bump     bool
 			}{
-				{name: "a request disables a key", id: multi.Id, usingKey: "key-a", status: common.ChannelStatusAutoDisabled},
 				{name: "a request disables a single-key channel", id: single.Id, usingKey: "key-a", status: common.ChannelStatusAutoDisabled},
 				{name: "a test re-enables the channel", id: single.Id, usingKey: "key-a", status: common.ChannelStatusEnabled},
 				{name: "an admin disables a channel", id: single.Id, status: common.ChannelStatusManuallyDisabled, bump: true},
 				{name: "an admin disables it again", id: single.Id, status: common.ChannelStatusManuallyDisabled},
 				{name: "an admin enables a channel", id: single.Id, status: common.ChannelStatusEnabled, bump: true},
-				{name: "an admin disables a multi-key channel", id: multi.Id, status: common.ChannelStatusManuallyDisabled, bump: true},
 			} {
 				before := revision()
 				changed := UpdateChannelStatus(step.id, step.usingKey, step.status, step.name)

@@ -48,7 +48,6 @@
   "Model name is too long: {{model}}": "模型名称过长: {{model}}",
   "Model {{model}} deleted successfully": "模型 {{model}} 删除成功",
   "Model {{model}} pulled successfully": "模型 {{model}} 拉取成功",
-  "Multi-key channels do not support balance queries": "多密钥渠道不支持余额查询",
   "New API channel base URL cannot be empty": "New API 渠道的 Base URL 不能为空",
   "Not implemented yet": "尚未实现",
   "Parameter override must be valid JSON format": "参数覆盖必须是合法的 JSON 格式",

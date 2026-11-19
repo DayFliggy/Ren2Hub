@@ -45,7 +45,6 @@ func TestUpstreamMidjourneyContinuationOfMissingOrForeignTaskIsNotFoundFirst(t *
 				assert.JSONEq(t, `{"code":4,"description":"task_not_found ","type":"upstream_error"}`, recorder.Body.String())
 				assert.Zero(t, route.upstream.sends)
 				assert.Equal(t, before, mjUserQuota(t))
-				assert.Zero(t, mjPollingIndex(t, a.Id), "no channel was set up")
 			})
 		}
 	}

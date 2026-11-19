@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -309,76 +307,6 @@ func runChannelMutationModelsRebuild(t *testing.T, db *gorm.DB) {
 		require.Zero(t, ability.Weight)
 		require.False(t, ability.Enabled)
 	}
-}
-
-func runChannelMutationMultiKeyPolling(t *testing.T, db *gorm.DB) {
-	tag := "multi"
-	active := Channel{Id: 1, Key: "key-a\nkey-b\nkey-c", Status: common.ChannelStatusEnabled, Models: "m", Tag: &tag,
-		ChannelInfo: ChannelInfo{IsMultiKey: true, MultiKeySize: 3, MultiKeyMode: constant.MultiKeyModePolling,
-			MultiKeyPollingIndex: 2, MultiKeyStatusList: map[int]int{1: common.ChannelStatusManuallyDisabled}}}
-	exhausted := Channel{Id: 2, Key: "key-d", Status: common.ChannelStatusManuallyDisabled, Models: "m", Tag: &tag,
-		ChannelInfo: ChannelInfo{IsMultiKey: true, MultiKeySize: 1, MultiKeyMode: constant.MultiKeyModePolling,
-			MultiKeyStatusList: map[int]int{0: common.ChannelStatusAutoDisabled}}}
-	exhausted.SetOtherInfo(map[string]any{"status_reason": ChannelStatusReasonAllKeysDisabled})
-	for _, channel := range []*Channel{&active, &exhausted} {
-		require.NoError(t, db.Create(channel).Error)
-		require.NoError(t, channel.AddAbilities(db))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	DB = db.WithContext(ctx)
-	reached, resume := make(chan struct{}), make(chan struct{})
-	release := sync.OnceFunc(func() { close(resume) })
-	defer release()
-	var once sync.Once
-	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:batch_locked", func(tx *gorm.DB) {
-		if tx.Error == nil && tx.Statement.Schema != nil && tx.Statement.Schema.Name == "Channel" {
-			if _, locked := tx.Statement.Clauses["FOR"]; locked {
-				once.Do(func() { close(reached); <-resume })
-			}
-		}
-	}))
-	disabled := make(chan error, 1)
-	go func() { disabled <- DisableChannelByTag(tag) }()
-	select {
-	case <-reached:
-	case err := <-disabled:
-		t.Fatalf("batch did not reach the lock barrier: %v", err)
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	}
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	baseline := sqlDB.Stats().WaitCount
-	rotated := make(chan struct{})
-	var index int
-	var keyErr error
-	go func() {
-		defer close(rotated)
-		_, next, err := active.GetNextEnabledKey()
-		index = next
-		if err != nil {
-			keyErr = err
-		}
-	}()
-	// On SQLite the single connection blocks the read. Other engines can read
-	// the old row, then wait on the cursor update; either path must complete.
-	_ = waitFinishedOrBlocked(t, db, sqlDB, baseline, rotated)
-	release()
-	require.NoError(t, <-disabled)
-	<-rotated
-	DB = db
-	require.NoError(t, keyErr)
-	require.Equal(t, 2, index)
-	var stored Channel
-	require.NoError(t, db.First(&stored, 1).Error)
-	require.Equal(t, common.ChannelStatusManuallyDisabled, stored.Status)
-	require.Zero(t, stored.ChannelInfo.MultiKeyPollingIndex)
-	require.Equal(t, active.ChannelInfo.MultiKeyStatusList, stored.ChannelInfo.MultiKeyStatusList)
-	stored = Channel{}
-	require.NoError(t, db.First(&stored, 2).Error)
-	require.Equal(t, "manual tag operation", stored.GetOtherInfo()["status_reason"])
-	require.Equal(t, exhausted.ChannelInfo.MultiKeyStatusList, stored.ChannelInfo.MultiKeyStatusList)
 }
 
 func runChannelSaveOrphanCleanup(t *testing.T, db *gorm.DB, stage string) {

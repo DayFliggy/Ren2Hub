@@ -78,7 +78,6 @@ func TestStrictAffinityOpenBreakerRejectsBeforeBilling(t *testing.T) {
 	backup.Id = 0
 	backup.Name = "strict-affinity-backup"
 	backup.Key = "backup-key"
-	backup.ChannelInfo = model.ChannelInfo{}
 	backup.BaseURL = &upstream.URL
 	backup.Priority = common.GetPointer[int64](0)
 	require.NoError(t, model.DB.Create(&backup).Error)

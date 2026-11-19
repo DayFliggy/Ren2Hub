@@ -390,8 +390,7 @@ func newResponsesWSBillingTestWithSetup(t *testing.T, expression string, handle 
 		handle(ws, r)
 	}))
 	t.Cleanup(upstream.Close)
-	channel := &model.Channel{Name: "responses-ws-upstream", Key: "upstream-first\nupstream-second", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: "ws-billing", BaseURL: &upstream.URL,
-		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling}}
+	channel := &model.Channel{Name: "responses-ws-upstream", Key: "upstream-first", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: "ws-billing", BaseURL: &upstream.URL}
 	modelMapping := `{"ws-billing":"gpt-4o"}`
 	channel.ModelMapping = &modelMapping
 	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
@@ -718,8 +717,8 @@ func TestResponsesWebSocketDialsNativeResponsesChannelTypes(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("HTTP request did not finish")
 			}
-			// The polling multi-key channel rotates to its second key for the HTTP request.
-			assert.Equal(t, tc.want("upstream-second"), <-targets)
+			// The HTTP request sends the channel's one key too.
+			assert.Equal(t, tc.want("upstream-first"), <-targets)
 			fixture.closeAndWait(t)
 			assertResponsesWSAccounting(t, fixture, []int{1000, 1000})
 		})

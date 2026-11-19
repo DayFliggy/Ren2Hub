@@ -745,10 +745,6 @@ func UpdateChannelBalance(c *gin.Context) {
 		})
 		return
 	}
-	if channel.ChannelInfo.IsMultiKey {
-		common.ApiErrorT(c, "Multi-key channels do not support balance queries")
-		return
-	}
 	result, err := updateChannelBalance(channel)
 	if err != nil {
 		common.ApiError(c, err)

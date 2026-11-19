@@ -43,20 +43,6 @@ func InitChannelCache() {
 	}
 
 	channelSyncLock.Lock()
-	//channelsIDM = newChannelId2channel
-	for i, channel := range newChannelId2channel {
-		if channel.ChannelInfo.IsMultiKey {
-			channel.Keys = channel.GetKeys()
-			if channel.ChannelInfo.MultiKeyMode == constant.MultiKeyModePolling {
-				if oldChannel, ok := channelsIDM[i]; ok {
-					// 存在旧的渠道，如果是多key且轮询，保留轮询索引信息
-					if oldChannel.ChannelInfo.IsMultiKey && oldChannel.ChannelInfo.MultiKeyMode == constant.MultiKeyModePolling {
-						channel.ChannelInfo.MultiKeyPollingIndex = oldChannel.ChannelInfo.MultiKeyPollingIndex
-					}
-				}
-			}
-		}
-	}
 	channelsIDM = newChannelId2channel
 	channel2advancedCustomConfig = newChannel2advancedCustomConfig
 	channelSyncLock.Unlock()
@@ -91,24 +77,6 @@ func CacheGetChannel(id int) (*Channel, error) {
 	return c, nil
 }
 
-func CacheGetChannelInfo(id int) (*ChannelInfo, error) {
-	if !common.MemoryCacheEnabled {
-		channel, err := GetChannelById(id, true)
-		if err != nil {
-			return nil, err
-		}
-		return &channel.ChannelInfo, nil
-	}
-	channelSyncLock.RLock()
-	defer channelSyncLock.RUnlock()
-
-	c, ok := channelsIDM[id]
-	if !ok {
-		return nil, fmt.Errorf("channel #%d no longer exists", id)
-	}
-	return &c.ChannelInfo, nil
-}
-
 func CacheUpdateChannelStatus(id int, status int) {
 	if !common.MemoryCacheEnabled {
 		return
@@ -133,8 +101,8 @@ func CacheUpdateChannel(channel *Channel) {
 	if channelsIDM == nil {
 		channelsIDM = make(map[int]*Channel)
 	}
-	if oldChannel, ok := channelsIDM[channel.Id]; ok {
-		logger.LogDebug(nil, "CacheUpdateChannel before: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, oldChannel.ChannelInfo.MultiKeyPollingIndex)
+	if _, ok := channelsIDM[channel.Id]; ok {
+		logger.LogDebug(nil, "CacheUpdateChannel before: id=%d, name=%s, status=%d", channel.Id, channel.Name, channel.Status)
 	}
 	channelsIDM[channel.Id] = channel
 	if channel2advancedCustomConfig == nil {
@@ -146,7 +114,7 @@ func CacheUpdateChannel(channel *Channel) {
 			channel2advancedCustomConfig[channel.Id] = config
 		}
 	}
-	logger.LogDebug(nil, "CacheUpdateChannel after: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, channel.ChannelInfo.MultiKeyPollingIndex)
+	logger.LogDebug(nil, "CacheUpdateChannel after: id=%d, name=%s, status=%d", channel.Id, channel.Name, channel.Status)
 	// Lock ordering: do NOT hold channelSyncLock while calling
 	// InvalidatePricingCache. GetPricing acquires updatePricingLock first and then
 	// channelSyncLock.RLock (via loadPricingAdvancedCustomConfigs); acquiring

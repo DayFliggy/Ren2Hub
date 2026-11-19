@@ -40,13 +40,13 @@ func sqliteChannelKeyLock(channelID int) *sync.Mutex {
 // UpdateChannelLocked lets update change a channel's key while no other node
 // or goroutine can: MySQL and PostgreSQL hold the channel row lock across
 // update, and SQLite holds a process lock. update must not wait on the
-// network, because every request of a multi-key channel waits on this lock.
+// network, because the channel's other writers wait on this lock.
 // Every write of a channel's key goes through here or through
 // UpdateTaskPluginChannelLocked, which takes the same locks; Channel.Update
 // never writes it. So the key update reads is the stored one, never a copy a
 // refresh has replaced since.
-// update receives the stored channel and may change its Key, Status,
-// OtherInfo and ChannelInfo; the changed ones are written together. The
+// update receives the stored channel and may change its Key, Status and
+// OtherInfo; the changed ones are written together. The
 // stored channel afterwards is returned, a new key is published to this
 // node's channel cache, and a new status to the channel's abilities.
 func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*Channel, error) {
@@ -55,14 +55,9 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 	// changes runs update on channel and returns the columns it changed.
 	changes := func() (map[string]any, error) {
 		key, status, otherInfo := channel.Key, channel.Status, channel.OtherInfo
-		info, err := common.Marshal(channel.ChannelInfo)
-		if err != nil {
-			return nil, err
-		}
 		if err := update(&channel); err != nil {
 			return nil, err
 		}
-		channel.Keys = nil
 		updates := map[string]any{}
 		if channel.Key != key {
 			updates["key"], keyChanged = channel.Key, true
@@ -72,11 +67,6 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 		}
 		if channel.OtherInfo != otherInfo {
 			updates["other_info"] = channel.OtherInfo
-		}
-		if next, err := common.Marshal(channel.ChannelInfo); err != nil {
-			return nil, err
-		} else if string(next) != string(info) {
-			updates["channel_info"] = channel.ChannelInfo
 		}
 		return updates, nil
 	}
@@ -141,13 +131,9 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 // UpdateTaskPluginChannelLocked runs update on a task plugin channel while
 // every other task plugin channel is locked too, so a check across channels,
 // such as one account per plugin, cannot interleave with another login's
-// write. update may change Key, Status, OtherInfo and ChannelInfo and must not
-// wait on the network. The caller reloads the channel cache.
+// write. update may change Key, Status and OtherInfo and must not wait on
+// the network. The caller reloads the channel cache.
 func UpdateTaskPluginChannelLocked(channelID int, update func(channel *Channel, others []*Channel) error) error {
-	// Key status and the polling cursor share channel_info; see UpdateChannelStatus.
-	pollingLock := GetChannelPollingLock(channelID)
-	pollingLock.Lock()
-	defer pollingLock.Unlock()
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		sqlitePluginLoginLock.Lock()
 		defer sqlitePluginLoginLock.Unlock()
@@ -179,12 +165,10 @@ func UpdateTaskPluginChannelLocked(channelID int, update func(channel *Channel, 
 			return err
 		}
 		statusChanged, enabled = target.Status != status, target.Status == common.ChannelStatusEnabled
-		target.Keys = nil
 		updates := map[string]any{
-			"key":          target.Key,
-			"status":       target.Status,
-			"other_info":   target.OtherInfo,
-			"channel_info": target.ChannelInfo,
+			"key":        target.Key,
+			"status":     target.Status,
+			"other_info": target.OtherInfo,
 		}
 		return tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error
 	})
@@ -215,8 +199,6 @@ func CacheUpdateChannelKey(id int, key string) {
 	}
 	updated := *cached
 	updated.Key = key
-	updated.Keys = nil
-	updated.Keys = updated.GetKeys()
 	channelsIDM[id] = &updated
 }
 
@@ -238,22 +220,19 @@ func channelRelayConfig(ch *Channel) *dto.AdvancedCustomConfig {
 
 // UpdateScheduledChannelLocked persists a completed scheduled result. update
 // only compares the prepared key and applies validated data to the current row;
-// it must not run JavaScript or perform network I/O. The polling/key locks and
+// it must not run JavaScript or perform network I/O. The key lock and the
 // database transaction therefore cover only the short persistence step.
 func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update func(channel *Channel) error) (*Channel, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	pollingLock := GetChannelPollingLock(channelID)
-	pollingLock.Lock()
-	defer pollingLock.Unlock()
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		keyLock := sqliteChannelKeyLock(channelID)
 		keyLock.Lock()
 		defer keyLock.Unlock()
 	}
 	var channel Channel
-	var keyChanged, statusChanged, infoChanged, otherChanged, written bool
+	var keyChanged, statusChanged, otherChanged, written bool
 	// Failed SQL must not include a credential, including in debug mode.
 	db := DB.WithContext(ctx).Session(&gorm.Session{Logger: logger.Discard})
 	err := db.Transaction(func(tx *gorm.DB) error {
@@ -261,14 +240,9 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 			return err
 		}
 		key, status, otherInfo := channel.Key, channel.Status, channel.OtherInfo
-		info, err := common.Marshal(channel.ChannelInfo)
-		if err != nil {
-			return err
-		}
 		if err := update(&channel); err != nil {
 			return err
 		}
-		channel.Keys = nil
 		updates := map[string]any{}
 		if channel.Key != key {
 			updates["key"], keyChanged = channel.Key, true
@@ -278,11 +252,6 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 		}
 		if channel.OtherInfo != otherInfo {
 			updates["other_info"], otherChanged = channel.OtherInfo, true
-		}
-		if next, err := common.Marshal(channel.ChannelInfo); err != nil {
-			return err
-		} else if string(next) != string(info) {
-			updates["channel_info"], infoChanged = channel.ChannelInfo, true
 		}
 		if len(updates) == 0 {
 			return nil
@@ -300,15 +269,12 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 	if keyChanged {
 		CacheUpdateChannelKey(channelID, channel.Key)
 	}
-	if common.MemoryCacheEnabled && (statusChanged || infoChanged || otherChanged) {
+	if common.MemoryCacheEnabled && (statusChanged || otherChanged) {
 		channelSyncLock.Lock()
 		if cached, ok := channelsIDM[channelID]; ok {
 			updated := *cached
-			updated.Key, updated.Keys = channel.Key, nil
-			updated.ChannelInfo = channel.ChannelInfo
-			updated.ChannelInfo.MultiKeyPollingIndex = cached.ChannelInfo.MultiKeyPollingIndex
+			updated.Key = channel.Key
 			updated.OtherInfo = channel.OtherInfo
-			updated.Keys = updated.GetKeys()
 			channelsIDM[channelID] = &updated
 		}
 		channelSyncLock.Unlock()

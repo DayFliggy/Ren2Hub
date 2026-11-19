@@ -57,7 +57,6 @@ func testRelay429Cooldown(t *testing.T, retryAfter string) {
 	backup.Id = 0
 	backup.Name = "responses-http-cooldown-backup"
 	backup.Key = "backup-key"
-	backup.ChannelInfo = model.ChannelInfo{}
 	backup.BaseURL = &upstream.URL
 	require.NoError(t, model.DB.Create(&backup).Error)
 	require.NoError(t, model.DB.Create(&model.Ability{ChannelId: backup.Id, Model: "ws-billing", Enabled: true}).Error)

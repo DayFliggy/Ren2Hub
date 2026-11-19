@@ -398,11 +398,10 @@
       "scope": "data",
       "file": "controller/relay_route_selection_test.go",
       "test": "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey",
-      "action": "moved_to_known_upstream_restored",
-      "diagnostic": "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+      "action": "removed_with_single_key_contract; original_assertions_archived; not_known_upstream_restored",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/controller/relay_route_selection_test.go.txt",
       "original_sha256": "63fd46dceadae9fa4b02cc0dae07e9fffc82f1c35fa0dc523902ba32c2848604",
-      "reason": "approved SetupContext error-priority restoration; same behavioral family as pre-frozen middleware SetupError diagnostic; no production change",
+      "reason": "Ren2Hub channels hold one key (single-key-channel contract); the multi-key fixture this probe needed no longer exists, so the diagnostic was deleted. Original assertions stay archived.",
       "discovered_by": "go-checks/root-4-batch-14.log",
       "baseline_native_report": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/report.json"
     },
@@ -1745,7 +1744,7 @@
     "unmapped": [],
     "original_tests": 3133,
     "current_tests": 3092,
-    "diagnostic_tests": 82,
+    "diagnostic_tests": 80,
     "bindings": [
       {
         "package": "common",
@@ -1901,11 +1900,10 @@
             "scope": "data",
             "file": "controller/relay_route_selection_test.go",
             "test": "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey",
-            "action": "moved_to_known_upstream_restored",
-            "diagnostic": "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey",
+            "action": "removed_with_single_key_contract; original_assertions_archived; not_known_upstream_restored",
             "archive": "scripts/testing/fixtures/known_upstream_restored/archive/controller/relay_route_selection_test.go.txt",
             "original_sha256": "63fd46dceadae9fa4b02cc0dae07e9fffc82f1c35fa0dc523902ba32c2848604",
-            "reason": "approved SetupContext error-priority restoration; same behavioral family as pre-frozen middleware SetupError diagnostic; no production change",
+            "reason": "Ren2Hub channels hold one key (single-key-channel contract); the multi-key fixture this probe needed no longer exists, so the diagnostic was deleted. Original assertions stay archived.",
             "discovered_by": "go-checks/root-4-batch-14.log",
             "baseline_native_report": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/report.json"
           }
@@ -3095,8 +3093,6 @@
   "additional_normal_regressions": [
     "controller/TestSwapFaceRequestPluginsRejectBeforeSubmission",
     "controller/TestSwapFaceRequestPluginRejectionReleasesConcurrency",
-    "model/TestPollingReadFailureSkipsRetry",
-    "service/TestPollingReadFailureStopsRelayRetry",
     "relay/helper/TestModelMappedHelperPreservesNativeStateAndSetter",
     "relay/helper/TestModelMappingUsesConfiguredJSONCodec",
     "relay/helper/TestResolveMappedModelNameKeepsRoutingAndDispatchIdentity",

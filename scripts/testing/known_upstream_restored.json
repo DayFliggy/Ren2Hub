@@ -81,7 +81,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -128,7 +127,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -174,7 +172,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -251,7 +248,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -290,7 +286,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -335,7 +330,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -382,7 +376,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -425,7 +418,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -476,7 +468,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -613,7 +604,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -680,7 +670,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -721,7 +710,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -765,7 +753,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -808,7 +795,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -851,7 +837,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -974,7 +959,6 @@
         "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
         "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
         "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
         "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
         "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
         "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
@@ -1011,51 +995,12 @@
       }
     },
     {
-      "id": "controller/TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey",
-      "module": ".",
-      "package": "controller",
-      "test": "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey",
-      "fixtures": {
-        "controller/native_restored_funds_replay_test.go": "dcb036df8637ad9cf791b399e2ed3261147ae0d0c70a63e003dc42e72c847d2d",
-        "controller/native_restored_control_test.go": "dfcbd1e49481fa124dde800df2e9714040b7a6e4806e24384f80c7e8f954bb53",
-        "controller/native_restored_control_adapter_test.go": "5c6282f4c5d1707328f2ab3da309bab23f235f84d6b27612ac0446a171a1bdce",
-        "controller/native_restored_funds_logging_test.go": "3805e31b66d47b9af16b0fdacc1a4fae597371c23b4459f0d25e8053a5bc2ea2",
-        "controller/native_restored_funds_helpers_test.go": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90",
-        "controller/native_restored_funds_coverage_test.go": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4",
-        "controller/native_restored_relay_route_selection_test.go": "d2334ab4b2a1cae09d8714c8ca470faa8c722a7502cbd2d07ac26a8b7f8d504b",
-        "controller/native_restored_funds_wechat_test.go": "a5989257aeddc8d8ed7a7413f142f864b8e6cd7558c5655658525d923446a20d",
-        "controller/native_restored_funds_callbacks_test.go": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409",
-        "controller/native_restored_funds_visibility_test.go": "37d08791ad8cb7d484d46b539f4fce06eba847e539b8623311c9c37618d7641b"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey": "fail"
-        },
-        "assertions": {
-          "TestRestoredProbeRelayFirstAttemptRejectsChannelWithoutEnabledKey": [
-            "\"{\\\"error\\\":{\\\"message\\\":\\\"upstream error: do request failed (request id: responses-http-billing)\\\",\\\"type\\\":\\\"new_api_error\\\",\\\"param\\\":\\\"\\\",\\\"code\\\":\\\"do_request_failed\\\"}}\" does not contain \"channel:no_available_key\""
-          ]
-        },
-        "messages": {}
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/data-baseline-probes.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/data-native-probes.jsonl",
-        "baseline_log_sha256": "6deb2af20b8c677abc2422d7deb564d40a4346e85276cf601b5ef7f10aff680e",
-        "upstream_log_sha256": "193ef80573f7ce66fbd25ea58fe1a711fba0d641583e171fe730e276d6be9a16",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-10-relay-key/freeze.json",
-        "declaration_sha256": "ada7cbcdc3558e8790ce886d2d73ad13f360e26334efdb84c8bd1222735fce45"
-      }
-    },
-    {
       "id": "middleware/TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache",
       "module": ".",
       "package": "middleware",
       "test": "TestRestoredProbeApplyOriginTaskIntentReadsOriginChannelThroughCache",
       "fixtures": {
-        "middleware/native_restored_routing_test.go": "1eadb68cf082d1d4e18a81ff180f6b27e375a05e3fd5548bb885dcbfa3542bb3",
+        "middleware/native_restored_routing_test.go": "ae9abb7e471b079257d709ede0aee80838bcf92f3387e9aec9b0249067b22cfb",
         "middleware/native_restored_origin_task_plugin_origin_task_test.go": "f7752c6774ad959ae87a24ed8934bee6510ead3d13ffce351985adacfd345faf",
         "middleware/native_restored_multipart_route_test.go": "dc91d0ba7ec5767e2517dccad926582512e4e8bd3ec75cd5a03b5d50da221724",
         "middleware/native_restored_logger_test.go": "d4ca308178fdc8398f33c7ba2caf723e37844f202801e06481a110a215f821b2"
@@ -1094,7 +1039,7 @@
       "package": "middleware",
       "test": "TestRestoredProbeGeminiUnknownAction",
       "fixtures": {
-        "middleware/native_restored_routing_test.go": "1eadb68cf082d1d4e18a81ff180f6b27e375a05e3fd5548bb885dcbfa3542bb3",
+        "middleware/native_restored_routing_test.go": "ae9abb7e471b079257d709ede0aee80838bcf92f3387e9aec9b0249067b22cfb",
         "middleware/native_restored_origin_task_plugin_origin_task_test.go": "f7752c6774ad959ae87a24ed8934bee6510ead3d13ffce351985adacfd345faf",
         "middleware/native_restored_multipart_route_test.go": "dc91d0ba7ec5767e2517dccad926582512e4e8bd3ec75cd5a03b5d50da221724",
         "middleware/native_restored_logger_test.go": "d4ca308178fdc8398f33c7ba2caf723e37844f202801e06481a110a215f821b2"
@@ -1127,7 +1072,7 @@
       "package": "middleware",
       "test": "TestRestoredProbePluginMultipartTextBudget",
       "fixtures": {
-        "middleware/native_restored_routing_test.go": "1eadb68cf082d1d4e18a81ff180f6b27e375a05e3fd5548bb885dcbfa3542bb3",
+        "middleware/native_restored_routing_test.go": "ae9abb7e471b079257d709ede0aee80838bcf92f3387e9aec9b0249067b22cfb",
         "middleware/native_restored_origin_task_plugin_origin_task_test.go": "f7752c6774ad959ae87a24ed8934bee6510ead3d13ffce351985adacfd345faf",
         "middleware/native_restored_multipart_route_test.go": "dc91d0ba7ec5767e2517dccad926582512e4e8bd3ec75cd5a03b5d50da221724",
         "middleware/native_restored_logger_test.go": "d4ca308178fdc8398f33c7ba2caf723e37844f202801e06481a110a215f821b2"
@@ -1161,7 +1106,7 @@
       "package": "middleware",
       "test": "TestRestoredProbeRequestLoggerRedactsSensitiveQueryParameters",
       "fixtures": {
-        "middleware/native_restored_routing_test.go": "1eadb68cf082d1d4e18a81ff180f6b27e375a05e3fd5548bb885dcbfa3542bb3",
+        "middleware/native_restored_routing_test.go": "ae9abb7e471b079257d709ede0aee80838bcf92f3387e9aec9b0249067b22cfb",
         "middleware/native_restored_origin_task_plugin_origin_task_test.go": "f7752c6774ad959ae87a24ed8934bee6510ead3d13ffce351985adacfd345faf",
         "middleware/native_restored_multipart_route_test.go": "dc91d0ba7ec5767e2517dccad926582512e4e8bd3ec75cd5a03b5d50da221724",
         "middleware/native_restored_logger_test.go": "d4ca308178fdc8398f33c7ba2caf723e37844f202801e06481a110a215f821b2"
@@ -1190,45 +1135,6 @@
         "upstream_log_sha256": "7dda2a5414973b4c1ecc16307578854bbef0bf40189a9ffdc519b3a747de7ed2",
         "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/stable-diagnostic-output/frozen-before-current.json",
         "declaration_sha256": "e46811dae01f07eb82f6de46c16265be8969c319abe93a6dd4592bf55897c83b"
-      }
-    },
-    {
-      "id": "middleware/TestRestoredProbeSetupErrorStopsHandler",
-      "module": ".",
-      "package": "middleware",
-      "test": "TestRestoredProbeSetupErrorStopsHandler",
-      "fixtures": {
-        "middleware/native_restored_routing_test.go": "1eadb68cf082d1d4e18a81ff180f6b27e375a05e3fd5548bb885dcbfa3542bb3",
-        "middleware/native_restored_origin_task_plugin_origin_task_test.go": "f7752c6774ad959ae87a24ed8934bee6510ead3d13ffce351985adacfd345faf",
-        "middleware/native_restored_multipart_route_test.go": "dc91d0ba7ec5767e2517dccad926582512e4e8bd3ec75cd5a03b5d50da221724",
-        "middleware/native_restored_logger_test.go": "d4ca308178fdc8398f33c7ba2caf723e37844f202801e06481a110a215f821b2"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredProbeSetupErrorStopsHandler": "fail"
-        },
-        "assertions": {
-          "TestRestoredProbeSetupErrorStopsHandler": [
-            "Should be false",
-            "\"204\" is not greater than or equal to \"400\"",
-            "\"\" does not contain \"no enabled keys\""
-          ]
-        },
-        "messages": {
-          "TestRestoredProbeSetupErrorStopsHandler": [
-            "testify: probe must reach key setup, not route admission"
-          ]
-        }
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-9-setup-ability-correction/data-baseline-probes.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-9-setup-ability-correction/data-native-probes.jsonl",
-        "baseline_log_sha256": "2f066bcab29381de8008fba24c56f6213284ad79f550f84098a392ae67483d7e",
-        "upstream_log_sha256": "1f6f53c5883b8d402ec9a0b617360eb888c20410537e9db71177cb5035448a80",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-9-setup-ability-correction/freeze-correction.json",
-        "declaration_sha256": "78959fc3a2ea3dd3d5fe20e9439932885f1a46c092df6019d1c1956299ff747b"
       }
     },
     {

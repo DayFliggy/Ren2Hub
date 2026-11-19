@@ -33467,101 +33467,91 @@
       ]
     },
     "model/channel.go": {
-      "local_sha256": "ea2ffafd254f8c6b5f3f70197b5dd35f26894278a0c5420d68469ba4f309b52c",
+      "local_sha256": "601a2dbe35e1c39a7f1383f388eb01babed2dcc4a9597931334921127fac17c4",
       "hunks": [
         {
-          "header": "@@ -15,12 +15,10 @@",
-          "sha256": "8abed598c5550159b9a219c936463ecf34ff9ac0385e9020a59f2f6d424f517d",
-          "basis": "删除业务分组：删除日志、jsplugin、lo 导入；加模型实验室分类导入（catalog-stats）。"
+          "header": "@@ -3,11 +3,9 @@",
+          "sha256": "b2ab6d4349947fa3ca11cb83431587196f71530b0bf6fbaa23c27826d83ce4e5",
+          "basis": "删除多 Key：删除 ChannelInfo 序列化和随机选 Key 用到的 driver、rand 导入（single-key-channel）。"
         },
         {
-          "header": "@@ -42,7 +40,6 @@",
-          "sha256": "1a5ce956e83d8536d0b0fdeeaf29dbc5e47f170679c57d9ac5765241fc3a7712",
+          "header": "@@ -15,12 +13,9 @@",
+          "sha256": "4bae1dfef305baa13b39202ed968d252253433946cb515cbde292ff487d24494",
+          "basis": "删除业务分组：删除日志、jsplugin、lo 导入；加模型实验室分类导入（catalog-stats）；删除多 Key 后不再导入 relaykit/types（single-key-channel）。"
+        },
+        {
+          "header": "@@ -42,7 +37,6 @@",
+          "sha256": "02ecda7e1405537eb818512c22aa701348e1b5d2591316290aa6305c12cbf022",
           "basis": "删除业务分组：Channel 删除 Group 字段。"
         },
         {
-          "header": "@@ -62,6 +59,13 @@",
-          "sha256": "7edae336b01f53405645ccb188a7e7aee638dd44966e18f17104495b7c5d7f05",
-          "basis": "渠道倍率、即时并发上限及只读投影 InFlight、RoutingQuality、Lab（channel-ratio、concurrency、catalog-stats）。"
+          "header": "@@ -55,28 +49,17 @@",
+          "sha256": "5afd593e993dc74f60eb10e07ffd4abc41982d0054c78398cd5423ff6cea3e22",
+          "basis": "删除多 Key：删除 ChannelInfo、Keys 字段、ChannelInfo 类型和 ChannelStatusReasonAllKeysDisabled（single-key-channel）；渠道倍率、即时并发上限及只读投影 InFlight、RoutingQuality、Lab（channel-ratio、concurrency、catalog-stats）。"
         },
         {
-          "header": "@@ -144,38 +148,6 @@",
-          "sha256": "f70f0f756531d832f5946438299879375aa21fe6e4006a363cf8c674ea0190c4",
-          "basis": "删除业务分组：删除分组过滤的规范化函数。"
+          "header": "@@ -144,60 +127,9 @@",
+          "sha256": "228e5bef96d5ed95234a7bd190f2eb827bc8c2bef0f02ab321bc566c64da33a5",
+          "basis": "删除业务分组：删除分组过滤的规范化函数；删除多 Key：删除 ChannelInfo 的 Value/Scan（single-key-channel）。"
         },
         {
-          "header": "@@ -265,37 +237,11 @@",
-          "sha256": "2feca0d5db7ac8cfa5e9fbc20bce1e48f795ab371db64292f9e216cb8d7334f3",
-          "basis": "多 Key 轮询游标移到扩展文件 model/channel_polling.go 的 advanceChannelPolling（concurrency）；T3 删除多 Key 时随之删除。"
+          "header": "@@ -216,112 +148,11 @@",
+          "sha256": "4982acd8cab291ec0ab636859f3472a41d39a7bd0971c98ab7a39b413a8c7ee3",
+          "basis": "删除多 Key：删除 GetNextEnabledKey、SaveChannelInfo（single-key-channel）；删除业务分组：删除 GetGroups 等分组读取。"
         },
         {
-          "header": "@@ -311,17 +257,6 @@",
-          "sha256": "f925f0d3492275466ef868dacf3245627797278618bf052cc3372ae87c9d76a5",
-          "basis": "删除业务分组：删除 GetGroups 等分组读取。"
-        },
-        {
-          "header": "@@ -446,7 +381,7 @@",
-          "sha256": "cb2bdf8dee9f2346ec2f54c7176fd96aa7a380b2cdfea29e9c5b6bfbc816b055",
+          "header": "@@ -446,7 +277,7 @@",
+          "sha256": "3d34859cfc3f529c37709e9f44566b30501dc46e8463d71b259f7fdd30213fc6",
           "basis": "删除业务分组：SearchChannels 去掉 group 参数。"
         },
         {
-          "header": "@@ -469,7 +404,7 @@",
-          "sha256": "26e58b840ab4cdea05af0fa71a5402081aef675fd2d333fc30ba88948d45109d",
+          "header": "@@ -469,7 +300,7 @@",
+          "sha256": "59654d7c7dc780c120572c7697db8ebe0c6f9d28a8ce0914b6f5fdea1652fa01",
           "basis": "删除业务分组：搜索查询不加分组过滤。"
         },
         {
-          "header": "@@ -538,32 +473,42 @@",
-          "sha256": "f19fcc7d5ce94c8864952e6f6fad341fb2602c9b1418735db1b7aadc19b4c90a",
+          "header": "@@ -538,32 +369,42 @@",
+          "sha256": "4d2a4b3008265365ffe0ae1baa260d56c6550ebd3f917493c656d4de7d08b3d6",
           "basis": "批量删除按有序行锁返回快照并发布路由变更（token-routing、concurrency）。"
         },
         {
-          "header": "@@ -620,7 +565,18 @@",
-          "sha256": "b8f9d736498da3739484c1fff7295d48c41f5664bfc3cdac31e63209c6af2240",
-          "basis": "编辑未带 channel_ratio 时沿用库内倍率，避免回落默认值（channel-ratio）。"
+          "header": "@@ -620,48 +461,37 @@",
+          "sha256": "de94ebd0c5dd37e0022e60e8808f163a3a4da3b4b1778289000f31491127dc7c",
+          "basis": "删除多 Key：编辑不再重算 MultiKeySize（single-key-channel）；编辑未带 channel_ratio 时沿用库内倍率，避免回落默认值（channel-ratio）；编辑在事务内写入并重建能力，提交后发布路由变更（token-routing）。"
         },
         {
-          "header": "@@ -654,14 +610,25 @@",
-          "sha256": "672b91217a902e1bb0639aa9ef13ae9ee93c129f0ed9855075b1d66cb92e4b29",
-          "basis": "编辑在事务内写入并重建能力，提交后发布路由变更（token-routing）。"
+          "header": "@@ -685,51 +515,11 @@",
+          "sha256": "cb4ec18e738aac79040d9fe5c1e9d43426d647ba173afd3cb50171c2566b0053",
+          "basis": "删除渠道经本地有序删除并发布路由变更（token-routing、concurrency）；删除多 Key：删除按渠道的轮询锁（single-key-channel）。"
         },
         {
-          "header": "@@ -685,13 +652,7 @@",
-          "sha256": "abea55b7c62826963c2f9d2e432924d9f4b6f96707a89f233009ba36406572e3",
-          "basis": "删除渠道经本地有序删除并发布路由变更（token-routing、concurrency）。"
+          "header": "@@ -793,233 +583,28 @@",
+          "sha256": "9ecce3ae701bc99aa668d4e83424acd8f0410135fdc655ba41187e5cd21ac0f9",
+          "basis": "删除多 Key：删除 handlerMultiKeyUpdate、hasEnabledMultiKey，按标签禁用不再单独处理全部 Key 停用的渠道（single-key-channel）；渠道状态写入移到扩展文件 model/channel_status.go 的 UpdateChannelStatusDetailed（token-routing）；按标签启用、禁用经行锁事务并发布路由变更（token-routing、concurrency）；删除业务分组：EditChannelByTag 去掉 group 参数。"
         },
         {
-          "header": "@@ -858,135 +819,16 @@",
-          "sha256": "36dc8761aa829b3f4061a5951b9aafe781c12e11071673161c5ecacf22c527ce",
-          "basis": "渠道状态写入移到扩展文件 model/channel_status.go 的 UpdateChannelStatusDetailed（token-routing）。"
-        },
-        {
-          "header": "@@ -1003,23 +845,18 @@",
-          "sha256": "593e0a19de9455536fb2ea71f79527a237ade8f3703a55f81608011aeaee4601",
-          "basis": "按标签禁用经行锁事务并发布路由变更（token-routing、concurrency）。"
-        },
-        {
-          "header": "@@ -1028,10 +865,6 @@",
-          "sha256": "0c653b5f6f901988693da63f67cb7c726e07065e951706ee606d6d44fff3364a",
+          "header": "@@ -1028,10 +613,6 @@",
+          "sha256": "28776383eca62379df5052637f7de1aa61bff02a8ea9f5ce4b8d367429ecec44",
           "basis": "删除业务分组：按标签编辑不再改分组。"
         },
         {
-          "header": "@@ -1045,28 +878,12 @@",
-          "sha256": "ae604647a04438b0d8d790d791ae8e904b9a968252407af1b77ba5e7e2acbb2f",
+          "header": "@@ -1045,28 +626,12 @@",
+          "sha256": "25d2537c73733353eb058ea0c8d5daf9a36c07a7878d9dca73495ac1466fd5da",
           "basis": "按标签编辑经行锁事务写入并发布路由变更（token-routing、concurrency）。"
         },
         {
-          "header": "@@ -1113,7 +930,7 @@",
-          "sha256": "dc093b508be560068eec836572a50eeec257eb35375f2738496052fb9f8a771d",
+          "header": "@@ -1113,7 +678,7 @@",
+          "sha256": "9966d9b83047d862fd7fac32139e5cc8b978ad713286650b332301b551af9460",
           "basis": "删除业务分组：SearchTags 去掉 group 参数。"
         },
         {
-          "header": "@@ -1139,7 +956,7 @@",
-          "sha256": "7a3d68e9cf2bef34886e1d626d6cc3afd24837a82e012a1b5ef5eda16cdfb8c8",
+          "header": "@@ -1139,7 +704,7 @@",
+          "sha256": "e10256fe7245575f1a783a13030aec57cc0a18cf60aa5a1763633101856da7e0",
           "basis": "删除业务分组：标签搜索不加分组过滤。"
         },
         {
-          "header": "@@ -1281,41 +1098,20 @@",
-          "sha256": "9917047f4bac7ec50c78ad34533f1413988f01ffb33e66669c02994e96c20fb7",
+          "header": "@@ -1281,41 +846,20 @@",
+          "sha256": "37758390f1c8ba9d8dc444944051b3fc72b50976ee6e1bbc8ccebd55c8722ca5",
           "basis": "BatchSetChannelTag 用本地行锁事务（lockChannels 与 updateLockedChannels，在同一事务内加锁重读后重建能力）实现渠道变更锁顺序与路由发布；上游 ce8fc49e4 改为事务内读回，生产行为等价，保留本地实现并带入上游 TestBatchSetChannelTagDatabaseMatrix（去掉 Group，能力数按本地 2）。"
         }
       ]

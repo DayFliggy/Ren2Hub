@@ -42,7 +42,6 @@ func TestParamOverrideRequestValueErrorStaysOnOneChannel(t *testing.T) {
 	backup.Id = 0
 	backup.Name = "param-override-backup"
 	backup.Key = "backup-key"
-	backup.ChannelInfo = model.ChannelInfo{}
 	require.NoError(t, model.DB.Create(&backup).Error)
 	require.NoError(t, model.DB.Create(&model.Ability{ChannelId: backup.Id, Model: "ws-billing", Enabled: true}).Error)
 	t.Cleanup(func() {

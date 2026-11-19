@@ -73,9 +73,6 @@ func TestTokenRouteChannelMutationLockOrderDatabases(t *testing.T) {
 			t.Run("models_rebuild", func(t *testing.T) {
 				runChannelMutationModelsRebuild(t, openChannelMutationDatabase(t, driver, dialect))
 			})
-			t.Run("multi_key_disable_polling", func(t *testing.T) {
-				runChannelMutationMultiKeyPolling(t, openChannelMutationDatabase(t, driver, dialect))
-			})
 			for _, stage := range []string{stageEntriesRead, stageEntriesInsert} {
 				t.Run("save_orphan_cleanup/"+stage, func(t *testing.T) {
 					runChannelSaveOrphanCleanup(t, openChannelMutationDatabase(t, driver, dialect), stage)

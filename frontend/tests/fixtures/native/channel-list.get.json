@@ -6,13 +6,6 @@
         "balance": 0,
         "balance_updated_time": 0,
         "base_url": "https://api.example.com",
-        "channel_info": {
-          "is_multi_key": false,
-          "multi_key_mode": "",
-          "multi_key_polling_index": 0,
-          "multi_key_size": 0,
-          "multi_key_status_list": null
-        },
         "channel_ratio": "1",
         "created_time": 0,
         "header_override": null,
@@ -51,13 +44,6 @@
         "balance": 0,
         "balance_updated_time": 0,
         "base_url": "https://api.example.com",
-        "channel_info": {
-          "is_multi_key": false,
-          "multi_key_mode": "",
-          "multi_key_polling_index": 0,
-          "multi_key_size": 0,
-          "multi_key_status_list": null
-        },
         "channel_ratio": "1",
         "created_time": 0,
         "header_override": null,
@@ -96,13 +82,6 @@
         "balance": 0,
         "balance_updated_time": 0,
         "base_url": "https://api.example.com",
-        "channel_info": {
-          "is_multi_key": false,
-          "multi_key_mode": "",
-          "multi_key_polling_index": 0,
-          "multi_key_size": 0,
-          "multi_key_status_list": null
-        },
         "channel_ratio": "1",
         "created_time": 0,
         "header_override": null,
@@ -141,13 +120,6 @@
         "balance": 0,
         "balance_updated_time": 0,
         "base_url": "https://api.example.com",
-        "channel_info": {
-          "is_multi_key": false,
-          "multi_key_mode": "",
-          "multi_key_polling_index": 0,
-          "multi_key_size": 0,
-          "multi_key_status_list": null
-        },
         "channel_ratio": "1",
         "created_time": 0,
         "header_override": null,

@@ -1,18 +1,13 @@
 {
   "schema_version": 1,
-  "total_selected_top_level_executions": 148,
+  "total_selected_top_level_executions": 143,
   "groups": [
     {
       "id": "original-model",
       "package": "model",
-      "pattern": "^(TestRedeemConcurrentSingleSuccess|TestPollingFreshRouteCandidatesAndCacheSync|TestPollingSkipsDisabledKeysAndHandlesShortenedKeyList|TestPollingConcurrentRequestsAndCacheRebuild|TestPollingDoesNotLoseConcurrentMultiKeyStatus|TestPollingCursorPersistenceFailureStillSelectsKey|TestAffiliateConcurrentAdminAndTransferOperations)$",
+      "pattern": "^(TestRedeemConcurrentSingleSuccess|TestAffiliateConcurrentAdminAndTransferOperations)$",
       "names": [
         "TestRedeemConcurrentSingleSuccess",
-        "TestPollingFreshRouteCandidatesAndCacheSync",
-        "TestPollingSkipsDisabledKeysAndHandlesShortenedKeyList",
-        "TestPollingConcurrentRequestsAndCacheRebuild",
-        "TestPollingDoesNotLoseConcurrentMultiKeyStatus",
-        "TestPollingCursorPersistenceFailureStillSelectsKey",
         "TestAffiliateConcurrentAdminAndTransferOperations"
       ]
     },
@@ -255,7 +250,7 @@
       "TestUpdateVideoTasksMixedChannelSleepSettings"
     ]
   },
-  "ordinary_top_level_executions": 128,
+  "ordinary_top_level_executions": 123,
   "separately_verified_funds": [
     {
       "path": "/home/work/ren2hub-native-b388-20261114/implementation/funds/race-model-docker.jsonl",

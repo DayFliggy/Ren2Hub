@@ -55,9 +55,8 @@ func TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext(t *t
 	mapping := `{"sora-2":"sora-2-pro"}`
 	headers := `{"X-Remix-Probe":"origin-channel"}`
 	channel := route.channel(t, model.Channel{
-		Type: constant.ChannelTypeSora, Name: "sora", Models: "sora-2", Key: "key-one\nkey-two",
+		Type: constant.ChannelTypeSora, Name: "sora", Models: "sora-2", Key: "key-one",
 		ModelMapping: &mapping, HeaderOverride: &headers,
-		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeyMode: constant.MultiKeyModePolling},
 	})
 	route.task(t, soraOriginTask(channel.Id))
 	before := remixUserQuota(t)
@@ -70,10 +69,7 @@ func TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext(t *t
 	assert.Equal(t, "/v1/videos/video_origin_up/remix", route.upstream.path, "the vendor receives its own video id")
 	assert.Contains(t, route.upstream.body, `"model":"sora-2-pro"`, "the origin channel's model mapping applies")
 	assert.Equal(t, "origin-channel", route.upstream.header.Get("X-Remix-Probe"), "the origin channel's header override applies")
-	assert.Equal(t, "Bearer key-one", route.upstream.header.Get("Authorization"), "one remix selects one key")
-	var stored model.Channel
-	require.NoError(t, model.DB.First(&stored, channel.Id).Error)
-	assert.Equal(t, 1, stored.ChannelInfo.MultiKeyPollingIndex, "the polling cursor advances once")
+	assert.Equal(t, "Bearer key-one", route.upstream.header.Get("Authorization"), "the remix sends the origin channel's key")
 	assert.Equal(t, 600_000, before-remixUserQuota(t), "0.1 x 500000 x the inherited 12 seconds")
 	var task model.Task
 	require.NoError(t, model.DB.Where("action = ?", constant.TaskActionRemix).First(&task).Error)

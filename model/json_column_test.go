@@ -26,11 +26,6 @@ func TestJSONColumnValuersReturnString(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "ChannelInfo",
-			valuer: ChannelInfo{IsMultiKey: true, MultiKeySize: 2},
-			want:   `{"is_multi_key":true,"multi_key_size":2,"multi_key_status_list":null,"multi_key_polling_index":0,"multi_key_mode":""}`,
-		},
-		{
 			name:   "Properties",
 			valuer: Properties{Input: "hello"},
 			want:   `{"input":"hello"}`,
@@ -85,11 +80,6 @@ func TestJSONColumnScannersAcceptStringAndBytes(t *testing.T) {
 
 	for _, kind := range []string{"bytes", "string"} {
 		t.Run(kind, func(t *testing.T) {
-			var info ChannelInfo
-			require.NoError(t, info.Scan(toInput(kind, `{"is_multi_key":true,"multi_key_size":2}`)))
-			assert.True(t, info.IsMultiKey)
-			assert.Equal(t, 2, info.MultiKeySize)
-
 			var props Properties
 			require.NoError(t, props.Scan(toInput(kind, `{"input":"hello"}`)))
 			assert.Equal(t, "hello", props.Input)
@@ -105,7 +95,6 @@ func TestJSONColumnDatabaseRoundTrip(t *testing.T) {
 	type row struct {
 		ID          int `gorm:"primaryKey"`
 		Name        string
-		Info        ChannelInfo     `gorm:"type:json"`
 		Properties  Properties      `gorm:"type:json"`
 		PrivateData TaskPrivateData `gorm:"type:json"`
 		Payload     JSONValue       `gorm:"type:json"`
@@ -151,7 +140,6 @@ func TestJSONColumnDatabaseRoundTrip(t *testing.T) {
 			t.Logf("%s version: %s", dialect, version)
 			require.NoError(t, table.Create(map[string]any{
 				"name":         "legacy",
-				"info":         `{"is_multi_key":true,"multi_key_size":2,"multi_key_status_list":{"0":1,"1":0},"multi_key_polling_index":0,"multi_key_mode":""}`,
 				"properties":   `{"input":"\u003cp\u003e图片\u003c/p\u003e"}`,
 				"private_data": `{"upstream_task_id":"upstream-1","plugin_state":` + payload + `}`,
 				"payload":      payload,
@@ -162,7 +150,6 @@ func TestJSONColumnDatabaseRoundTrip(t *testing.T) {
 			require.NoError(t, err)
 			current := row{
 				Name:        "current",
-				Info:        ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyStatusList: map[int]int{0: 1, 1: 0}},
 				Properties:  Properties{Input: "<p>图片</p>"},
 				PrivateData: TaskPrivateData{UpstreamTaskID: "upstream-1", PluginState: json.RawMessage(payload)},
 				Payload:     JSONValue(payload),
@@ -173,7 +160,6 @@ func TestJSONColumnDatabaseRoundTrip(t *testing.T) {
 				t.Run(name, func(t *testing.T) {
 					var got row
 					require.NoError(t, table.Where("name = ?", name).First(&got).Error)
-					assert.Equal(t, current.Info, got.Info)
 					assert.Equal(t, current.Properties, got.Properties)
 					assert.Equal(t, "upstream-1", got.PrivateData.UpstreamTaskID)
 					assert.JSONEq(t, payload, string(got.PrivateData.PluginState))

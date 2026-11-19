@@ -66,12 +66,10 @@ func parseStatusFilter(statusParam string) int {
 	}
 }
 
+// clearChannelInfo keeps upstream's name. A channel holds one key
+// (Ren2Hub single-key-channel), so it only fills the balance projection.
 func clearChannelInfo(channel *model.Channel) {
 	channel.BalanceDetail = channel.GetBalanceDetail()
-	if channel.ChannelInfo.IsMultiKey {
-		channel.ChannelInfo.MultiKeyDisabledReason = nil
-		channel.ChannelInfo.MultiKeyDisabledTime = nil
-	}
 }
 
 func channelIDsFromChannels(channels []*model.Channel) []int {
@@ -1171,9 +1169,6 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
-
-	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
-	channel.ChannelInfo = originChannel.ChannelInfo
 
 	if channelHasSensitiveChanges(&channel, originChannel, requestData) &&
 		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {

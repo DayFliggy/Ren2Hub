@@ -155,14 +155,15 @@ func TestUpdateChannelLocked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "edited", current.Key, "a lost race never overwrites the newer key")
 
-	err = concurrentWrite("channel_info", ChannelInfo{MultiKeyPollingIndex: 3}, func(stored *Channel) {
+	err = concurrentWrite("remark", "written by another writer", func(stored *Channel) {
 		stored.Status = common.ChannelStatusAutoDisabled
 	})
 	require.NoError(t, err)
 	current, err = GetChannelById(channel.Id, true)
 	require.NoError(t, err)
 	assert.Equal(t, common.ChannelStatusAutoDisabled, current.Status)
-	assert.Equal(t, 3, current.ChannelInfo.MultiKeyPollingIndex, "only the changed columns are written")
+	require.NotNil(t, current.Remark)
+	assert.Equal(t, "written by another writer", *current.Remark, "only the changed columns are written")
 	assert.Equal(t, "edited", current.Key)
 	var enabled []bool
 	require.NoError(t, DB.Model(&Ability{}).Where("channel_id = ?", channel.Id).Pluck("enabled", &enabled).Error)
