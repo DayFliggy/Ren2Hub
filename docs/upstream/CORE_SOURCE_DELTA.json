@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 413,
+    "extension": 415,
     "removed": 45
   },
   "files": [
@@ -13021,7 +13021,7 @@
       "path": "service/route_breaker.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bb7cf5a2c3d36bab11436aaa10112ab255ae193866b6a6115397ffa71711aaf6",
+      "local_sha256": "5130e4d70a26c91604c6fa2dcc504821a5c692870025a36ff489b54e075f2d7c",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13040,7 +13040,7 @@
       "path": "service/route_breaker_diagnostics_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3999d5b826cae43564c6c7f4810f4988fbd38f455588d8d364a3bf2e326a9d0e"
+      "local_sha256": "3a83a5c2fe6fa5d271f4b8bdaf92fe2f9fa7fa61905e2c46f1fd93a85f123968"
     },
     {
       "path": "service/route_breaker_test.go",
@@ -13149,6 +13149,26 @@
       }
     },
     {
+      "path": "service/route_error_codes.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "12850c90f3b7941a9814d2c04f804e975d0587fb11367331dd88e3e19b014d70",
+      "reasons": [
+        "token-routing",
+        "ops-metrics"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "自动路由读取的错误码表：原生分类器点名的上游码（按原生类别）、本网关生成的 relaykit 错误码和路由原因。上下文超长收窄据此识别凭据、额度、限流、权限类错误；Root 熔断快照只保存表内的码，其余记 unrecognized。客户响应、重试和原生分类不变。"
+      }
+    },
+    {
+      "path": "service/route_error_codes_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "60cd32fa96966a104a17c90f71cdd3b5405a9bf0eb1180a3a582d0dd5443d505"
+    },
+    {
       "path": "service/route_limit_read_failure_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -13183,7 +13203,7 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bb025ac5044abae0bd4c9171bfe737204c53a50d60479cc243738f486bb0f9c6",
+      "local_sha256": "cd7bdd8552f9b9cda07f6a618f5862e7a29f17e7ca30379185d0d42a223b6331",
       "reasons": [
         "token-routing",
         "ops-metrics"

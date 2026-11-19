@@ -68,17 +68,6 @@ func (a *routeAttempt) emptyStreamOutcome() (perfmetrics.Outcome, string) {
 	return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput
 }
 
-// accountErrorSignals are the credential, quota, rate-limit and permission
-// codes and types that the native classifier (pkg/perf_metrics) lists as
-// failures. Message text never overrules them.
-var accountErrorSignals = map[string]bool{
-	"invalid_api_key": true, "api_key_invalid": true, "api_key_expired": true, "api_key_service_blocked": true,
-	"invalid_authentication": true, "authentication_error": true, "unauthenticated": true,
-	"permission_denied": true, "permission_error": true, "access_denied": true,
-	"insufficient_quota": true, "quota_exceeded": true, "resource_exhausted": true,
-	"rate_limit_exceeded": true, "rate_limit_error": true, "insufficient_user_quota": true, "pre_consume_token_quota_failed": true,
-}
-
 // requestContextOverflow recognizes a context overflow that the upstream
 // reported without a recognizable code, for example a reseller's code-less
 // 500. Account and rate-limit statuses, codes and types are never overruled
@@ -95,7 +84,7 @@ func (a *routeAttempt) requestContextOverflow(apiErr *types.NewAPIError) bool {
 		}
 	}
 	for _, signal := range []string{string(root.GetErrorCode()), root.ToOpenAIError().Type} {
-		if accountErrorSignals[strings.ToLower(signal)] {
+		if class, _ := routeErrorCodeClass(signal); class == routeErrorAccount {
 			return false
 		}
 	}
