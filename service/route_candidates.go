@@ -299,14 +299,36 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 
 // AcquirePinnedRouteChannel revalidates a continuation without selecting another channel.
 func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, error) {
-	row, err := acquireBoundRouteChannel(c, channelID, modelName, false)
+	row, err := acquireBoundRouteChannel(c, channelID, modelName, boundCapacityOnly)
 	if row != nil {
 		setRouteDecision(c, row.Id, "pin")
 	}
 	return row, err
 }
 
-func acquireBoundRouteChannel(c *gin.Context, channelID int, modelName string, healthy bool) (*model.Channel, error) {
+// boundRouteGate is how a channel already bound to the request is admitted.
+type boundRouteGate int
+
+const (
+	// Pins, manual lists and origin tasks: capacity only.
+	boundCapacityOnly boundRouteGate = iota
+	// Prefer affinity and plugin reacquisition: breaker and 429 cooldown.
+	boundHealthy
+	// Strict affinity: breaker only; a channel that merely cools down after a
+	// 429 is still used, because the session has no other channel.
+	boundHealthyAllowCooling
+)
+
+// affinityRouteGate is the one admission rule for a session-bound channel,
+// shared by affinity selection and plugin reacquisition.
+func affinityRouteGate(c *gin.Context) boundRouteGate {
+	if RequestPolicy(c).SessionMode == "strict" {
+		return boundHealthyAllowCooling
+	}
+	return boundHealthy
+}
+
+func acquireBoundRouteChannel(c *gin.Context, channelID int, modelName string, gate boundRouteGate) (*model.Channel, error) {
 	ReleaseRouteChannel(c)
 	BeginRouteObservation(c)
 	scope, err := requestRouteScope(c)
@@ -321,8 +343,11 @@ func acquireBoundRouteChannel(c *gin.Context, channelID int, modelName string, h
 		if channel.Id != channelID {
 			continue
 		}
-		if healthy {
+		switch gate {
+		case boundHealthy:
 			return acquireHealthyRoute(c, channel, modelName, false)
+		case boundHealthyAllowCooling:
+			return acquireHealthyRoute(c, channel, modelName, true)
 		}
 		return acquireRouteChannel(c, channel)
 	}
@@ -355,9 +380,14 @@ func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName stri
 	}
 	started := time.Now()
 	_, pinned, _ := GetChannelConstraints(c).ResolvedPin()
-	affinityInfo, _ := c.Get(ginKeyChannelAffinityLogInfo)
-	healthy := !pinned && !HasPrivateTokenRoute(c) && !(RequestPolicy(c).SessionMode == "strict" && affinityInfo != nil)
-	channel, err := acquireBoundRouteChannel(c, channelID, modelName, healthy)
+	gate := boundHealthy
+	if affinityInfo, _ := c.Get(ginKeyChannelAffinityLogInfo); affinityInfo != nil {
+		gate = affinityRouteGate(c)
+	}
+	if pinned || HasPrivateTokenRoute(c) {
+		gate = boundCapacityOnly
+	}
+	channel, err := acquireBoundRouteChannel(c, channelID, modelName, gate)
 	var pause *routePauseError
 	if errors.As(err, &pause) || errors.Is(err, ErrConcurrencyFull) || errors.Is(err, model.ErrTokenRouteForbidden) {
 		// The caller selects again, which records affinity use afresh.

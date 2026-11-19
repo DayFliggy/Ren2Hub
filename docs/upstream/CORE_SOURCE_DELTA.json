@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 404,
+    "extension": 406,
     "removed": 45
   },
   "files": [
@@ -2253,6 +2253,12 @@
       "status": "adapted",
       "upstream_sha256": "755d455067cde38c6d9940ed86f92578ce226332b74955c28c1b95427dc4fac3",
       "local_sha256": "38b5def6c16aa1e81422f37087077633605f736c18224f8726ebe466b4d0ada2"
+    },
+    {
+      "path": "controller/relay_strict_affinity_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c65eeb0ca0a49cbea74cd3e286f4c02b2403a19c68ef7ba7e194c055c9274386"
     },
     {
       "path": "controller/relay_swapface_concurrency_test.go",
@@ -12895,13 +12901,13 @@
       "path": "service/route_admission_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f87711751e148fd33a3ee9bd2a2991f1ba102335a33285aa0a7f4f5ce1e43efb"
+      "local_sha256": "91f5269a13950518268a66b3fcd7b2ccef4b8e87bce7429324af7cc0a7649648"
     },
     {
       "path": "service/route_affinity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c31ce0c320f5d9c3e7ed60af2ffdaaa5ff36aa357f9a415b3b2252128e15502f",
+      "local_sha256": "d3c8598a012200f09896ddba68e9915864e7a8abb6d64490ab6b0d35a5602750",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -12915,6 +12921,12 @@
           "service/route_affinity.go#1"
         ]
       }
+    },
+    {
+      "path": "service/route_affinity_strict_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "73b316f0c8c26614e2a006142668366926bc57787b512b67706eb00c67fd3c6c"
     },
     {
       "path": "service/route_affinity_test.go",
@@ -13044,7 +13056,7 @@
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "491755faee2715fbfe68d0e1b0c96b5d3a0bb80feb6649e6a0d0d7c6c3bb7b45",
+      "local_sha256": "84158a70d64da73ce536ccb1f61424a65b65bcdecae099bea4d5584d6528671f",
       "reasons": [
         "concurrency",
         "origin-task-continuation",

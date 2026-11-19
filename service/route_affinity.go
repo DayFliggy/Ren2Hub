@@ -9,15 +9,18 @@ import (
 )
 
 // selectAffinityChannel 在首轮尝试会话亲和渠道。decided 为 false 时调用方继续正常选路。
-// strict 模式下亲和渠道不可用直接拒绝；prefer 模式下渠道不合格或满载时退回正常选路，
-// 存储等技术错误不当作“不合格”处理，照常返回 500。
+// strict 模式下亲和渠道不可用直接拒绝，熔断打开或探测占用也算不可用（与上游对不可用
+// 亲和渠道的处理一致：503，除 KeepOnChannelDisabled 外清除绑定），仅 429 冷却照常发送；
+// prefer 模式下渠道不合格、暂停或满载时退回正常选路，存储等技术错误不当作“不合格”
+// 处理，照常返回 500。
 func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Channel, selectErr *ChannelSelectError, decided bool) {
 	preferred, found := GetPreferredChannelByAffinity(c, modelName)
 	if !found {
 		return nil, nil, false
 	}
-	strict := RequestPolicy(c).SessionMode == "strict"
-	row, err := acquireBoundRouteChannel(c, preferred, modelName, !strict)
+	gate := affinityRouteGate(c)
+	strict := gate == boundHealthyAllowCooling
+	row, err := acquireBoundRouteChannel(c, preferred, modelName, gate)
 	if err == nil {
 		MarkChannelAffinityUsed(c, row.Id)
 		if !routePreselecting(c) {
@@ -38,6 +41,7 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		if !full && !ShouldKeepChannelAffinityOnChannelDisabled() {
 			ClearCurrentChannelAffinityCache(c)
 		}
+		setRouteRetryAfter(c, err, true)
 		status := http.StatusServiceUnavailable
 		if full {
 			status = http.StatusTooManyRequests

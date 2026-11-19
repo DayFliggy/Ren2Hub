@@ -176,7 +176,10 @@ func TestRouteAdmissionFullBeforeCoolingFallback(t *testing.T) {
 	require.Equal(t, 22, ch.Id)
 }
 
-func TestPreferEscapesPauseAndStrictKeepsChannel(t *testing.T) {
+// A bound channel that only cools down after a 429: prefer escapes to a
+// healthy channel, strict has no other channel and still sends. Neither clears
+// the binding. The open-breaker contract is TestStrictAffinityHonorsOpenBreaker.
+func TestPreferEscapesCoolingAndStrictStillSends(t *testing.T) {
 	for _, mode := range []string{"prefer", "strict"} {
 		t.Run(mode, func(t *testing.T) {
 			setupAffinityChannels(t)
