@@ -105,9 +105,6 @@ func (r *mjRoute) channel(t *testing.T, name, key string) model.Channel {
 		Type: constant.ChannelTypeMidjourney, Name: name, Key: key, Models: "mj_imagine,mj_upscale,mj_modal,mj_video",
 		Status: common.ChannelStatusEnabled, BaseURL: &r.baseURL, MaxConcurrency: 1,
 	}
-	if strings.Contains(key, "\n") {
-		channel.ChannelInfo = model.ChannelInfo{IsMultiKey: true, MultiKeyMode: constant.MultiKeyModePolling}
-	}
 	require.NoError(t, model.DB.Create(&channel).Error)
 	require.NoError(t, channel.AddAbilities(nil))
 	require.NoError(t, service.RefreshChannelConcurrencyLimit(context.Background(), channel.Id))
@@ -247,7 +244,6 @@ func TestMidjourneyContinuationPriceLimitRejectsBeforeChargeAndSend(t *testing.T
 				assert.Zero(t, route.upstream.sends, "neither the origin nor the cheaper channel receives a request")
 				assert.Zero(t, quotaWrites.Load(), "a debit followed by a refund would also fail this assertion")
 				assert.Equal(t, before, mjUserQuota(t))
-				assert.Zero(t, mjPollingIndex(t, a.Id), "rejection precedes key rotation")
 				assert.Zero(t, service.ChannelInFlight(a.Id))
 				assert.Zero(t, service.ChannelInFlight(b.Id))
 				for _, user := range service.RoutingSnapshot().Users {
@@ -366,26 +362,6 @@ func TestMidjourneyContinuationOriginChannelFailures(t *testing.T) {
 			assert.Contains(t, recorder.Body.String(), tc.code)
 			assert.Zero(t, route.upstream.sends, "nothing goes to B")
 			assert.Equal(t, before, mjUserQuota(t))
-		})
-	}
-}
-
-// Distribute admits and sets up the origin channel once; the handler reuses
-// it. Before the fix each continuation rotated a multi-key channel twice and
-// sent the second key.
-func TestMidjourneyContinuationRotatesOriginKeyOnce(t *testing.T) {
-	for _, tc := range mjContinuations {
-		t.Run(tc.name, func(t *testing.T) {
-			route := newMjRoute(t)
-			a := route.channel(t, "origin-a", "key-a1\nkey-a2\nkey-a3")
-			route.origin(t, mjUserID, a.Id)
-
-			recorder := route.submit(t, route.token(t, "mjrotate", ""), tc.path, tc.body)
-
-			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
-			assert.Equal(t, []string{tc.path}, route.upstream.paths)
-			assert.Equal(t, []string{"key-a1"}, route.upstream.secrets)
-			assert.Equal(t, 1, mjPollingIndex(t, a.Id), "the cursor advances once")
 		})
 	}
 }

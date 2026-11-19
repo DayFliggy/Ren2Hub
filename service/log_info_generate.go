@@ -86,10 +86,6 @@ func AppendRelayLogAdminInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 			other.SetAdmin("request_plugins", relayInfo.RequestPluginSteps)
 		}
 	}
-	if common.GetContextKeyBool(ctx, constant.ContextKeyChannelIsMultiKey) {
-		other.SetAdmin("is_multi_key", true)
-		other.SetAdmin("multi_key_index", common.GetContextKeyInt(ctx, constant.ContextKeyChannelMultiKeyIndex))
-	}
 	if common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens) {
 		other.SetAdmin("local_count_tokens", true)
 	}

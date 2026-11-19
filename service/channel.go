@@ -47,7 +47,7 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 			return i18n.Translate(lang, i18n.MsgChannelNotifyDisabledSubject, params), i18n.Translate(lang, i18n.MsgChannelNotifyDisabledContent, params)
 		})
 		if common.IsMasterNode && channel != nil {
-			scheduledPlugins.disabled(channel, channelError.UsingKey, time.Now())
+			scheduledPlugins.disabled(channel, time.Now())
 		}
 	}
 }

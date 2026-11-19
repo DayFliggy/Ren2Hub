@@ -39,11 +39,8 @@ var upstreamRatioDetectTypes = map[int]struct{}{
 	constant.ChannelTypeSiliconFlow: {}, constant.ChannelTypeDeepSeek: {}, constant.ChannelTypeVolcEngine: {},
 }
 
-// UpstreamRatioKind 决定渠道走哪条探测路径。多 Key 渠道无法确定用哪把 Key 代表渠道，只能手动填写。
+// UpstreamRatioKind 决定渠道走哪条探测路径。
 func UpstreamRatioKind(channel *model.Channel) string {
-	if channel.ChannelInfo.IsMultiKey {
-		return UpstreamRatioKindUnsupported
-	}
 	switch channel.Type {
 	case constant.ChannelTypeSub2API:
 		return UpstreamRatioKindSub2API

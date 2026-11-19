@@ -21,8 +21,8 @@ import (
 	"github.com/QuantumNous/new-api/service"
 )
 
-// balanceQueryTimeout bounds the balance query of one key in an update of all
-// balances, and of one plugin key line anywhere.
+// balanceQueryTimeout bounds the balance query of one channel in an update of
+// all balances, and of a plugin channel anywhere.
 const balanceQueryTimeout = 30 * time.Second
 
 // balanceUpdateConcurrency is how many channels an update of all balances
@@ -67,78 +67,34 @@ func recordBuiltinBalance(channel *model.Channel, result channelBalanceResult, e
 	return detail
 }
 
-// pluginKeyBalance is the balance query of one key line of a task plugin
-// channel.
-type pluginKeyBalance struct {
-	index  int
-	key    string
-	result jsplugin.BalanceResult
-	err    error
-}
-
 // pluginReportsBalance reports whether a plugin exports the balance hooks.
 func pluginReportsBalance(plugin *jsplugin.LoadedPlugin) bool {
 	return plugin.HasProviderHook("buildBalanceRequest") && plugin.HasProviderHook("parseBalance")
 }
 
 // updatePluginChannelBalance queries the balance of a task plugin channel with
-// its plugin's balance hooks, each key line of a multi-key channel on its own,
-// and stores the result: the detail, and the USD balance when the result has
-// one. enabledOnly skips the disabled keys of a multi-key channel. err is the
-// failure when every queried key failed.
-func updatePluginChannelBalance(channel *model.Channel, plugin *jsplugin.LoadedPlugin, enabledOnly bool) ([]pluginKeyBalance, *model.ChannelBalanceDetail, error) {
-	keys := []string{strings.TrimSpace(channel.Key)}
-	if channel.ChannelInfo.IsMultiKey {
-		keys = channel.GetKeys()
-	}
-	balances := make([]pluginKeyBalance, 0, len(keys))
-	for index, key := range keys {
-		if enabledOnly && channel.ChannelInfo.IsMultiKey {
-			if status, ok := channel.ChannelInfo.MultiKeyStatusList[index]; ok && status != common.ChannelStatusEnabled {
-				continue
-			}
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), balanceQueryTimeout)
-		result, err := queryPluginKeyBalance(ctx, channel, plugin, index, key)
-		cancel()
-		if err != nil {
-			err = fmt.Errorf("%s", balanceErrorText(err, key))
-		}
-		balances = append(balances, pluginKeyBalance{index: index, key: key, result: result, err: err})
-	}
-	var failure error
-	succeeded := false
-	for _, balance := range balances {
-		if balance.err == nil {
-			succeeded = true
-		} else if failure == nil {
-			failure = balance.err
-		}
-	}
-	if len(balances) == 0 {
-		return nil, nil, nil
-	}
-	records := make(map[int]model.ChannelBalanceDetail, len(balances))
-	for _, balance := range balances {
-		record := model.ChannelBalanceDetail{BalanceResult: balance.result}
-		if balance.err != nil {
-			record.Error = balance.err.Error()
-		}
-		records[balance.index] = record
-	}
-	detail, err := service.UpdatePluginKeyBalances(channel, records)
+// its plugin's balance hooks and stores the result: the detail, and the USD
+// balance when the result has one. err is the query's failure.
+func updatePluginChannelBalance(channel *model.Channel, plugin *jsplugin.LoadedPlugin) (jsplugin.BalanceResult, *model.ChannelBalanceDetail, error) {
+	key := strings.TrimSpace(channel.Key)
+	ctx, cancel := context.WithTimeout(context.Background(), balanceQueryTimeout)
+	result, err := queryPluginKeyBalance(ctx, channel, plugin, key)
+	cancel()
+	record := model.ChannelBalanceDetail{BalanceResult: result}
 	if err != nil {
-		common.SysError(common.LogText("failed to store balance detail: channel_id=%d, error=%v", channel.Id, err))
+		err = fmt.Errorf("%s", balanceErrorText(err, key))
+		record.Error = err.Error()
 	}
-	if !succeeded {
-		return balances, detail, failure
+	detail, storeErr := service.UpdatePluginBalance(channel.Id, record)
+	if storeErr != nil {
+		common.SysError(common.LogText("failed to store balance detail: channel_id=%d, error=%v", channel.Id, storeErr))
 	}
-	return balances, detail, nil
+	return result, detail, err
 }
 
-// queryPluginKeyBalance queries the balance of one key line of a task plugin
-// channel through the channel's proxy, TLS setting and header overrides.
-func queryPluginKeyBalance(ctx context.Context, channel *model.Channel, plugin *jsplugin.LoadedPlugin, index int, key string) (jsplugin.BalanceResult, error) {
+// queryPluginKeyBalance queries the balance of a task plugin channel's key
+// through the channel's proxy, TLS setting and header overrides.
+func queryPluginKeyBalance(ctx context.Context, channel *model.Channel, plugin *jsplugin.LoadedPlugin, key string) (jsplugin.BalanceResult, error) {
 	info := &relaycommon.RelayInfo{
 		RelayFormat:    types.RelayFormatOpenAI,
 		RelayMode:      relayconstant.RelayModeUnknown,
@@ -146,8 +102,6 @@ func queryPluginKeyBalance(ctx context.Context, channel *model.Channel, plugin *
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
-			ChannelIsMultiKey:    channel.ChannelInfo.IsMultiKey,
-			ChannelMultiKeyIndex: index,
 			ChannelBaseUrl:       channel.GetBaseURL(),
 			ApiKey:               key,
 			ChannelSetting:       channel.GetSetting(),
@@ -193,34 +147,24 @@ func balanceErrorText(err error, key string) string {
 
 // updateBalanceInRun queries one enabled channel in an update of all
 // balances and disables what has none left, when the channel's automatic
-// disabling is on: the channel, or a multi-key plugin channel's empty keys.
+// disabling is on.
 func updateBalanceInRun(channel *model.Channel) {
 	if channel.Type == constant.ChannelTypeTaskPlugin {
 		plugin, ok := service.PluginOfChannel(channel)
 		if !ok || !pluginReportsBalance(plugin) {
 			return
 		}
-		balances, _, _ := updatePluginChannelBalance(channel, plugin, true)
-		for _, balance := range balances {
-			if balance.err != nil || !emptyBalance(balance.result) {
-				continue
-			}
-			usingKey := ""
-			if channel.ChannelInfo.IsMultiKey {
-				usingKey = balance.key
-			}
-			service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, usingKey, channel.GetAutoBan()), "Insufficient balance")
+		result, _, err := updatePluginChannelBalance(channel, plugin)
+		if err == nil && emptyBalance(result) {
+			service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, "", channel.GetAutoBan()), "Insufficient balance")
 		}
 		return
-	}
-	if channel.ChannelInfo.IsMultiKey {
-		return // built-in multi-key channels have no balance query
 	}
 	result, err := withBalanceTimeout(func() (channelBalanceResult, error) {
 		return updateChannelBalance(channel)
 	})
 	if err == nil && result.RawResponse == "" && emptyBalance(jsplugin.BalanceResult{Amount: &result.Balance}) {
-		service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, "", channel.GetAutoBan()), "Insufficient balance")
+		service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, "", channel.GetAutoBan()), "Insufficient balance")
 	}
 }
 

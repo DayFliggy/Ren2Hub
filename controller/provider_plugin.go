@@ -13,11 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type pluginLoginStartRequest struct {
-	KeyIndex *int `json:"key_index"`
-	Add      bool `json:"add"`
-}
-
 type pluginLoginContinueRequest struct {
 	Flow  string                   `json:"flow"`
 	Input service.PluginLoginInput `json:"input"`
@@ -76,12 +71,22 @@ func StartPluginLogin(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var request pluginLoginStartRequest
+	var request map[string]any
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil && !errors.Is(err, io.EOF) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	result, err := service.StartPluginLogin(c.Request.Context(), identity, channelID, request.KeyIndex, request.Add)
+	// A login replaces the channel's one credential; the retired fields that
+	// picked a key line or added an account are refused.
+	if _, ok := request["key_index"]; ok {
+		common.ApiErrorT(c, "A channel holds one key; add one channel per key instead")
+		return
+	}
+	if _, ok := request["add"]; ok {
+		common.ApiErrorT(c, "A channel holds one key; add one channel per key instead")
+		return
+	}
+	result, err := service.StartPluginLogin(c.Request.Context(), identity, channelID)
 	if err != nil {
 		common.ApiError(c, err)
 		return

@@ -9,12 +9,10 @@ import (
 const channelBalanceDetailKey = "balance_detail"
 
 // ChannelBalanceDetail is the last balance query of a channel, kept in
-// other_info: the result in its own currency, the last failure, and for a
-// multi-key plugin channel the result of each key by its 0-based index.
+// other_info: the result in its own currency and the last failure.
 type ChannelBalanceDetail struct {
 	jsplugin.BalanceResult
-	Error string                          `json:"error,omitempty"`
-	Keys  map[string]ChannelBalanceDetail `json:"keys,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // GetBalanceDetail returns the channel's last balance query, nil before the

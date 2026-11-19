@@ -38,8 +38,8 @@ type cachedAccessToken struct {
 }
 
 var (
-	// accessTokens holds one entry per channel key slot (channel id, plus the
-	// key index on multi-key channels).
+	// accessTokens holds one entry per channel; a channel holds one key
+	// (Ren2Hub single-key-channel).
 	accessTokens       sync.Map
 	accessTokenFlights singleflight.Group
 	// fetchAccessToken is replaced in tests.
@@ -48,9 +48,6 @@ var (
 
 func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	cacheKey := fmt.Sprintf("%d", info.ChannelId)
-	if info.ChannelIsMultiKey {
-		cacheKey = fmt.Sprintf("%d-%d", info.ChannelId, info.ChannelMultiKeyIndex)
-	}
 	creds := a.AccountCredentials
 	// A replaced service-account key must not reuse the old key's token.
 	identity := creds.ClientEmail + "\x00" + creds.PrivateKeyID

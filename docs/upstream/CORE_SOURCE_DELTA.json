@@ -3,8 +3,8 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 868,
-    "adapted": 295,
+    "upstream_equal": 850,
+    "adapted": 313,
     "extension": 415,
     "removed": 46
   },
@@ -769,13 +769,14 @@
       "path": "constant/context_key.go",
       "status": "adapted",
       "upstream_sha256": "28178c39c5639923ca705b5c859c7c340b69041970863f7a3197251f3b5443e5",
-      "local_sha256": "a1946a683d91190cc8107eb3d583c32eb1c21ffd7f7d6b58a7193a5362c740ea",
+      "local_sha256": "6141204d1730837fdf7cac36e3fb0cff269025f53eccf69c5b93846a911fc8b6",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "single-key-channel"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：constant/context_key.go#1, constant/context_key.go#2",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：constant/context_key.go#1, constant/context_key.go#2。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -904,11 +905,12 @@
       "upstream_sha256": "74d63a6666915d0aa0d97f269e2300e028342083d99ff75871015d27bc8b80b2",
       "local_sha256": "a204c62be7107d50c52507f8ab53b8ed308e8672e5b7147421c90a0e080fa143",
       "reasons": [
-        "retired"
+        "retired",
+        "single-key-channel"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/audit.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/audit.go#1。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -954,25 +956,33 @@
     },
     {
       "path": "controller/channel-billing.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "59bd8dfbb2fdbf25bf3b87a5b89d04c8013f11856612839fed2fc8a585b68927",
-      "local_sha256": "59bd8dfbb2fdbf25bf3b87a5b89d04c8013f11856612839fed2fc8a585b68927"
+      "local_sha256": "af324d51e83bc7989fee0a429cb1b42922d1afe6e4597ab68695731cd8b68e3c",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "插件渠道余额按渠道查询一次，不再逐 Key 查询（single-key-channel）。"
+      }
     },
     {
       "path": "controller/channel-test.go",
       "status": "adapted",
       "upstream_sha256": "2854ae6987e4f6d458de553dca6a06c48c0f88cced1ed608e5bb29f0f382a4d0",
-      "local_sha256": "a333a78bbe1beec6396554f95f60999bf7d5b1cd3a463485995bfbccf20c89eb",
+      "local_sha256": "e7f65da4064d74bd02cf53fecbfcfa66b145e73c43f6c2dc6d6e36ee4200728d",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -999,11 +1009,12 @@
         "concurrency",
         "group-removal",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -1067,11 +1078,12 @@
         "catalog-stats",
         "channel-ratio",
         "concurrency",
-        "group-removal"
+        "group-removal",
+        "single-key-channel"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -1091,9 +1103,16 @@
     },
     {
       "path": "controller/channel_balance.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "fa98c7594204882b33ec9218b52e20db4650286afa50fb32f110b887dfbe86ff",
-      "local_sha256": "fa98c7594204882b33ec9218b52e20db4650286afa50fb32f110b887dfbe86ff"
+      "local_sha256": "0886c405fc917d3e316f2cde350c54702981b4b6f8317f1aa0b4ba59135cfb32",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "插件余额按渠道 Key 查询并存储一次，余额耗尽停用渠道；删除逐 Key 查询、Key 下标与内置多 Key 跳过（single-key-channel）。"
+      }
     },
     {
       "path": "controller/channel_billing_sub2api_test.go",
@@ -1134,9 +1153,16 @@
     },
     {
       "path": "controller/channel_inference.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "df7522e8027e92362d0f982c2b998474481252681437f7341e9ad06f4b2cfeee",
-      "local_sha256": "df7522e8027e92362d0f982c2b998474481252681437f7341e9ad06f4b2cfeee"
+      "local_sha256": "0f48d9e8fd11da153f4680df8fe7e82502b0c1a6f3a0baaffe4537c6d3dff185",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "推理服务状态请求直接用渠道 Key，删除取启用 Key 的失败分支（single-key-channel）。"
+      }
     },
     {
       "path": "controller/channel_inference_test.go",
@@ -1182,9 +1208,9 @@
     },
     {
       "path": "controller/channel_plugin_gaps_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "998e34d960d739a86ef6ab7bda6263e9f963574a99441ba185a489ef4330e178",
-      "local_sha256": "998e34d960d739a86ef6ab7bda6263e9f963574a99441ba185a489ef4330e178"
+      "local_sha256": "01d9b6f6886b9239f9627755a018c10d344e0a182512cc720dc9af9f997bbb4d"
     },
     {
       "path": "controller/channel_priority.go",
@@ -1274,15 +1300,16 @@
       "path": "controller/channel_upstream_update.go",
       "status": "adapted",
       "upstream_sha256": "7dd46eb7b98d12f9bd93475ff1a3208120107c3c70b8c4feaa475c27b70b6aab",
-      "local_sha256": "15b030e5ec7a88b66b8ab6807f57b01827a1932121542a429bfdd299cb572d52",
+      "local_sha256": "af8a04c4d4ba65d5fea851ea9f782e25c5c553aedb540fb5bd4cc197bc70d2eb",
       "reasons": [
         "concurrency",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_upstream_update.go#1, controller/channel_upstream_update.go#15, controller/channel_upstream_update.go#18, controller/channel_upstream_update.go#5, controller/channel_upstream_update.go#8",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_upstream_update.go#1, controller/channel_upstream_update.go#15, controller/channel_upstream_update.go#18, controller/channel_upstream_update.go#5, controller/channel_upstream_update.go#8。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -1298,7 +1325,7 @@
       "path": "controller/channel_upstream_update_test.go",
       "status": "adapted",
       "upstream_sha256": "b7490ced1ef7b263305a30848935089976b79d0dcc022e323661caf914772726",
-      "local_sha256": "d24e7f3e71a4ebd41f7a0c1bb70a8ee78e22f7d43d0dabe96d468c47a3c646f1"
+      "local_sha256": "e7f05cdbd00a98136439853e49618c35d95573c20a193e8dce2003331781f436"
     },
     {
       "path": "controller/channel_vertex_version_test.go",
@@ -2109,15 +2136,22 @@
     },
     {
       "path": "controller/provider_plugin.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "2ec3b7d6722f5bd7a0f60d58108e968bce44c82be87e8d1832515ab02150289b",
-      "local_sha256": "2ec3b7d6722f5bd7a0f60d58108e968bce44c82be87e8d1832515ab02150289b"
+      "local_sha256": "8d6c931c875784dfe87d344181bdc99b86decfe0ecf1752e3c05b5e2234ec227",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "插件登录请求拒绝 key_index 与 add，登录替换渠道凭据（single-key-channel）。"
+      }
     },
     {
       "path": "controller/provider_plugin_test.go",
       "status": "adapted",
       "upstream_sha256": "1d1e206dca999b9772dfafb92c7a0c0f6699be7dc10202c21c6ae381a650195d",
-      "local_sha256": "64fb5ce9719ef665c24b933cab80b38e130a66215b1cb2d7b045f06c8f3a5c94"
+      "local_sha256": "0d61b8656a2d45b36ac63b85d678207ee1a75d205b2ae441de71a95cae983ea9"
     },
     {
       "path": "controller/rankings.go",
@@ -2135,13 +2169,14 @@
       "path": "controller/ratio_sync.go",
       "status": "adapted",
       "upstream_sha256": "dece2f1b7c64586a7000a3e495575d5dead871169c1a32281cb357b94648e83e",
-      "local_sha256": "2cacd17207f7b4b42d26e3e15a7bddb6658f0cddbc6103cf15e82afd79908838",
+      "local_sha256": "2125ac8660d539412ca398409ceb34fc064d35f50a2fddfa9522a783c5f06e3c",
       "reasons": [
-        "catalog-stats"
+        "catalog-stats",
+        "single-key-channel"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/ratio_sync.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/ratio_sync.go#1。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -2197,7 +2232,7 @@
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "478c7d453db4e6e64bfb440eab14fda1c31d6e9d493f6231aaf73c9f5f8c64d6",
-      "local_sha256": "65f206031cb5d8c6a8de0a10a71d8c7b6ed390c98455409785ab61f3d13d63ec",
+      "local_sha256": "28daf796d7d3a14276df3d47f37cf9dc2ee024d5d038bcf94613f855a344fb40",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -2205,11 +2240,12 @@
         "native-count",
         "origin-task-continuation",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3757,7 +3793,7 @@
       "path": "middleware/distributor.go",
       "status": "adapted",
       "upstream_sha256": "07368d97236b38126701028a043e1121dba421c1a262637c616c0f6d81fba9fe",
-      "local_sha256": "427f38de3e25bce5275e349abbbe79b43e11ffc44ffee56a90e2f36989f78b29",
+      "local_sha256": "99bda12b257df46ade1746613c9015c8e38119cf59e278e1f298122e3e079964",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -3765,11 +3801,12 @@
         "native-count",
         "origin-task-continuation",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/distributor.go#1, middleware/distributor.go#10, middleware/distributor.go#11, middleware/distributor.go#12, middleware/distributor.go#13, middleware/distributor.go#14, middleware/distributor.go#15, middleware/distributor.go#16, middleware/distributor.go#17, middleware/distributor.go#18, middleware/distributor.go#19, middleware/distributor.go#2, middleware/distributor.go#3, middleware/distributor.go#4, middleware/distributor.go#5, middleware/distributor.go#6, middleware/distributor.go#7, middleware/distributor.go#8, middleware/distributor.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/distributor.go#1, middleware/distributor.go#10, middleware/distributor.go#11, middleware/distributor.go#12, middleware/distributor.go#13, middleware/distributor.go#14, middleware/distributor.go#15, middleware/distributor.go#16, middleware/distributor.go#17, middleware/distributor.go#18, middleware/distributor.go#19, middleware/distributor.go#2, middleware/distributor.go#3, middleware/distributor.go#4, middleware/distributor.go#5, middleware/distributor.go#6, middleware/distributor.go#7, middleware/distributor.go#8, middleware/distributor.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4401,9 +4438,16 @@
     },
     {
       "path": "model/channel_balance.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "f9e171ef8f9d636990e82828ac7d0d2fcfdcd7c6a7c77ed9ecde83e09453c0e1",
-      "local_sha256": "f9e171ef8f9d636990e82828ac7d0d2fcfdcd7c6a7c77ed9ecde83e09453c0e1"
+      "local_sha256": "401ff00b3a52a6e3d76fb8cfde1abdcfdfb5d7734872cf11550482241a3f22d3",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "余额详情删除逐 Key 结果 keys（single-key-channel）。"
+      }
     },
     {
       "path": "model/channel_cache.go",
@@ -4539,14 +4583,15 @@
       "path": "model/channel_plugin_credential.go",
       "status": "adapted",
       "upstream_sha256": "d0733a5981dd2637b45a8d14e0cd4dcf1e8111e87a51b1bfc20603c34e7cffc3",
-      "local_sha256": "4f8c0a73ab6d5d51f404d05536eaf7a8cc586540e358b4c1678bc32c57b66ced",
+      "local_sha256": "5f7c2b68652978385ca95d14ad06a9ec949e6d14dc358b508b98a8652d0d4239",
       "reasons": [
         "auth-cache-integrity",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_plugin_credential.go#1, model/channel_plugin_credential.go#6, model/channel_plugin_credential.go#8, model/channel_plugin_credential.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_plugin_credential.go#1, model/channel_plugin_credential.go#6, model/channel_plugin_credential.go#8, model/channel_plugin_credential.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4561,7 +4606,7 @@
       "path": "model/channel_plugin_credential_test.go",
       "status": "adapted",
       "upstream_sha256": "0d0811e0ab6652bc47d36206a1037ca3bd1e78bcfda009c9b7ce759cedcf8a24",
-      "local_sha256": "ad72f0ed6a1981cfa527aba0ae47e1508b07f4a6829f724baaa09bfd6157c000"
+      "local_sha256": "ce82148bf61d2788f9389a5a25ded5b2e5ac849a889dc412e322d4f5bc5afd4b"
     },
     {
       "path": "model/channel_polling.go",
@@ -8474,9 +8519,16 @@
     },
     {
       "path": "relay/channel/providerplugin/adaptor.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "2623e15bb8de10bdea1099e83c6decd2d216df9cc48d9353f7e7373657eb8802",
-      "local_sha256": "2623e15bb8de10bdea1099e83c6decd2d216df9cc48d9353f7e7373657eb8802"
+      "local_sha256": "21b3896fe20b1e60a5fbc4fbbdaf6b837b2493ea626bd1591df49b7d45c81367",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "凭据刷新、needs_login 停用按渠道进行，删除凭据下标（single-key-channel）。"
+      }
     },
     {
       "path": "relay/channel/providerplugin/chain.go",
@@ -8507,9 +8559,16 @@
     },
     {
       "path": "relay/channel/providerplugin/management.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "2a5702026b8a131d35fc1c17e08253e58d8c63bafbb051ef77f2f5b450d703fa",
-      "local_sha256": "2a5702026b8a131d35fc1c17e08253e58d8c63bafbb051ef77f2f5b450d703fa"
+      "local_sha256": "69774a05ba9d999012d3d539efbd21b36493e2730e68afd1251e28feef651ac0",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "管理请求刷新凭据按渠道进行，删除凭据下标（single-key-channel）。"
+      }
     },
     {
       "path": "relay/channel/providerplugin/management_test.go",
@@ -8647,15 +8706,22 @@
     },
     {
       "path": "relay/channel/task/jsplugin/credential.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "f50744a07802d33696b477062e699e84a8f2561e14b719adbeac9db498819d74",
-      "local_sha256": "f50744a07802d33696b477062e699e84a8f2561e14b719adbeac9db498819d74"
+      "local_sha256": "af8a2e6f9831aede2d88d259bd41d1911186207a7d0eb24f82ef3cdacead8a62",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "任务提交与轮询用渠道凭据，轮询仍核对提交任务的账号；删除凭据行扫描与下标（single-key-channel）。"
+      }
     },
     {
       "path": "relay/channel/task/jsplugin/credential_test.go",
       "status": "adapted",
       "upstream_sha256": "92694a25a2e0a806c6795df42a61653da1a10ba091206625e112b5f34802189d",
-      "local_sha256": "ff34baf06ab3a40cf1903045dcc22c91e65f4aac389b9d510aa19ea7985ab0ff"
+      "local_sha256": "0d133b4d0280d32429d15d28ee6f3f3d0eb299dc79cb44f316610694ea26c827"
     },
     {
       "path": "relay/channel/task/jsplugin/performance_test.go",
@@ -8749,15 +8815,22 @@
     },
     {
       "path": "relay/channel/vertex/service_account.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "164b07627df086cdb844fc15464d651c0e47fa0764c4ecf452ea739b634140e1",
-      "local_sha256": "164b07627df086cdb844fc15464d651c0e47fa0764c4ecf452ea739b634140e1"
+      "local_sha256": "d716f2e02161e2ea3d1ada41f56788bfa42d76ca8223758934bccf269b7e6480",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "访问令牌缓存按渠道 ID，删除多 Key 下标（single-key-channel）。"
+      }
     },
     {
       "path": "relay/channel/vertex/service_account_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "06d8a8dea40732bf5a0ceb3dc0d31b43db5746264e5fb83c0e14bdd1e45a5926",
-      "local_sha256": "06d8a8dea40732bf5a0ceb3dc0d31b43db5746264e5fb83c0e14bdd1e45a5926"
+      "local_sha256": "ac1c545932fa82c19a1b0300a0b267d4d8b07c5c2b04695f1b0f3ae05b7a47f4"
     },
     {
       "path": "relay/channel/vertex/url_builder.go",
@@ -9113,17 +9186,18 @@
       "path": "relay/common/relay_info.go",
       "status": "adapted",
       "upstream_sha256": "4ea60dbc4a9d203eb9a7c158789520077b301fc1bdcb5e9bb3ec2923a83b3023",
-      "local_sha256": "10f8ceb6d545b3d37dfd4cbe4d2d3bc15278153e8ae21a29e2268683fdb2f05c",
+      "local_sha256": "1a442a7d9a345e727ae8a821dbb22b500635ba70adeecf907c67e5263c0e56b6",
       "reasons": [
         "channel-ratio",
         "group-removal",
         "origin-task-continuation",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/relay_info.go#1, relay/common/relay_info.go#10, relay/common/relay_info.go#11, relay/common/relay_info.go#2, relay/common/relay_info.go#3, relay/common/relay_info.go#4, relay/common/relay_info.go#5, relay/common/relay_info.go#6, relay/common/relay_info.go#7, relay/common/relay_info.go#8, relay/common/relay_info.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/relay_info.go#1, relay/common/relay_info.go#10, relay/common/relay_info.go#11, relay/common/relay_info.go#2, relay/common/relay_info.go#3, relay/common/relay_info.go#4, relay/common/relay_info.go#5, relay/common/relay_info.go#6, relay/common/relay_info.go#7, relay/common/relay_info.go#8, relay/common/relay_info.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -9630,17 +9704,18 @@
       "path": "relay/relay_task.go",
       "status": "adapted",
       "upstream_sha256": "0ba590b7879418eafd07e049627aee88690f21f3f3e22e9c5e96709466a2ffa2",
-      "local_sha256": "42c90ab0a43134f2699a14b1c0b28afec87955f6ea4feb6dce2ff34e9a6cb02f",
+      "local_sha256": "0ba8f57d7a1fee0b16e0159ae2d3e07d203c72b5bf51b1b1aa83ef42c5cc7427",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "origin-task-continuation",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/relay_task.go#10, relay/relay_task.go#11, relay/relay_task.go#5, relay/relay_task.go#6, relay/relay_task.go#7, relay/relay_task.go#8, relay/relay_task.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/relay_task.go#10, relay/relay_task.go#11, relay/relay_task.go#5, relay/relay_task.go#6, relay/relay_task.go#7, relay/relay_task.go#8, relay/relay_task.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -9930,16 +10005,17 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "5eff80a23e4c69573bb6598fec1a14205a59202833abdce7b8033557395a5b07",
-      "local_sha256": "0cba71572f9fbe047161ac74b9ef9f1d99711d5523f63922176a9cedf2eccd01",
+      "local_sha256": "0522aa09c63ca8ecd3d4aca356a4e68c29736dfe5b383991ac2a4a7c1e2f21b1",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 buildResponsesWSCreatePayload 把最终出站事件交给 service.ObserveRouteGenerate（实际不要求生成且没有输出的请求在路由上记 ignored），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 buildResponsesWSCreatePayload 把最终出站事件交给 service.ObserveRouteGenerate（实际不要求生成且没有输出的请求在路由上记 ignored），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -10983,9 +11059,16 @@
     },
     {
       "path": "relaykit/types/channel_error.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "2a780541bc31f14c8caa9d018f8d7109690876d3c984e0adef191211f5253c8e",
-      "local_sha256": "2a780541bc31f14c8caa9d018f8d7109690876d3c984e0adef191211f5253c8e"
+      "local_sha256": "a99ec7af4beb06da353404d46adc84ed6fe3f169aa2af2f696389fcd615a42f0",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "ChannelError 删除 IsMultiKey 与对应参数（single-key-channel）。"
+      }
     },
     {
       "path": "relaykit/types/conversion.go",
@@ -11099,11 +11182,12 @@
       "local_sha256": "0c6a5dbb06c26df305e141adbe420afabc792b38ecb48a0a1ccd05282d77bcc7",
       "reasons": [
         "catalog-stats",
-        "retired"
+        "retired",
+        "single-key-channel"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/channel-router.go#1, router/channel-router.go#2",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/channel-router.go#1, router/channel-router.go#2。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11199,7 +11283,7 @@
       "path": "router/mj_origin_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5efff7749525b0ed0809f20c8f09d21065ffa9254b6249be22aff1cf2a7b9ce9"
+      "local_sha256": "f0f8094e7deffc389d4b0d92efc8bcf210075455dc8bc7abfa969d96dc3daebf"
     },
     {
       "path": "router/mj_origin_upstream_probe_test.go",
@@ -11223,7 +11307,7 @@
       "path": "router/native_count_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "25c8050c79e1c5af3d875024d7925fa479ebedccd3b4345ac58bafcfabbcb5cc"
+      "local_sha256": "ff7b13f6c991f0a8cc57e0b87a879dc915dbe4a29b64fb9a308bfa12a63c15fb"
     },
     {
       "path": "router/native_restored_remix_storage_test.go",
@@ -11281,7 +11365,7 @@
       "path": "router/provider_plugin_relay_test.go",
       "status": "adapted",
       "upstream_sha256": "3a4d55b86f1d1aa719e3118a177dc1a4fbfdd7b8771443a4e64a47126caa00e4",
-      "local_sha256": "c318efee13aee767b0e32d31b334d60c275996ba446b1ea4e8baaec8cb459fea"
+      "local_sha256": "d1e517c4cedc44b52f48007161c7a8d53d0a08908f0d19e80cc6dde51061a3fd"
     },
     {
       "path": "router/relay-router.go",
@@ -11737,9 +11821,16 @@
     },
     {
       "path": "service/channel.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
-      "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4"
+      "local_sha256": "badb0aee339db24a6ff28f203fc40d4ba2bbec06426e288c026416fdbc83f3b9",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。"
+      }
     },
     {
       "path": "service/channel_affinity.go",
@@ -11855,13 +11946,14 @@
       "path": "service/channel_upstream_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "91ff0ca2be6bdb29446ac8a54da3aeb9bff0f3923aacfc2008b03ba706299ece",
+      "local_sha256": "e437f964c5b63b1b9773b1044e74244219eec789e931801e375492b7aa0f64c4",
       "reasons": [
+        "single-key-channel",
         "upstream-ratio"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio.go#1。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12410,16 +12502,17 @@
       "path": "service/log_info_generate.go",
       "status": "adapted",
       "upstream_sha256": "aa9443a1a8a607dfe9bb3297bfb34c1949b8015ade379756e9006dc7a97b9398",
-      "local_sha256": "3ed5067f090506eea12514efaa1dc46d7ad680cfe0fa67911908fb212d68c3fb",
+      "local_sha256": "d6c99edf0286aced1ea2ed0bb190b3027ae50454a25dbd41c737149b0acfa9e2",
       "reasons": [
         "channel-ratio",
         "group-removal",
         "retired",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/log_info_generate.go#1, service/log_info_generate.go#2, service/log_info_generate.go#3, service/log_info_generate.go#4, service/log_info_generate.go#5, service/log_info_generate.go#6。普通中继与任务消费日志共用请求策略的管理员字段，见 SYNC_LEDGER.md#自动选渠诊断接点。 管理员日志走本轮证据投影，覆盖先结算记日志后结束尝试的原生时序。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/log_info_generate.go#1, service/log_info_generate.go#2, service/log_info_generate.go#3, service/log_info_generate.go#4, service/log_info_generate.go#5, service/log_info_generate.go#6。普通中继与任务消费日志共用请求策略的管理员字段，见 SYNC_LEDGER.md#自动选渠诊断接点。 管理员日志走本轮证据投影，覆盖先结算记日志后结束尝试的原生时序。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12747,39 +12840,67 @@
     },
     {
       "path": "service/provider_plugin.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "b0c083c73648c188dc1b5873f4d9f9d5f022296f47688c6abada6139c962ed27",
-      "local_sha256": "b0c083c73648c188dc1b5873f4d9f9d5f022296f47688c6abada6139c962ed27"
+      "local_sha256": "1f92739ca34b6829042bc388d650442df813e14546b34e35115e66bf9ea45188",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "凭据刷新、needs_login 停用、模型列表 Key、复制时丢弃凭据和撤销被替换凭据都按渠道的一份凭据进行，删除凭据行下标与多 Key 分支（single-key-channel）。"
+      }
     },
     {
       "path": "service/provider_plugin_balance.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "b1767cdd0a55f35a7faad86c27a209d6ce2d85017b6098c94e449f418850d09c",
-      "local_sha256": "b1767cdd0a55f35a7faad86c27a209d6ce2d85017b6098c94e449f418850d09c"
+      "local_sha256": "53df6ae7802a9677360bad5d559c69980b47f24f8a9d9c56b43821f4f94e5174",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "插件余额按渠道存一份结果，删除逐 Key 合并与求和（single-key-channel）。"
+      }
     },
     {
       "path": "service/provider_plugin_login.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "4b856e0d8781b32e56439dbefbc57f3f8c91647bfa89374f882c08fad9cb4561",
-      "local_sha256": "4b856e0d8781b32e56439dbefbc57f3f8c91647bfa89374f882c08fad9cb4561"
+      "local_sha256": "531637a68431237b76c39369a868246cb11d10da6a75ee2b072f42c0e99ee9e9",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "登录替换渠道凭据并把已存凭据交给 login、要求同一账号；删除 add、key_index、转多 Key 与凭据 index（single-key-channel）。"
+      }
     },
     {
       "path": "service/provider_plugin_login_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "3068bf8cb989c49926005f60587aba24b865dc5a5da3cf732be807bbbc26c056",
-      "local_sha256": "3068bf8cb989c49926005f60587aba24b865dc5a5da3cf732be807bbbc26c056"
+      "local_sha256": "39bfa39ccde89ae8530be543126c9b369529d5c2ee6bbf1be91deed318aa2e04"
     },
     {
       "path": "service/provider_plugin_scheduled.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "f01c424b983c87b40a49f72b6daf20350b03813dd08fa4aa8a64969560bb61b9",
-      "local_sha256": "f01c424b983c87b40a49f72b6daf20350b03813dd08fa4aa8a64969560bb61b9"
+      "local_sha256": "20e3a1b595de3e0edcfc6be51d37ed03e300a03690b4e4583e1c03b5edb1bdc6",
+      "reasons": [
+        "single-key-channel"
+      ],
+      "review": {
+        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+        "basis": "scheduled 调度按渠道记一项，状态用渠道状态；删除 Key 下标与多 Key 状态（single-key-channel）。"
+      }
     },
     {
       "path": "service/provider_plugin_test.go",
       "status": "adapted",
       "upstream_sha256": "406b1b9e59736988b5c79ae83b83affda3189b20df0ba5a00c4d55fbd180b7ef",
-      "local_sha256": "59d3477ff8af51bf21bdd38360f0f08f326541ffa28737842426f58dba086f38"
+      "local_sha256": "47c7d962d2968568658ea11651bf853b86ecb744b9b0425e51bb6f6ff9cb23f6"
     },
     {
       "path": "service/provider_plugin_token_test.go",
@@ -12868,7 +12989,7 @@
       "path": "service/relay_error_test.go",
       "status": "adapted",
       "upstream_sha256": "968428cae7e49a5dde6dfadde47b876adf9677a2bb8ab26056ffc7c9ff32e12f",
-      "local_sha256": "99994c57cad54863fd0fae727bf4722c69cca12014450e37cedd92b2a5e679a4"
+      "local_sha256": "56ec856753744444dd5a8cfd9d93e9dad30969305d826796313b31eeecd5bc69"
     },
     {
       "path": "service/request_converter.go",
@@ -12880,14 +13001,15 @@
       "path": "service/request_policy.go",
       "status": "adapted",
       "upstream_sha256": "f4c0eb4c06c5489bb359004dc0eadc71dde5a4cc2c7fae2a588072cdeadeacd3",
-      "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
+      "local_sha256": "461eabbddb3e8565e70003bd6dd7fa7364634e68ecaccd86bd412d7989580d2e",
       "reasons": [
         "group-removal",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -13040,7 +13162,7 @@
       "path": "service/route_breaker_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "589c2777b163e48540c34d766e7eb2de472dfcee704ec3b2ab200e0ecfcd02ef"
+      "local_sha256": "5b4a104b3a0564dbff68007937cf7413bf4146489456c072f8dd59567da06607"
     },
     {
       "path": "service/route_cache_context.go",
@@ -13152,14 +13274,15 @@
       "path": "service/route_error_codes.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ec6fc85e5d57caa19c618f627c9a8cf7c03eddb2cbf82431fcfaee75f28693d1",
+      "local_sha256": "73506c8fe7f77b5dc2fd6ecc72e05407e596900a6a05c4ebc36b3dfcf9b8fbe4",
       "reasons": [
-        "token-routing",
-        "ops-metrics"
+        "ops-metrics",
+        "single-key-channel",
+        "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "自动路由读取的错误码表：原生分类器点名的上游码（按原生类别）、本网关生成的 relaykit 错误码和路由原因。上下文超长收窄据此识别凭据、额度、限流、权限类错误；Root 熔断快照只保存表内的码，其余记 unrecognized。客户响应、重试和原生分类不变。"
+        "basis": "自动路由读取的错误码表：原生分类器点名的上游码（按原生类别）、本网关生成的 relaykit 错误码和路由原因。上下文超长收窄据此识别凭据、额度、限流、权限类错误；Root 熔断快照只保存表内的码，其余记 unrecognized。客户响应、重试和原生分类不变。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。"
       }
     },
     {
@@ -14730,6 +14853,16 @@
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
+    "auth-cache-integrity": {
+      "basis": "吸收已合并#8200缓存签名、旧缓存回源修复、计数CAS保留和会话撤销保护，适配本地MaxConcurrency及已删除分组。",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
+      "kind": "approved_contract"
+    },
+    "backup-payment-links": {
+      "basis": "钱包备用支付：原生 TopUpLink 之外由管理员维护最多 10 个名称加 http(s) 链接，保存时校验；/api/user/topup/info 返回合并列表，支付合规未确认时为空；逻辑在扩展文件。",
+      "authority": "SYNC_LEDGER.md#备用支付接点",
+      "kind": "approved_contract"
+    },
     "branding": {
       "basis": "保留 Ren2Hub / DayFliggy 产品名称和品牌资源。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
@@ -14785,6 +14918,16 @@
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
+    "origin-task-continuation": {
+      "basis": "本地原渠道准入合同：只豁免手动列表，不豁免当前Key倍率上限；保留显式过滤器和即时容量。MJ找到原任务后复用准备结果，只占槽和轮换Key一次。共有错误优先级、remix上下文/动作/ID/平台/继承倍率不在本地修复范围。",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
+      "kind": "approved_contract"
+    },
+    "payment-single-credit": {
+      "kind": "approved_contract",
+      "authority": "AGENTS.md; docs/billing/TOPUP_BONUS.md#在线充值的报价与确认",
+      "basis": "支付回调与人工补单最多一次入账；保留冻结额度、PayAmount/Currency、历史额度解释和返利原子事务，不泛化为所有通道收据/ACK修复。"
+    },
     "price-source": {
       "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
@@ -14798,6 +14941,11 @@
     "retired": {
       "basis": "明确退役站内订阅/套餐、旧 Codex/type 57 专用接入、io.net、Playground、旧前端和 api/next。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
+      "kind": "approved_contract"
+    },
+    "single-key-channel": {
+      "basis": "一条渠道只保存一把 Key，提供商插件渠道只保存一份凭据；多个 Key 或账号各建一条渠道，再次登录替换凭据。写入口拒绝多 Key，运行时不选 Key、不按 Key 停用、不存 Key 级状态；保留跨渠道一账号一凭据检查、全表锁和按 CredentialAccount 分批轮询。",
+      "authority": "SYNC_LEDGER.md#单-key-渠道接点",
       "kind": "approved_contract"
     },
     "single-node": {
@@ -14815,6 +14963,11 @@
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
+    "strict-preconsume": {
+      "kind": "approved_contract",
+      "authority": "docs/billing/IMPLEMENTATION.md:14; docs/routing/UNIFIED_ROUTING.md:15",
+      "basis": "路由发送前强制估算及余额覆盖；不恢复trust_quota_usd、信任免预扣或允许负余额的reserve分支。"
+    },
     "ticket": {
       "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
@@ -14830,6 +14983,11 @@
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
+    "topup-bonus": {
+      "basis": "独有充值加赠：单笔入账、固定、全站与个人用量阶梯合成一次加赠比例，实付不变，按本金另赠额度；覆盖六个在线充值渠道、兑换码与管理员加额；订单 ExpectedQuota 冻结本金加赠合计、返利基数为本金；小时统计、配置、决策记录与一次性迁移放在扩展文件；调用计价与上游一致。",
+      "authority": "SYNC_LEDGER.md#充值加赠接点",
+      "kind": "approved_contract"
+    },
     "upstream-ratio": {
       "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
@@ -14838,36 +14996,6 @@
     "vue-frontend": {
       "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
-      "kind": "approved_contract"
-    },
-    "auth-cache-integrity": {
-      "basis": "吸收已合并#8200缓存签名、旧缓存回源修复、计数CAS保留和会话撤销保护，适配本地MaxConcurrency及已删除分组。",
-      "authority": "SYNC_LEDGER.md#现行本地差异",
-      "kind": "approved_contract"
-    },
-    "origin-task-continuation": {
-      "basis": "本地原渠道准入合同：只豁免手动列表，不豁免当前Key倍率上限；保留显式过滤器和即时容量。MJ找到原任务后复用准备结果，只占槽和轮换Key一次。共有错误优先级、remix上下文/动作/ID/平台/继承倍率不在本地修复范围。",
-      "authority": "SYNC_LEDGER.md#现行本地差异",
-      "kind": "approved_contract"
-    },
-    "strict-preconsume": {
-      "kind": "approved_contract",
-      "authority": "docs/billing/IMPLEMENTATION.md:14; docs/routing/UNIFIED_ROUTING.md:15",
-      "basis": "路由发送前强制估算及余额覆盖；不恢复trust_quota_usd、信任免预扣或允许负余额的reserve分支。"
-    },
-    "payment-single-credit": {
-      "kind": "approved_contract",
-      "authority": "AGENTS.md; docs/billing/TOPUP_BONUS.md#在线充值的报价与确认",
-      "basis": "支付回调与人工补单最多一次入账；保留冻结额度、PayAmount/Currency、历史额度解释和返利原子事务，不泛化为所有通道收据/ACK修复。"
-    },
-    "topup-bonus": {
-      "basis": "独有充值加赠：单笔入账、固定、全站与个人用量阶梯合成一次加赠比例，实付不变，按本金另赠额度；覆盖六个在线充值渠道、兑换码与管理员加额；订单 ExpectedQuota 冻结本金加赠合计、返利基数为本金；小时统计、配置、决策记录与一次性迁移放在扩展文件；调用计价与上游一致。",
-      "authority": "SYNC_LEDGER.md#充值加赠接点",
-      "kind": "approved_contract"
-    },
-    "backup-payment-links": {
-      "basis": "钱包备用支付：原生 TopUpLink 之外由管理员维护最多 10 个名称加 http(s) 链接，保存时校验；/api/user/topup/info 返回合并列表，支付合规未确认时为空；逻辑在扩展文件。",
-      "authority": "SYNC_LEDGER.md#备用支付接点",
       "kind": "approved_contract"
     }
   },

@@ -118,13 +118,10 @@ func pluginCredentialLine(t *testing.T, pluginKey, token string) string {
 	return line
 }
 
-func insertPluginChannel(t *testing.T, pluginKey, baseURL, key string, multiKey bool) *model.Channel {
+func insertPluginChannel(t *testing.T, pluginKey, baseURL, key string) *model.Channel {
 	t.Helper()
 	channel := &model.Channel{Type: constant.ChannelTypeTaskPlugin, Key: key, Status: common.ChannelStatusEnabled, Name: "login-channel", Models: "m", BaseURL: &baseURL}
 	channel.SetSetting(dto.ChannelSettings{TaskPluginKey: pluginKey})
-	if multiKey {
-		channel.ChannelInfo = model.ChannelInfo{IsMultiKey: true, MultiKeySize: len(strings.Split(key, "\n")), MultiKeyMode: constant.MultiKeyModePolling}
-	}
 	require.NoError(t, channel.Insert())
 	return channel
 }
@@ -136,24 +133,21 @@ func TestAddChannelWithoutKeyForALoginPlugin(t *testing.T) {
 			mode, channelType, key, pluginKey)
 	}
 
-	for _, mode := range []string{"single", "multi_to_single"} {
-		t.Run(mode, func(t *testing.T) {
-			response, raw := callChannelAPI(t, AddChannel, http.MethodPost, "/api/channel", body(mode, "null", "ctl-login", constant.ChannelTypeTaskPlugin))
+	t.Run("single", func(t *testing.T) {
+		response, raw := callChannelAPI(t, AddChannel, http.MethodPost, "/api/channel", body("single", "null", "ctl-login", constant.ChannelTypeTaskPlugin))
 
-			require.True(t, response.Success, raw)
-			var data struct {
-				IDs []int `json:"ids"`
-			}
-			require.NoError(t, json.Unmarshal(response.Data, &data))
-			require.Len(t, data.IDs, 1)
-			stored, err := model.GetChannelById(data.IDs[0], true)
-			require.NoError(t, err)
-			assert.Empty(t, stored.Key)
-			assert.Equal(t, common.ChannelStatusAutoDisabled, stored.Status, "it waits for a login")
-			assert.Equal(t, model.ChannelStatusReasonPluginLoginRequired, stored.GetOtherInfo()["status_reason"])
-			assert.Equal(t, mode == "multi_to_single", stored.ChannelInfo.IsMultiKey)
-		})
-	}
+		require.True(t, response.Success, raw)
+		var data struct {
+			IDs []int `json:"ids"`
+		}
+		require.NoError(t, json.Unmarshal(response.Data, &data))
+		require.Len(t, data.IDs, 1)
+		stored, err := model.GetChannelById(data.IDs[0], true)
+		require.NoError(t, err)
+		assert.Empty(t, stored.Key)
+		assert.Equal(t, common.ChannelStatusAutoDisabled, stored.Status, "it waits for a login")
+		assert.Equal(t, model.ChannelStatusReasonPluginLoginRequired, stored.GetOtherInfo()["status_reason"])
+	})
 
 	for name, request := range map[string]string{
 		"batch mode":             body("batch", `""`, "ctl-login", constant.ChannelTypeTaskPlugin),
@@ -192,7 +186,7 @@ func TestSubmittedCredentialsAreRejected(t *testing.T) {
 	assert.Equal(t, "Plugin credentials can only be added by logging in", response.Message)
 
 	stored := pluginCredentialLine(t, "ctl-forge", "stored")
-	channel := insertPluginChannel(t, "ctl-forge", "https://vendor.example", stored, false)
+	channel := insertPluginChannel(t, "ctl-forge", "https://vendor.example", stored)
 	update := func(fields string) (channelAPIResponse, string) {
 		return callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel", fmt.Sprintf(`{"id":%d,"name":"forge",%s}`, channel.Id, fields))
 	}
@@ -223,7 +217,7 @@ func TestSubmittedCredentialsAreRejected(t *testing.T) {
 func TestChannelKeyShowsCredentialSummaries(t *testing.T) {
 	setupProviderPluginControllerTest(t, "ctl-reveal")
 	line := pluginCredentialLine(t, "ctl-reveal", "secret-token")
-	channel := insertPluginChannel(t, "ctl-reveal", "https://vendor.example", "sk-static\n"+line, true)
+	channel := insertPluginChannel(t, "ctl-reveal", "https://vendor.example", line)
 
 	response, raw := callChannelAPI(t, GetChannelKey, http.MethodPost, "/api/channel/key", "", idParam(channel.Id))
 
@@ -234,19 +228,16 @@ func TestChannelKeyShowsCredentialSummaries(t *testing.T) {
 		Key string `json:"key"`
 	}
 	require.NoError(t, json.Unmarshal(response.Data, &data))
-	lines := strings.Split(data.Key, "\n")
-	require.Len(t, lines, 2)
-	assert.Equal(t, "sk-static", lines[0])
 	var summary map[string]any
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &summary))
+	require.NoError(t, json.Unmarshal([]byte(data.Key), &summary))
 	assert.Equal(t, map[string]any{"type": "plugin_credential", "plugin": "ctl-reveal", "account_id": "acct-secret-token", "label": "secret-token@example.com", "expires_at": float64(0), "needs_login": false}, summary)
 
 }
 
 func TestCopyChannelDropsCredentials(t *testing.T) {
 	setupProviderPluginControllerTest(t, "ctl-copy")
-	single := insertPluginChannel(t, "ctl-copy", "https://vendor.example", pluginCredentialLine(t, "ctl-copy", "one"), false)
-	multi := insertPluginChannel(t, "ctl-copy", "https://vendor.example", "sk-static\n"+pluginCredentialLine(t, "ctl-copy", "two"), true)
+	single := insertPluginChannel(t, "ctl-copy", "https://vendor.example", pluginCredentialLine(t, "ctl-copy", "one"))
+	static := insertPluginChannel(t, "ctl-copy", "https://vendor.example", "sk-static")
 
 	copyOf := func(id int) *model.Channel {
 		t.Helper()
@@ -265,9 +256,8 @@ func TestCopyChannelDropsCredentials(t *testing.T) {
 	assert.Empty(t, copied.Key)
 	assert.Equal(t, common.ChannelStatusAutoDisabled, copied.Status, "the copy waits for its own login")
 
-	copied = copyOf(multi.Id)
-	assert.Equal(t, "sk-static", copied.Key)
-	assert.Equal(t, 1, copied.ChannelInfo.MultiKeySize)
+	copied = copyOf(static.Id)
+	assert.Equal(t, "sk-static", copied.Key, "a static key is copied")
 	assert.Equal(t, common.ChannelStatusEnabled, copied.Status)
 }
 
@@ -284,24 +274,24 @@ func TestRemovingCredentialsRevokesThem(t *testing.T) {
 	}
 
 	t.Run("delete", func(t *testing.T) {
-		channel := insertPluginChannel(t, "ctl-revoke", server.URL, pluginCredentialLine(t, "ctl-revoke", "deleted"), false)
+		channel := insertPluginChannel(t, "ctl-revoke", server.URL, pluginCredentialLine(t, "ctl-revoke", "deleted"))
 		response, raw := callChannelAPI(t, DeleteChannel, http.MethodDelete, "/api/channel", "", idParam(channel.Id))
 		require.True(t, response.Success, raw)
 		waitForRevokes("/revoke deleted")
 	})
 
 	t.Run("batch delete", func(t *testing.T) {
-		first := insertPluginChannel(t, "ctl-revoke", server.URL, pluginCredentialLine(t, "ctl-revoke", "batch-1"), false)
-		second := insertPluginChannel(t, "ctl-revoke", server.URL, "sk-static\n"+pluginCredentialLine(t, "ctl-revoke", "batch-2"), true)
+		first := insertPluginChannel(t, "ctl-revoke", server.URL, pluginCredentialLine(t, "ctl-revoke", "batch-1"))
+		second := insertPluginChannel(t, "ctl-revoke", server.URL, pluginCredentialLine(t, "ctl-revoke", "batch-2"))
 		response, raw := callChannelAPI(t, DeleteChannelBatch, http.MethodPost, "/api/channel/batch", fmt.Sprintf(`{"ids":[%d,%d]}`, first.Id, second.Id))
 		require.True(t, response.Success, raw)
 		waitForRevokes("/revoke batch-1", "/revoke batch-2")
 	})
 
-	t.Run("a line removed by an edit", func(t *testing.T) {
-		kept, removed := pluginCredentialLine(t, "ctl-revoke", "kept"), pluginCredentialLine(t, "ctl-revoke", "removed")
-		channel := insertPluginChannel(t, "ctl-revoke", server.URL, kept+"\n"+removed, true)
-		response, raw := callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel", fmt.Sprintf(`{"id":%d,"name":"edited","key":%q}`, channel.Id, kept))
+	t.Run("a credential replaced by an edit", func(t *testing.T) {
+		removed := pluginCredentialLine(t, "ctl-revoke", "removed")
+		channel := insertPluginChannel(t, "ctl-revoke", server.URL, removed)
+		response, raw := callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel", fmt.Sprintf(`{"id":%d,"name":"edited","key":"sk-static"}`, channel.Id))
 		require.True(t, response.Success, raw)
 		waitForRevokes("/revoke removed")
 	})
@@ -310,9 +300,9 @@ func TestRemovingCredentialsRevokesThem(t *testing.T) {
 
 func TestPluginLoginAPI(t *testing.T) {
 	setupProviderPluginControllerTest(t, "ctl-api")
-	channel := insertPluginChannel(t, "ctl-api", "https://vendor.example", "", false)
+	channel := insertPluginChannel(t, "ctl-api", "https://vendor.example", "")
 
-	response, raw := callChannelAPI(t, StartPluginLogin, http.MethodPost, "/api/channel/plugin_login", `{"key_index":null}`, idParam(channel.Id))
+	response, raw := callChannelAPI(t, StartPluginLogin, http.MethodPost, "/api/channel/plugin_login", `{}`, idParam(channel.Id))
 	require.True(t, response.Success, raw)
 	var started struct {
 		Flow string         `json:"flow"`
@@ -326,7 +316,7 @@ func TestPluginLoginAPI(t *testing.T) {
 	response, raw = callChannelAPI(t, ContinuePluginLogin, http.MethodPost, "/api/channel/plugin_login/continue",
 		fmt.Sprintf(`{"flow":%q,"input":{"fields":{"api_token":"tok-123"}}}`, started.Flow), idParam(channel.Id))
 	require.True(t, response.Success, raw)
-	assert.JSONEq(t, `{"step":{"type":"done","credential":{"index":0,"label":"user@example.com","account_id":"acct-7","expires_at":0,"needs_login":false}}}`, string(response.Data))
+	assert.JSONEq(t, `{"step":{"type":"done","credential":{"label":"user@example.com","account_id":"acct-7","expires_at":0,"needs_login":false}}}`, string(response.Data))
 	assert.NotContains(t, raw, "tok-123")
 
 	stored, err := model.GetChannelById(channel.Id, true)
@@ -349,7 +339,7 @@ func TestPluginLoginAPI(t *testing.T) {
 
 	response, raw = callChannelAPI(t, GetPluginCredentials, http.MethodGet, "/api/channel/plugin_credentials", "", idParam(channel.Id))
 	require.True(t, response.Success, raw)
-	assert.JSONEq(t, `{"items":[{"index":0,"label":"user@example.com","account_id":"acct-7","expires_at":0,"needs_login":false}]}`, string(response.Data))
+	assert.JSONEq(t, `{"items":[{"label":"user@example.com","account_id":"acct-7","expires_at":0,"needs_login":false}]}`, string(response.Data))
 
 	t.Run("the flow is spent", func(t *testing.T) {
 		response, raw := callChannelAPI(t, ContinuePluginLogin, http.MethodPost, "/api/channel/plugin_login/continue",
@@ -372,31 +362,53 @@ func TestPluginLoginAPI(t *testing.T) {
 		assert.EqualValues(t, 1, flows, "no new flow was opened")
 	})
 
-	t.Run("an added account cannot target a credential", func(t *testing.T) {
-		response, raw := callChannelAPI(t, StartPluginLogin, http.MethodPost, "/api/channel/plugin_login", `{"add":true,"key_index":0}`, idParam(channel.Id))
-		assert.False(t, response.Success, raw)
-		assert.Equal(t, "Adding an account cannot target an existing credential", response.Message)
+	// A channel holds one credential (Ren2Hub single-key-channel): the
+	// fields that picked a key line or added an account are refused.
+	t.Run("the retired key line and add fields are refused", func(t *testing.T) {
+		for _, body := range []string{`{"key_index":null}`, `{"key_index":0}`, `{"add":true}`, `{"add":false}`} {
+			response, raw := callChannelAPI(t, StartPluginLogin, http.MethodPost, "/api/channel/plugin_login", body, idParam(channel.Id))
+			assert.False(t, response.Success, raw)
+			assert.Equal(t, "A channel holds one key; add one channel per key instead", response.Message, body)
+		}
+		var flows int64
+		require.NoError(t, model.DB.Model(&model.AuthFlow{}).Where("purpose = ?", model.AuthFlowPurposePluginLogin).Count(&flows).Error)
+		assert.EqualValues(t, 1, flows, "no new flow was opened")
 	})
 
-	t.Run("an added account turns the channel multi-key", func(t *testing.T) {
-		response, raw := callChannelAPI(t, StartPluginLogin, http.MethodPost, "/api/channel/plugin_login", `{"add":true}`, idParam(channel.Id))
+	login := func(t *testing.T, token string) (channelAPIResponse, string) {
+		t.Helper()
+		response, raw := callChannelAPI(t, StartPluginLogin, http.MethodPost, "/api/channel/plugin_login", ``, idParam(channel.Id))
 		require.True(t, response.Success, raw)
-		var added struct {
+		var flow struct {
 			Flow string `json:"flow"`
 		}
-		require.NoError(t, json.Unmarshal(response.Data, &added))
-		response, raw = callChannelAPI(t, ContinuePluginLogin, http.MethodPost, "/api/channel/plugin_login/continue",
-			fmt.Sprintf(`{"flow":%q,"input":{"fields":{"api_token":"tok-1234"}}}`, added.Flow), idParam(channel.Id))
-		require.True(t, response.Success, raw)
+		require.NoError(t, json.Unmarshal(response.Data, &flow))
+		return callChannelAPI(t, ContinuePluginLogin, http.MethodPost, "/api/channel/plugin_login/continue",
+			fmt.Sprintf(`{"flow":%q,"input":{"fields":{"api_token":%q}}}`, flow.Flow, token), idParam(channel.Id))
+	}
 
-		response, raw = callChannelAPI(t, GetPluginCredentials, http.MethodGet, "/api/channel/plugin_credentials", "", idParam(channel.Id))
-		require.True(t, response.Success, raw)
-		assert.JSONEq(t, `{"items":[{"index":0,"label":"user@example.com","account_id":"acct-7","expires_at":0,"needs_login":false},`+
-			`{"index":1,"label":"user@example.com","account_id":"acct-8","expires_at":0,"needs_login":false}]}`, string(response.Data))
+	t.Run("another account cannot replace the credential", func(t *testing.T) {
+		response, raw := login(t, "tok-1234")
+		assert.False(t, response.Success, raw)
 		stored, err := model.GetChannelById(channel.Id, true)
 		require.NoError(t, err)
-		assert.True(t, stored.ChannelInfo.IsMultiKey)
-		assert.Equal(t, 2, stored.ChannelInfo.MultiKeySize)
+		credential, ok := jsplugin.ParseCredential(stored.Key)
+		require.True(t, ok)
+		assert.Equal(t, "acct-7", credential.AccountID)
+	})
+
+	t.Run("a login again replaces the credential", func(t *testing.T) {
+		response, raw := login(t, "tok-456")
+		require.True(t, response.Success, raw)
+		stored, err := model.GetChannelById(channel.Id, true)
+		require.NoError(t, err)
+		credential, ok := jsplugin.ParseCredential(stored.Key)
+		require.True(t, ok)
+		assert.JSONEq(t, `{"token":"tok-456"}`, string(credential.Data))
+		assert.NotContains(t, stored.Key, "\n")
+		response, raw = callChannelAPI(t, GetPluginCredentials, http.MethodGet, "/api/channel/plugin_credentials", "", idParam(channel.Id))
+		require.True(t, response.Success, raw)
+		assert.JSONEq(t, `{"items":[{"label":"user@example.com","account_id":"acct-7","expires_at":0,"needs_login":false}]}`, string(response.Data))
 	})
 }
 
@@ -473,7 +485,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 		"fetch-manifest": {"manifest"},
 	} {
 		t.Run(key, func(t *testing.T) {
-			channel := insertPluginChannel(t, key, upstream.URL, "sk-static", false)
+			channel := insertPluginChannel(t, key, upstream.URL, "sk-static")
 			models, err := fetchChannelUpstreamModelIDs(channel)
 			require.NoError(t, err)
 			assert.Equal(t, want, models)
@@ -492,13 +504,13 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 		return line
 	}
 	t.Run("an expiring credential is refreshed first", func(t *testing.T) {
-		channel := insertPluginChannel(t, "fetch-refresh", upstream.URL, expiring(t, "fetch-refresh"), false)
+		channel := insertPluginChannel(t, "fetch-refresh", upstream.URL, expiring(t, "fetch-refresh"))
 		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"credential-a"}, models)
 	})
 	t.Run("a converted route goes out as a relay request with a static key", func(t *testing.T) {
-		channel := insertPluginChannel(t, "fetch-converted", upstream.URL, "sk-static", false)
+		channel := insertPluginChannel(t, "fetch-converted", upstream.URL, "sk-static")
 		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"converted-a", "converted-b"}, models)
@@ -511,7 +523,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 		assert.Equal(t, http.MethodGet, sent.Header.Get("X-Signed"))
 	})
 	t.Run("a converted route refreshes an expiring credential and sends it", func(t *testing.T) {
-		channel := insertPluginChannel(t, "fetch-converted", upstream.URL, expiring(t, "fetch-converted"), false)
+		channel := insertPluginChannel(t, "fetch-converted", upstream.URL, expiring(t, "fetch-converted"))
 		models, err := fetchChannelUpstreamModelIDs(channel)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"converted-a", "converted-b"}, models)
@@ -526,7 +538,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 	t.Run("a converted route follows the channel's TLS setting", func(t *testing.T) {
 		tlsUpstream := httptest.NewTLSServer(http.HandlerFunc(serve))
 		t.Cleanup(tlsUpstream.Close)
-		channel := insertPluginChannel(t, "fetch-converted", tlsUpstream.URL, "sk-static", false)
+		channel := insertPluginChannel(t, "fetch-converted", tlsUpstream.URL, "sk-static")
 		_, err := fetchChannelUpstreamModelIDs(channel)
 		require.Error(t, err)
 		channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "fetch-converted", TLSInsecureSkipVerify: true})
@@ -551,7 +563,7 @@ func TestFetchModelsOfAProviderChannel(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			vendorStatus.Store(int32(tc.status))
 			vendorBody.Store(tc.body)
-			channel := insertPluginChannel(t, "fetch-reply", upstream.URL, "sk-static", false)
+			channel := insertPluginChannel(t, "fetch-reply", upstream.URL, "sk-static")
 			_, err := fetchChannelUpstreamModelIDs(channel)
 			require.ErrorContains(t, err, tc.wants)
 		})
@@ -611,8 +623,8 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 			require.NoError(t, err)
 			assert.NotEqual(t, "Task pricing must be converted manually using the task usage schema.", conversion.UnsupportedReason)
 
-			deleted := insertPluginChannel(t, pluginKey, server.URL, pluginCredentialLine(t, pluginKey, "batch-deleted"), false)
-			disabled := insertPluginChannel(t, pluginKey, server.URL, pluginCredentialLine(t, pluginKey, "disabled-deleted"), false)
+			deleted := insertPluginChannel(t, pluginKey, server.URL, pluginCredentialLine(t, pluginKey, "batch-deleted"))
+			disabled := insertPluginChannel(t, pluginKey, server.URL, pluginCredentialLine(t, pluginKey, "disabled-deleted"))
 			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", disabled.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
 
 			response, raw = callChannelAPI(t, DeleteChannelBatch, http.MethodPost, "/api/channel/batch", fmt.Sprintf(`{"ids":[%d]}`, deleted.Id))
@@ -626,7 +638,7 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 			require.NoError(t, db.Model(&model.Channel{}).Order("id").Pluck("id", &remaining).Error)
 			assert.Equal(t, batch, remaining, "the keyless channel waiting for a login was disabled, so it went too")
 
-			// Each write runs against a refresh of the channel's first
+			// Each write runs against a refresh of the channel's
 			// credential: while the refresh waits on the vendor, after it
 			// stored the rotated credential, or reading the channel before
 			// the refresh stored it and writing after. The rotated
@@ -634,21 +646,19 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 			for _, race := range []struct {
 				name  string
 				write func(t *testing.T, channel *model.Channel)
-				// rest is the key after the rotated credential.
-				rest  []string
 				check func(t *testing.T, stored *model.Channel)
 			}{
 				{name: "an edit that sends the key back", write: func(t *testing.T, channel *model.Channel) {
 					// The key as the client read it, before the write.
 					response, raw := callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel", fmt.Sprintf(`{"id":%d,"name":"renamed","key":%q}`, channel.Id, channel.Key))
 					assert.True(t, response.Success, raw)
-				}, rest: []string{"sk-static"}, check: func(t *testing.T, stored *model.Channel) {
+				}, check: func(t *testing.T, stored *model.Channel) {
 					assert.Equal(t, "renamed", stored.Name)
 				}},
-				{name: "a key status write", write: func(t *testing.T, channel *model.Channel) {
-					model.UpdateChannelStatus(channel.Id, "sk-static", common.ChannelStatusAutoDisabled, "upstream rejected the key")
-				}, rest: []string{"sk-static"}, check: func(t *testing.T, stored *model.Channel) {
-					assert.Equal(t, common.ChannelStatusAutoDisabled, stored.ChannelInfo.MultiKeyStatusList[1])
+				{name: "a status write", write: func(t *testing.T, channel *model.Channel) {
+					model.UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "upstream rejected the key")
+				}, check: func(t *testing.T, stored *model.Channel) {
+					assert.Equal(t, common.ChannelStatusAutoDisabled, stored.Status)
 				}},
 			} {
 				for _, order := range []string{"during the vendor call", "after the refresh", "read before the refresh stored"} {
@@ -665,7 +675,7 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 						releaseVendor := func() { releaseOnce.Do(func() { close(release) }) }
 						t.Cleanup(releaseVendor)
 						old := pluginCredentialLine(t, pluginKey, "old")
-						channel := insertPluginChannel(t, pluginKey, vendor.URL, old+"\nsk-static", true)
+						channel := insertPluginChannel(t, pluginKey, vendor.URL, old)
 						await := func(done <-chan struct{}, failure string) {
 							t.Helper()
 							select {
@@ -685,7 +695,7 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 						var refreshErr error
 						go func() {
 							defer close(refreshed)
-							_, refreshErr = service.RefreshPluginCredential(context.Background(), channel.Id, 0, old)
+							_, refreshErr = service.RefreshPluginCredential(context.Background(), channel.Id, old)
 						}()
 						await(arrived, "the refresh never reached the vendor")
 						switch order {
@@ -746,11 +756,9 @@ func TestProviderChannelManagementDatabaseMatrix(t *testing.T) {
 
 						stored, err := model.GetChannelById(channel.Id, true)
 						require.NoError(t, err)
-						lines := strings.Split(stored.Key, "\n")
-						credential, ok := jsplugin.ParseCredential(lines[0])
+						credential, ok := jsplugin.ParseCredential(stored.Key)
 						require.True(t, ok, stored.Key)
 						assert.JSONEq(t, `{"token":"rotated"}`, string(credential.Data), "the write kept the rotated credential")
-						assert.Equal(t, race.rest, lines[1:])
 						if race.check != nil {
 							race.check(t, stored)
 						}

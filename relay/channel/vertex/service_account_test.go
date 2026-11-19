@@ -63,23 +63,20 @@ func TestGetAccessTokenReusesTokenUntilNearExpiry(t *testing.T) {
 	assert.Equal(t, int32(2), calls.Load())
 }
 
-func TestGetAccessTokenSeparatesKeySlotsAndReplacedKeys(t *testing.T) {
+func TestGetAccessTokenSeparatesChannelsAndReplacedKeys(t *testing.T) {
 	var calls atomic.Int32
 	stubAccessTokenFetch(t, func(creds Credentials, _ string) (string, time.Duration, error) {
 		calls.Add(1)
 		return creds.PrivateKeyID, time.Hour, nil
 	})
 
-	multiKey := newAccessTokenTestInfo(9)
-	multiKey.ChannelIsMultiKey = true
-	multiKey.ChannelMultiKeyIndex = 1
-	slotOne, err := getAccessToken(newAccessTokenTestAdaptor("slot-1"), multiKey)
+	// Each channel holds one key and caches its own token.
+	first, err := getAccessToken(newAccessTokenTestAdaptor("channel-9"), newAccessTokenTestInfo(9))
 	require.NoError(t, err)
-	multiKey.ChannelMultiKeyIndex = 2
-	slotTwo, err := getAccessToken(newAccessTokenTestAdaptor("slot-2"), multiKey)
+	second, err := getAccessToken(newAccessTokenTestAdaptor("channel-12"), newAccessTokenTestInfo(12))
 	require.NoError(t, err)
-	assert.Equal(t, "slot-1", slotOne)
-	assert.Equal(t, "slot-2", slotTwo)
+	assert.Equal(t, "channel-9", first)
+	assert.Equal(t, "channel-12", second)
 
 	// Replacing the channel's key fetches a token for the new key.
 	single := newAccessTokenTestInfo(10)

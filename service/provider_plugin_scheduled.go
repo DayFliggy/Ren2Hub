@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"math/rand/v2"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,12 +20,8 @@ import (
 
 const pluginScheduledFailureDelay = 15 * time.Minute
 
-// The scheduler keeps timing and execution flags; credentials stay in channels.
-type pluginScheduledKey struct {
-	channelID int
-	index     int
-}
-
+// The scheduler keeps timing and execution flags per channel; credentials
+// stay in channels. A channel holds one key (Ren2Hub single-key-channel).
 type pluginScheduledEntry struct {
 	identity        uint64
 	next            time.Time
@@ -39,7 +34,7 @@ type pluginScheduledEntry struct {
 
 type pluginScheduler struct {
 	mu      sync.Mutex
-	entries map[pluginScheduledKey]*pluginScheduledEntry
+	entries map[int]*pluginScheduledEntry
 	slots   chan struct{}
 	workers sync.WaitGroup
 }
@@ -81,17 +76,17 @@ func (s *pluginScheduler) scan(channels []*model.Channel, now time.Time) {
 		if !ok || !plugin.HasProviderHook("scheduled") || !scheduledChannelEligible(channel) {
 			continue
 		}
-		for index, line := range pluginCredentialKeyLines(channel) {
-			if !scheduledKeyEligible(channel, plugin, index, line) {
+		for _, line := range pluginCredentialKeyLines(channel) {
+			if !scheduledKeyEligible(channel, plugin, line) {
 				continue
 			}
-			key := pluginScheduledKey{channel.Id, index}
+			key := channel.Id
 			if s.entries == nil {
-				s.entries = make(map[pluginScheduledKey]*pluginScheduledEntry)
+				s.entries = make(map[int]*pluginScheduledEntry)
 			}
 			entry := s.entries[key]
 			identity := scheduledKeyIdentity(plugin, line)
-			status := scheduledKeyStatus(channel, index)
+			status := channel.Status
 			if entry == nil || !entry.running && entry.identity != identity {
 				entry = &pluginScheduledEntry{identity: identity, lastStatus: status, next: now.Add(time.Duration(rand.Int64N(int64(10 * time.Minute))))}
 				s.entries[key] = entry
@@ -143,7 +138,7 @@ func (s *pluginScheduler) scan(channels []*model.Channel, now time.Time) {
 
 // disabled receives the channel reread after UpdateChannelStatus succeeds.
 // Checking the export table precedes all scheduler allocation and JS work.
-func (s *pluginScheduler) disabled(channel *model.Channel, usingKey string, now time.Time) {
+func (s *pluginScheduler) disabled(channel *model.Channel, now time.Time) {
 	if !common.IsMasterNode {
 		return
 	}
@@ -151,19 +146,15 @@ func (s *pluginScheduler) disabled(channel *model.Channel, usingKey string, now 
 	if !ok || !plugin.HasProviderHook("scheduled") || !scheduledChannelEligible(channel) {
 		return
 	}
-	lines := pluginCredentialKeyLines(channel)
-	index := 0
-	if channel.ChannelInfo.IsMultiKey {
-		index = slices.Index(lines, usingKey)
-	}
-	if index < 0 || index >= len(lines) || !scheduledKeyEligible(channel, plugin, index, lines[index]) {
+	line := channel.Key
+	if !scheduledKeyEligible(channel, plugin, line) {
 		return
 	}
-	key, line := pluginScheduledKey{channel.Id, index}, lines[index]
+	key := channel.Id
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.entries == nil {
-		s.entries = make(map[pluginScheduledKey]*pluginScheduledEntry)
+		s.entries = make(map[int]*pluginScheduledEntry)
 	}
 	entry := s.entries[key]
 	identity := scheduledKeyIdentity(plugin, line)
@@ -192,13 +183,13 @@ func (s *pluginScheduler) disabled(channel *model.Channel, usingKey string, now 
 	})
 }
 
-func (s *pluginScheduler) run(channel *model.Channel, plugin *jsplugin.LoadedPlugin, key pluginScheduledKey, entry *pluginScheduledEntry, line, reason string) {
+func (s *pluginScheduler) run(channel *model.Channel, plugin *jsplugin.LoadedPlugin, key int, entry *pluginScheduledEntry, line, reason string) {
 	delay := pluginScheduledFailureDelay
 	status := 0
 	disabledByHook := false
 	defer func() {
 		if recover() != nil {
-			common.SysLog(common.LogText("plugin scheduled failed: plugin=%s channel_id=%d key_index=%d category=%s", plugin.Meta.Key, channel.Id, key.index, "panic"))
+			common.SysLog(common.LogText("plugin scheduled failed: plugin=%s channel_id=%d category=%s", plugin.Meta.Key, channel.Id, "panic"))
 			delay = pluginScheduledFailureDelay
 		}
 		<-s.slots
@@ -223,10 +214,10 @@ func (s *pluginScheduler) run(channel *model.Channel, plugin *jsplugin.LoadedPlu
 	ctx, cancel := context.WithTimeout(context.Background(), pluginCredentialHookTimeout)
 	defer cancel()
 	var err error
-	delay, status, disabledByHook, err = runScheduledPlugin(ctx, channel, plugin, key.index, line, reason)
+	delay, status, disabledByHook, err = runScheduledPlugin(ctx, channel, plugin, line, reason)
 	if err != nil {
 		delay = pluginScheduledFailureDelay
-		common.SysLog(common.LogText("plugin scheduled failed: plugin=%s channel_id=%d key_index=%d category=%s", plugin.Meta.Key, channel.Id, key.index, pluginErrorCategory(err)))
+		common.SysLog(common.LogText("plugin scheduled failed: plugin=%s channel_id=%d category=%s", plugin.Meta.Key, channel.Id, pluginErrorCategory(err)))
 	}
 }
 
@@ -234,18 +225,8 @@ func scheduledChannelEligible(channel *model.Channel) bool {
 	return channel.Status == common.ChannelStatusEnabled || channel.Status == common.ChannelStatusAutoDisabled
 }
 
-func scheduledKeyStatus(channel *model.Channel, index int) int {
-	if !channel.ChannelInfo.IsMultiKey {
-		return channel.Status
-	}
-	if status, ok := channel.ChannelInfo.MultiKeyStatusList[index]; ok {
-		return status
-	}
-	return common.ChannelStatusEnabled
-}
-
-func scheduledKeyEligible(channel *model.Channel, plugin *jsplugin.LoadedPlugin, index int, line string) bool {
-	status := scheduledKeyStatus(channel, index)
+func scheduledKeyEligible(channel *model.Channel, plugin *jsplugin.LoadedPlugin, line string) bool {
+	status := channel.Status
 	if status != common.ChannelStatusEnabled && status != common.ChannelStatusAutoDisabled || strings.TrimSpace(line) == "" {
 		return false
 	}
@@ -257,11 +238,11 @@ func scheduledKeyEligible(channel *model.Channel, plugin *jsplugin.LoadedPlugin,
 
 // runScheduledPlugin calls the hook without channel locks. Its result is
 // applied only while the prepared key still matches the stored key.
-func runScheduledPlugin(ctx context.Context, channel *model.Channel, plugin *jsplugin.LoadedPlugin, keyIndex int, line, reason string) (time.Duration, int, bool, error) {
+func runScheduledPlugin(ctx context.Context, channel *model.Channel, plugin *jsplugin.LoadedPlugin, line, reason string) (time.Duration, int, bool, error) {
 	if !common.IsMasterNode {
 		return 0, 0, false, nil
 	}
-	prepared, err := FreshPluginCredentialLine(ctx, plugin, channel.Id, keyIndex, line)
+	prepared, err := FreshPluginCredentialLine(ctx, plugin, channel.Id, line)
 	if errors.Is(err, ErrPluginCredentialNeedsLogin) || errors.Is(err, ErrPluginCredentialRemoved) {
 		return 0, 0, false, nil
 	}
@@ -276,14 +257,10 @@ func runScheduledPlugin(ctx context.Context, channel *model.Channel, plugin *jsp
 	if !ok || currentPlugin != plugin || !scheduledChannelEligible(current) {
 		return 0, 0, false, nil
 	}
-	lines := pluginCredentialKeyLines(current)
-	if keyIndex < 0 || keyIndex >= len(lines) {
-		return 0, 0, false, nil
-	}
-	if lines[keyIndex] != prepared {
+	if current.Key != prepared {
 		return time.Minute, 0, false, nil
 	}
-	if !scheduledKeyEligible(current, plugin, keyIndex, prepared) {
+	if !scheduledKeyEligible(current, plugin, prepared) {
 		return 0, 0, false, nil
 	}
 	credential, isCredential := jsplugin.ParseCredential(prepared)
@@ -301,13 +278,9 @@ func runScheduledPlugin(ctx context.Context, channel *model.Channel, plugin *jsp
 		}
 	}
 	callCtx := jsplugin.ScheduledContext{CredentialContext: hookCtx, Reason: reason, KeyStatus: "enabled"}
-	if scheduledKeyStatus(current, keyIndex) == common.ChannelStatusAutoDisabled {
+	if current.Status == common.ChannelStatusAutoDisabled {
 		callCtx.KeyStatus = "auto_disabled"
-		if current.ChannelInfo.IsMultiKey {
-			callCtx.DisabledReason = current.ChannelInfo.MultiKeyDisabledReason[keyIndex]
-		} else {
-			callCtx.DisabledReason, _ = current.GetOtherInfo()["status_reason"].(string)
-		}
+		callCtx.DisabledReason, _ = current.GetOtherInfo()["status_reason"].(string)
 	}
 	result, err := plugin.CallScheduled(PluginCredentialHookContext(ctx, plugin, hookCtx.BaseURL, proxy), callCtx)
 	if err != nil {
@@ -335,28 +308,20 @@ func runScheduledPlugin(ctx context.Context, channel *model.Channel, plugin *jsp
 		if !ok || currentPlugin != plugin || !scheduledChannelEligible(current) {
 			return nil
 		}
-		lines := pluginCredentialKeyLines(current)
-		if keyIndex >= len(lines) {
-			return nil
-		}
-		if lines[keyIndex] != prepared || current.GetBaseURL() != hookCtx.BaseURL || current.GetSetting().Proxy != proxy ||
+		if current.Key != prepared || current.GetBaseURL() != hookCtx.BaseURL || current.GetSetting().Proxy != proxy ||
 			!bytes.Equal(plugin.ChannelConfigFor(current.GetOtherSettings().PluginConfig), hookCtx.Config) {
 			delay = time.Minute
 			return nil
 		}
-		if !scheduledKeyEligible(current, plugin, keyIndex, prepared) {
+		if !scheduledKeyEligible(current, plugin, prepared) {
 			return nil
 		}
-		if nextLine != prepared {
-			lines[keyIndex] = nextLine
-			current.Key = strings.Join(lines, "\n")
-			current.Keys = nil
-		}
+		current.Key = nextLine
 		switch result.KeyStatus {
 		case "enabled":
-			statusChanged = model.SetScheduledChannelKeyStatus(current, keyIndex, common.ChannelStatusEnabled, "")
+			statusChanged = model.SetScheduledChannelStatus(current, common.ChannelStatusEnabled, "")
 		case "auto_disabled":
-			statusChanged = model.SetScheduledChannelKeyStatus(current, keyIndex, common.ChannelStatusAutoDisabled, statusReason)
+			statusChanged = model.SetScheduledChannelStatus(current, common.ChannelStatusAutoDisabled, statusReason)
 		}
 		applied, delay = true, result.Next
 		return nil
@@ -364,10 +329,10 @@ func runScheduledPlugin(ctx context.Context, channel *model.Channel, plugin *jsp
 	if err != nil || !applied {
 		return delay, 0, false, err
 	}
-	status := scheduledKeyStatus(stored, keyIndex)
+	status := stored.Status
 	var balanceErr error
 	if result.Balance != nil {
-		_, balanceErr = UpdatePluginKeyBalances(stored, map[int]model.ChannelBalanceDetail{keyIndex: {BalanceResult: *result.Balance}})
+		_, balanceErr = UpdatePluginBalance(stored.Id, model.ChannelBalanceDetail{BalanceResult: *result.Balance})
 	}
 	if statusChanged {
 		params := map[string]any{"Name": stored.Name, "Id": stored.Id, "Reason": statusReason}

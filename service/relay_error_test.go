@@ -254,9 +254,6 @@ func TestRequestPolicyEventsReachLogAdminInfo(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, events[1].Status)
 	assert.Equal(t, PolicyDecision{Action: "stop", Reason: "attempt_budget_exhausted", Source: "global"}, events[2].Decision)
 	assert.Equal(t, "channel_disable_requested", events[2].Health, "the health entry follows the automatic disable rules")
-	common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)
-	RecordPolicyFailure(c, 7, apiErr, DecideRelayRetry(c, apiErr, 0))
-	assert.Equal(t, "key_disable_requested", state.Events()[4].Health)
 
 	state.BeginAttempt(&model.Channel{Id: 8})
 	c.Set("channel_id", 8)
@@ -266,32 +263,16 @@ func TestRequestPolicyEventsReachLogAdminInfo(t *testing.T) {
 	AppendRelayLogAdminInfo(c, nil, succeeded)
 	events, ok = succeeded.Snapshot()["admin_info"].(map[string]any)["request_policy"].([]PolicyEvent)
 	require.True(t, ok, "a successful relay exposes its decision events to administrators")
-	require.Len(t, events, 7, "the outcome is recorded once")
-	assert.Equal(t, PolicyDecision{Action: "success", Reason: "request_completed", Source: "upstream"}, events[6].Decision)
-	assert.Equal(t, 8, events[6].ChannelID)
-	assert.Equal(t, 2, events[6].Attempt)
+	require.Len(t, events, 5, "the outcome is recorded once")
+	assert.Equal(t, PolicyDecision{Action: "success", Reason: "request_completed", Source: "upstream"}, events[4].Decision)
+	assert.Equal(t, 8, events[4].ChannelID)
+	assert.Equal(t, 2, events[4].Attempt)
 	assert.True(t, state.Successful)
 
 	untouched, _ := gin.CreateTestContext(httptest.NewRecorder())
 	other := model.NewLogOther()
 	AppendRelayLogAdminInfo(untouched, nil, other)
 	assert.NotContains(t, other.Snapshot()["admin_info"], "request_policy", "requests without decisions do not carry an empty record")
-}
-
-func TestPollingReadFailureStopsRelayRetry(t *testing.T) {
-	previous := common.MemoryCacheEnabled
-	common.MemoryCacheEnabled = true
-	t.Cleanup(func() { common.MemoryCacheEnabled = previous })
-	// A negative ID cannot belong to a stored channel; this exercises the real
-	// polling cache lookup without adding another database test fixture.
-	channel := model.Channel{Id: -927104, Key: "fixture-a\nfixture-b", ChannelInfo: model.ChannelInfo{
-		IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling,
-	}}
-	_, _, apiErr := channel.GetNextEnabledKey()
-	require.NotNil(t, apiErr)
-	require.Equal(t, types.ErrorCodeGetChannelFailed, apiErr.GetErrorCode())
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	require.Equal(t, PolicyDecision{Action: "stop", Reason: "non_retryable_error", Source: "system"}, DecideRelayRetry(c, apiErr, 2))
 }
 
 // Automatic disabling only reacts to failures that say something about the

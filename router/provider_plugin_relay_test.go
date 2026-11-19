@@ -617,8 +617,8 @@ func TestFailedRefreshBeforeTheRequest(t *testing.T) {
 	})
 }
 
-// A key whose credential needs a new login never reaches the upstream: the
-// request disables the key for the reason a login clears, whatever the
+// A credential that needs a new login never reaches the upstream: the
+// request disables the channel for the reason a login clears, whatever the
 // automatic disabling setting is, and a retry can serve the request with
 // another channel.
 func TestNeedsLoginCredentialFailsWithoutReachingTheUpstream(t *testing.T) {
@@ -647,12 +647,11 @@ func TestNeedsLoginCredentialFailsWithoutReachingTheUpstream(t *testing.T) {
 			assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, stored.GetOtherInfo()["status_reason"], "disabled for the reason a login clears")
 
 			// Ren2Hub never retries the same channel in one request. A fallback
-			// channel serves this request; the disabled key stays blocked.
+			// channel serves this request; the waiting channel is disabled again.
 			common.RetryTimes = 1
-			multi := harness.pluginChannel("relay-needs-login", line+"\n"+credentialFor(t, "relay-needs-login", 0))
-			multi.ChannelInfo = model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling}
-			multi.Priority = common.GetPointer[int64](10)
-			multi = harness.install(t, multi)
+			waiting := harness.pluginChannel("relay-needs-login", line)
+			waiting.Priority = common.GetPointer[int64](10)
+			waiting = harness.install(t, waiting)
 			fallback := harness.pluginChannel("relay-needs-login", credentialFor(t, "relay-needs-login", 0))
 			require.NoError(t, fallback.Insert())
 			model.InitChannelCache()
@@ -663,12 +662,10 @@ func TestNeedsLoginCredentialFailsWithoutReachingTheUpstream(t *testing.T) {
 			requests := harness.upstream.captured()
 			require.Len(t, requests, 1)
 			assert.Equal(t, "Bearer old-access", requests[0].Header.Get("Authorization"))
-			stored, err = model.GetChannelById(multi.Id, true)
+			stored, err = model.GetChannelById(waiting.Id, true)
 			require.NoError(t, err)
-			assert.Equal(t, common.ChannelStatusEnabled, stored.Status)
-			assert.Equal(t, common.ChannelStatusAutoDisabled, stored.ChannelInfo.MultiKeyStatusList[0])
-			assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, stored.ChannelInfo.MultiKeyDisabledReason[0])
-			assert.NotEqual(t, common.ChannelStatusAutoDisabled, stored.ChannelInfo.MultiKeyStatusList[1])
+			assert.Equal(t, common.ChannelStatusAutoDisabled, stored.Status)
+			assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, stored.GetOtherInfo()["status_reason"])
 			assert.Equal(t, fallback.Id, outcome.log.ChannelId, "the request retries a different channel")
 		})
 	}

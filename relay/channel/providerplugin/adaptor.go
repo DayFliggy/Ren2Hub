@@ -541,7 +541,7 @@ func (a *Adaptor) bind(c *gin.Context, info *relaycommon.RelayInfo) error {
 // useFreshCredential refreshes a credential that expires within the request
 // margin. A failed refresh keeps a credential that has not expired yet. A
 // credential only a login restores fails the attempt before the upstream, and
-// the request may retry on another key or channel.
+// the request may retry on another channel.
 func (a *Adaptor) useFreshCredential(c *gin.Context, info *relaycommon.RelayInfo) error {
 	if a.credential == nil {
 		return nil
@@ -549,10 +549,10 @@ func (a *Adaptor) useFreshCredential(c *gin.Context, info *relaycommon.RelayInfo
 	if a.credential.NeedsLogin {
 		// Only a login restores the key, even after an administrator enabled
 		// it again: disable it for the reason a login clears.
-		service.DisablePluginCredentialForLogin(info.ChannelId, common.GetContextKeyString(c, constant.ContextKeyChannelName), info.ChannelIsMultiKey, common.GetContextKeyBool(c, constant.ContextKeyChannelAutoBan), info.ApiKey)
+		service.DisablePluginCredentialForLogin(info.ChannelId, common.GetContextKeyString(c, constant.ContextKeyChannelName), common.GetContextKeyBool(c, constant.ContextKeyChannelAutoBan), info.ApiKey)
 		return types.NewError(service.ErrPluginCredentialNeedsLogin, types.ErrorCodeDoRequestFailed)
 	}
-	line, err := service.FreshPluginCredentialLine(c.Request.Context(), a.plugin, info.ChannelId, credentialIndex(info), info.ApiKey)
+	line, err := service.FreshPluginCredentialLine(c.Request.Context(), a.plugin, info.ChannelId, info.ApiKey)
 	if errors.Is(err, service.ErrPluginCredentialNeedsLogin) {
 		// The refresh disabled the key for a new login already.
 		return types.NewError(err, types.ErrorCodeDoRequestFailed)
@@ -574,13 +574,6 @@ func (a *Adaptor) useCredentialLine(c *gin.Context, info *relaycommon.RelayInfo,
 	a.credential = credential
 	info.ApiKey = line
 	common.SetContextKey(c, constant.ContextKeyChannelKey, line)
-}
-
-func credentialIndex(info *relaycommon.RelayInfo) int {
-	if info.ChannelIsMultiKey {
-		return info.ChannelMultiKeyIndex
-	}
-	return 0
 }
 
 func (a *Adaptor) credentialContext(info *relaycommon.RelayInfo) jsplugin.CredentialContext {
@@ -645,7 +638,7 @@ func (a *Adaptor) renew(c *gin.Context, info *relaycommon.RelayInfo) error {
 		}
 		return nil
 	}
-	line, err := service.RefreshPluginCredential(c.Request.Context(), info.ChannelId, credentialIndex(info), info.ApiKey)
+	line, err := service.RefreshPluginCredential(c.Request.Context(), info.ChannelId, info.ApiKey)
 	if err != nil {
 		logger.LogWarn(c, common.LogText("plugin credential refresh after a rejection failed: plugin=%s channel_id=%d", a.plugin.Meta.Key, info.ChannelId))
 		return err

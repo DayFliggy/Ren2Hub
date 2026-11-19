@@ -1,4 +1,4 @@
-"""普通 race 发布证据必须覆盖固定 130 次执行，且不接受任何竞争。"""
+"""普通 race 发布证据必须覆盖固定 129 次执行，且不接受任何竞争。"""
 import copy
 import json
 import shutil
@@ -44,7 +44,7 @@ def minimal_report(root, output, source=None):
     report = {'schema_version': 1, 'stage': ordinary.STAGE, 'selection_sha256': ordinary.FROZEN_SELECTION,
               'source_root': str(root.resolve()), 'source_before': identity, 'source_after': identity, 'runtime': runtime, 'image': ordinary.IMAGE,
               'image_log': image.name, 'image_log_sha256': digest(image), 'suites': [], 'error': None,
-              'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 130}}
+              'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 129}}
     for group in groups:
         inventory = output / (group['id'] + '.inventory.log')
         inventory.write_text('\n'.join(group['names']) + '\n')
@@ -74,10 +74,10 @@ class OrdinaryRaceTests(unittest.TestCase):
     def test_complete_report_and_exact_concurrent_commands(self):
         report = minimal_report(self.root, self.output)
         verified = ordinary.verify_report(report, self.output, self.root, {'fixture': True})
-        self.assertEqual(verified['test_count'], 130)
+        self.assertEqual(verified['test_count'], 129)
         self.assertEqual(len(verified['groups']), 11)
         self.assertEqual(len(self.groups[4]['names']), 10)
-        self.assertEqual(sum(len(group['names']) for group in self.groups), 130)
+        self.assertEqual(sum(len(group['names']) for group in self.groups), 129)
         for group, row in zip(self.groups, report['suites']):
             self.assertIn('-timeout=60s', row['command'])
             self.assertIn('-p=2', row['command'])

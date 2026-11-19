@@ -326,54 +326,26 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 	return &channel, nil
 }
 
-// SetScheduledChannelKeyStatus applies an automatic status transition to the
-// stored key. Call it only inside UpdateScheduledChannelLocked, after locating
+// SetScheduledChannelStatus applies an automatic status transition to the
+// channel. Call it only inside UpdateScheduledChannelLocked, after checking
 // the key again; a manual disable can never be undone by a plugin.
-func SetScheduledChannelKeyStatus(channel *Channel, keyIndex, status int, reason string) bool {
-	if channel.Status != common.ChannelStatusEnabled && channel.Status != common.ChannelStatusAutoDisabled {
-		return false
-	}
-	channel.Keys = nil
-	keys := []string{channel.Key}
-	if channel.ChannelInfo.IsMultiKey {
-		keys = channel.GetKeys()
-	}
-	if keyIndex < 0 || keyIndex >= len(keys) {
-		return false
-	}
-	current := channel.Status
-	if channel.ChannelInfo.IsMultiKey {
-		current = common.ChannelStatusEnabled
-		if stored, ok := channel.ChannelInfo.MultiKeyStatusList[keyIndex]; ok {
-			current = stored
-		}
-	} else if keyIndex != 0 {
-		return false
-	}
+func SetScheduledChannelStatus(channel *Channel, status int, reason string) bool {
 	switch status {
 	case common.ChannelStatusEnabled:
-		if current != common.ChannelStatusAutoDisabled {
+		if channel.Status != common.ChannelStatusAutoDisabled {
 			return false
 		}
 	case common.ChannelStatusAutoDisabled:
-		if current != common.ChannelStatusEnabled || !channel.GetAutoBan() {
+		if channel.Status != common.ChannelStatusEnabled || !channel.GetAutoBan() {
 			return false
 		}
 	default:
 		return false
 	}
-	if channel.ChannelInfo.IsMultiKey {
-		handlerMultiKeyUpdate(channel, keys[keyIndex], status, reason)
-		if status == common.ChannelStatusEnabled {
-			delete(channel.ChannelInfo.MultiKeyDisabledReason, keyIndex)
-			delete(channel.ChannelInfo.MultiKeyDisabledTime, keyIndex)
-		}
-	} else {
-		channel.Status = status
-		info := channel.GetOtherInfo()
-		info["status_reason"] = reason
-		info["status_time"] = common.GetTimestamp()
-		channel.SetOtherInfo(info)
-	}
+	channel.Status = status
+	info := channel.GetOtherInfo()
+	info["status_reason"] = reason
+	info["status_time"] = common.GetTimestamp()
+	channel.SetOtherInfo(info)
 	return true
 }

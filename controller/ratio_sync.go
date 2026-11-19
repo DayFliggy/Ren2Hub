@@ -340,11 +340,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 					ch <- upstreamResult{Name: uniqueName, Err: "failed to get channel key: " + err.Error()}
 					return
 				}
-				key, _, apiErr := dbCh.GetNextEnabledKey()
-				if apiErr != nil {
-					ch <- upstreamResult{Name: uniqueName, Err: "failed to get enabled channel key: " + apiErr.Error()}
-					return
-				}
+				key := dbCh.Key
 				if strings.TrimSpace(key) == "" {
 					ch <- upstreamResult{Name: uniqueName, Err: "no API key configured for this channel"}
 					return

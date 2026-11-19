@@ -404,11 +404,7 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 	}
 
 	if channel.Type == constant.ChannelTypeGemini {
-		key, _, apiErr := channel.GetNextEnabledKey()
-		if apiErr != nil {
-			return nil, fmt.Errorf("failed to get channel key: %w", apiErr)
-		}
-		key = strings.TrimSpace(key)
+		key := strings.TrimSpace(channel.Key)
 		models, err := gemini.FetchGeminiModels(baseURL, key, channel.GetSetting())
 		if err != nil {
 			return nil, err
@@ -449,11 +445,7 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 		url = fmt.Sprintf("%s/v1/models", baseURL)
 	}
 
-	key, _, apiErr := channel.GetNextEnabledKey()
-	if apiErr != nil {
-		return nil, fmt.Errorf("failed to get channel key: %w", apiErr)
-	}
-	key = strings.TrimSpace(key)
+	key := strings.TrimSpace(channel.Key)
 
 	headers, err := buildFetchModelsHeaders(channel, key)
 	if err != nil {
@@ -479,11 +471,7 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 }
 
 func fetchAdvancedCustomUpstreamModelIDs(channel *model.Channel, baseURL string) ([]string, error) {
-	key, _, apiErr := channel.GetNextEnabledKey()
-	if apiErr != nil {
-		return nil, fmt.Errorf("failed to get channel key: %w", apiErr)
-	}
-	key = strings.TrimSpace(key)
+	key := strings.TrimSpace(channel.Key)
 
 	info := &relaycommon.RelayInfo{
 		RelayFormat:    types.RelayFormatOpenAI,
@@ -534,8 +522,6 @@ func fetchProviderPluginUpstreamModelIDs(channel *model.Channel, plugin *jsplugi
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
-			ChannelIsMultiKey:    channel.ChannelInfo.IsMultiKey,
-			ChannelMultiKeyIndex: pluginKeyIndex(channel, key),
 			ChannelBaseUrl:       channel.GetBaseURL(),
 			ApiKey:               key,
 			ChannelSetting:       channel.GetSetting(),
@@ -554,17 +540,6 @@ func fetchProviderPluginUpstreamModelIDs(channel *model.Channel, plugin *jsplugi
 		return nil, sanitizeFetchModelsError(err, key)
 	}
 	return parseOpenAIModelIDs(body)
-}
-
-// pluginKeyIndex is the index of the key line key among the channel's keys,
-// 0 when it is not one of them.
-func pluginKeyIndex(channel *model.Channel, key string) int {
-	for index, line := range channel.GetKeys() {
-		if line == key {
-			return index
-		}
-	}
-	return 0
 }
 
 // sendChannelRequest sends a channel management request through the

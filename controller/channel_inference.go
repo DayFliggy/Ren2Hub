@@ -89,11 +89,7 @@ func fetchInferenceStatus(ctx context.Context, channel *model.Channel) (*inferen
 	if err != nil || parsedURL.Host == "" || parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
 		return nil, errors.New("Invalid inference server address")
 	}
-	key, _, keyErr := channel.GetNextEnabledKey()
-	if keyErr != nil {
-		return nil, errors.New("No enabled channel key")
-	}
-	key = strings.TrimSpace(key)
+	key := strings.TrimSpace(channel.Key)
 	headers, err := buildFetchModelsHeaders(channel, key)
 	if err != nil {
 		return nil, errors.New("Invalid channel header override")

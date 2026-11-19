@@ -60,7 +60,7 @@ func (a *Adaptor) renewManagement(ctx context.Context, info *relaycommon.RelayIn
 		a.token = token
 		return nil
 	}
-	line, err := service.RefreshPluginCredential(ctx, info.ChannelId, credentialIndex(info), info.ApiKey)
+	line, err := service.RefreshPluginCredential(ctx, info.ChannelId, info.ApiKey)
 	if err != nil {
 		return err
 	}

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -65,13 +64,13 @@ func newLoginFixture(t *testing.T, key, mode string) loginFixture {
 	useProviderPluginDatabase(t)
 	server := newFakeAuthServer(t)
 	plugin := registerProviderPlugin(t, key, mode)
-	channel := createProviderChannel(t, key, server.URL, "", false)
+	channel := createProviderChannel(t, key, server.URL, "")
 	return loginFixture{server: server, plugin: plugin, channel: channel}
 }
 
 func (f loginFixture) start(t *testing.T) PluginLoginResult {
 	t.Helper()
-	result, err := StartPluginLogin(context.Background(), loginAdmin, f.channel.Id, nil, false)
+	result, err := StartPluginLogin(context.Background(), loginAdmin, f.channel.Id)
 	require.NoError(t, err)
 	return result
 }
@@ -102,7 +101,7 @@ func TestPluginLoginRedirect(t *testing.T) {
 	require.NotNil(t, done.Step.Credential)
 	assert.Equal(t, "acct-1", done.Step.Credential.AccountID)
 	assert.Equal(t, "acct-1@example.com", done.Step.Credential.Label)
-	stored := storedCredential(t, f.channel.Id, 0)
+	stored := storedCredential(t, f.channel.Id)
 	assert.Equal(t, "login-redirect", stored.Plugin)
 	assert.Equal(t, "Bearer access-1", stored.Headers["Authorization"])
 	assert.JSONEq(t, `{"access":"access-1","refresh":"refresh-1"}`, string(stored.Data))
@@ -130,7 +129,7 @@ func TestPluginLoginPaste(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, "done", done.Step.Type)
-			assert.Equal(t, "Bearer access-1", storedCredential(t, f.channel.Id, 0).Headers["Authorization"])
+			assert.Equal(t, "Bearer access-1", storedCredential(t, f.channel.Id).Headers["Authorization"])
 		})
 	}
 }
@@ -188,7 +187,7 @@ func TestPluginLoginDevice(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "done", done.Step.Type)
 	assert.EqualValues(t, 2, f.server.devicePolls.Load())
-	assert.Equal(t, "Bearer access-1", storedCredential(t, f.channel.Id, 0).Headers["Authorization"])
+	assert.Equal(t, "Bearer access-1", storedCredential(t, f.channel.Id).Headers["Authorization"])
 }
 
 func TestPluginLoginDeviceExpires(t *testing.T) {
@@ -227,7 +226,7 @@ func TestPluginLoginFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "done", done.Step.Type)
 	assert.Equal(t, "Field main", done.Step.Credential.Label)
-	assert.Equal(t, "Bearer secret-token", storedCredential(t, f.channel.Id, 0).Headers["Authorization"])
+	assert.Equal(t, "Bearer secret-token", storedCredential(t, f.channel.Id).Headers["Authorization"])
 }
 
 func TestPluginLoginRejectsInputOfAnotherStep(t *testing.T) {
@@ -299,7 +298,7 @@ func TestPluginLoginCallbackRejections(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newLoginFixture(t, key, "redirect")
 			registerProviderPlugin(t, "login-reject-other", "redirect")
-			createProviderChannel(t, "login-reject-other", f.server.URL, "", false)
+			createProviderChannel(t, "login-reject-other", f.server.URL, "")
 			started := f.start(t)
 			values := visitAuthorize(t, started.Step.URL)
 			params := callbackParams(values)
@@ -431,9 +430,9 @@ export const meta = {apiVersion: 1, key: "login-bad-step", name: "Bad", version:
 export function login() { return {type: "redirect", url: "javascript:alert(1)"}; }`, jsplugin.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister("login-bad-step")) })
-	channel := createProviderChannel(t, "login-bad-step", "https://api.example", "", false)
+	channel := createProviderChannel(t, "login-bad-step", "https://api.example", "")
 
-	_, err = StartPluginLogin(context.Background(), loginAdmin, channel.Id, nil, false)
+	_, err = StartPluginLogin(context.Background(), loginAdmin, channel.Id)
 
 	require.ErrorContains(t, err, "Plugin login failed")
 }
@@ -487,10 +486,9 @@ func TestPluginLoginOnExistingCredential(t *testing.T) {
 	f := newLoginFixture(t, "login-again", "redirect")
 	line := expiringLine(t, "login-again", "r", "acct-1", 1)
 	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", f.channel.Id).Update("key", line).Error)
-	index := 0
 
 	// The plugin reads the stored data as ctx.credential.
-	started, err := StartPluginLogin(context.Background(), loginAdmin, f.channel.Id, &index, false)
+	started, err := StartPluginLogin(context.Background(), loginAdmin, f.channel.Id)
 	require.NoError(t, err)
 
 	f.server.account.Store("acct-2")
@@ -501,23 +499,19 @@ func TestPluginLoginOnExistingCredential(t *testing.T) {
 	assert.Equal(t, "refresh-1", f.server.revokedToken.Load(), "a grant of an account stored nowhere is revoked")
 
 	f.server.account.Store("acct-1")
-	started, err = StartPluginLogin(context.Background(), loginAdmin, f.channel.Id, &index, false)
+	started, err = StartPluginLogin(context.Background(), loginAdmin, f.channel.Id)
 	require.NoError(t, err)
 	done, err := CompletePluginLoginCallback(context.Background(), loginAdmin, "login-again", callbackParams(visitAuthorize(t, started.Step.URL)))
 	require.NoError(t, err)
-	assert.Zero(t, done.Step.Credential.Index)
+	assert.Equal(t, "acct-1", done.Step.Credential.AccountID)
 	stored := storedChannel(t, f.channel.Id)
 	assert.NotContains(t, stored.Key, "\n")
 	assert.Contains(t, stored.Key, "access-2")
-
-	outOfRange := 3
-	_, err = StartPluginLogin(context.Background(), loginAdmin, f.channel.Id, &outOfRange, false)
-	require.ErrorContains(t, err, "Credential index out of range")
 }
 
 func TestPluginLoginOneAccountPerPlugin(t *testing.T) {
 	f := newLoginFixture(t, "login-account", "redirect")
-	createProviderChannel(t, "login-account", f.server.URL, expiringLine(t, "login-account", "r", "acct-1", 0), false)
+	createProviderChannel(t, "login-account", f.server.URL, expiringLine(t, "login-account", "r", "acct-1", 0))
 
 	started := f.start(t)
 	_, err := CompletePluginLoginCallback(context.Background(), loginAdmin, "login-account", callbackParams(visitAuthorize(t, started.Step.URL)))
@@ -537,20 +531,20 @@ func TestPluginLoginOneAccountPerPlugin(t *testing.T) {
 
 	// Another plugin may hold the same account.
 	registerProviderPlugin(t, "login-account-b", "redirect")
-	other := createProviderChannel(t, "login-account-b", f.server.URL, "", false)
-	_, err = StorePluginLoginCredential(other.Id, "login-account-b", nil, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: "acct-2"})
+	other := createProviderChannel(t, "login-account-b", f.server.URL, "")
+	_, err = StorePluginLoginCredential(other.Id, "login-account-b", jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: "acct-2"})
 	require.NoError(t, err)
 }
 
 func TestPluginLoginConcurrentLoginsHoldOneAccountOnce(t *testing.T) {
 	f := newLoginFixture(t, "login-race", "redirect")
-	channels := []*model.Channel{f.channel, createProviderChannel(t, "login-race", f.server.URL, "", false), createProviderChannel(t, "login-race", f.server.URL, "", false)}
+	channels := []*model.Channel{f.channel, createProviderChannel(t, "login-race", f.server.URL, ""), createProviderChannel(t, "login-race", f.server.URL, "")}
 
 	var stored atomic.Int32
 	var group sync.WaitGroup
 	for _, channel := range channels {
 		group.Go(func() {
-			_, err := StorePluginLoginCredential(channel.Id, "login-race", nil, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: "acct-1"})
+			_, err := StorePluginLoginCredential(channel.Id, "login-race", jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: "acct-1"})
 			if err == nil {
 				stored.Add(1)
 			}
@@ -561,114 +555,48 @@ func TestPluginLoginConcurrentLoginsHoldOneAccountOnce(t *testing.T) {
 	assert.EqualValues(t, 1, stored.Load())
 }
 
-func TestPluginLoginAddsLineInMultiKeyMode(t *testing.T) {
-	f := newLoginFixture(t, "login-multi", "redirect")
-	first := expiringLine(t, "login-multi", "r", "acct-0", 0)
-	channel := createProviderChannel(t, "login-multi", f.server.URL, first, true)
-
-	view, err := StorePluginLoginCredential(channel.Id, "login-multi", nil, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: "acct-1", Label: "second"})
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, view.Index)
-	stored := storedChannel(t, channel.Id)
-	assert.Equal(t, 2, stored.ChannelInfo.MultiKeySize)
-	lines := pluginCredentialKeyLines(stored)
-	require.Len(t, lines, 2)
-	assert.Equal(t, first, lines[0])
-
-	views := PluginCredentialViews(stored)
-	require.Len(t, views, 2)
-	assert.Equal(t, "second", views[1].Label)
-}
-
-func TestPluginLoginSingleKeyReplacesTheKey(t *testing.T) {
-	f := newLoginFixture(t, "login-single", "redirect")
-	channel := createProviderChannel(t, "login-single", f.server.URL, "sk-static", false)
-
-	view, err := StorePluginLoginCredential(channel.Id, "login-single", nil, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{"a":1}`), AccountID: "acct-1"})
-
-	require.NoError(t, err)
-	assert.Zero(t, view.Index)
-	_, ok := jsplugin.ParseCredential(storedChannel(t, channel.Id).Key)
-	assert.True(t, ok)
-}
-
-func TestPluginLoginAddAccount(t *testing.T) {
-	const key = "login-add"
-	first := expiringLine(t, key, "r", "acct-a", 0)
+// A channel holds one credential (Ren2Hub single-key-channel): a login
+// replaces the key, a different account than the stored credential's is
+// refused, and the channel never holds a second line.
+func TestPluginLoginReplacesTheChannelCredential(t *testing.T) {
+	const key = "login-replace"
+	stored := expiringLine(t, key, "r", "acct-a", 0)
+	needsLogin := credentialLine(t, jsplugin.Credential{Plugin: key, Data: json.RawMessage(`{}`), AccountID: "acct-a", NeedsLogin: true})
 	for _, tc := range []struct {
-		name     string
-		key      string
-		multiKey bool
-		add      bool
-		account  string
-		message  string
-		index    int
-		accounts []string
-		// mode is the multi-key strategy afterwards; empty for a single key.
-		mode constant.MultiKeyMode
+		name    string
+		key     string
+		account string
+		message string
 	}{
-		{name: "a single-key channel becomes multi-key", key: first, add: true, account: "acct-b", index: 1, accounts: []string{"acct-a", "acct-b"}, mode: constant.MultiKeyModeRandom},
-		{name: "a multi-key channel appends", key: first, multiKey: true, add: true, account: "acct-b", index: 1, accounts: []string{"acct-a", "acct-b"}, mode: constant.MultiKeyModePolling},
-		{name: "an empty channel takes its first account", add: true, account: "acct-b", accounts: []string{"acct-b"}},
-		{name: "switching the account replaces the key", key: first, account: "acct-b", accounts: []string{"acct-b"}},
-		{name: "the account already on the channel", key: first, add: true, account: "acct-a", message: "already logged in on another credential"},
-		{name: "a key of several lines", key: "sk-1\nsk-2", add: true, account: "acct-b", message: "cannot hold another account"},
+		{name: "an empty channel takes its first account", account: "acct-b"},
+		{name: "a static key is replaced", key: "sk-static", account: "acct-b"},
+		{name: "the stored account logs in again", key: stored, account: "acct-a"},
+		{name: "a credential that needs a login is replaced", key: needsLogin, account: "acct-a"},
+		{name: "another account than the stored credential's", key: stored, account: "acct-b", message: "different account"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			useProviderPluginDatabase(t)
 			registerProviderPlugin(t, key, "redirect")
-			channel := createProviderChannel(t, key, "https://vendor.example", tc.key, tc.multiKey)
+			channel := createProviderChannel(t, key, "https://vendor.example", tc.key)
 
-			view, err := StorePluginLoginCredential(channel.Id, key, nil, tc.add, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: tc.account})
+			view, err := StorePluginLoginCredential(channel.Id, key, jsplugin.CredentialResult{Credential: json.RawMessage(`{"fresh":true}`), AccountID: tc.account, Label: "new"})
 
-			stored := storedChannel(t, channel.Id)
+			after := storedChannel(t, channel.Id)
 			if tc.message != "" {
 				require.ErrorContains(t, err, tc.message)
-				assert.Equal(t, tc.key, stored.Key)
-				assert.False(t, stored.ChannelInfo.IsMultiKey)
+				assert.Equal(t, tc.key, after.Key)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tc.index, view.Index)
-			var accounts []string
-			for _, credential := range PluginCredentialViews(stored) {
-				accounts = append(accounts, credential.AccountID)
-			}
-			assert.Equal(t, tc.accounts, accounts)
-			assert.Equal(t, tc.mode != "", stored.ChannelInfo.IsMultiKey)
-			if tc.mode == "" {
-				return
-			}
-			assert.Equal(t, tc.mode, stored.ChannelInfo.MultiKeyMode)
-			assert.Equal(t, 2, stored.ChannelInfo.MultiKeySize)
-			assert.Empty(t, stored.ChannelInfo.MultiKeyStatusList, "both keys are enabled")
-			next, _, apiErr := stored.GetNextEnabledKey()
-			require.Nil(t, apiErr)
-			assert.Contains(t, pluginCredentialKeyLines(stored), next)
+			assert.Equal(t, PluginCredentialView{Label: "new", AccountID: tc.account}, view)
+			credential, ok := jsplugin.ParseCredential(after.Key)
+			require.True(t, ok)
+			assert.NotContains(t, after.Key, "\n")
+			assert.JSONEq(t, `{"fresh":true}`, string(credential.Data))
+			assert.False(t, credential.NeedsLogin)
+			assert.Equal(t, []PluginCredentialView{{Label: "new", AccountID: tc.account}}, PluginCredentialViews(after))
 		})
 	}
-}
-
-func TestPluginLoginAddAccountKeepsAKeyThatNeedsLoginDisabled(t *testing.T) {
-	useProviderPluginDatabase(t)
-	registerProviderPlugin(t, "login-add-relogin", "redirect")
-	line := credentialLine(t, jsplugin.Credential{Plugin: "login-add-relogin", Data: json.RawMessage(`{}`), AccountID: "acct-a", NeedsLogin: true})
-	channel := createProviderChannel(t, "login-add-relogin", "https://vendor.example", line, false)
-	channel.SetOtherInfo(map[string]any{"status_reason": model.ChannelStatusReasonPluginNeedsLogin})
-	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{"status": common.ChannelStatusAutoDisabled, "other_info": channel.OtherInfo}).Error)
-
-	_, err := StorePluginLoginCredential(channel.Id, "login-add-relogin", nil, true, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`), AccountID: "acct-b"})
-
-	require.NoError(t, err)
-	stored := storedChannel(t, channel.Id)
-	assert.Equal(t, common.ChannelStatusEnabled, stored.Status)
-	assert.Equal(t, map[int]int{0: common.ChannelStatusAutoDisabled}, stored.ChannelInfo.MultiKeyStatusList)
-	assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, stored.ChannelInfo.MultiKeyDisabledReason[0])
-	next, index, apiErr := stored.GetNextEnabledKey()
-	require.Nil(t, apiErr)
-	assert.Equal(t, 1, index)
-	assert.Contains(t, next, "acct-b")
 }
 
 func TestPluginLoginEnablesOnlyWhatTheHostDisabled(t *testing.T) {
@@ -689,7 +617,7 @@ func TestPluginLoginEnablesOnlyWhatTheHostDisabled(t *testing.T) {
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", f.channel.Id).Updates(map[string]any{"status": tc.status, "other_info": f.channel.OtherInfo}).Error)
 			require.NoError(t, model.UpdateAbilityStatus(f.channel.Id, false))
 
-			_, err := StorePluginLoginCredential(f.channel.Id, "login-enable", nil, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`)})
+			_, err := StorePluginLoginCredential(f.channel.Id, "login-enable", jsplugin.CredentialResult{Credential: json.RawMessage(`{}`)})
 
 			require.NoError(t, err)
 			after := storedChannel(t, f.channel.Id)
@@ -707,9 +635,9 @@ func TestPluginLoginEnablesOnlyWhatTheHostDisabled(t *testing.T) {
 
 func TestPluginLoginRefusesJSONArrayKeys(t *testing.T) {
 	f := newLoginFixture(t, "login-array", "redirect")
-	channel := createProviderChannel(t, "login-array", f.server.URL, `["a","b"]`, false)
+	channel := createProviderChannel(t, "login-array", f.server.URL, `["a","b"]`)
 
-	_, err := StorePluginLoginCredential(channel.Id, "login-array", nil, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{}`)})
+	_, err := StorePluginLoginCredential(channel.Id, "login-array", jsplugin.CredentialResult{Credential: json.RawMessage(`{}`)})
 
 	require.ErrorContains(t, err, "key format cannot hold plugin credentials")
 }
@@ -720,9 +648,9 @@ func TestPluginLoginNeedsALoginPlugin(t *testing.T) {
 export const meta = {apiVersion: 1, key: "login-none", name: "None", version: "1.0.0", author: {name: "Test"}, relay: [{incoming_path: "/v1/chat/completions", upstream_path: "/c"}]};`, jsplugin.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister("login-none")) })
-	channel := createProviderChannel(t, "login-none", "https://api.example", "sk", false)
+	channel := createProviderChannel(t, "login-none", "https://api.example", "sk")
 
-	_, err = StartPluginLogin(context.Background(), loginAdmin, channel.Id, nil, false)
+	_, err = StartPluginLogin(context.Background(), loginAdmin, channel.Id)
 
 	require.ErrorContains(t, err, "does not support login")
 	assert.False(t, ChannelSupportsPluginLogin(channel))

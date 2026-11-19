@@ -278,13 +278,10 @@ func registerProviderPlugin(t *testing.T, key, mode string) *jsplugin.LoadedPlug
 	return plugin
 }
 
-func createProviderChannel(t *testing.T, pluginKey, baseURL, key string, multiKey bool) *model.Channel {
+func createProviderChannel(t *testing.T, pluginKey, baseURL, key string) *model.Channel {
 	t.Helper()
 	channel := &model.Channel{Type: constant.ChannelTypeTaskPlugin, Key: key, Status: common.ChannelStatusEnabled, Name: "provider", Models: "provider-model", BaseURL: &baseURL}
 	channel.SetSetting(dto.ChannelSettings{TaskPluginKey: pluginKey})
-	if multiKey {
-		channel.ChannelInfo = model.ChannelInfo{IsMultiKey: true, MultiKeySize: len(strings.Split(key, "\n")), MultiKeyMode: constant.MultiKeyModePolling}
-	}
 	require.NoError(t, channel.Insert())
 	return channel
 }
@@ -311,11 +308,9 @@ func storedChannel(t *testing.T, id int) *model.Channel {
 	return channel
 }
 
-func storedCredential(t *testing.T, id, index int) *jsplugin.Credential {
+func storedCredential(t *testing.T, id int) *jsplugin.Credential {
 	t.Helper()
-	lines := pluginCredentialKeyLines(storedChannel(t, id))
-	require.Greater(t, len(lines), index)
-	credential, ok := jsplugin.ParseCredential(lines[index])
+	credential, ok := jsplugin.ParseCredential(storedChannel(t, id).Key)
 	require.True(t, ok)
 	return credential
 }
@@ -334,13 +329,13 @@ func TestRefreshConcurrentRequestsMakeOnePluginCall(t *testing.T) {
 	server.refreshDelay.Store(int64(100 * time.Millisecond))
 	registerProviderPlugin(t, "refresh-flight", "redirect")
 	line := expiringLine(t, "refresh-flight", "refresh-0", "acct-1", time.Now().Add(time.Second).Unix())
-	channel := createProviderChannel(t, "refresh-flight", server.URL, line, false)
+	channel := createProviderChannel(t, "refresh-flight", server.URL, line)
 
 	results := make([]string, 16)
 	var group sync.WaitGroup
 	for index := range results {
 		group.Go(func() {
-			refreshed, err := RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+			refreshed, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 			assert.NoError(t, err)
 			results[index] = refreshed
 		})
@@ -365,14 +360,14 @@ func TestRefreshTwoNodesMakeOnePluginCall(t *testing.T) {
 	server.refreshDelay.Store(int64(300 * time.Millisecond))
 	registerProviderPlugin(t, "refresh-nodes", "redirect")
 	line := expiringLine(t, "refresh-nodes", "refresh-0", "acct-1", time.Now().Add(time.Second).Unix())
-	channel := createProviderChannel(t, "refresh-nodes", server.URL, line, false)
+	channel := createProviderChannel(t, "refresh-nodes", server.URL, line)
 
 	nodes := []*PluginCredentialRefresher{{}, {}, {}}
 	results := make([]string, len(nodes))
 	var group sync.WaitGroup
 	for index, node := range nodes {
 		group.Go(func() {
-			refreshed, err := node.Refresh(context.Background(), channel.Id, 0, line)
+			refreshed, err := node.Refresh(context.Background(), channel.Id, line)
 			assert.NoError(t, err)
 			results[index] = refreshed
 		})
@@ -397,14 +392,14 @@ func TestRefreshPluginCallHoldsNoChannelLock(t *testing.T) {
 	server.refreshDelay.Store(int64(time.Second))
 	registerProviderPlugin(t, "refresh-unlocked", "redirect")
 	line := expiringLine(t, "refresh-unlocked", "refresh-0", "acct-1", time.Now().Add(time.Second).Unix())
-	channel := createProviderChannel(t, "refresh-unlocked", server.URL, line, false)
+	channel := createProviderChannel(t, "refresh-unlocked", server.URL, line)
 
 	done := make(chan struct{})
 	var refreshed string
 	var refreshErr error
 	go func() {
 		defer close(done)
-		refreshed, refreshErr = RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+		refreshed, refreshErr = RefreshPluginCredential(context.Background(), channel.Id, line)
 	}()
 	require.Eventually(t, func() bool { return server.refreshCalls.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
 
@@ -436,9 +431,9 @@ func TestRefreshRotatedTokenIsNeverSentAgain(t *testing.T) {
 	server.newRefreshToken("refresh-0")
 	registerProviderPlugin(t, "refresh-rotate", "redirect")
 	line := expiringLine(t, "refresh-rotate", "refresh-0", "acct-1", time.Now().Add(time.Second).Unix())
-	channel := createProviderChannel(t, "refresh-rotate", server.URL, line, false)
+	channel := createProviderChannel(t, "refresh-rotate", server.URL, line)
 
-	first, err := RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	first, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 	require.NoError(t, err)
 	assert.Contains(t, first, "refresh-1")
 
@@ -449,7 +444,7 @@ func TestRefreshRotatedTokenIsNeverSentAgain(t *testing.T) {
 	t.Cleanup(func() { common.MemoryCacheEnabled = previousMemoryCache; model.InitChannelCache() })
 	model.InitChannelCache()
 	model.CacheUpdateChannelKey(channel.Id, line)
-	stale, err := RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	stale, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 	require.NoError(t, err)
 	assert.Equal(t, first, stale)
 	assert.EqualValues(t, 1, server.refreshCalls.Load())
@@ -457,7 +452,7 @@ func TestRefreshRotatedTokenIsNeverSentAgain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first, cached.Key)
 
-	second, err := RefreshPluginCredential(context.Background(), channel.Id, 0, first)
+	second, err := RefreshPluginCredential(context.Background(), channel.Id, first)
 	require.NoError(t, err)
 	assert.Contains(t, second, "refresh-2")
 	assert.EqualValues(t, 2, server.refreshCalls.Load())
@@ -474,12 +469,12 @@ func TestRefreshMergesItsResult(t *testing.T) {
 		Plugin: "refresh-merge", Data: json.RawMessage(`{"refresh":"refresh-0"}`), Query: map[string]string{"old": "1"},
 		ExpiresAt: 1, AccountID: "acct-1", Label: "kept label",
 	})
-	channel := createProviderChannel(t, "refresh-merge", server.URL, line, false)
+	channel := createProviderChannel(t, "refresh-merge", server.URL, line)
 
-	_, err := RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	_, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 
 	require.NoError(t, err)
-	stored := storedCredential(t, channel.Id, 0)
+	stored := storedCredential(t, channel.Id)
 	assert.Equal(t, "acct-1", stored.AccountID)
 	assert.Equal(t, "kept label", stored.Label)
 	assert.Equal(t, "Bearer access-1", stored.Headers["Authorization"])
@@ -493,10 +488,10 @@ func TestRefreshFailuresKeepTheCredential(t *testing.T) {
 	server.newRefreshToken("refresh-0")
 	registerProviderPlugin(t, "refresh-fail", "redirect")
 	line := expiringLine(t, "refresh-fail", "refresh-0", "acct-1", time.Now().Add(time.Second).Unix())
-	channel := createProviderChannel(t, "refresh-fail", server.URL, line, false)
+	channel := createProviderChannel(t, "refresh-fail", server.URL, line)
 
 	server.failNext.Store(true)
-	_, err := RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	_, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "token endpoint answered 502")
 	assert.Equal(t, line, storedChannel(t, channel.Id).Key)
@@ -505,7 +500,7 @@ func TestRefreshFailuresKeepTheCredential(t *testing.T) {
 	// The vendor rotated to another account: nothing is stored, and the
 	// refresh stays a transient failure.
 	server.account.Store("acct-2")
-	_, err = RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	_, err = RefreshPluginCredential(context.Background(), channel.Id, line)
 	require.ErrorContains(t, err, "returned another account")
 	assert.Equal(t, line, storedChannel(t, channel.Id).Key)
 }
@@ -516,9 +511,9 @@ func TestRefreshRemovedCredential(t *testing.T) {
 	registerProviderPlugin(t, "refresh-gone", "redirect")
 	line := expiringLine(t, "refresh-gone", "refresh-0", "acct-1", 1)
 	other := expiringLine(t, "refresh-gone", "refresh-9", "acct-9", 1)
-	channel := createProviderChannel(t, "refresh-gone", server.URL, other, false)
+	channel := createProviderChannel(t, "refresh-gone", server.URL, other)
 
-	_, err := RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	_, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 
 	require.ErrorIs(t, err, ErrPluginCredentialRemoved)
 	assert.Zero(t, server.refreshCalls.Load())
@@ -558,62 +553,45 @@ func TestRefreshReloginDisablesAndNotifies(t *testing.T) {
 	t.Cleanup(func() { common.AutomaticDisableChannelEnabled = automaticDisable })
 	for _, tc := range []struct {
 		name             string
-		multiKey         bool
 		automaticDisable bool
-	}{{"single key", false, true}, {"multi key", true, true}, {"single key without automatic disable", false, false}, {"multi key without automatic disable", true, false}} {
+	}{{"automatic disable", true}, {"without automatic disable", false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			common.AutomaticDisableChannelEnabled = tc.automaticDisable
 			useProviderPluginDatabase(t)
 			server := newFakeAuthServer(t)
 			server.refreshFail.Store("invalid_grant")
-			key := fmt.Sprintf("refresh-relogin-%t-%t", tc.multiKey, tc.automaticDisable)
+			key := fmt.Sprintf("refresh-relogin-%t", tc.automaticDisable)
 			registerProviderPlugin(t, key, "redirect")
 			var notices atomic.Int32
 			relaxNoticeDelivery(t, func(string) { notices.Add(1) })
 
 			line := expiringLine(t, key, "refresh-0", "acct-1", time.Now().Add(time.Second).Unix())
-			stored := line
-			index := 0
-			if tc.multiKey {
-				healthy := expiringLine(t, key, "refresh-5", "acct-5", time.Now().Add(time.Hour).Unix())
-				stored, index = healthy+"\n"+line, 1
-			}
-			channel := createProviderChannel(t, key, server.URL, stored, tc.multiKey)
+			channel := createProviderChannel(t, key, server.URL, line)
 
-			_, err := RefreshPluginCredential(context.Background(), channel.Id, index, line)
+			_, err := RefreshPluginCredential(context.Background(), channel.Id, line)
 
 			require.ErrorIs(t, err, ErrPluginCredentialNeedsLogin)
 
-			assert.True(t, storedCredential(t, channel.Id, index).NeedsLogin)
+			assert.True(t, storedCredential(t, channel.Id).NeedsLogin)
 			assert.EqualValues(t, 1, notices.Load())
 			after := storedChannel(t, channel.Id)
-			if tc.multiKey {
-				assert.Equal(t, common.ChannelStatusEnabled, after.Status, "the other key keeps serving")
-				assert.Equal(t, common.ChannelStatusAutoDisabled, after.ChannelInfo.MultiKeyStatusList[1])
-				assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, after.ChannelInfo.MultiKeyDisabledReason[1])
-				assert.False(t, storedCredential(t, channel.Id, 0).NeedsLogin)
-			} else {
-				assert.Equal(t, common.ChannelStatusAutoDisabled, after.Status)
-				assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, after.GetOtherInfo()["status_reason"])
-			}
+			assert.Equal(t, common.ChannelStatusAutoDisabled, after.Status)
+			assert.Equal(t, model.ChannelStatusReasonPluginNeedsLogin, after.GetOtherInfo()["status_reason"])
 
 			// A request holding the old line fails without another plugin call.
 			calls := server.refreshCalls.Load()
-			current := pluginCredentialKeyLines(after)[index]
-			_, err = RefreshPluginCredential(context.Background(), channel.Id, index, line)
+			_, err = RefreshPluginCredential(context.Background(), channel.Id, line)
 			require.ErrorIs(t, err, ErrPluginCredentialNeedsLogin)
-			_, err = RefreshPluginCredential(context.Background(), channel.Id, index, current)
+			_, err = RefreshPluginCredential(context.Background(), channel.Id, after.Key)
 			require.Error(t, err)
 			assert.LessOrEqual(t, server.refreshCalls.Load(), calls+1)
 
 			// A login clears the flag and enables what was disabled.
-			view, err := StorePluginLoginCredential(channel.Id, key, &index, false, jsplugin.CredentialResult{Credential: json.RawMessage(`{"refresh":"new"}`), AccountID: "acct-1"})
+			_, err = StorePluginLoginCredential(channel.Id, key, jsplugin.CredentialResult{Credential: json.RawMessage(`{"refresh":"new"}`), AccountID: "acct-1"})
 			require.NoError(t, err)
-			assert.Equal(t, index, view.Index)
 			after = storedChannel(t, channel.Id)
 			assert.Equal(t, common.ChannelStatusEnabled, after.Status)
-			assert.Empty(t, after.ChannelInfo.MultiKeyStatusList)
-			assert.False(t, storedCredential(t, channel.Id, index).NeedsLogin)
+			assert.False(t, storedCredential(t, channel.Id).NeedsLogin)
 		})
 	}
 }
@@ -627,20 +605,20 @@ func TestBackgroundScanRefreshesOnlyWhatExpiresSoon(t *testing.T) {
 	server.account.Store("keep")
 	registerProviderPlugin(t, "refresh-scan", "redirect")
 	now := time.Now()
-	due := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "due", "a", now.Add(5*time.Minute).Unix()), false)
-	disabled := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "disabled", "b", now.Add(5*time.Minute).Unix()), false)
+	due := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "due", "a", now.Add(5*time.Minute).Unix()))
+	disabled := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "disabled", "b", now.Add(5*time.Minute).Unix()))
 	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", disabled.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
-	later := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "later", "c", now.Add(2*time.Hour).Unix()), false)
-	never := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "never", "d", 0), false)
+	later := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "later", "c", now.Add(2*time.Hour).Unix()))
+	never := createProviderChannel(t, "refresh-scan", server.URL, expiringLine(t, "refresh-scan", "never", "d", 0))
 	needsLogin := jsplugin.Credential{Plugin: "refresh-scan", Data: json.RawMessage(`{"refresh":"login"}`), ExpiresAt: 1, NeedsLogin: true}
-	waiting := createProviderChannel(t, "refresh-scan", server.URL, credentialLine(t, needsLogin), false)
-	static := createProviderChannel(t, "refresh-scan", server.URL, "sk-static", false)
+	waiting := createProviderChannel(t, "refresh-scan", server.URL, credentialLine(t, needsLogin))
+	static := createProviderChannel(t, "refresh-scan", server.URL, "sk-static")
 
 	RefreshExpiringPluginCredentials(now)
 
 	assert.EqualValues(t, 2, server.refreshCalls.Load())
-	assert.Greater(t, storedCredential(t, due.Id, 0).ExpiresAt, now.Add(time.Hour-time.Minute).Unix())
-	assert.Greater(t, storedCredential(t, disabled.Id, 0).ExpiresAt, now.Add(time.Hour-time.Minute).Unix(), "a stopped channel keeps its grant alive")
+	assert.Greater(t, storedCredential(t, due.Id).ExpiresAt, now.Add(time.Hour-time.Minute).Unix())
+	assert.Greater(t, storedCredential(t, disabled.Id).ExpiresAt, now.Add(time.Hour-time.Minute).Unix(), "a stopped channel keeps its grant alive")
 	assert.Contains(t, storedChannel(t, later.Id).Key, `"refresh":"later"`)
 	assert.Contains(t, storedChannel(t, never.Id).Key, `"refresh":"never"`)
 	assert.Contains(t, storedChannel(t, waiting.Id).Key, `"refresh":"login"`)
@@ -653,14 +631,17 @@ func TestRevokeRunsInTheBackgroundForRemovedLines(t *testing.T) {
 	registerProviderPlugin(t, "revoke-lines", "redirect")
 	kept := expiringLine(t, "revoke-lines", "kept", "a", 0)
 	removed := expiringLine(t, "revoke-lines", "removed", "b", 0)
-	channel := createProviderChannel(t, "revoke-lines", server.URL, kept+"\n"+removed, true)
+	channel := createProviderChannel(t, "revoke-lines", server.URL, kept)
 
-	RevokeRemovedChannelCredentials(channel, kept+"\n"+removed+"\nsk-static", kept)
+	RevokeRemovedChannelCredentials(channel, kept, kept)
+	RevokeRemovedChannelCredentials(channel, "sk-static", kept)
+	RevokeRemovedChannelCredentials(channel, removed, kept)
 	require.Eventually(t, func() bool { return server.revoked.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
-	assert.Equal(t, "removed", server.revokedToken.Load())
+	assert.Equal(t, "removed", server.revokedToken.Load(), "only a replaced credential is revoked")
 
 	RevokeDeletedChannelCredentials([]*model.Channel{channel})
-	require.Eventually(t, func() bool { return server.revoked.Load() == 3 }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return server.revoked.Load() == 2 }, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, "kept", server.revokedToken.Load())
 }
 
 func TestRevokeFailureIsOnlyLogged(t *testing.T) {
@@ -694,13 +675,13 @@ export function refresh(ctx) { utils.fetch({url: ctx.baseUrl + "/token", method:
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister("tls-verify")) })
 	line := expiringLine(t, "tls-verify", "r", "a", 1)
-	channel := createProviderChannel(t, "tls-verify", server.URL, line, false)
+	channel := createProviderChannel(t, "tls-verify", server.URL, line)
 	channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "tls-verify", TLSInsecureSkipVerify: true})
 	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("setting", channel.Setting).Error)
 
-	_, err = StartPluginLogin(context.Background(), PluginLoginIdentity{UserID: 1, SessionID: "session"}, channel.Id, nil, false)
+	_, err = StartPluginLogin(context.Background(), PluginLoginIdentity{UserID: 1, SessionID: "session"}, channel.Id)
 	require.ErrorContains(t, err, "Plugin login failed")
-	_, err = RefreshPluginCredential(context.Background(), channel.Id, 0, line)
+	_, err = RefreshPluginCredential(context.Background(), channel.Id, line)
 	require.Error(t, err)
 	assert.Zero(t, calls.Load(), "the handshake must fail before a token is sent")
 }
@@ -716,31 +697,27 @@ func TestPluginModelListKey(t *testing.T) {
 	foreign := credentialLine(t, jsplugin.Credential{Plugin: "another", Data: json.RawMessage(`{"name":"foreign"}`)})
 
 	for name, tc := range map[string]struct {
-		key      string
-		multiKey bool
-		disabled []int
-		want     string
+		key  string
+		want string
 	}{
-		"a credential waiting for a login is skipped": {key: needsLogin + "\n" + usable, multiKey: true, want: usable},
-		"another plugin's credential is skipped":      {key: foreign + "\n" + usable, multiKey: true, want: usable},
-		"a disabled key is skipped":                   {key: "sk-off\n" + usable, multiKey: true, disabled: []int{0}, want: usable},
-		"a static key":                                {key: " sk-static ", want: "sk-static"},
-		"a static key after a waiting credential":     {key: needsLogin + "\nsk-static", multiKey: true, want: "sk-static"},
-		"a channel without keys":                      {key: "", want: ""},
+		"a usable credential":    {key: usable, want: usable},
+		"a static key":           {key: " sk-static ", want: "sk-static"},
+		"a channel without keys": {key: "", want: ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			channel := createProviderChannel(t, "list-usable", "https://api.example", tc.key, tc.multiKey)
-			for _, index := range tc.disabled {
-				channel.ChannelInfo.MultiKeyStatusList = map[int]int{index: common.ChannelStatusManuallyDisabled}
-			}
+			channel := createProviderChannel(t, "list-usable", "https://api.example", tc.key)
 			key, err := PluginModelListKey(context.Background(), channel, plugin)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, key)
 		})
 	}
 
-	_, err = PluginModelListKey(context.Background(), createProviderChannel(t, "list-usable", "https://api.example", needsLogin, false), plugin)
-	require.ErrorContains(t, err, "no usable key")
+	for name, key := range map[string]string{"a credential waiting for a login": needsLogin, "another plugin's credential": foreign} {
+		t.Run(name, func(t *testing.T) {
+			_, err := PluginModelListKey(context.Background(), createProviderChannel(t, "list-usable", "https://api.example", key), plugin)
+			require.ErrorContains(t, err, "no usable key")
+		})
+	}
 }
 
 func TestCheckSubmittedPluginCredentials(t *testing.T) {
@@ -773,18 +750,6 @@ func TestDropPluginCredentials(t *testing.T) {
 	assert.Equal(t, common.ChannelStatusAutoDisabled, single.Status)
 	assert.Equal(t, model.ChannelStatusReasonPluginLoginRequired, single.GetOtherInfo()["status_reason"])
 
-	multi := &model.Channel{Type: constant.ChannelTypeTaskPlugin, Key: "sk-1\n" + line + "\nsk-2", Status: common.ChannelStatusEnabled, ChannelInfo: model.ChannelInfo{
-		IsMultiKey: true, MultiKeySize: 3, MultiKeyPollingIndex: 2, MultiKeyStatusList: map[int]int{2: common.ChannelStatusAutoDisabled},
-		MultiKeyDisabledReason: map[int]string{2: "quota"}, MultiKeyDisabledTime: map[int]int64{2: 7},
-	}}
-	DropPluginCredentials(multi)
-	assert.Equal(t, "sk-1\nsk-2", multi.Key)
-	assert.Equal(t, common.ChannelStatusEnabled, multi.Status)
-	assert.Equal(t, 2, multi.ChannelInfo.MultiKeySize)
-	assert.Equal(t, map[int]int{1: common.ChannelStatusAutoDisabled}, multi.ChannelInfo.MultiKeyStatusList)
-	assert.Equal(t, map[int]string{1: "quota"}, multi.ChannelInfo.MultiKeyDisabledReason)
-	assert.Zero(t, multi.ChannelInfo.MultiKeyPollingIndex)
-
 	static := &model.Channel{Type: constant.ChannelTypeTaskPlugin, Key: "sk-1", Status: common.ChannelStatusEnabled}
 	DropPluginCredentials(static)
 	assert.Equal(t, "sk-1", static.Key)
@@ -809,7 +774,7 @@ func TestScheduledCredentialBalanceAndNodeSync(t *testing.T) {
  return {next: 120, credential: {remaining: 0}, keyStatus: "enabled", balance: {amount: 12, currency: "USD"}};
 }`)
 	line := credentialLine(t, jsplugin.Credential{Plugin: plugin.Meta.Key, Data: json.RawMessage(`{"remaining":1}`), AccountID: "own-account", Headers: map[string]string{"Authorization": "Bearer fixture"}})
-	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", line, false)
+	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", line)
 	require.True(t, model.UpdateChannelStatus(channel.Id, line, common.ChannelStatusAutoDisabled, "quota"))
 	var replicated string
 	RegisterSyncTopic(model.SyncTopicChannels, func(context.Context) error {
@@ -818,12 +783,12 @@ func TestScheduledCredentialBalanceAndNodeSync(t *testing.T) {
 	})
 	syncNodeTopics(context.Background())
 	assert.Equal(t, line, replicated)
-	delay, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, line, "disabled")
+	delay, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, line, "disabled")
 	require.NoError(t, err)
 	assert.Equal(t, 2*time.Minute, delay)
 	stored := storedChannel(t, channel.Id)
 	assert.Equal(t, common.ChannelStatusEnabled, stored.Status)
-	credential := storedCredential(t, channel.Id, 0)
+	credential := storedCredential(t, channel.Id)
 	assert.JSONEq(t, `{"remaining":0}`, string(credential.Data))
 	assert.Equal(t, "own-account", credential.AccountID)
 	assert.Equal(t, map[string]string{"Authorization": "Bearer fixture"}, credential.Headers)
@@ -852,7 +817,7 @@ func TestScheduledRunsOncePerKey(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl}); return {keyStatus: "enabled"};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	require.True(t, model.UpdateChannelStatus(channel.Id, channel.Key, common.ChannelStatusAutoDisabled, "quota"))
 	channel = storedChannel(t, channel.Id)
 	s := &pluginScheduler{}
@@ -860,7 +825,7 @@ func TestScheduledRunsOncePerKey(t *testing.T) {
 	s.scan([]*model.Channel{channel}, now)
 	s.scan([]*model.Channel{channel}, now.Add(10*time.Minute))
 	<-entered
-	s.disabled(channel, channel.Key, now)
+	s.disabled(channel, now)
 	s.scan([]*model.Channel{channel}, now.Add(time.Hour))
 	releaseHook()
 	s.workers.Wait()
@@ -872,9 +837,9 @@ func TestScheduledStaleRemovedAndManualKeys(t *testing.T) {
 	useNodeSync(t)
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) { throw new Error("must not run"); }`)
 	line := expiringLine(t, plugin.Meta.Key, "before", "account", 0)
-	for _, mode := range []string{"refreshed", "removed", "manual channel", "manual key", "needs login"} {
+	for _, mode := range []string{"refreshed", "removed", "manual channel", "needs login"} {
 		t.Run(mode, func(t *testing.T) {
-			channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", line, mode == "manual key")
+			channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", line)
 			_, err := model.UpdateScheduledChannelLocked(context.Background(), channel.Id, func(current *model.Channel) error {
 				switch mode {
 				case "refreshed":
@@ -883,8 +848,6 @@ func TestScheduledStaleRemovedAndManualKeys(t *testing.T) {
 					current.Key = "replacement"
 				case "manual channel":
 					current.Status = common.ChannelStatusManuallyDisabled
-				case "manual key":
-					current.ChannelInfo.MultiKeyStatusList = map[int]int{0: common.ChannelStatusManuallyDisabled}
 				case "needs login":
 					credential, _ := jsplugin.ParseCredential(line)
 					credential.NeedsLogin = true
@@ -894,7 +857,7 @@ func TestScheduledStaleRemovedAndManualKeys(t *testing.T) {
 			})
 			require.NoError(t, err)
 			before := storedChannel(t, channel.Id)
-			delay, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, line, "timer")
+			delay, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, line, "timer")
 			require.NoError(t, err)
 			if mode == "refreshed" || mode == "removed" || mode == "needs login" {
 				assert.Equal(t, time.Minute, delay)
@@ -920,10 +883,10 @@ func TestScheduledInvalidResultsWriteNothing(t *testing.T) {
 			useNodeSync(t)
 			plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {`+result+`}`)
 			line := credentialLine(t, jsplugin.Credential{Plugin: plugin.Meta.Key, AccountID: "account", Data: json.RawMessage(`{"unchanged":true}`)})
-			channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", line, false)
+			channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", line)
 			require.True(t, model.UpdateChannelStatus(channel.Id, line, common.ChannelStatusAutoDisabled, "quota"))
 			before := storedChannel(t, channel.Id)
-			_, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, line, "timer")
+			_, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, line, "timer")
 			require.Error(t, err)
 			after := storedChannel(t, channel.Id)
 			assert.Equal(t, before.Key, after.Key)
@@ -945,11 +908,11 @@ func TestScheduledDisabledTriggerAndThrottle(t *testing.T) {
  if (ctx.reason !== "disabled" || ctx.credential !== null || ctx.apiKey !== "own-key") throw new Error("wrong context");
  utils.fetch({url: ctx.baseUrl, method: "POST", body: "{}"}); return {keyStatus: "enabled"};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	previous := scheduledPlugins
 	scheduledPlugins = &pluginScheduler{}
 	t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
-	channelError := types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "own-key", true)
+	channelError := types.NewChannelError(channel.Id, channel.Type, channel.Name, "own-key", true)
 	DisableChannel(*channelError, "quota")
 	scheduledPlugins.workers.Wait()
 	assert.Equal(t, common.ChannelStatusEnabled, storedChannel(t, channel.Id).Status)
@@ -958,7 +921,7 @@ func TestScheduledDisabledTriggerAndThrottle(t *testing.T) {
 	scheduledPlugins.workers.Wait()
 	assert.EqualValues(t, 1, calls.Load(), "one disabled trigger per key per minute")
 	assert.Equal(t, common.ChannelStatusAutoDisabled, storedChannel(t, channel.Id).Status)
-	scheduledPlugins.disabled(storedChannel(t, channel.Id), "own-key", time.Now().Add(time.Minute))
+	scheduledPlugins.disabled(storedChannel(t, channel.Id), time.Now().Add(time.Minute))
 	scheduledPlugins.workers.Wait()
 	assert.EqualValues(t, 2, calls.Load())
 }
@@ -975,12 +938,12 @@ func TestScheduledNextFailureAndIdleCost(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  const r = utils.fetch({url: ctx.baseUrl}); if (r.body.fail) throw new Error("private vendor token"); return {next: 120};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	s := &pluginScheduler{}
 	now := time.Now()
 	s.scan([]*model.Channel{channel}, now)
 	require.Len(t, s.entries, 1)
-	key := pluginScheduledKey{channel.Id, 0}
+	key := channel.Id
 	first := s.entries[key].next
 	assert.False(t, first.Before(now))
 	assert.True(t, first.Before(now.Add(10*time.Minute)))
@@ -1006,7 +969,7 @@ func TestScheduledNextFailureAndIdleCost(t *testing.T) {
 	s.workers.Wait()
 	assert.EqualValues(t, 2, calls.Load())
 	assert.NotContains(t, logs.String(), "private vendor token")
-	assert.Contains(t, logs.String(), "plugin=scheduled-test channel_id=1 key_index=0 category=plugin_error")
+	assert.Contains(t, logs.String(), "plugin=scheduled-test channel_id=1 category=plugin_error")
 	assert.False(t, s.entries[key].next.Before(before.Add(15*time.Minute)))
 	assert.False(t, s.entries[key].next.After(time.Now().Add(15*time.Minute)))
 	s.scan(nil, now)
@@ -1019,7 +982,7 @@ func TestScheduledNextFailureAndIdleCost(t *testing.T) {
 	channel.SetSetting(dto.ChannelSettings{TaskPluginKey: idle.Meta.Key})
 	inactive := &pluginScheduler{}
 	inactive.scan([]*model.Channel{channel}, now)
-	inactive.disabled(channel, "own-key", now)
+	inactive.disabled(channel, now)
 	assert.Nil(t, inactive.entries)
 	assert.Nil(t, inactive.slots)
 	inactive.workers.Wait()
@@ -1037,7 +1000,7 @@ func TestScheduledPoolBoundsAndRunningKey(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) { utils.fetch({url: ctx.baseUrl}); return {next: 600}; }`)
 	channels := make([]*model.Channel, 5)
 	for index := range channels {
-		channels[index] = createProviderChannel(t, plugin.Meta.Key, server.URL, fmt.Sprintf("key-%d", index), false)
+		channels[index] = createProviderChannel(t, plugin.Meta.Key, server.URL, fmt.Sprintf("key-%d", index))
 	}
 	s := &pluginScheduler{}
 	now := time.Now()
@@ -1048,7 +1011,7 @@ func TestScheduledPoolBoundsAndRunningKey(t *testing.T) {
 	}
 	assert.Len(t, s.slots, 4)
 	s.scan(channels, now.Add(10*time.Minute))
-	s.disabled(channels[0], channels[0].Key, now)
+	s.disabled(channels[0], now)
 	assert.Len(t, s.slots, 4, "scans and disabled events skip an already running key")
 	s.scan(nil, now)
 	assert.Len(t, s.entries, 4, "an old snapshot must keep the running keys and their eventual next times")
@@ -1066,14 +1029,14 @@ func TestScheduledDisableHonorsChannelSwitchAndDoesNotRecurse(t *testing.T) {
 	scheduledPlugins = &pluginScheduler{}
 	t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
 	for _, autoBan := range []bool{false, true} {
-		channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key", false)
+		channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key")
 		flag := 0
 		if autoBan {
 			flag = 1
 		}
 		channel.AutoBan = &flag
 		require.NoError(t, model.DB.Model(channel).Update("auto_ban", flag).Error)
-		_, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, channel.Key, "timer")
+		_, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, channel.Key, "timer")
 		require.NoError(t, err)
 		stored := storedChannel(t, channel.Id)
 		if autoBan {
@@ -1097,11 +1060,11 @@ func TestScheduledCancellationAndTLSKeepStoredState(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl, method: "POST", body: "{}"}); return {keyStatus: "auto_disabled"};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	ctx, cancel := context.WithCancel(context.Background())
 	finished := make(chan error, 1)
 	go func() {
-		_, _, _, err := runScheduledPlugin(ctx, channel, plugin, 0, channel.Key, "timer")
+		_, _, _, err := runScheduledPlugin(ctx, channel, plugin, channel.Key, "timer")
 		finished <- err
 	}()
 	<-entered
@@ -1114,10 +1077,10 @@ func TestScheduledCancellationAndTLSKeepStoredState(t *testing.T) {
 	var requests atomic.Int32
 	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1) }))
 	defer tlsServer.Close()
-	tlsChannel := createProviderChannel(t, plugin.Meta.Key, tlsServer.URL, "own-key", false)
+	tlsChannel := createProviderChannel(t, plugin.Meta.Key, tlsServer.URL, "own-key")
 	tlsChannel.SetSetting(dto.ChannelSettings{TaskPluginKey: plugin.Meta.Key, TLSInsecureSkipVerify: true})
 	require.NoError(t, model.DB.Model(tlsChannel).Update("setting", tlsChannel.Setting).Error)
-	_, _, _, err = runScheduledPlugin(context.Background(), tlsChannel, plugin, 0, tlsChannel.Key, "timer")
+	_, _, _, err = runScheduledPlugin(context.Background(), tlsChannel, plugin, tlsChannel.Key, "timer")
 	require.Error(t, err)
 	assert.Zero(t, requests.Load(), "the certificate check must reject the request before sending the key")
 	assert.Equal(t, common.ChannelStatusEnabled, storedChannel(t, tlsChannel.Id).Status)
@@ -1126,11 +1089,11 @@ func TestScheduledCancellationAndTLSKeepStoredState(t *testing.T) {
 func TestScheduledReplacementKeysGetAnInitialRun(t *testing.T) {
 	useNodeSync(t)
 	plugin := registerScheduledPlugin(t, `export function scheduled() { return {next: 86400}; }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "old-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "old-key")
 	s := &pluginScheduler{}
 	now := time.Now()
 	s.scan([]*model.Channel{channel}, now)
-	key := pluginScheduledKey{channel.Id, 0}
+	key := channel.Id
 	s.entries[key].next = now.Add(24 * time.Hour)
 	channel.Key = "replacement-key"
 	s.scan([]*model.Channel{channel}, now)
@@ -1148,7 +1111,7 @@ func TestScheduledReplacementKeysGetAnInitialRun(t *testing.T) {
 func TestScheduledScanRunsOnlyOnMaster(t *testing.T) {
 	useNodeSync(t)
 	plugin := registerScheduledPlugin(t, `export function scheduled() { throw new Error("initial jitter must defer JS"); }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key")
 	previous, master := scheduledPlugins, common.IsMasterNode
 	scheduledPlugins = &pluginScheduler{}
 	t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins, common.IsMasterNode = previous, master })
@@ -1157,10 +1120,12 @@ func TestScheduledScanRunsOnlyOnMaster(t *testing.T) {
 	assert.Nil(t, scheduledPlugins.entries)
 	common.IsMasterNode = true
 	RefreshExpiringPluginCredentials(time.Now())
-	assert.Contains(t, scheduledPlugins.entries, pluginScheduledKey{channel.Id, 0})
+	assert.Contains(t, scheduledPlugins.entries, channel.Id)
 }
 
-func TestScheduledHookDoesNotBlockKeySelection(t *testing.T) {
+// The hook runs without channel locks: reading the channel for a request and
+// writing its status go on while it waits.
+func TestScheduledHookDoesNotBlockChannelReadsOrStatusWrites(t *testing.T) {
 	for _, cacheEnabled := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cache=%t", cacheEnabled), func(t *testing.T) {
 			useNodeSync(t)
@@ -1176,45 +1141,34 @@ func TestScheduledHookDoesNotBlockKeySelection(t *testing.T) {
 			plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl}); return {keyStatus: "enabled"};
 }`)
-			channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "recovering\nother\nhealthy", true)
-			require.True(t, model.UpdateChannelStatus(channel.Id, "recovering", common.ChannelStatusAutoDisabled, "quota"))
+			channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "recovering")
+			require.True(t, model.UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "quota"))
 			common.MemoryCacheEnabled = cacheEnabled
 			model.InitChannelCache()
 			channel, err := model.CacheGetChannel(channel.Id)
 			require.NoError(t, err)
 			hookDone := make(chan error, 1)
 			go func() {
-				_, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, "recovering", "timer")
+				_, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, "recovering", "timer")
 				hookDone <- err
 			}()
 			<-entered
-			type selection struct {
-				key string
-				err error
-			}
-			selected := make(chan selection, 1)
+			read := make(chan error, 1)
 			go func() {
-				key, _, apiErr := channel.GetNextEnabledKey()
-				var err error
-				if apiErr != nil {
-					err = apiErr
-				}
-				selected <- selection{key, err}
+				_, err := model.CacheGetChannel(channel.Id)
+				read <- err
 			}()
 			select {
-			case result := <-selected:
-				require.NoError(t, result.err)
-				assert.Contains(t, []string{"other", "healthy"}, result.key)
+			case err := <-read:
+				require.NoError(t, err)
 			case <-time.After(500 * time.Millisecond):
-				t.Error("request key selection waited for the scheduled hook")
+				t.Error("a channel read waited for the scheduled hook")
 				releaseHook()
-				<-selected
+				<-read
 			}
-			// Exercise both operations while the hook waits without racing a
-			// stale selection snapshot against an unrelated status write.
 			statusDone := make(chan bool, 1)
 			go func() {
-				statusDone <- model.UpdateChannelStatus(channel.Id, "other", common.ChannelStatusAutoDisabled, "other quota")
+				statusDone <- model.UpdateChannelStatus(channel.Id, "", common.ChannelStatusEnabled, "")
 			}()
 			select {
 			case changed := <-statusDone:
@@ -1226,11 +1180,7 @@ func TestScheduledHookDoesNotBlockKeySelection(t *testing.T) {
 			}
 			releaseHook()
 			require.NoError(t, <-hookDone)
-			after := storedChannel(t, channel.Id)
-			assert.NotContains(t, after.ChannelInfo.MultiKeyStatusList, 0)
-			assert.Equal(t, common.ChannelStatusAutoDisabled, after.ChannelInfo.MultiKeyStatusList[1])
-			assert.NotContains(t, after.ChannelInfo.MultiKeyStatusList, 2)
-			assert.Equal(t, common.ChannelStatusEnabled, after.Status)
+			assert.Equal(t, common.ChannelStatusEnabled, storedChannel(t, channel.Id).Status)
 		})
 	}
 }
@@ -1251,7 +1201,7 @@ func TestScheduledScanDetectsDisabledTransitionOnce(t *testing.T) {
 		plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl + "?reason=" + ctx.reason}); return {next: 3600};
 }`)
-		channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+		channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 		previous := scheduledPlugins
 		scheduledPlugins = &pluginScheduler{}
 		t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
@@ -1259,7 +1209,7 @@ func TestScheduledScanDetectsDisabledTransitionOnce(t *testing.T) {
 		RegisterSyncTopic(model.SyncTopicChannels, ScanScheduledPlugins)
 		now := time.Now()
 		require.True(t, syncNodeTopics(context.Background()))
-		DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, false, channel.Key, true), "quota")
+		DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.Key, true), "quota")
 		// A later configuration write may scan the same local transition.
 		model.BumpSyncTopic(model.SyncTopicChannels)
 		require.True(t, syncNodeTopics(context.Background()))
@@ -1277,7 +1227,7 @@ func TestScheduledScanDetectsDisabledTransitionOnce(t *testing.T) {
 
 		freshMaster := &pluginScheduler{}
 		freshMaster.scan([]*model.Channel{channel}, now)
-		first := freshMaster.entries[pluginScheduledKey{channel.Id, 0}].next
+		first := freshMaster.entries[channel.Id].next
 		assert.False(t, first.Before(now))
 		assert.True(t, first.Before(now.Add(10*time.Minute)))
 		freshMaster.scan([]*model.Channel{channel}, first)
@@ -1299,7 +1249,7 @@ func TestScheduledSyncSkipsIdleAndFollowerNodes(t *testing.T) {
 				hooks = `export function scheduled() { throw new Error("follower ran JS"); }`
 			}
 			plugin := registerScheduledPlugin(t, hooks)
-			createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key", false)
+			createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key")
 			previous := scheduledPlugins
 			scheduledPlugins = &pluginScheduler{}
 			t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
@@ -1323,7 +1273,7 @@ func TestScheduledSyncSkipsIdleAndFollowerNodes(t *testing.T) {
 func TestScheduledSyncRetriesFailedQuery(t *testing.T) {
 	database := useNodeSync(t)
 	plugin := registerScheduledPlugin(t, `export function scheduled() { throw new Error("initial jitter must defer JS"); }`)
-	createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key", false)
+	createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key")
 	previous := scheduledPlugins
 	scheduledPlugins = &pluginScheduler{}
 	t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
@@ -1357,7 +1307,7 @@ func TestScheduledOwnDisableSyncDuringCommitDoesNotRecurse(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl}); return {keyStatus: "auto_disabled", next: 3600};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	flag := 1
 	require.NoError(t, database.Model(channel).Update("auto_ban", flag).Error)
 	previous := scheduledPlugins
@@ -1378,7 +1328,7 @@ func TestScheduledOwnDisableSyncDuringCommitDoesNotRecurse(t *testing.T) {
 		}
 	}))
 	t.Cleanup(func() { require.NoError(t, database.Callback().Create().Remove("scheduled_hold_commit")) })
-	key := pluginScheduledKey{channel.Id, 0}
+	key := channel.Id
 	scheduledPlugins.scan([]*model.Channel{channel}, scheduledPlugins.entries[key].next)
 	select {
 	case <-committed:
@@ -1411,7 +1361,7 @@ func TestScheduledSyncBeforeMasterDisableDoesNotDuplicate(t *testing.T) {
  if (ctx.reason !== "disabled") throw new Error("unexpected timer run");
  utils.fetch({url: ctx.baseUrl}); return {next: 3600};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	previous := scheduledPlugins
 	scheduledPlugins = &pluginScheduler{}
 	t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
@@ -1425,7 +1375,7 @@ func TestScheduledSyncBeforeMasterDisableDoesNotDuplicate(t *testing.T) {
 	scheduledPlugins.workers.Wait()
 	require.EqualValues(t, 1, calls.Load())
 	// Resume the same DisableChannel call after the node-sync run completed.
-	scheduledPlugins.disabled(storedChannel(t, channel.Id), channel.Key, time.Now())
+	scheduledPlugins.disabled(storedChannel(t, channel.Id), time.Now())
 	scheduledPlugins.workers.Wait()
 	require.EqualValues(t, 1, calls.Load())
 	RefreshExpiringPluginCredentials(time.Now().Add(2 * time.Minute))
@@ -1436,17 +1386,17 @@ func TestScheduledSyncBeforeMasterDisableDoesNotDuplicate(t *testing.T) {
 func TestScheduledFollowerSkipsEveryTrigger(t *testing.T) {
 	useNodeSync(t)
 	plugin := registerScheduledPlugin(t, `export function scheduled() { throw new Error("follower executed JS"); }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, "https://vendor.example", "own-key")
 	previous := scheduledPlugins
 	scheduledPlugins = &pluginScheduler{}
 	t.Cleanup(func() { scheduledPlugins.workers.Wait(); scheduledPlugins = previous })
 	common.IsMasterNode = false
-	DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, false, channel.Key, true), "quota")
+	DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.Key, true), "quota")
 	channel = storedChannel(t, channel.Id)
 	assert.Equal(t, common.ChannelStatusAutoDisabled, channel.Status)
 	scheduledPlugins.scan([]*model.Channel{channel}, time.Now().Add(time.Hour))
-	scheduledPlugins.disabled(channel, channel.Key, time.Now())
-	delay, status, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, channel.Key, "disabled")
+	scheduledPlugins.disabled(channel, time.Now())
+	delay, status, _, err := runScheduledPlugin(context.Background(), channel, plugin, channel.Key, "disabled")
 	require.NoError(t, err)
 	assert.Zero(t, delay)
 	assert.Zero(t, status)
@@ -1472,7 +1422,7 @@ func TestScheduledChangedKeyDiscardsAllResults(t *testing.T) {
 }`)
 	old := expiringLine(t, plugin.Meta.Key, "before", "account", 0)
 	replacement := expiringLine(t, plugin.Meta.Key, "after", "account", 0)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, old, false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, old)
 	require.True(t, model.UpdateChannelStatus(channel.Id, old, common.ChannelStatusAutoDisabled, "quota"))
 	var notices atomic.Int32
 	relaxNoticeDelivery(t, func(string) { notices.Add(1) })
@@ -1482,7 +1432,7 @@ func TestScheduledChangedKeyDiscardsAllResults(t *testing.T) {
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		delay, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, 0, old, "timer")
+		delay, _, _, err := runScheduledPlugin(context.Background(), channel, plugin, old, "timer")
 		done <- outcome{delay, err}
 	}()
 	<-entered
@@ -1524,7 +1474,7 @@ func TestScheduledDisableDuringTimerRunsOnNextScan(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl + "?reason=" + ctx.reason}); return {next: 3600};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	previous := scheduledPlugins
 	s := &pluginScheduler{}
 	scheduledPlugins = s
@@ -1533,7 +1483,7 @@ func TestScheduledDisableDuringTimerRunsOnNextScan(t *testing.T) {
 	s.scan([]*model.Channel{channel}, now)
 	s.scan([]*model.Channel{channel}, now.Add(10*time.Minute))
 	<-entered
-	DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, false, channel.Key, true), "quota")
+	DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.Key, true), "quota")
 	releaseHook()
 	s.workers.Wait()
 	s.scan([]*model.Channel{storedChannel(t, channel.Id)}, now)
@@ -1556,7 +1506,7 @@ func TestScheduledOwnDisableDoesNotBecomeScanTrigger(t *testing.T) {
 	plugin := registerScheduledPlugin(t, `export function scheduled(ctx) {
  utils.fetch({url: ctx.baseUrl}); return {next: 3600, keyStatus: "auto_disabled"};
 }`)
-	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key", false)
+	channel := createProviderChannel(t, plugin.Meta.Key, server.URL, "own-key")
 	entered, release := make(chan struct{}), make(chan struct{})
 	releaseNotice := sync.OnceFunc(func() { close(release) })
 	defer releaseNotice()

@@ -121,7 +121,6 @@ type responsesWSSession struct {
 	lockedModel     string
 	lockedChannelID int
 	lockedKey       string
-	lockedKeyIndex  int
 	lockedContext   map[appconstant.ContextKey]any
 	lockedRoute     dto.AdvancedCustomRoute
 }
@@ -384,7 +383,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				service.FinishRouteAttempt(c, info, apiErr)
 				decision := service.DecideRelayRetry(c, apiErr, common.RetryTimes-retry.GetRetry())
 				service.RecordPolicyFailure(c, channel.Id, apiErr, decision)
-				service.ProcessChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, info.ApiKey, channel.GetAutoBan()), apiErr, info)
+				service.ProcessChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, info.ApiKey, channel.GetAutoBan()), apiErr, info)
 				if decision.Action == "retry" {
 					continue
 				}
@@ -399,7 +398,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
 			s.lockedModel, s.lockedChannelID = modelName, channel.Id
-			s.lockedKey, s.lockedKeyIndex = info.ApiKey, info.ChannelMultiKeyIndex
+			s.lockedKey = info.ApiKey
 			s.lockedRoute, _ = connectionOtherSettings(c, channel).AdvancedCustom.MatchPathForModel(c.Request.URL.Path, modelName)
 			s.lockedContext = make(map[appconstant.ContextKey]any)
 			for _, key := range []appconstant.ContextKey{
@@ -407,7 +406,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				appconstant.ContextKeyChannelCreateTime, appconstant.ContextKeyChannelSetting, appconstant.ContextKeyChannelOtherSetting,
 				appconstant.ContextKeyChannelParamOverride, appconstant.ContextKeyChannelHeaderOverride, appconstant.ContextKeyChannelOrganization,
 				appconstant.ContextKeyChannelAutoBan, appconstant.ContextKeyChannelModelMapping, appconstant.ContextKeyChannelStatusCodeMapping,
-				appconstant.ContextKeyChannelIsMultiKey, appconstant.ContextKeyChannelMultiKeyIndex, appconstant.ContextKeyChannelKey, appconstant.ContextKeyChannelBaseUrl,
+				appconstant.ContextKeyChannelKey, appconstant.ContextKeyChannelBaseUrl,
 				appconstant.ContextKeyUpstreamRequestOrigin, appconstant.ContextKeyProviderPlugin,
 			} {
 				if value, ok := c.Get(string(key)); ok {
@@ -684,13 +683,8 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 	if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled || !channel.GetSetting().ResponsesWebSocketEnabled {
 		return types.NewErrorWithStatusCode(errors.New("Responses WebSocket is disabled for this channel"), types.ErrorCode(appdto.FilterResponsesWebSocket), http.StatusForbidden, types.ErrOptionWithSkipRetry())
 	}
-	keyEnabled := channel.Key == s.lockedKey
-	if channel.ChannelInfo.IsMultiKey {
-		keys := channel.GetKeys()
-		status := channel.ChannelInfo.MultiKeyStatusList[s.lockedKeyIndex]
-		keyEnabled = s.lockedKeyIndex >= 0 && s.lockedKeyIndex < len(keys) && keys[s.lockedKeyIndex] == s.lockedKey && (status == 0 || status == common.ChannelStatusEnabled)
-	}
-	if !keyEnabled {
+	// A channel holds one key (Ren2Hub single-key-channel).
+	if channel.Key != s.lockedKey {
 		return types.NewErrorWithStatusCode(errors.New("the upstream connection credential is no longer enabled"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
 	}
 	// Changes that alter the physical upstream connection require a new

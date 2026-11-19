@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -140,9 +138,6 @@ func RecordPolicyFailure(c *gin.Context, channelID int, err *types.NewAPIError, 
 	event.Decision, event.Health = decision, "unchanged"
 	if c.GetBool("auto_ban") && ShouldDisableChannel(err) {
 		event.Health = "channel_disable_requested"
-		if common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
-			event.Health = "key_disable_requested"
-		}
 	}
 	state.AddEvent(event)
 }

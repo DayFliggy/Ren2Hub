@@ -107,7 +107,7 @@ func TestGapsChannelConfigAndKeyCheckOnSave(t *testing.T) {
 			"a config that is no object":             {"single", "good-1", `{"plugin_config":[1]}`, "Invalid plugin config: plugin_config must be a JSON object"},
 			"a rejected key with the default config": {"single", "bad-1", "", "The plugin rejected the key: bad key bad-1 for us"},
 			"a rejected key with the saved config":   {"single", "bad-1", `{"plugin_config":{"region":"eu"}}`, "The plugin rejected the key: bad key bad-1 for eu"},
-			"a rejected second line":                 {"multi_to_single", "good-1\nbad-2", "", "The plugin rejected key line 2: bad key bad-2 for us"},
+			"a rejected second line of a batch":      {"batch", "good-1\nbad-2", "", "The plugin rejected key line 2: bad key bad-2 for us"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				response, raw := callChannelAPI(t, AddChannel, http.MethodPost, "/api/channel", addBody(tc.mode, tc.key, tc.settings))
@@ -134,7 +134,7 @@ func TestGapsChannelConfigAndKeyCheckOnSave(t *testing.T) {
 	})
 
 	t.Run("update checks only the key lines it adds", func(t *testing.T) {
-		channel := insertPluginChannel(t, "gaps-config", "https://vendor.example", "bad-stored", false)
+		channel := insertPluginChannel(t, "gaps-config", "https://vendor.example", "bad-stored")
 		channel.SetOtherSettings(dto.ChannelOtherSettings{PluginConfig: json.RawMessage(`{"region":"eu"}`)})
 		require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("settings", channel.OtherSettings).Error)
 		update := func(fields string) (channelAPIResponse, string) {
@@ -154,14 +154,10 @@ func TestGapsChannelConfigAndKeyCheckOnSave(t *testing.T) {
 		require.True(t, response.Success, raw)
 		assert.Equal(t, "good-new", storedGapsChannel(t, channel.Id).Key)
 
-		multi := insertPluginChannel(t, "gaps-config", "https://vendor.example", "bad-stored\ngood-1", true)
-		response, raw = callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel", fmt.Sprintf(`{"id":%d,"key":"bad-stored\ngood-1\nbad-new"}`, multi.Id))
-		assert.False(t, response.Success, raw)
-		assert.Equal(t, "The plugin rejected key line 3: bad key bad-new for us", response.Message)
 	})
 
 	t.Run("update validates a config sent without the channel type", func(t *testing.T) {
-		channel := insertPluginChannel(t, "gaps-config", "https://vendor.example", "good-1", false)
+		channel := insertPluginChannel(t, "gaps-config", "https://vendor.example", "good-1")
 		response, raw := callChannelAPI(t, UpdateChannel, http.MethodPut, "/api/channel",
 			fmt.Sprintf(`{"id":%d,"settings":"{\"plugin_config\":{\"region\":\"mars\",\"undeclared\":1}}"}`, channel.Id))
 		assert.False(t, response.Success, raw)
@@ -212,7 +208,7 @@ func TestGapsUpdateChannelBalanceOfAPluginChannel(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	t.Run("a balance read in two calls", func(t *testing.T) {
-		channel := insertPluginChannel(t, "gaps-chain", upstream.URL, "sk-chain", false)
+		channel := insertPluginChannel(t, "gaps-chain", upstream.URL, "sk-chain")
 
 		_, raw := callChannelAPI(t, UpdateChannelBalance, http.MethodGet, "/api/channel/update_balance", "", idParam(channel.Id))
 
@@ -235,7 +231,7 @@ func TestGapsUpdateChannelBalanceOfAPluginChannel(t *testing.T) {
 	})
 
 	t.Run("a plugin without balance hooks", func(t *testing.T) {
-		channel := insertPluginChannel(t, "gaps-no-balance", upstream.URL, "sk-chain", false)
+		channel := insertPluginChannel(t, "gaps-no-balance", upstream.URL, "sk-chain")
 		response, raw := callChannelAPI(t, UpdateChannelBalance, http.MethodGet, "/api/channel/update_balance", "", idParam(channel.Id))
 		assert.False(t, response.Success, raw)
 		assert.Equal(t, "The plugin of this channel does not report a balance", response.Message)
@@ -252,13 +248,12 @@ func TestGapsBalanceRunDisablesOnlyWhatIsUsedUp(t *testing.T) {
 		"sk-unlimited": `{"amount":0,"currency":"USD","unlimited":true}`,
 		"sk-windows":   `{"windows":[{"name":"5h","used":100,"limit":100}]}`,
 		"sk-error":     `{"error":"account suspended"}`,
-		"sk-funded":    `{"amount":5,"currency":"USD"}`,
 	})
 	// run stores the key on a channel whose balance column holds 9 and runs
 	// its query as an update of all balances does.
-	run := func(t *testing.T, key string, multiKey bool, autoBan int) *model.Channel {
+	run := func(t *testing.T, key string, autoBan int) *model.Channel {
 		t.Helper()
-		channel := insertPluginChannel(t, "gaps-balance", upstream.URL, key, multiKey)
+		channel := insertPluginChannel(t, "gaps-balance", upstream.URL, key)
 		require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{"balance": 9, "auto_ban": autoBan}).Error)
 		updateBalanceInRun(storedGapsChannel(t, channel.Id))
 		return storedGapsChannel(t, channel.Id)
@@ -280,7 +275,7 @@ func TestGapsBalanceRunDisablesOnlyWhatIsUsedUp(t *testing.T) {
 		{"an error", "sk-error", 1, common.ChannelStatusEnabled, 9, `{"amount":null,"currency":"","unlimited":false,"windows":[],"error":"account suspended"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			stored := run(t, tc.key, false, tc.autoBan)
+			stored := run(t, tc.key, tc.autoBan)
 			assert.Equal(t, tc.wantStatus, stored.Status)
 			assert.InDelta(t, tc.wantBalance, stored.Balance, 1e-9)
 			detail, err := common.Marshal(stored.GetBalanceDetail())
@@ -289,18 +284,6 @@ func TestGapsBalanceRunDisablesOnlyWhatIsUsedUp(t *testing.T) {
 		})
 	}
 
-	t.Run("a multi-key channel disables only the used-up key", func(t *testing.T) {
-		stored := run(t, "sk-funded\nsk-zero", true, 1)
-		assert.Equal(t, common.ChannelStatusEnabled, stored.Status)
-		assert.Equal(t, map[int]int{1: common.ChannelStatusAutoDisabled}, stored.ChannelInfo.MultiKeyStatusList)
-		assert.Equal(t, "Insufficient balance", stored.ChannelInfo.MultiKeyDisabledReason[1])
-		assert.InDelta(t, 5.0, stored.Balance, 1e-9, "the keys' amounts add up")
-		detail, err := common.Marshal(stored.GetBalanceDetail())
-		require.NoError(t, err)
-		assert.JSONEq(t, `{"amount":5,"currency":"USD","unlimited":false,"windows":[],"keys":{
-		  "0":{"amount":5,"currency":"USD","unlimited":false,"windows":[]},
-		  "1":{"amount":0,"currency":"USD","unlimited":false,"windows":[]}}}`, string(detail))
-	})
 }
 
 func TestGapsUpdateAllBalancesRunsAsASystemTask(t *testing.T) {
@@ -312,7 +295,7 @@ func TestGapsUpdateAllBalancesRunsAsASystemTask(t *testing.T) {
 		_, _ = io.WriteString(w, `{"amount":3,"currency":"USD"}`)
 	}))
 	t.Cleanup(upstream.Close)
-	channel := insertPluginChannel(t, "gaps-balance-all", upstream.URL, "sk-all", false)
+	channel := insertPluginChannel(t, "gaps-balance-all", upstream.URL, "sk-all")
 
 	type queuedRun struct {
 		Started bool   `json:"started"`

@@ -149,13 +149,10 @@ func useCredentialTestDB(t *testing.T, models ...any) {
 	})
 }
 
-func insertCredentialChannel(t *testing.T, pluginKey, baseURL, key string, multiKey bool) *model.Channel {
+func insertCredentialChannel(t *testing.T, pluginKey, baseURL, key string) *model.Channel {
 	t.Helper()
 	stored := &model.Channel{Type: constant.ChannelTypeTaskPlugin, Key: key, Status: common.ChannelStatusEnabled, Models: "cred-video", BaseURL: &baseURL}
 	stored.SetSetting(dto.ChannelSettings{TaskPluginKey: pluginKey})
-	if multiKey {
-		stored.ChannelInfo = model.ChannelInfo{IsMultiKey: true, MultiKeySize: len(strings.Split(key, "\n"))}
-	}
 	require.NoError(t, model.DB.Create(stored).Error)
 	return stored
 }
@@ -225,7 +222,7 @@ func TestTaskPollingUsesTheSubmittingAccount(t *testing.T) {
 	useCredentialTestDB(t, &model.Channel{})
 	plugin := registerCredentialTaskPlugin(t, "task-cred-poll")
 	upstream := newTaskUpstream(t)
-	key := "sk-static\n" + taskCredentialLine(t, "task-cred-poll", "tok-1", "acct-1", 0) + "\n" + taskCredentialLine(t, "task-cred-poll", "tok-2", "acct-2", 0)
+	key := taskCredentialLine(t, "task-cred-poll", "tok-1", "acct-1", 0)
 	info := credentialTaskInfo(upstream.URL, key, constant.ChannelTypeTaskPlugin)
 	adaptor := New(plugin)
 	adaptor.Init(info)
@@ -234,7 +231,7 @@ func TestTaskPollingUsesTheSubmittingAccount(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ name, account, want string }{
-		{name: "the submitting account", account: "acct-2", want: "tok-2"},
+		{name: "the submitting account", account: "acct-1", want: "tok-1"},
 		{name: "a task without an account", want: "tok-1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,7 +246,6 @@ func TestTaskPollingUsesTheSubmittingAccount(t *testing.T) {
 			assert.Equal(t, "Bearer "+tc.want, request.Header.Get("Authorization"))
 			assert.Equal(t, tc.want, request.Header.Get("X-Seen-Credential"))
 			assert.Equal(t, "[]", request.Header.Get("X-Key"))
-			assert.NotContains(t, request.Header.Get("X-Seen-Auth"), "sk-static")
 			target := upstream.URL + "/tasks/up-" + tc.want + "?account=" + strings.Replace(tc.want, "tok", "acct", 1)
 			assert.Equal(t, signature(tc.want, http.MethodGet, target, ""), request.Header.Get("X-Signature"))
 
@@ -271,17 +267,16 @@ func TestTaskPollingUsesTheSubmittingAccount(t *testing.T) {
 	})
 }
 
-// TestBatchPollsGroupTasksByAccount polls tasks of two accounts, and of one
-// that left the channel, on one multi-key channel.
+// TestBatchPollsGroupTasksByAccount polls tasks of the channel's account, and
+// of one that left the channel, on one channel.
 func TestBatchPollsGroupTasksByAccount(t *testing.T) {
 	plugin := registerCredentialTaskPlugin(t, "task-cred-batch")
 	upstream := newTaskUpstream(t)
 	useCredentialTestDB(t, &model.Channel{}, &model.Task{})
-	stored := insertCredentialChannel(t, "task-cred-batch", upstream.URL,
-		taskCredentialLine(t, "task-cred-batch", "tok-1", "acct-1", 0)+"\n"+taskCredentialLine(t, "task-cred-batch", "tok-2", "acct-2", 0), true)
+	stored := insertCredentialChannel(t, "task-cred-batch", upstream.URL, taskCredentialLine(t, "task-cred-batch", "tok-1", "acct-1", 0))
 	taskM := map[string]*model.Task{}
 	var ids []string
-	for _, tc := range []struct{ id, account string }{{"up-1", "acct-1"}, {"up-2", "acct-2"}, {"up-3", "acct-1"}, {"up-4", "gone"}} {
+	for _, tc := range []struct{ id, account string }{{"up-1", "acct-1"}, {"up-3", "acct-1"}, {"up-4", "gone"}} {
 		task := &model.Task{TaskID: "task_" + tc.id, Platform: constant.TaskPlatform("61"), ChannelId: stored.Id, Status: model.TaskStatusInProgress,
 			PrivateData: model.TaskPrivateData{UpstreamTaskID: tc.id, CredentialAccount: tc.account}}
 		require.NoError(t, model.DB.Create(task).Error)
@@ -301,8 +296,8 @@ func TestBatchPollsGroupTasksByAccount(t *testing.T) {
 		batches = append(batches, request.Header.Get("Authorization")+" "+strings.Join(body.IDs, ","))
 	}
 	upstream.mu.Unlock()
-	assert.Equal(t, []string{"Bearer tok-1 up-1,up-3", "Bearer tok-2 up-2"}, batches, "each batch holds the tasks of one account")
-	for id, credential := range map[string]string{"up-1": "tok-1", "up-2": "tok-2", "up-3": "tok-1"} {
+	assert.Equal(t, []string{"Bearer tok-1 up-1,up-3"}, batches, "the batch holds the tasks of the channel's account")
+	for id, credential := range map[string]string{"up-1": "tok-1", "up-3": "tok-1"} {
 		var task model.Task
 		require.NoError(t, model.DB.Where("task_id = ?", "task_"+id).First(&task).Error)
 		assert.Equal(t, "50%", task.Progress, id)
@@ -321,10 +316,10 @@ func TestTaskOnlyPluginLoginServesTasks(t *testing.T) {
 	require.False(t, plugin.Meta.HasProviderPart())
 	upstream := newTaskUpstream(t)
 	useCredentialTestDB(t, &model.Channel{}, &model.Ability{}, &model.AuthFlow{})
-	stored := insertCredentialChannel(t, "task-cred-login", upstream.URL, "", false)
+	stored := insertCredentialChannel(t, "task-cred-login", upstream.URL, "")
 	identity := service.PluginLoginIdentity{UserID: 1, SessionID: "browser-session"}
 
-	started, err := service.StartPluginLogin(t.Context(), identity, stored.Id, nil, false)
+	started, err := service.StartPluginLogin(t.Context(), identity, stored.Id)
 	require.NoError(t, err)
 	require.Equal(t, "fields", started.Step.Type)
 	_, err = service.ContinuePluginLogin(t.Context(), identity, stored.Id, started.Flow, service.PluginLoginInput{Fields: map[string]string{"access": "tok-9"}})
@@ -435,14 +430,14 @@ func TestExpiringTaskCredentialIsRefreshedFirst(t *testing.T) {
 	plugin := registerCredentialTaskPlugin(t, "task-cred-refresh")
 	upstream := newTaskUpstream(t)
 	useCredentialTestDB(t, &model.Channel{})
-	insert := func(key string, multiKey bool) *model.Channel {
-		return insertCredentialChannel(t, "task-cred-refresh", upstream.URL, key, multiKey)
+	insert := func(key string) *model.Channel {
+		return insertCredentialChannel(t, "task-cred-refresh", upstream.URL, key)
 	}
 	soon := time.Now().Add(10 * time.Second).Unix()
 
 	t.Run("submit", func(t *testing.T) {
 		line := taskCredentialLine(t, "task-cred-refresh", "tok-1", "acct-1", soon)
-		stored := insert(line, false)
+		stored := insert(line)
 		info := credentialTaskInfo(upstream.URL, line, constant.ChannelTypeTaskPlugin)
 		info.ChannelId = stored.Id
 		adaptor := New(plugin)
@@ -464,8 +459,8 @@ func TestExpiringTaskCredentialIsRefreshedFirst(t *testing.T) {
 		upstream.mu.Lock()
 		upstream.requests = nil
 		upstream.mu.Unlock()
-		key := taskCredentialLine(t, "task-cred-refresh", "tok-a", "acct-a", 0) + "\n" + taskCredentialLine(t, "task-cred-refresh", "tok-b", "acct-b", soon)
-		stored := insert(key, true)
+		key := taskCredentialLine(t, "task-cred-refresh", "tok-b", "acct-b", soon)
+		stored := insert(key)
 		info := credentialTaskInfo(upstream.URL, key, constant.ChannelTypeTaskPlugin)
 		info.ChannelId = stored.Id
 		adaptor := New(plugin)
@@ -478,9 +473,6 @@ func TestExpiringTaskCredentialIsRefreshedFirst(t *testing.T) {
 		assert.Equal(t, "Bearer fresh-tok-b", upstream.sent(t, "/tasks/up-b").Header.Get("Authorization"))
 		reloaded, err := model.GetChannelById(stored.Id, true)
 		require.NoError(t, err)
-		lines := strings.Split(reloaded.Key, "\n")
-		require.Len(t, lines, 2)
-		assert.Equal(t, strings.Split(key, "\n")[0], lines[0], "the other credential is untouched")
-		assert.Contains(t, lines[1], "fresh-tok-b")
+		assert.Contains(t, reloaded.Key, "fresh-tok-b", "the poll stored the refreshed credential")
 	})
 }

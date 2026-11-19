@@ -48,7 +48,7 @@ var localRouteErrorCodes = []string{
 	string(types.ErrorCodeRequestPluginFailed), string(types.ErrorCodeResponseRejected), string(types.ErrorCodeViolationFeeGrokCSAM),
 	string(types.ErrorCodeCountTokenFailed), string(types.ErrorCodeModelPriceError), string(types.ErrorCodeInvalidApiType),
 	string(types.ErrorCodeJsonMarshalFailed), string(types.ErrorCodeDoRequestFailed), string(types.ErrorCodeGetChannelFailed),
-	string(types.ErrorCodeGenRelayInfoFailed), string(types.ErrorCodeChannelNoAvailableKey), string(types.ErrorCodeChannelParamOverrideInvalid),
+	string(types.ErrorCodeGenRelayInfoFailed), string(types.ErrorCodeChannelParamOverrideInvalid),
 	string(types.ErrorCodeChannelHeaderOverrideInvalid), string(types.ErrorCodeChannelModelMappedError), string(types.ErrorCodeChannelAwsClientError),
 	string(types.ErrorCodeChannelInvalidKey), string(types.ErrorCodeChannelResponseTimeExceeded), string(types.ErrorCodeReadRequestBodyFailed),
 	string(types.ErrorCodeConvertRequestFailed), string(types.ErrorCodeAccessDenied), string(types.ErrorCodeBadRequestBody),

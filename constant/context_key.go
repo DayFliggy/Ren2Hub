@@ -33,8 +33,6 @@ const (
 	ContextKeyChannelAutoBan           ContextKey = "auto_ban"
 	ContextKeyChannelModelMapping      ContextKey = "model_mapping"
 	ContextKeyChannelStatusCodeMapping ContextKey = "status_code_mapping"
-	ContextKeyChannelIsMultiKey        ContextKey = "channel_is_multi_key"
-	ContextKeyChannelMultiKeyIndex     ContextKey = "channel_multi_key_index"
 	ContextKeyChannelKey               ContextKey = "channel_key"
 	// ContextKeyProviderPlugin holds the jsplugin.PinnedPlugin whose relay
 	// routes serve this request on a task plugin channel.

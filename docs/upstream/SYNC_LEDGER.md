@@ -74,6 +74,14 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - `model/option.go` 的 `validateOptionValue` 在保存前调用 `ValidateBackupPaymentLinks`；`handleConfigUpdate` 像上游处理 `ToolPriceOptionKey` 一样把该键交给 `LoadBackupPaymentLinks`，不走通用配置加载器（它原地解码切片会保留被省略的字段，且静默丢弃解码错误）。`LoadBackupPaymentLinks` 用同一套校验整体替换钱包读取的快照，不合规的已存值记错误日志并保留上一份有效列表。
 - `controller/topup.go` 的 `GetTopUpInfo` 增加 `backup_payment_links`：`TopUpLink` 不带名称排第一（不是 http/https 链接时不列出），其后是配置项；与在线支付方式一样，支付合规未确认时为空数组。`topup_link` 字段保持上游原样。
 
+### 单 Key 渠道接点
+
+一条渠道只保存一把 Key，提供商插件渠道只保存一份凭据；多个 Key 或多个账号各建一条渠道（合同 `single-key-channel`）。上游的多 Key 模式、Key 选择、按 Key 停用和 Key 级状态不吸收。原生文件里的接点：
+
+- 写入口：`POST /api/channel/` 没有 `multi_to_single` 和 `multi_key_mode`，`PUT /api/channel/` 拒绝 `key_mode` 与 `multi_key_mode`，没有 `/api/channel/multi_key/manage`；批量创建（每行一条渠道）照旧。
+- 运行时：`middleware/distributor.go` 直接取渠道 Key；`ChannelMeta`、上下文、`admin_info` 和请求策略事件都没有多 Key 字段；`types.NewChannelError` 不带多 Key 标记；Responses WebSocket 锁定连接只比较 Key 文本；Vertex 令牌缓存按渠道 ID；原任务续作、上游模型拉取、上游倍率识别和推理服务状态都用渠道 Key。
+- 插件凭据：登录替换渠道里的凭据，已存凭据属于本插件时把它交给 `login` 并要求同一账号；请求不再带 `add` 和 `key_index`（被拒绝），`plugin_credentials` 不带 `index`。刷新、`relogin` 停用、`scheduled` 和余额都按渠道进行；一个账号在同一插件只登录在一条渠道上，任务轮询仍按提交任务的账号分批。
+
 ## 与上游相同、未在本地修复的已知问题
 
 原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（少计费、任务缺渠道不退款、任务 ID 碰撞、统计可见范围、日志脱敏、配置原子性、支付回调核验、两处数据竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：

@@ -726,7 +726,7 @@ func UpdateChannelBalance(c *gin.Context) {
 			common.ApiErrorT(c, "The plugin of this channel does not report a balance")
 			return
 		}
-		_, detail, err := updatePluginChannelBalance(channel, plugin, false)
+		_, detail, err := updatePluginChannelBalance(channel, plugin)
 		if err != nil {
 			common.ApiError(c, err)
 			return

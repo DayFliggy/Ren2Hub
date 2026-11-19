@@ -370,7 +370,7 @@ func TestScheduledChannelLockedStatus(t *testing.T) {
 
 			stored, err := UpdateScheduledChannelLocked(context.Background(), channel.Id, func(stored *Channel) error {
 				stored.Key = "new"
-				require.True(t, SetScheduledChannelKeyStatus(stored, 0, common.ChannelStatusEnabled, ""))
+				require.True(t, SetScheduledChannelStatus(stored, common.ChannelStatusEnabled, ""))
 				return nil
 			})
 			require.NoError(t, err)
@@ -392,7 +392,7 @@ func TestScheduledChannelLockedStatus(t *testing.T) {
 			failure := errors.New("scheduled result rejected")
 			_, err = UpdateScheduledChannelLocked(context.Background(), channel.Id, func(stored *Channel) error {
 				stored.Key = "invalid"
-				SetScheduledChannelKeyStatus(stored, 0, common.ChannelStatusAutoDisabled, "invalid")
+				SetScheduledChannelStatus(stored, common.ChannelStatusAutoDisabled, "invalid")
 				return failure
 			})
 			assert.ErrorIs(t, err, failure)
@@ -403,7 +403,7 @@ func TestScheduledChannelLockedStatus(t *testing.T) {
 			assert.Equal(t, before, channelsRevision(t), "a failed callback writes neither state nor a sync task")
 
 			_, err = UpdateScheduledChannelLocked(context.Background(), channel.Id, func(stored *Channel) error {
-				require.True(t, SetScheduledChannelKeyStatus(stored, 0, common.ChannelStatusAutoDisabled, "Disabled by plugin"))
+				require.True(t, SetScheduledChannelStatus(stored, common.ChannelStatusAutoDisabled, "Disabled by plugin"))
 				return nil
 			})
 			require.NoError(t, err)
@@ -425,64 +425,12 @@ func TestScheduledChannelLockedStatus(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					guarded := Channel{Key: "key", Status: tc.status, AutoBan: tc.autoBan}
-					assert.False(t, SetScheduledChannelKeyStatus(&guarded, 0, tc.target, "reason"))
+					assert.False(t, SetScheduledChannelStatus(&guarded, tc.target, "reason"))
 					assert.Equal(t, tc.status, guarded.Status)
 				})
 			}
 		})
 	}
-}
-
-func TestScheduledChannelLockedMultiKey(t *testing.T) {
-	useScheduledChannelDatabase(t)
-	autoBan := 1
-	channel := Channel{Type: constant.ChannelTypeTaskPlugin, Name: "scheduled multi", Key: "one\ntwo\nthree", Status: common.ChannelStatusEnabled,
-		Models: "scheduled-multi", AutoBan: &autoBan, ChannelInfo: ChannelInfo{IsMultiKey: true, MultiKeySize: 3,
-			MultiKeyMode: constant.MultiKeyModePolling, MultiKeyPollingIndex: 2,
-			MultiKeyStatusList:     map[int]int{0: common.ChannelStatusAutoDisabled, 1: common.ChannelStatusManuallyDisabled},
-			MultiKeyDisabledReason: map[int]string{0: "exhausted", 1: "manual"}}}
-	require.NoError(t, channel.Insert())
-	InitChannelCache()
-	stored, err := UpdateScheduledChannelLocked(context.Background(), channel.Id, func(stored *Channel) error {
-		assert.False(t, SetScheduledChannelKeyStatus(stored, 1, common.ChannelStatusEnabled, ""))
-		assert.False(t, SetScheduledChannelKeyStatus(stored, 1, common.ChannelStatusAutoDisabled, ""))
-		assert.False(t, SetScheduledChannelKeyStatus(stored, 3, common.ChannelStatusEnabled, ""))
-		require.True(t, SetScheduledChannelKeyStatus(stored, 0, common.ChannelStatusEnabled, ""))
-		return nil
-	})
-	require.NoError(t, err)
-	assert.Equal(t, map[int]int{1: common.ChannelStatusManuallyDisabled}, stored.ChannelInfo.MultiKeyStatusList)
-	assert.Equal(t, map[int]string{1: "manual"}, stored.ChannelInfo.MultiKeyDisabledReason)
-	cached, err := CacheGetChannel(channel.Id)
-	require.NoError(t, err)
-	assert.Equal(t, stored.ChannelInfo.MultiKeyStatusList, cached.ChannelInfo.MultiKeyStatusList)
-	assert.Equal(t, 2, cached.ChannelInfo.MultiKeyPollingIndex)
-
-	_, err = UpdateScheduledChannelLocked(context.Background(), channel.Id, func(stored *Channel) error {
-		require.True(t, SetScheduledChannelKeyStatus(stored, 0, common.ChannelStatusAutoDisabled, "empty"))
-		require.True(t, SetScheduledChannelKeyStatus(stored, 2, common.ChannelStatusAutoDisabled, "empty"))
-		return nil
-	})
-	require.NoError(t, err)
-	selected, err := RouteChannelRows(context.Background(), channel.Models, nil)
-	require.NoError(t, err)
-	assert.Empty(t, selected)
-	stored, err = UpdateScheduledChannelLocked(context.Background(), channel.Id, func(stored *Channel) error {
-		require.True(t, SetScheduledChannelKeyStatus(stored, 0, common.ChannelStatusEnabled, ""))
-		return nil
-	})
-	require.NoError(t, err)
-	assert.Equal(t, common.ChannelStatusEnabled, stored.Status)
-	assert.Equal(t, common.ChannelStatusManuallyDisabled, stored.ChannelInfo.MultiKeyStatusList[1])
-	assert.Equal(t, common.ChannelStatusAutoDisabled, stored.ChannelInfo.MultiKeyStatusList[2])
-	selected, err = RouteChannelRows(context.Background(), channel.Models, nil)
-	require.NoError(t, err)
-	require.Len(t, selected, 1)
-	key, index, keyErr := selected[0].GetNextEnabledKey()
-	require.Nil(t, keyErr)
-	assert.Equal(t, "one", key)
-	assert.Zero(t, index)
-
 }
 
 func TestScheduledChannelLockedCancellation(t *testing.T) {

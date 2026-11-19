@@ -47,7 +47,7 @@ class RunnerContractTests(unittest.TestCase):
         # The standalone module owns both orchestration and release verification;
         # this profile must not maintain a second test-selection implementation.
         source, output, env = Path('/source'), Path('/output'), {'fixture': 'true'}
-        result = {'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 130}}
+        result = {'success': True, 'contracts_success': True, 'exit_code': 0, 'counts': {'pass': 129}}
         with patch('ordinary_race.run', return_value=result) as execute:
             self.assertIs(run.race(source, output, env), result)
         execute.assert_called_once_with(source, output / 'ordinary-race', env)

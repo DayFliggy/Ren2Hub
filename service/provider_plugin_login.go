@@ -52,9 +52,8 @@ type PluginLoginStepView struct {
 	Credential              *PluginCredentialView  `json:"credential,omitempty"`
 }
 
-// PluginCredentialView is the non-secret summary of one credential line.
+// PluginCredentialView is the non-secret summary of a channel's credential.
 type PluginCredentialView struct {
-	Index      int    `json:"index"`
 	Label      string `json:"label"`
 	AccountID  string `json:"account_id"`
 	ExpiresAt  int64  `json:"expires_at"`
@@ -83,8 +82,6 @@ type PluginLoginResult struct {
 type pluginLoginPayload struct {
 	Seq             int64               `json:"seq"`
 	ChannelID       int                 `json:"channel_id"`
-	KeyIndex        *int                `json:"key_index"`
-	Add             bool                `json:"add,omitempty"`
 	CodeVerifier    string              `json:"code_verifier"`
 	Nonce           string              `json:"nonce"`
 	Session         json.RawMessage     `json:"session,omitempty"`
@@ -131,13 +128,10 @@ func randomURLToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(random), nil
 }
 
-// StartPluginLogin opens a login flow on a channel: keyIndex nil adds a
-// credential, an index logs in again on that key line. add keeps the account
-// of a single-key channel next to the new one; see StorePluginLoginCredential.
-func StartPluginLogin(ctx context.Context, identity PluginLoginIdentity, channelID int, keyIndex *int, add bool) (PluginLoginResult, error) {
-	if add && keyIndex != nil {
-		return PluginLoginResult{}, common.NewMessage("Adding an account cannot target an existing credential")
-	}
+// StartPluginLogin opens a login flow on a channel. A channel holds one
+// credential (Ren2Hub single-key-channel): the login replaces it, and the
+// hook receives the stored credential of the plugin to log in again.
+func StartPluginLogin(ctx context.Context, identity PluginLoginIdentity, channelID int) (PluginLoginResult, error) {
 	channel, err := model.GetChannelById(channelID, true)
 	if err != nil {
 		return PluginLoginResult{}, common.NewMessage("Channel does not exist")
@@ -145,16 +139,6 @@ func StartPluginLogin(ctx context.Context, identity PluginLoginIdentity, channel
 	plugin, err := loginPluginOfChannel(channel)
 	if err != nil {
 		return PluginLoginResult{}, err
-	}
-	var credential json.RawMessage
-	if keyIndex != nil {
-		lines := pluginCredentialKeyLines(channel)
-		if *keyIndex < 0 || *keyIndex >= len(lines) {
-			return PluginLoginResult{}, common.NewMessage("Credential index out of range")
-		}
-		if stored, ok := jsplugin.ParseCredential(lines[*keyIndex]); ok && stored.Plugin == plugin.Meta.Key {
-			credential = stored.Data
-		}
 	}
 	verifier, err := randomURLToken()
 	if err != nil {
@@ -167,8 +151,6 @@ func StartPluginLogin(ctx context.Context, identity PluginLoginIdentity, channel
 	now := time.Now()
 	payload := pluginLoginPayload{
 		ChannelID:    channelID,
-		KeyIndex:     keyIndex,
-		Add:          add,
 		CodeVerifier: verifier,
 		Nonce:        nonce,
 		// The first call holds the flow until it returns its first step.
@@ -189,7 +171,7 @@ func StartPluginLogin(ctx context.Context, identity PluginLoginIdentity, channel
 	if err != nil {
 		return PluginLoginResult{}, err
 	}
-	flow := pluginLoginFlow{token: token, plugin: plugin, channel: channel, identity: identity, payload: payload, stored: string(encoded), credential: credential}
+	flow := pluginLoginFlow{token: token, plugin: plugin, channel: channel, identity: identity, payload: payload, stored: string(encoded), credential: storedLoginCredential(channel, plugin)}
 	step, err := flow.call(ctx, nil)
 	if err != nil {
 		return PluginLoginResult{}, err
@@ -280,21 +262,26 @@ func CompletePluginLoginCallback(ctx context.Context, identity PluginLoginIdenti
 	return flow.result(step), nil
 }
 
-// PluginCredentialViews lists the credential lines of a channel without
-// their secrets; a static key line has no label or account.
+// storedLoginCredential is the data of the channel's credential when it
+// belongs to the plugin, which a login on the channel logs in to again.
+func storedLoginCredential(channel *model.Channel, plugin *jsplugin.LoadedPlugin) json.RawMessage {
+	if stored, ok := jsplugin.ParseCredential(channel.Key); ok && stored.Plugin == plugin.Meta.Key {
+		return stored.Data
+	}
+	return nil
+}
+
+// PluginCredentialViews lists a channel's key without its secrets: none for
+// an empty key, and a static key without a label or account.
 func PluginCredentialViews(channel *model.Channel) []PluginCredentialView {
-	lines := pluginCredentialKeyLines(channel)
-	views := make([]PluginCredentialView, 0, len(lines))
-	for index, line := range lines {
+	views := make([]PluginCredentialView, 0, 1)
+	for _, line := range pluginCredentialKeyLines(channel) {
 		credential, ok := jsplugin.ParseCredential(line)
 		if !ok {
-			if strings.TrimSpace(line) != "" {
-				views = append(views, PluginCredentialView{Index: index})
-			}
+			views = append(views, PluginCredentialView{})
 			continue
 		}
 		views = append(views, PluginCredentialView{
-			Index:      index,
 			Label:      credential.Label,
 			AccountID:  credential.AccountID,
 			ExpiresAt:  credential.ExpiresAt,
@@ -358,16 +345,7 @@ func loadPluginLoginFlow(identity PluginLoginIdentity, token, pluginKey string) 
 	if plugin.Meta.Key != stored.Provider {
 		return nil, invalid
 	}
-	flow := &pluginLoginFlow{token: token, plugin: plugin, channel: channel, identity: identity, payload: payload, stored: stored.Payload}
-	if payload.KeyIndex != nil {
-		lines := pluginCredentialKeyLines(channel)
-		if *payload.KeyIndex < len(lines) {
-			if credential, ok := jsplugin.ParseCredential(lines[*payload.KeyIndex]); ok && credential.Plugin == plugin.Meta.Key {
-				flow.credential = credential.Data
-			}
-		}
-	}
-	return flow, nil
+	return &pluginLoginFlow{token: token, plugin: plugin, channel: channel, identity: identity, payload: payload, stored: stored.Payload, credential: storedLoginCredential(channel, plugin)}, nil
 }
 
 // pastedCallbackParams reads the query of the address an administrator
@@ -581,7 +559,7 @@ func (f *pluginLoginFlow) finish(step jsplugin.LoginStep) (PluginLoginStepView, 
 		revoke()
 		return PluginLoginStepView{}, common.NewMessage("Login flow is invalid or has expired")
 	}
-	view, err := StorePluginLoginCredential(f.payload.ChannelID, f.plugin.Meta.Key, f.payload.KeyIndex, f.payload.Add, *step.Result)
+	view, err := StorePluginLoginCredential(f.payload.ChannelID, f.plugin.Meta.Key, *step.Result)
 	if err != nil {
 		f.logFailure("store_failed")
 		revoke()
@@ -612,13 +590,12 @@ func pluginAccountLoggedIn(pluginKey, accountID string) bool {
 	return false
 }
 
-// StorePluginLoginCredential writes the credential of a finished login: it
-// replaces the line at keyIndex, or adds one (a new line in multi-key mode,
-// otherwise the key), and re-enables what the host disabled for want of a
-// login. add on a single-key channel holding one line keeps that line as the
-// first key and turns the channel multi-key: a plugin credential is always
-// one line, so no key is split or dropped.
-func StorePluginLoginCredential(channelID int, pluginKey string, keyIndex *int, add bool, result jsplugin.CredentialResult) (PluginCredentialView, error) {
+// StorePluginLoginCredential writes the credential of a finished login as the
+// channel's key, replacing what it held, and re-enables the channel when the
+// host disabled it for want of a login. A login on a stored credential of the
+// plugin must return the same account, and an account is logged in on one
+// channel of a plugin only.
+func StorePluginLoginCredential(channelID int, pluginKey string, result jsplugin.CredentialResult) (PluginCredentialView, error) {
 	var view PluginCredentialView
 	err := model.UpdateTaskPluginChannelLocked(channelID, func(channel *model.Channel, others []*model.Channel) error {
 		if channel.GetSetting().TaskPluginKey != pluginKey {
@@ -627,44 +604,17 @@ func StorePluginLoginCredential(channelID int, pluginKey string, keyIndex *int, 
 		if strings.HasPrefix(strings.TrimSpace(channel.Key), "[") {
 			return common.NewMessage("This channel's key format cannot hold plugin credentials")
 		}
-		lines := pluginCredentialKeyLines(channel)
-		index := len(lines)
-		toMultiKey := false
-		switch {
-		case keyIndex != nil:
-			if *keyIndex < 0 || *keyIndex >= len(lines) {
-				return common.NewMessage("Credential index out of range")
-			}
-			index = *keyIndex
-			if stored, ok := jsplugin.ParseCredential(lines[index]); ok && stored.Plugin == pluginKey &&
-				stored.AccountID != "" && result.AccountID != "" && stored.AccountID != result.AccountID {
-				return common.NewMessage("Logged in to a different account than the credential being replaced")
-			}
-		case channel.ChannelInfo.IsMultiKey:
-			// The credential becomes a new line.
-		case add && len(lines) == 1:
-			// Multi-key mode splits the key by line, so a key of several
-			// lines would fall apart.
-			lines[0] = strings.TrimSpace(lines[0])
-			if strings.Contains(lines[0], "\n") {
-				return common.NewMessage("This channel's key cannot hold another account")
-			}
-			toMultiKey = true
-		default:
-			index = 0
+		if stored, ok := jsplugin.ParseCredential(channel.Key); ok && stored.Plugin == pluginKey &&
+			stored.AccountID != "" && result.AccountID != "" && stored.AccountID != result.AccountID {
+			return common.NewMessage("Logged in to a different account than the credential being replaced")
 		}
 		if result.AccountID != "" {
-			for _, candidate := range append([]*model.Channel{channel}, others...) {
+			for _, candidate := range others {
 				if candidate.GetSetting().TaskPluginKey != pluginKey {
 					continue
 				}
-				for lineIndex, line := range pluginCredentialKeyLines(candidate) {
-					if candidate.Id == channel.Id && lineIndex == index {
-						continue
-					}
-					if stored, ok := jsplugin.ParseCredential(line); ok && stored.Plugin == pluginKey && stored.AccountID == result.AccountID {
-						return common.NewMessage("This account is already logged in on another credential of this plugin")
-					}
+				if stored, ok := jsplugin.ParseCredential(candidate.Key); ok && stored.Plugin == pluginKey && stored.AccountID == result.AccountID {
+					return common.NewMessage("This account is already logged in on another credential of this plugin")
 				}
 			}
 		}
@@ -681,52 +631,18 @@ func StorePluginLoginCredential(channelID int, pluginKey string, keyIndex *int, 
 		if err != nil {
 			return err
 		}
-		if index == len(lines) {
-			lines = append(lines, line)
-		} else {
-			lines[index] = line
-		}
-		if toMultiKey {
-			info := &channel.ChannelInfo
-			info.IsMultiKey = true
-			info.MultiKeyMode = cmp.Or(info.MultiKeyMode, constant.MultiKeyModeRandom)
-			info.MultiKeyStatusList = map[int]int{}
-			info.MultiKeyDisabledReason = map[int]string{}
-			info.MultiKeyDisabledTime = map[int]int64{}
-			// A credential only a new login restores keeps its key disabled,
-			// as a multi-key channel's relay would on its first use.
-			if stored, ok := jsplugin.ParseCredential(lines[0]); ok && stored.NeedsLogin {
-				info.MultiKeyStatusList[0] = common.ChannelStatusAutoDisabled
-				info.MultiKeyDisabledReason[0] = model.ChannelStatusReasonPluginNeedsLogin
-				info.MultiKeyDisabledTime[0] = common.GetTimestamp()
-			}
-		}
-		channel.Key = strings.Join(lines, "\n")
-		enablePluginLoginChannel(channel, index, len(lines))
-		view = PluginCredentialView{Index: index, Label: credential.Label, AccountID: credential.AccountID, ExpiresAt: credential.ExpiresAt}
+		channel.Key = line
+		enablePluginLoginChannel(channel)
+		view = PluginCredentialView{Label: credential.Label, AccountID: credential.AccountID, ExpiresAt: credential.ExpiresAt}
 		return nil
 	})
 	return view, err
 }
 
-// enablePluginLoginChannel re-enables the key line at index, and the
-// channel, when the host disabled them for a missing or expired login. A
-// manual disable stays.
-func enablePluginLoginChannel(channel *model.Channel, index, size int) {
+// enablePluginLoginChannel re-enables the channel when the host disabled it
+// for a missing or expired login. A manual disable stays.
+func enablePluginLoginChannel(channel *model.Channel) {
 	hostReasons := []string{model.ChannelStatusReasonPluginLoginRequired, model.ChannelStatusReasonPluginNeedsLogin}
-	info := &channel.ChannelInfo
-	if info.IsMultiKey {
-		info.MultiKeySize = size
-		if info.MultiKeyStatusList[index] == common.ChannelStatusAutoDisabled && slices.Contains(hostReasons, info.MultiKeyDisabledReason[index]) {
-			delete(info.MultiKeyStatusList, index)
-			delete(info.MultiKeyDisabledReason, index)
-			delete(info.MultiKeyDisabledTime, index)
-		}
-		hostReasons = append(hostReasons, model.ChannelStatusReasonAllKeysDisabled)
-		if _, disabled := info.MultiKeyStatusList[index]; disabled {
-			return
-		}
-	}
 	otherInfo := channel.GetOtherInfo()
 	reason, _ := otherInfo["status_reason"].(string)
 	if channel.Status != common.ChannelStatusAutoDisabled || !slices.Contains(hostReasons, reason) {

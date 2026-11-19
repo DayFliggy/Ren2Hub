@@ -109,7 +109,7 @@ func TestFetchAdvancedCustomModelsAppliesHeaderOverrideAfterRouteAuth(t *testing
 	require.Equal(t, "models.example.test", request.Host)
 }
 
-func TestFetchAdvancedCustomModelsUsesEnabledSavedMultiKey(t *testing.T) {
+func TestFetchAdvancedCustomModelsUsesSavedKey(t *testing.T) {
 	authorization := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authorization <- r.Header.Get("Authorization")
@@ -117,19 +117,12 @@ func TestFetchAdvancedCustomModelsUsesEnabledSavedMultiKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	channel := newAdvancedCustomModelListChannel(server.URL, "disabled-key\nenabled-key", "/v1/models", nil)
-	channel.ChannelInfo = model.ChannelInfo{
-		IsMultiKey: true,
-		MultiKeyStatusList: map[int]int{
-			0: common.ChannelStatusManuallyDisabled,
-			1: common.ChannelStatusEnabled,
-		},
-	}
+	channel := newAdvancedCustomModelListChannel(server.URL, "saved-key", "/v1/models", nil)
 
 	models, err := fetchChannelUpstreamModelIDs(channel)
 	require.NoError(t, err)
 	require.Equal(t, []string{"gpt-4.1-mini"}, models)
-	require.Equal(t, "Bearer enabled-key", <-authorization)
+	require.Equal(t, "Bearer saved-key", <-authorization)
 }
 
 func TestFetchAdvancedCustomModelsRejectsNonOKResponse(t *testing.T) {
@@ -251,16 +244,9 @@ func TestFetchModelsAdvancedCustomEditPreviewUsesSavedKeyAndExplicitClears(t *te
 	}))
 	defer server.Close()
 
-	savedChannel := newAdvancedCustomModelListChannel("http://127.0.0.1:1", "disabled-saved-key\nenabled-saved-key", "/saved/models", nil)
+	savedChannel := newAdvancedCustomModelListChannel("http://127.0.0.1:1", "enabled-saved-key", "/saved/models", nil)
 	savedChannel.Name = "saved advanced channel"
 	savedChannel.Models = "old-model"
-	savedChannel.ChannelInfo = model.ChannelInfo{
-		IsMultiKey: true,
-		MultiKeyStatusList: map[int]int{
-			0: common.ChannelStatusManuallyDisabled,
-			1: common.ChannelStatusEnabled,
-		},
-	}
 	savedHeaderOverride := `{"X-Saved":"must-not-be-sent"}`
 	savedChannel.HeaderOverride = &savedHeaderOverride
 	savedChannel.SetSetting(dto.ChannelSettings{Proxy: "http://127.0.0.1:1"})

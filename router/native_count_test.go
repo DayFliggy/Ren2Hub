@@ -349,20 +349,19 @@ func TestNativeCountReusesManualRoutesAndRejectsUnsupportedChannels(t *testing.T
 	require.Zero(t, unsupportedCalls.Load())
 }
 
-func TestNativeCountReusesEnabledMultiKeyAndProxyTransport(t *testing.T) {
+func TestNativeCountReusesChannelKeyAndProxyTransport(t *testing.T) {
 	var calls atomic.Int32
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		require.Equal(t, "count-provider.invalid", r.URL.Host)
 		require.Equal(t, "/v1beta/models/gemini-2.0-flash:countTokens", r.URL.Path)
-		require.Equal(t, "enabled-key", r.Header.Get("x-goog-api-key"))
+		require.Equal(t, "channel-key", r.Header.Get("x-goog-api-key"))
 		_, _ = w.Write([]byte(`{"totalTokens":8}`))
 	}))
 	defer proxy.Close()
 	engine, _, token, ch := nativeCountFixture(t, constant.ChannelTypeGemini, "http://count-provider.invalid")
 	ch.SetSetting(kitdto.ChannelSettings{Proxy: proxy.URL})
-	info := model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling, MultiKeyStatusList: map[int]int{0: common.ChannelStatusManuallyDisabled}}
-	require.NoError(t, model.DB.Model(&ch).Updates(map[string]any{"key": "disabled-key\nenabled-key", "channel_info": info, "setting": ch.Setting}).Error)
+	require.NoError(t, model.DB.Model(&ch).Updates(map[string]any{"key": "channel-key", "setting": ch.Setting}).Error)
 	for range 3 {
 		result := nativeCountRequest(engine, "/v1beta/models/gemini-2.0-flash:countTokens", `{"contents":[{"parts":[{"text":"hello"}]}]}`, token.Key)
 		require.Equal(t, 200, result.Code, result.Body.String())

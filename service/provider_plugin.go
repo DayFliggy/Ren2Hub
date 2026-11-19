@@ -154,19 +154,18 @@ type PluginCredentialRefresher struct {
 var pluginCredentialRefresher = &PluginCredentialRefresher{}
 
 // RefreshPluginCredential refreshes the credential line a request or the
-// background scan used, at keyIndex of the channel's keys. It returns the line
-// to use from now on: the refreshed one, or the one another node stored
-// meanwhile.
-func RefreshPluginCredential(ctx context.Context, channelID, keyIndex int, line string) (string, error) {
-	return pluginCredentialRefresher.Refresh(ctx, channelID, keyIndex, line)
+// background scan used, the channel's key. It returns the line to use from
+// now on: the refreshed one, or the one another node stored meanwhile.
+func RefreshPluginCredential(ctx context.Context, channelID int, line string) (string, error) {
+	return pluginCredentialRefresher.Refresh(ctx, channelID, line)
 }
 
 // Refresh is RefreshPluginCredential on this refresher's single-flight group.
-func (r *PluginCredentialRefresher) Refresh(ctx context.Context, channelID, keyIndex int, line string) (string, error) {
+func (r *PluginCredentialRefresher) Refresh(ctx context.Context, channelID int, line string) (string, error) {
 	sum := sha256.Sum256([]byte(line))
 	flight := r.group.DoChan(strconv.Itoa(channelID)+":"+hex.EncodeToString(sum[:]), func() (any, error) {
 		// The call is shared, so no single caller's cancellation ends it.
-		return refreshPluginCredentialLine(channelID, keyIndex, line)
+		return refreshPluginCredentialLine(channelID, line)
 	})
 	select {
 	case result := <-flight:
@@ -179,13 +178,13 @@ func (r *PluginCredentialRefresher) Refresh(ctx context.Context, channelID, keyI
 	}
 }
 
-func refreshPluginCredentialLine(channelID, keyIndex int, used string) (string, error) {
+func refreshPluginCredentialLine(channelID int, used string) (string, error) {
 	usedCredential, ok := jsplugin.ParseCredential(used)
 	if !ok {
 		return "", errors.New("channel key is not a plugin credential")
 	}
 	var current, storedKey, channelName string
-	multiKey, autoBan := false, false
+	autoBan := false
 	needsLogin := false
 	storedElsewhere := false
 	// A refresh waits for another one of the channel at most as long as that
@@ -197,7 +196,7 @@ func refreshPluginCredentialLine(channelID, keyIndex int, used string) (string, 
 		if err != nil {
 			return err
 		}
-		channelName, multiKey, autoBan, storedKey = channel.Name, channel.ChannelInfo.IsMultiKey, channel.GetAutoBan(), channel.Key
+		channelName, autoBan, storedKey = channel.Name, channel.GetAutoBan(), channel.Key
 		plugin, ok := PluginOfChannel(channel)
 		if !ok || plugin.Meta.Key != usedCredential.Plugin {
 			return fmt.Errorf("channel #%d is not bound to plugin %s", channelID, usedCredential.Plugin)
@@ -205,14 +204,12 @@ func refreshPluginCredentialLine(channelID, keyIndex int, used string) (string, 
 		if !plugin.HasProviderHook("refresh") {
 			return fmt.Errorf("plugin %s does not export refresh", plugin.Meta.Key)
 		}
-		lines := pluginCredentialKeyLines(channel)
-		index := locatePluginCredentialLine(lines, keyIndex, used, usedCredential)
-		if index < 0 {
+		if !storesPluginCredential(channel.Key, used, usedCredential) {
 			return ErrPluginCredentialRemoved
 		}
-		if lines[index] != used {
+		if channel.Key != used {
 			// Another node refreshed or a login replaced it meanwhile.
-			current, storedElsewhere = lines[index], true
+			current, storedElsewhere = channel.Key, true
 			return nil
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), pluginCredentialHookTimeout)
@@ -238,18 +235,15 @@ func refreshPluginCredentialLine(channelID, keyIndex int, used string) (string, 
 		// The plugin call held no channel lock, so the result replaces the
 		// line only if no login or edit replaced it meanwhile.
 		stored, err := model.UpdateChannelLocked(channelID, func(channel *model.Channel) error {
-			lines := pluginCredentialKeyLines(channel)
-			index := locatePluginCredentialLine(lines, keyIndex, used, usedCredential)
-			if index < 0 {
+			if !storesPluginCredential(channel.Key, used, usedCredential) {
 				return ErrPluginCredentialRemoved
 			}
-			if lines[index] != used {
-				current, storedElsewhere = lines[index], true
+			if channel.Key != used {
+				current, storedElsewhere = channel.Key, true
 				return nil
 			}
 			current, needsLogin = refreshed, result.Relogin
-			lines[index] = refreshed
-			channel.Key = strings.Join(lines, "\n")
+			channel.Key = refreshed
 			return nil
 		})
 		if err != nil {
@@ -267,7 +261,7 @@ func refreshPluginCredentialLine(channelID, keyIndex int, used string) (string, 
 		model.CacheUpdateChannelKey(channelID, storedKey)
 	}
 	if needsLogin {
-		DisablePluginCredentialForLogin(channelID, channelName, multiKey, autoBan, current)
+		DisablePluginCredentialForLogin(channelID, channelName, autoBan, current)
 		return "", ErrPluginCredentialNeedsLogin
 	}
 	if credential, ok := jsplugin.ParseCredential(current); ok && credential.NeedsLogin {
@@ -281,12 +275,11 @@ func refreshPluginCredentialLine(channelID, keyIndex int, used string) (string, 
 // clears, so requests stop picking it. Unlike a request error it is certain,
 // so the automatic disabling setting does not apply: only the channel's own
 // switch, autoBan, keeps such a key in use.
-func DisablePluginCredentialForLogin(channelID int, channelName string, multiKey, autoBan bool, line string) {
+func DisablePluginCredentialForLogin(channelID int, channelName string, autoBan bool, line string) {
 	DisableChannel(types.ChannelError{
 		ChannelId:   channelID,
 		ChannelType: constant.ChannelTypeTaskPlugin,
 		ChannelName: channelName,
-		IsMultiKey:  multiKey,
 		AutoBan:     autoBan,
 		UsingKey:    line,
 	}, model.ChannelStatusReasonPluginNeedsLogin)
@@ -374,13 +367,13 @@ func InvalidatePluginKeyToken(plugin *jsplugin.LoadedPlugin, channelID int, line
 }
 
 // FreshPluginCredentialLine returns the line a request about to use the
-// credential line at keyIndex sends: the line, or its refresh when it expires
+// channel's credential line sends: the line, or its refresh when it expires
 // within the request margin. A failed refresh keeps a credential that has not
 // expired and is logged by category only, since the plugin's message may
 // quote the vendor's answer. A credential only a new login restores reports
 // ErrPluginCredentialNeedsLogin, an expired one whose refresh failed
 // ErrPluginCredentialRefreshFailed. A static key is returned as it is.
-func FreshPluginCredentialLine(ctx context.Context, plugin *jsplugin.LoadedPlugin, channelID, keyIndex int, line string) (string, error) {
+func FreshPluginCredentialLine(ctx context.Context, plugin *jsplugin.LoadedPlugin, channelID int, line string) (string, error) {
 	credential, ok := jsplugin.ParseCredential(line)
 	if !ok {
 		return line, nil
@@ -392,11 +385,11 @@ func FreshPluginCredentialLine(ctx context.Context, plugin *jsplugin.LoadedPlugi
 	if !credential.ExpiresWithin(now, PluginCredentialRequestMargin) || !plugin.HasProviderHook("refresh") {
 		return line, nil
 	}
-	refreshed, err := RefreshPluginCredential(ctx, channelID, keyIndex, line)
+	refreshed, err := RefreshPluginCredential(ctx, channelID, line)
 	if err == nil || errors.Is(err, ErrPluginCredentialNeedsLogin) {
 		return refreshed, err
 	}
-	common.SysLog(common.LogText("plugin credential refresh failed: plugin=%s channel_id=%d key_index=%d category=%s", plugin.Meta.Key, channelID, keyIndex, pluginErrorCategory(err)))
+	common.SysLog(common.LogText("plugin credential refresh failed: plugin=%s channel_id=%d category=%s", plugin.Meta.Key, channelID, pluginErrorCategory(err)))
 	if credential.ExpiresWithin(now, 0) {
 		return "", ErrPluginCredentialRefreshFailed
 	}
@@ -421,39 +414,25 @@ func refreshedPluginCredential(stored jsplugin.Credential, result jsplugin.Crede
 	return stored
 }
 
-// pluginCredentialKeyLines splits a channel key into its lines: the whole key
-// is the one line of a single-key channel. An empty key has none.
+// pluginCredentialKeyLines returns a channel key as its one line: a channel
+// holds one key (Ren2Hub single-key-channel). An empty key has none.
 func pluginCredentialKeyLines(channel *model.Channel) []string {
 	if strings.TrimSpace(channel.Key) == "" {
 		return nil
 	}
-	if !channel.ChannelInfo.IsMultiKey {
-		return []string{channel.Key}
-	}
-	return strings.Split(strings.Trim(channel.Key, "\n"), "\n")
+	return []string{channel.Key}
 }
 
-// locatePluginCredentialLine finds the stored line of a used credential: at
-// its index, the same line or a newer credential of the same plugin and
-// account; otherwise the same line where it moved. It returns -1 when the
-// credential is gone.
-func locatePluginCredentialLine(lines []string, index int, used string, usedCredential *jsplugin.Credential) int {
-	if index >= 0 && index < len(lines) {
-		if lines[index] == used {
-			return index
-		}
-		stored, ok := jsplugin.ParseCredential(lines[index])
-		if ok && stored.Plugin == usedCredential.Plugin &&
-			(stored.AccountID == "" || usedCredential.AccountID == "" || stored.AccountID == usedCredential.AccountID) {
-			return index
-		}
+// storesPluginCredential reports whether a channel key still holds a used
+// credential: the same line, or a newer credential of the same plugin and
+// account that another node or a login stored meanwhile.
+func storesPluginCredential(key, used string, usedCredential *jsplugin.Credential) bool {
+	if key == used {
+		return true
 	}
-	for candidate, line := range lines {
-		if line == used {
-			return candidate
-		}
-	}
-	return -1
+	stored, ok := jsplugin.ParseCredential(key)
+	return ok && stored.Plugin == usedCredential.Plugin &&
+		(stored.AccountID == "" || usedCredential.AccountID == "" || stored.AccountID == usedCredential.AccountID)
 }
 
 var (
@@ -499,16 +478,16 @@ func RefreshExpiringPluginCredentials(now time.Time) {
 		if !ok || !plugin.HasProviderHook("refresh") {
 			continue
 		}
-		for index, line := range pluginCredentialKeyLines(channel) {
+		for _, line := range pluginCredentialKeyLines(channel) {
 			credential, ok := jsplugin.ParseCredential(line)
 			if !ok || credential.Plugin != plugin.Meta.Key || credential.NeedsLogin || !credential.ExpiresWithin(now, window) {
 				continue
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), pluginCredentialHookTimeout+5*time.Second)
-			_, err := RefreshPluginCredential(ctx, channel.Id, index, line)
+			_, err := RefreshPluginCredential(ctx, channel.Id, line)
 			cancel()
 			if err != nil {
-				common.SysLog(common.LogText("plugin credential refresh failed: plugin=%s channel_id=%d key_index=%d category=%s", plugin.Meta.Key, channel.Id, index, pluginErrorCategory(err)))
+				common.SysLog(common.LogText("plugin credential refresh failed: plugin=%s channel_id=%d category=%s", plugin.Meta.Key, channel.Id, pluginErrorCategory(err)))
 			}
 		}
 	}
@@ -567,55 +546,36 @@ func revokePluginCredentialData(pluginKey, baseURL, proxy string, channelID int,
 	})
 }
 
-// RemovedPluginCredentialLines returns the credential lines of before that
-// after no longer holds.
+// RemovedPluginCredentialLines returns the credential a channel key held
+// before an edit when the key after it is something else.
 func RemovedPluginCredentialLines(before, after string) []string {
-	if !strings.Contains(before, jsplugin.CredentialType) {
+	before = strings.TrimSpace(before)
+	if before == strings.TrimSpace(after) {
 		return nil
 	}
-	kept := make(map[string]struct{})
-	for line := range strings.SplitSeq(after, "\n") {
-		kept[strings.TrimSpace(line)] = struct{}{}
+	if _, ok := jsplugin.ParseCredential(before); !ok {
+		return nil
 	}
-	var removed []string
-	for line := range strings.SplitSeq(before, "\n") {
-		line = strings.TrimSpace(line)
-		if _, ok := kept[line]; ok {
-			continue
-		}
-		if _, ok := jsplugin.ParseCredential(line); ok {
-			removed = append(removed, line)
-		}
-	}
-	return removed
+	return []string{before}
 }
 
-// PluginModelListKey returns the key line the model list request of a channel
-// uses: its first enabled key that is a static key or a credential of the
-// plugin that needs no login, with the credential fresh as before a relay
-// request. A channel without keys has an empty one, for a route that needs
-// none.
+// PluginModelListKey returns the key the model list request of a channel
+// uses: a static key, or a credential of the plugin that needs no login,
+// fresh as before a relay request. A channel without a key has an empty one,
+// for a route that needs none.
 func PluginModelListKey(ctx context.Context, channel *model.Channel, plugin *jsplugin.LoadedPlugin) (string, error) {
-	lines := pluginCredentialKeyLines(channel)
-	for index, line := range lines {
-		if status, ok := channel.ChannelInfo.MultiKeyStatusList[index]; ok && status != common.ChannelStatusEnabled {
-			continue
-		}
-		credential, ok := jsplugin.ParseCredential(line)
-		if !ok {
-			if key := strings.TrimSpace(line); key != "" {
-				return key, nil
-			}
-			continue
-		}
-		if credential.Plugin == plugin.Meta.Key && !credential.NeedsLogin {
-			return FreshPluginCredentialLine(ctx, plugin, channel.Id, index, line)
-		}
+	key := strings.TrimSpace(channel.Key)
+	if key == "" {
+		return "", nil
 	}
-	if len(lines) > 0 {
+	credential, ok := jsplugin.ParseCredential(key)
+	if !ok {
+		return key, nil
+	}
+	if credential.Plugin != plugin.Meta.Key || credential.NeedsLogin {
 		return "", errors.New("channel has no usable key")
 	}
-	return "", nil
+	return FreshPluginCredentialLine(ctx, plugin, channel.Id, channel.Key)
 }
 
 // CheckSubmittedPluginCredentials rejects a key an administrator submits for
@@ -661,40 +621,8 @@ func DropPluginCredentials(channel *model.Channel) {
 	if !strings.Contains(channel.Key, jsplugin.CredentialType) {
 		return
 	}
-	if !channel.ChannelInfo.IsMultiKey {
-		if _, ok := jsplugin.ParseCredential(channel.Key); ok {
-			channel.Key = ""
-		}
-	} else {
-		info := channel.ChannelInfo
-		keys := channel.GetKeys()
-		kept := make([]string, 0, len(keys))
-		statusList, reasons, times := map[int]int{}, map[int]string{}, map[int]int64{}
-		for index, key := range keys {
-			if _, ok := jsplugin.ParseCredential(key); ok {
-				continue
-			}
-			next := len(kept)
-			if status, ok := info.MultiKeyStatusList[index]; ok {
-				statusList[next] = status
-			}
-			if reason, ok := info.MultiKeyDisabledReason[index]; ok {
-				reasons[next] = reason
-			}
-			if at, ok := info.MultiKeyDisabledTime[index]; ok {
-				times[next] = at
-			}
-			kept = append(kept, key)
-		}
-		if len(kept) == len(keys) {
-			return
-		}
-		channel.Key = strings.Join(kept, "\n")
-		channel.Keys = nil
-		info.MultiKeySize = len(kept)
-		info.MultiKeyStatusList, info.MultiKeyDisabledReason, info.MultiKeyDisabledTime = statusList, reasons, times
-		info.MultiKeyPollingIndex = 0
-		channel.ChannelInfo = info
+	if _, ok := jsplugin.ParseCredential(channel.Key); ok {
+		channel.Key = ""
 	}
 	if strings.TrimSpace(channel.Key) == "" {
 		PluginLoginNeededStatus(channel)
@@ -712,8 +640,8 @@ func RevokeDeletedChannelCredentials(channels []*model.Channel) {
 	}
 }
 
-// RevokeRemovedChannelCredentials revokes the credential lines of a task
-// plugin channel's key before an edit that its key after it no longer holds.
+// RevokeRemovedChannelCredentials revokes the credential a task plugin
+// channel's key held before an edit that replaced it.
 // stored gives the plugin, base URL and proxy the credentials were used with.
 func RevokeRemovedChannelCredentials(stored *model.Channel, before, after string) {
 	if stored.Type != constant.ChannelTypeTaskPlugin {

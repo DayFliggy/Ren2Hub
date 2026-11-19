@@ -53,14 +53,10 @@ func (a *TaskAdaptor) useFreshSubmitCredential(c *gin.Context, info *relaycommon
 	if credential.NeedsLogin {
 		// Only a login restores the key, even after an administrator enabled
 		// it again: disable it for the reason a login clears.
-		service.DisablePluginCredentialForLogin(info.ChannelId, common.GetContextKeyString(c, constant.ContextKeyChannelName), info.ChannelIsMultiKey, common.GetContextKeyBool(c, constant.ContextKeyChannelAutoBan), info.ApiKey)
+		service.DisablePluginCredentialForLogin(info.ChannelId, common.GetContextKeyString(c, constant.ContextKeyChannelName), common.GetContextKeyBool(c, constant.ContextKeyChannelAutoBan), info.ApiKey)
 		return service.ErrPluginCredentialNeedsLogin
 	}
-	index := 0
-	if info.ChannelIsMultiKey {
-		index = info.ChannelMultiKeyIndex
-	}
-	line, err := service.FreshPluginCredentialLine(c.Request.Context(), a.plugin, info.ChannelId, index, info.ApiKey)
+	line, err := service.FreshPluginCredentialLine(c.Request.Context(), a.plugin, info.ChannelId, info.ApiKey)
 	if err != nil {
 		return err
 	}
@@ -72,12 +68,11 @@ func (a *TaskAdaptor) useFreshSubmitCredential(c *gin.Context, info *relaycommon
 	return err
 }
 
-// taskCredentialLine picks, from a task plugin channel's whole key, the line
-// polling and content requests of task use: the credential of the account
-// that submitted it, or the plugin's first credential for a task without an
-// account. A task whose account left the channel gets no other account's
-// credential, whose answer could report the task missing. A key without
-// credentials is returned as it is.
+// taskCredentialLine is the credential polling and content requests of task
+// use: the channel's credential when it belongs to the plugin and to the
+// account that submitted the task. A task whose account left the channel gets
+// no other account's credential, whose answer could report the task missing.
+// A key without a credential is returned as it is.
 func (a *TaskAdaptor) taskCredentialLine(ctx context.Context, key string, task *model.Task) (string, error) {
 	if a.channelType() != constant.ChannelTypeTaskPlugin || !strings.Contains(key, pluginruntime.CredentialType) {
 		return key, nil
@@ -86,12 +81,9 @@ func (a *TaskAdaptor) taskCredentialLine(ctx context.Context, key string, task *
 	if task != nil {
 		account = task.PrivateData.CredentialAccount
 	}
-	lines := strings.Split(strings.Trim(key, "\n"), "\n")
-	for index, line := range lines {
-		credential, ok := pluginruntime.ParseCredential(line)
-		if ok && credential.Plugin == a.plugin.Meta.Key && (account == "" || credential.AccountID == account) {
-			return service.FreshPluginCredentialLine(ctx, a.plugin, a.info.ChannelId, index, line)
-		}
+	credential, ok := pluginruntime.ParseCredential(key)
+	if ok && credential.Plugin == a.plugin.Meta.Key && (account == "" || credential.AccountID == account) {
+		return service.FreshPluginCredentialLine(ctx, a.plugin, a.info.ChannelId, key)
 	}
 	if account != "" {
 		return "", errors.New("channel key no longer holds the credential of the account that submitted the task")
