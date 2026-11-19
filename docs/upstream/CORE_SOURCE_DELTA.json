@@ -2286,7 +2286,7 @@
       "path": "controller/relay_strict_affinity_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c65eeb0ca0a49cbea74cd3e286f4c02b2403a19c68ef7ba7e194c055c9274386"
+      "local_sha256": "b9f0a2ca63fbd174d903fdd8d35e655828569c435d6a01275685b4272d21cd7d"
     },
     {
       "path": "controller/relay_swapface_concurrency_test.go",
@@ -3945,7 +3945,7 @@
       "path": "middleware/model_rate_limit_test.go",
       "status": "adapted",
       "upstream_sha256": "e765ee104857b96e2da0de58a92a45662dd3fcb92aee7667933aad61183a9e46",
-      "local_sha256": "100b01d0f4509339ff120a99b8bc771570f870e16695bff192f6300453f279cb"
+      "local_sha256": "76a2e1451f7eaef91c99913b25200add2b9b420c87ea8dc64e27fca4e82e3fe5"
     },
     {
       "path": "middleware/native_restored_logger_test.go",
