@@ -922,7 +922,9 @@ func TestResponsesStreamOutcomesPreserveAccounting(t *testing.T) {
 						assert.Equal(t, "gpt-4o", body["model"])
 						output := events
 						if transport == "http-sse" || turn > 0 {
-							output = []string{`{"type":"response.completed","stream_id":"planner","response":{"id":"second","status":"completed","usage":{"input_tokens":1000,"output_tokens":1,"total_tokens":1001}}}`}
+							// The follow-up request is a healthy completion with content, so
+							// routing counts it as a success between the failing cases.
+							output = []string{`{"type":"response.completed","stream_id":"planner","response":{"id":"second","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":1000,"output_tokens":1,"total_tokens":1001}}}`}
 						}
 						for _, event := range output {
 							if !assert.NoError(t, ws.WriteMessage(websocket.TextMessage, []byte(event))) {

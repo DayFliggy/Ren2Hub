@@ -2387,7 +2387,7 @@
       "path": "controller/responses_websocket_test.go",
       "status": "adapted",
       "upstream_sha256": "f9e20c3f9642aa23070ae1bb12397e1a7a4fb95253d47c5bab7af0320d54ca2b",
-      "local_sha256": "227f906b10419e2ea3f63a7d8883c8aff89d77febcd9df509e17b89be124a285"
+      "local_sha256": "a8c14bc9fcc7ec17611469a7cfb9d1ab6ca0cd1375876c7bb30341c165546ba8"
     },
     {
       "path": "controller/return_path.go",
