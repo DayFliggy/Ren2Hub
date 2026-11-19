@@ -1161,6 +1161,7 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	if err != nil {
 		return channelTestSummary{}, err
 	}
+	scheduled := strings.TrimSpace(mode) == ""
 	if strings.TrimSpace(mode) == "" {
 		mode = operation_setting.GetMonitorSetting().ChannelTestMode
 	}
@@ -1168,7 +1169,9 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
 	concurrency := operation_setting.GetMonitorSetting().ChannelTestConcurrency
 	summary := performChannelTests(ctx, selected, testUserID, allowDisable, concurrency, report)
-	recoverAutoDisabledKeys(ctx, channels, testUserID, concurrency)
+	if scheduled {
+		recoverAutoDisabledKeys(ctx, channels, testUserID, concurrency)
+	}
 	if notify && (ctx == nil || ctx.Err() == nil) {
 		service.NotifyChannelWatchers(dto.NotifyTypeChannelTest, func(lang string) (string, string) {
 			return i18n.Translate(lang, i18n.MsgChannelTestCompletedSubject), i18n.Translate(lang, i18n.MsgChannelTestCompletedContent)

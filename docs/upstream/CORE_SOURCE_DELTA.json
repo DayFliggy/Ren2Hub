@@ -962,7 +962,7 @@
       "path": "controller/channel-test.go",
       "status": "adapted",
       "upstream_sha256": "2854ae6987e4f6d458de553dca6a06c48c0f88cced1ed608e5bb29f0f382a4d0",
-      "local_sha256": "6ee1d1230b4f1ee53e562bf2fd774767cba35ed3357dcc0ac8e8b7fba2ac302c",
+      "local_sha256": "b42d03ed347874f16cd7acbd443fc5829694f02009ba270de5f80d2496318c68",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -1150,7 +1150,7 @@
       "path": "controller/channel_key_recovery.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "853d3aeec553a905ab0f04ff315fe53dcf151ed09c8759e3dfd370cd85fa214a",
+      "local_sha256": "bce7b88767bda06407ffa779fc1da8d4b9809c484e398ff7db53256f9f89d33d",
       "reasons": [
         "scheduled-key-recovery"
       ],
@@ -1163,7 +1163,7 @@
       "path": "controller/channel_key_recovery_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "215122fe706951f10bad7eed75148ffb4f330decce9ca63428cb54e1a867b868"
+      "local_sha256": "fa1c97921d984497bd588411a905ba088d91d8130096977ec13e5ae38d346b36"
     },
     {
       "path": "controller/channel_lab.go",
@@ -14843,7 +14843,7 @@
       "kind": "approved_contract"
     },
     "scheduled-key-recovery": {
-      "basis": "定时渠道测试在开启自动启用时，用被测 Key 发一次与渠道测试相同的真实请求，恢复多 Key 渠道里被自动停用的 Key；每轮每渠道最多 3 个，失败不改状态，不写路由健康；人工禁用的 Key 和渠道不碰。",
+      "basis": "定时渠道测试在开启自动启用时，用被测 Key 发一次与渠道测试相同的真实请求，恢复多 Key 渠道里被自动停用的 Key；每轮每渠道最多 3 个，失败不改状态，不写路由健康；只在调度发起的运行里执行，人工禁用的 Key 和渠道、提供商插件渠道、文本重复的 Key 不碰。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }

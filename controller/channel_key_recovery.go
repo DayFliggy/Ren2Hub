@@ -16,7 +16,7 @@ import (
 // scheduled round tests per channel.
 const keyRecoveryPerChannel = 3
 
-var errKeyUnderTestChanged = errors.New("the key under test is no longer automatically disabled")
+var errKeyUnderTestChanged = errors.New("the key under test or its channel is no longer eligible for recovery")
 
 // channelKeyUnderTest is one automatically disabled key of a multi-key
 // channel, tested on its own outside the rotation. testChannel narrows the
@@ -28,13 +28,41 @@ type channelKeyUnderTest struct {
 	key   string
 }
 
+// keyRecoveryChannel reports a channel whose automatically disabled keys this
+// recovery may test: a multi-key channel that is enabled or automatically
+// disabled. Provider plugin channels are left to the plugin's own scheduled
+// hook: narrowed to one key, a plugin would locate and refresh credentials by
+// slot 0 and could prove the key with another slot's credential.
+func keyRecoveryChannel(channel *model.Channel) bool {
+	if !channel.ChannelInfo.IsMultiKey || channel.Status != common.ChannelStatusEnabled && channel.Status != common.ChannelStatusAutoDisabled {
+		return false
+	}
+	_, plugin := service.PluginOfChannel(channel)
+	return !plugin
+}
+
+// keyRecoverable reports an automatically disabled key whose text is unique in
+// the channel. The status write finds a key by its text (the native
+// handlerMultiKeyUpdate updates the first equal key), so a repeated text could
+// enable another slot.
+func keyRecoverable(channel *model.Channel, keys []string, index int) bool {
+	if index >= len(keys) || channel.ChannelInfo.MultiKeyStatusList[index] != common.ChannelStatusAutoDisabled {
+		return false
+	}
+	for i, key := range keys {
+		if i != index && key == keys[index] {
+			return false
+		}
+	}
+	return true
+}
+
 // apply returns a single-key copy of the reloaded channel that sends with the
-// key under test, or an error when the stored key changed or is no longer
-// automatically disabled, for example after a manual disable.
+// key under test, or an error when the channel or the stored key is no longer
+// eligible, for example after a manual disable of either.
 func (k channelKeyUnderTest) apply(channel *model.Channel) (*model.Channel, error) {
 	keys := channel.GetKeys()
-	if !channel.ChannelInfo.IsMultiKey || k.index >= len(keys) || keys[k.index] != k.key ||
-		channel.ChannelInfo.MultiKeyStatusList[k.index] != common.ChannelStatusAutoDisabled {
+	if !keyRecoveryChannel(channel) || k.index >= len(keys) || keys[k.index] != k.key || !keyRecoverable(channel, keys, k.index) {
 		return nil, errKeyUnderTestChanged
 	}
 	narrowed := *channel
@@ -52,9 +80,10 @@ var keyRecoveryTested = struct {
 	at map[keyRecoverySlot]time.Time
 }{at: map[keyRecoverySlot]time.Time{}}
 
-// recoverAutoDisabledKeys runs after the scheduled channel test, in every test
-// mode, when automatic enabling is on. Manually disabled channels and keys
-// are skipped; a channel disabled because every key was is covered.
+// recoverAutoDisabledKeys runs after a channel test run the scheduler started,
+// in every test mode, when automatic enabling is on; a run an administrator
+// started does not call it. Manually disabled channels and keys are skipped; a
+// channel disabled because every key was is covered.
 func recoverAutoDisabledKeys(ctx context.Context, channels []*model.Channel, testUserID int, concurrency int) {
 	if !common.AutomaticEnableChannelEnabled {
 		return
@@ -83,13 +112,13 @@ func keyRecoveryPlans(channels []*model.Channel) map[int][]channelKeyUnderTest {
 	seen := map[keyRecoverySlot]time.Time{}
 	plans := map[int][]channelKeyUnderTest{}
 	for _, channel := range channels {
-		if !channel.ChannelInfo.IsMultiKey || channel.Status != common.ChannelStatusEnabled && channel.Status != common.ChannelStatusAutoDisabled {
+		if !keyRecoveryChannel(channel) {
 			continue
 		}
 		keys := channel.GetKeys()
 		var disabled []channelKeyUnderTest
-		for index, status := range channel.ChannelInfo.MultiKeyStatusList {
-			if status == common.ChannelStatusAutoDisabled && index < len(keys) {
+		for index := range channel.ChannelInfo.MultiKeyStatusList {
+			if keyRecoverable(channel, keys, index) {
 				disabled = append(disabled, channelKeyUnderTest{index: index, key: keys[index]})
 				slot := keyRecoverySlot{channel.Id, index}
 				seen[slot] = keyRecoveryTested.at[slot]

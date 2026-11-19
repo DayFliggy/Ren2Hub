@@ -33539,7 +33539,7 @@
       ]
     },
     "controller/channel-test.go": {
-      "local_sha256": "6ee1d1230b4f1ee53e562bf2fd774767cba35ed3357dcc0ac8e8b7fba2ac302c",
+      "local_sha256": "b42d03ed347874f16cd7acbd443fc5829694f02009ba270de5f80d2496318c68",
       "hunks": [
         {
           "header": "@@ -48,9 +48,6 @@",
@@ -33587,9 +33587,14 @@
           "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#9。"
         },
         {
-          "header": "@@ -1152,6 +1168,7 @@",
-          "sha256": "053e9bc5abb8fa4eafa787f15fb8efd7280acd7202b0242571b34d68e84d0c02",
-          "basis": "定时 Key 恢复的接点：渠道测试之后调用扩展文件 controller/channel_key_recovery.go 的 recoverAutoDisabledKeys，三种测试模式都执行，只在开启自动启用时发请求。"
+          "header": "@@ -1145,6 +1161,7 @@",
+          "sha256": "242d2a799b93ef5c93a7ee1bf534baceb940d687ee318d42bb79608a52f102d8",
+          "basis": "定时 Key 恢复的接点：记录本次运行是否由调度发起（载荷 Mode 为空）；管理员“测试全部”入队时 Mode=scheduled_all，不执行 Key 恢复。"
+        },
+        {
+          "header": "@@ -1152,6 +1169,9 @@",
+          "sha256": "70d5cc02f0229e3aeae98cc5a68a26769f23159c2dc61d3fd710c5ca10351068",
+          "basis": "定时 Key 恢复的接点：只有调度发起的运行在渠道测试之后调用扩展文件 controller/channel_key_recovery.go 的 recoverAutoDisabledKeys，三种测试模式都执行，只在开启自动启用时发请求；提供商插件渠道和文本重复的 Key 不参与。"
         }
       ]
     }
