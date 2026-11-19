@@ -47,12 +47,20 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 
 	var mu sync.Mutex
 	hits, healthy := map[string]int{}, map[string]bool{}
+	// held keys pause at the upstream: the request is in flight until release.
+	type hold struct{ arrived, release chan struct{} }
+	held := map[string]hold{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		mu.Lock()
 		hits[key]++
 		ok := healthy[key]
+		h, isHeld := held[key]
 		mu.Unlock()
+		if isHeld {
+			close(h.arrived)
+			<-h.release
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -142,6 +150,33 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 		return false
 	}
 	auto, manual := common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled
+	// recoverWhileInFlight tests the planned key of the channel and runs
+	// change while that test request waits at the upstream, then lets the
+	// upstream answer 200. It returns the round's summary.
+	recoverWhileInFlight := func(t *testing.T, channel *model.Channel, key string, change func()) channelTestSummary {
+		t.Helper()
+		setHealthy(key)
+		h := hold{arrived: make(chan struct{}), release: make(chan struct{})}
+		mu.Lock()
+		held[key] = h
+		mu.Unlock()
+		t.Cleanup(func() {
+			mu.Lock()
+			delete(held, key)
+			mu.Unlock()
+		})
+		snapshot := stored(t, channel.Id)
+		plans := keyRecoveryPlans([]*model.Channel{&snapshot})
+		require.Len(t, plans[channel.Id], 1)
+		testUserID, err := resolveChannelTestUserID(nil)
+		require.NoError(t, err)
+		done := make(chan channelTestSummary)
+		go func() { done <- recoverChannelKeys(context.Background(), &snapshot, plans[channel.Id], testUserID) }()
+		<-h.arrived
+		change()
+		close(h.release)
+		return <-done
+	}
 
 	t.Run("a recovered key returns to the rotation", func(t *testing.T) {
 		channel := newChannel(t, "recover", 5, map[int]int{2: auto}, common.ChannelStatusEnabled)
@@ -219,6 +254,53 @@ func TestScheduledTestRecoversAutoDisabledKeys(t *testing.T) {
 		round(t)
 		require.Equal(t, before, totalHits(), "nothing is sent for a plugin channel's keys")
 		require.Equal(t, auto, stored(t, channel.Id).ChannelInfo.MultiKeyStatusList[1])
+	})
+
+	// The status write finds the key by its text, so the eligibility is checked
+	// again on the locked row: an administrator who gives slot 0 the tested
+	// text while the test is in flight must not get slot 0 enabled.
+	t.Run("a key whose text repeats while the test is in flight is not enabled", func(t *testing.T) {
+		channel := withKeys(t, "late-duplicate", []string{"late-duplicate-a", "late-duplicate-b"}, map[int]int{0: manual, 1: auto}, common.ChannelStatusEnabled)
+		before := stored(t, channel.Id)
+		summary := recoverWhileInFlight(t, channel, "late-duplicate-b", func() {
+			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("key", "late-duplicate-b\nlate-duplicate-b").Error)
+		})
+		require.Equal(t, 1, hitsOf("late-duplicate-b"))
+		require.Zero(t, summary.Enabled, "no recovery is reported or notified")
+		after := stored(t, channel.Id)
+		require.Equal(t, map[int]int{0: manual, 1: auto}, after.ChannelInfo.MultiKeyStatusList)
+		require.Equal(t, before.ChannelInfo.MultiKeyDisabledReason, after.ChannelInfo.MultiKeyDisabledReason)
+	})
+
+	t.Run("a channel turned into a plugin channel while the test is in flight is not enabled", func(t *testing.T) {
+		channel := newChannel(t, "late-plugin", 2, map[int]int{1: auto}, common.ChannelStatusEnabled)
+		summary := recoverWhileInFlight(t, channel, "late-plugin-k1", func() {
+			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("type", constant.ChannelTypeTaskPlugin).Error)
+		})
+		require.Zero(t, summary.Enabled)
+		require.Equal(t, auto, stored(t, channel.Id).ChannelInfo.MultiKeyStatusList[1])
+	})
+
+	t.Run("an out-of-range stored slot does not stop the round", func(t *testing.T) {
+		broken := newChannel(t, "broken-slots", 2, map[int]int{-1: auto, 1: auto, 7: auto}, common.ChannelStatusEnabled)
+		healthyChannel := newChannel(t, "next-channel", 2, map[int]int{0: auto}, common.ChannelStatusEnabled)
+		setHealthy("broken-slots-k1", "next-channel-k0")
+		round(t)
+		require.Equal(t, 1, hitsOf("broken-slots-k1"), "the valid slot is still tested")
+		require.NotContains(t, stored(t, broken.Id).ChannelInfo.MultiKeyStatusList, 1)
+		require.NotContains(t, stored(t, healthyChannel.Id).ChannelInfo.MultiKeyStatusList, 0)
+	})
+
+	// The plugin exclusion follows the stored channel type, not whether the
+	// plugin happens to be loaded.
+	t.Run("a task plugin channel without a loaded plugin is not planned", func(t *testing.T) {
+		channel := &model.Channel{Name: "unloaded-plugin", Key: "unloaded-k0\nunloaded-k1", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeTaskPlugin,
+			Models: "ws-billing", BaseURL: &upstream.URL,
+			ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyStatusList: map[int]int{1: auto}, MultiKeyMode: constant.MultiKeyModePolling}}
+		channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "plugin-that-is-not-loaded"})
+		insert(t, channel)
+		snapshot := stored(t, channel.Id)
+		require.Empty(t, keyRecoveryPlans([]*model.Channel{&snapshot})[channel.Id])
 	})
 
 	t.Run("a channel disabled by hand after planning is not tested", func(t *testing.T) {
