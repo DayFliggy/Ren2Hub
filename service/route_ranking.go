@@ -138,11 +138,7 @@ func orderRouteRows(c *gin.Context, rows []*model.Channel, requestID, modelName 
 		if err != nil {
 			mapped = ""
 		}
-		key := routeQualityKey{modelName, routeObservationKey{ch.Id, mapped, operation, stream}}
-		stat := quality[key]
-		if now.UnixMilli()-stat.UpdatedAt > 2*time.Hour.Milliseconds() {
-			stat = RouteQualitySnapshot{}
-		}
+		stat := routeQualityOf(quality, now, modelName, ch.Id, mapped, operation, stream)
 		health, factor := routeObservations.routeHealth(ch.Id, mapped)
 		ratio, _ := strconv.ParseFloat(ch.ChannelRatio, 64) // Eligibility has already validated the configured ratio.
 		hash := sha256.Sum256([]byte(requestID + ":" + strconv.Itoa(ch.Id)))
@@ -189,6 +185,17 @@ func orderRouteRows(c *gin.Context, rows []*model.Channel, requestID, modelName 
 		c.Set("route_explore_channel", chosen)
 	}
 }
+
+// routeQualityOf is a channel's quality on the request's model, operation and
+// stream type; a row not updated for two hours counts as unrated.
+func routeQualityOf(quality qualitySnapshot, now time.Time, modelName string, channelID int, mapped string, operation int, stream bool) RouteQualitySnapshot {
+	stat := quality[routeQualityKey{modelName, routeObservationKey{channelID, mapped, operation, stream}}]
+	if now.UnixMilli()-stat.UpdatedAt > 2*time.Hour.Milliseconds() {
+		return RouteQualitySnapshot{}
+	}
+	return stat
+}
+
 func setRouteDecision(c *gin.Context, id int, source string) {
 	band, price := 0, 1.0
 	if source == "auto" {

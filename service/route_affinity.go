@@ -3,8 +3,10 @@ package service
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +24,13 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 	gate := affinityRouteGate(c)
 	strict := gate == boundHealthyAllowCooling
 	row, err := acquireBoundRouteChannel(c, preferred, modelName, gate)
+	if err == nil && row.Id != preferred {
+		// The binding is kept; SwitchOnSuccess moves it after a success.
+		if !routePreselecting(c) {
+			setRouteDecision(c, row.Id, "affinity_exit")
+		}
+		return row, nil, true
+	}
 	if err == nil {
 		MarkChannelAffinityUsed(c, row.Id)
 		if !routePreselecting(c) {
@@ -60,6 +69,51 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		clearAffinityIfStillBound(c, preferred)
 	}
 	return nil, nil, false
+}
+
+// routeQualitySevereBand is the quality band at which a prefer binding yields.
+const routeQualitySevereBand = 2
+
+// preferAffinityExit serves a request bound by prefer affinity from a better
+// channel while the bound one is severely downgraded: in quality band 2 on the
+// request's model, operation and stream type (cache bands do not count). The
+// candidates in a better band are tried in automatic ranking order through the
+// normal admission, so an open breaker, a 429 cooldown or a full channel skips
+// a candidate just as in automatic selection. It returns nil when the binding
+// is not downgraded or no better candidate is admitted; the caller then uses
+// the bound channel. Strict affinity never calls it. Exploration does not run
+// here, so a yielding request spends no exploration budget.
+func preferAffinityExit(c *gin.Context, rows []*model.Channel, bound *model.Channel, modelName string) (*model.Channel, error) {
+	operation, stream := routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream)
+	quality, now := routeQualities.snapshot(), time.Now()
+	band := func(channel *model.Channel) int {
+		mapped := routeAvailabilityKey(channel, modelName).model
+		return routeQualityOf(quality, now, modelName, channel.Id, mapped, operation, stream).Band
+	}
+	limit := band(bound)
+	if limit < routeQualitySevereBand {
+		return nil, nil
+	}
+	var better []*model.Channel
+	for _, channel := range rows {
+		if channel.Id != bound.Id && band(channel) < limit {
+			better = append(better, channel)
+		}
+	}
+	orderAutomaticRoutes(better, c.GetString(common.RequestIdKey), modelName, operation, stream)
+	for _, channel := range better {
+		selected, err := acquireHealthyRoute(c, channel, modelName, false)
+		var pause *routePauseError
+		switch {
+		case err == nil:
+			return selected, nil
+		case errors.As(err, &pause), errors.Is(err, ErrConcurrencyFull), errors.Is(err, errConcurrencyResourceDeleted):
+			continue
+		default:
+			return nil, err
+		}
+	}
+	return nil, nil
 }
 
 // clearAffinityIfStillBound clears the session binding only while it still

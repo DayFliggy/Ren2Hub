@@ -313,8 +313,11 @@ type boundRouteGate int
 const (
 	// Pins, manual lists and origin tasks: capacity only.
 	boundCapacityOnly boundRouteGate = iota
-	// Prefer affinity and plugin reacquisition: breaker and 429 cooldown.
+	// Plugin reacquisition: breaker and 429 cooldown.
 	boundHealthy
+	// Prefer affinity: as boundHealthy, but a binding in severe quality
+	// downgrade yields to a better candidate (preferAffinityExit).
+	boundPreferAffinity
 	// Strict affinity: breaker only; a channel that merely cools down after a
 	// 429 is still used, because the session has no other channel.
 	boundHealthyAllowCooling
@@ -326,7 +329,7 @@ func affinityRouteGate(c *gin.Context) boundRouteGate {
 	if RequestPolicy(c).SessionMode == "strict" {
 		return boundHealthyAllowCooling
 	}
-	return boundHealthy
+	return boundPreferAffinity
 }
 
 func acquireBoundRouteChannel(c *gin.Context, channelID int, modelName string, gate boundRouteGate) (*model.Channel, error) {
@@ -345,6 +348,11 @@ func acquireBoundRouteChannel(c *gin.Context, channelID int, modelName string, g
 			continue
 		}
 		switch gate {
+		case boundPreferAffinity:
+			if row, err := preferAffinityExit(c, rows, channel, modelName); row != nil || err != nil {
+				return row, err
+			}
+			return acquireHealthyRoute(c, channel, modelName, false)
 		case boundHealthy:
 			return acquireHealthyRoute(c, channel, modelName, false)
 		case boundHealthyAllowCooling:
@@ -389,6 +397,13 @@ func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName stri
 		gate = boundCapacityOnly
 	}
 	channel, err := acquireBoundRouteChannel(c, channelID, modelName, gate)
+	if channel != nil && channel.Id != channelID {
+		// A downgraded binding yielded to another channel, but the caller
+		// prepared this request for the bound one: it selects again.
+		ReleaseRouteChannel(c)
+		forgetChannelAffinityUse(c)
+		return nil, nil
+	}
 	var pause *routePauseError
 	if errors.As(err, &pause) || errors.Is(err, ErrConcurrencyFull) || errors.Is(err, model.ErrTokenRouteForbidden) {
 		// The caller selects again, which records affinity use afresh.
