@@ -29,8 +29,7 @@ type routeAttempt struct {
 	lastOutput     atomic.Int64
 	streamEvents   atomic.Int64
 	requestEnded   atomic.Bool
-	stream         bool
-	breakerSettled atomic.Bool
+	breakerOnce    sync.Once
 	status         atomic.Int64
 	cooldown       atomic.Int64
 	estimated      atomic.Bool
@@ -100,15 +99,26 @@ func (a *routeAttempt) markOutput(now time.Time) {
 	a.lastOutput.Store(instant)
 }
 
-// settleStreamProbe 在流式探测的首个内容事件时按成功结算熔断：首输出是流式的成功界，
-// 结算会清掉打开状态里匹配的许可，下一个请求即可领取探测。只结算熔断，渠道并发槽
-// 仍到尝试结束才释放。首输出与结束可能在不同 goroutine，breakerSettled 保证只记一次。
+// settleStreamProbe 在探测的首个内容事件时按成功结算熔断：首输出是流式的成功界，
+// 结算会清掉打开状态里匹配的许可，下一个请求即可领取探测。只有流式观察器会报告
+// 首输出，所以派发后才因 SSE 响应确认为流式的请求同样在这里结算。只结算熔断，
+// 渠道并发槽仍到尝试结束才释放。首输出与结束可能在不同 goroutine，breakerOnce
+// 让熔断只写一次，并让结束方等在途的结算写完后再释放许可。
 func (a *routeAttempt) settleStreamProbe() {
-	if !a.bound || !a.stream || a.probe == nil || !a.breakerSettled.CompareAndSwap(false, true) {
+	if !a.bound || a.probe == nil {
 		return
 	}
-	routeObservations.recordBreaker(a.epoch, routeBreakerKey{a.channelID, a.model}, a.probe, routeBreakerSample{success: true})
+	a.breakerOnce.Do(func() {
+		if streamProbeSettleTestHook != nil {
+			streamProbeSettleTestHook()
+		}
+		routeObservations.recordBreaker(a.epoch, routeBreakerKey{a.channelID, a.model}, a.probe, routeBreakerSample{success: true})
+	})
 }
+
+// streamProbeSettleTestHook lets a test pause a first-output settlement after
+// it has won the breaker write and before the write. It is nil in production.
+var streamProbeSettleTestHook func()
 
 // ObserveRouteResponse 由传输层在收到上游 429 时按 Retry-After 或缺头的短冷却期限将渠道降档。
 func ObserveRouteResponse(c *gin.Context, resp *http.Response) {
@@ -151,7 +161,6 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 		admission: c.GetString("route_admission_source"), quality: c.GetInt("route_selected_quality"),
 		price: c.GetFloat64("route_price_factor"), cacheMode: routeCacheContext(c).mode,
 		probe: currentRouteProbe(c), model: name, epoch: epoch, bound: bound, operation: routeOperation(c),
-		stream: info != nil && info.IsStream,
 	})
 }
 
@@ -208,16 +217,15 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 
 // recordAttemptBreaker 以第一个有内容的事件为流式请求的成功界：之后的中断、取消或
 // 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。已在首输出时
-// 结算的流式探测不再计入。
+// 结算的流式探测不再计入；结算仍在写时等它写完。
 func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome, failure routeBreakerSample) {
-	if !attempt.breakerSettled.CompareAndSwap(false, true) {
-		return
-	}
-	key := routeBreakerKey{attempt.channelID, attempt.model}
-	switch {
-	case stream && attempt.firstOutput.Load() != 0, outcome == perfmetrics.OutcomeSuccess:
-		routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, routeBreakerSample{success: true})
-	case outcome == perfmetrics.OutcomeFailure:
-		routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, failure)
-	}
+	attempt.breakerOnce.Do(func() {
+		key := routeBreakerKey{attempt.channelID, attempt.model}
+		switch {
+		case stream && attempt.firstOutput.Load() != 0, outcome == perfmetrics.OutcomeSuccess:
+			routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, routeBreakerSample{success: true})
+		case outcome == perfmetrics.OutcomeFailure:
+			routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, failure)
+		}
+	})
 }
