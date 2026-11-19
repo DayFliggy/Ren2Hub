@@ -79,6 +79,18 @@ type routeScanCandidate struct {
 	Skip        string  `json:"skip,omitempty"`
 }
 
+// routeScanAbortReason names the technical error that ended a scan at a
+// candidate; it is empty for the selected candidate.
+func routeScanAbortReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errConcurrencyLimitUnavailable):
+		return "limit_unavailable"
+	}
+	return "error"
+}
+
 // noteVisit records an automatic visit until the limit is reached.
 func (s *routeScan) noteVisit(c *gin.Context, ranks map[int]routeRank, channel *model.Channel, skip string) {
 	if len(s.Ranked) >= routeScanRankedLimit {
@@ -147,8 +159,9 @@ func (s *routeScan) acquire(c *gin.Context, rows []*model.Channel, modelName str
 			// 在读取候选后被删除，继续候选扫描。
 			skip = "deleted"
 		default:
-			if automatic && err == nil {
-				s.noteVisit(c, ranks, channel, "")
+			// The selected channel, or a technical error that ends the scan.
+			if automatic {
+				s.noteVisit(c, ranks, channel, routeScanAbortReason(err))
 			}
 			return selected, err
 		}

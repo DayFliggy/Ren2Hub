@@ -157,3 +157,35 @@ func TestBoundAndManualRoutesDoNotEmitScan(t *testing.T) {
 	require.Nil(t, selectErr)
 	require.Empty(t, RequestPolicy(manual).Events())
 }
+
+// A technical error that ends the scan, such as an unreadable concurrency
+// limit, is the last visit in scan.ranked with its reason; the HTTP error is
+// unchanged.
+func TestRouteScanRecordsTheAbortingCandidate(t *testing.T) {
+	db := setupAffinityChannels(t)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("max_concurrency", 1).Error)
+	holder := routeTestContext(t)
+	held, selectErr := SelectChannelForRequest(holder, "route-model", nil)
+	require.Nil(t, selectErr)
+	require.Equal(t, 11, held.Id)
+	failChannelLimitRead(t, db, 22)
+
+	c := routeTestContext(t)
+	_, selectErr = SelectChannelForRequest(c, "route-model", nil)
+	require.NotNil(t, selectErr)
+	require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
+	require.EqualValues(t, "channel_concurrency_unavailable", selectErr.Code)
+	var scan *routeScan
+	for _, event := range RequestPolicy(c).Events() {
+		if event.Scan != nil {
+			scan = event.Scan
+		}
+	}
+	require.NotNil(t, scan)
+	visits := make([][2]any, 0, len(scan.Ranked))
+	for _, visit := range scan.Ranked {
+		visits = append(visits, [2]any{visit.ChannelID, visit.Skip})
+	}
+	require.Equal(t, [][2]any{{11, "full"}, {22, "limit_unavailable"}}, visits)
+	ReleaseRouteChannel(holder)
+}

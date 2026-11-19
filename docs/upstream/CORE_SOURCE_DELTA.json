@@ -12927,7 +12927,7 @@
       "path": "service/route_admission.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "16a05ab5660553270966950309939c852bf8093a3e0b1d2dcb8a7f618e298a76",
+      "local_sha256": "11cdba0e3f2074a33900dee3269a82c5cd76357773f2e7df2f2f6979497a9a24",
       "reasons": [
         "token-routing",
         "ops-metrics"
@@ -13009,7 +13009,7 @@
       "path": "service/route_breaker.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "023dd63be286ab78c3186d9de951db4c91f804a350fb5089291b8fa61e574966",
+      "local_sha256": "bb7cf5a2c3d36bab11436aaa10112ab255ae193866b6a6115397ffa71711aaf6",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13028,7 +13028,7 @@
       "path": "service/route_breaker_diagnostics_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "91f93d58c1d966e9db76030e59231f737088eaf14f93e168026133ec17eb64c6"
+      "local_sha256": "3999d5b826cae43564c6c7f4810f4988fbd38f455588d8d364a3bf2e326a9d0e"
     },
     {
       "path": "service/route_breaker_test.go",
@@ -13274,7 +13274,7 @@
       "path": "service/route_scan_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e8475a5005fa97290060ad14902d6de5bcb0428f944721bc8c4a23df862a1c64"
+      "local_sha256": "8afb9419536a01033ee58f867b293e753fe04982106e29cb447eb858a4f0b4b4"
     },
     {
       "path": "service/route_stream_output.go",

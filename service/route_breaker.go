@@ -70,6 +70,26 @@ type routeBreakerSample struct {
 // routeErrorCodeLimit bounds the stored error code, which comes from the upstream.
 const routeErrorCodeLimit = 64
 
+// routeUnrecognizedErrorCode replaces an upstream error code that is not a
+// short identifier: upstreams fill code freely, sometimes with a sentence, an
+// object or a credential. The client still receives the original error.
+const routeUnrecognizedErrorCode = "unrecognized"
+
+// routeErrorCode keeps an upstream error code only when it is a short
+// identifier of letters, digits and _ . : -.
+func routeErrorCode(code string) string {
+	if len(code) > routeErrorCodeLimit {
+		return routeUnrecognizedErrorCode
+	}
+	for _, r := range code {
+		identifier := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_.:-", r)
+		if !identifier {
+			return routeUnrecognizedErrorCode
+		}
+	}
+	return code
+}
+
 // routeCooldown is a channel's 429 cooldown; source is retry_after or headerless.
 type routeCooldown struct {
 	until  int64
@@ -116,11 +136,7 @@ func (s *routeBreakerState) noteFailure(sample routeBreakerSample) {
 	if sample.success {
 		return
 	}
-	code := sample.code
-	if len(code) > routeErrorCodeLimit {
-		code = code[:routeErrorCodeLimit]
-	}
-	s.lastStatus, s.lastErrorCode = sample.status, code
+	s.lastStatus, s.lastErrorCode = sample.status, routeErrorCode(sample.code)
 }
 
 func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey, probe *routeProbe, sample routeBreakerSample) {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,6 +45,39 @@ func TestRouteBreakerSnapshotExplainsTrigger(t *testing.T) {
 		encoded, err := common.Marshal(row)
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), "bad gateway from provider", "no upstream message")
+	})
+
+	// The error code comes from the upstream; only a short identifier is kept.
+	t.Run("free-form codes are not stored", func(t *testing.T) {
+		for _, tc := range []struct{ name, body, want string }{
+			{"identifier", `{"error":{"message":"m","code":"upstream.error:rate-1"}}`, "upstream.error:rate-1"},
+			{"sentence", `{"error":{"message":"m","code":"Your key sk-test-123 is invalid"}}`, "unrecognized"},
+			{"object", `{"error":{"message":"m","code":{"account":"acct-42"}}}`, "unrecognized"},
+			{"overlong identifier", `{"error":{"message":"m","code":"` + strings.Repeat("a", routeErrorCodeLimit+1) + `"}}`, "unrecognized"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				c := routeOutcomeTestContext(t)
+				for range routeBreakerOpenFailures {
+					finishRouteAttempt(t, c, info, upstreamError(t, http.StatusBadGateway, tc.body, false))
+				}
+				row, open := routeBreakerRow(t, 11, "route-model")
+				require.True(t, open)
+				require.Equal(t, tc.want, row.LastErrorCode)
+			})
+		}
+		t.Run("stream error event", func(t *testing.T) {
+			c := routeOutcomeTestContext(t)
+			for range routeBreakerOpenFailures {
+				status := relaycommon.NewStreamStatus()
+				status.RecordError("upstream failed")
+				status.MarkFailed("Bearer sk-live-secret", "server_error", http.StatusInternalServerError)
+				streamInfo := &relaycommon.RelayInfo{OriginModelName: "route-model", RelayMode: 1, IsStream: true, StartTime: time.Now(), StreamStatus: status}
+				finishRouteAttempt(t, c, streamInfo, nil)
+			}
+			row, open := routeBreakerRow(t, 11, "route-model")
+			require.True(t, open)
+			require.Equal(t, "unrecognized", row.LastErrorCode)
+		})
 	})
 
 	t.Run("window failure rate", func(t *testing.T) {
