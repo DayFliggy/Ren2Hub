@@ -8,7 +8,10 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -110,6 +113,47 @@ func TestRouteProbeLeaseLifecycle(t *testing.T) {
 	class, _ = routeObservations.availability(key)
 	require.Equal(t, routeOpen, class, "late completion cannot close the replaced configuration")
 	require.Zero(t, ChannelInFlight(11))
+
+	// A sent stream probe frees the probe at its first output; its channel
+	// slot stays held until the stream ends.
+	expireBreakerCooldown(t, 11, key.model)
+	streaming := routeTestContext(t)
+	ch, selErr = SelectChannelForRequest(streaming, key.model, nil)
+	require.Nil(t, selErr)
+	require.NotNil(t, currentRouteProbe(streaming))
+	common.SetContextKey(streaming, constant.ContextKeyChannelId, ch.Id)
+	info := &relaycommon.RelayInfo{OriginModelName: key.model, RelayMode: 1, IsStream: true, StartTime: time.Now()}
+	MarkRouteAttemptSent(streaming, info)
+	class, _ = routeObservations.availability(key)
+	require.Equal(t, routeProbeBusy, class)
+	ObserveRouteStreamOutput(streaming, `{"choices":[{"delta":{"content":"hi"}}]}`)
+	class, _ = routeObservations.availability(key)
+	require.Equal(t, routeAvailable, class, "the settled probe no longer blocks the next probe")
+	require.Equal(t, 1, ChannelInFlight(11))
+	FinishRouteAttempt(streaming, info, nil)
+	require.Zero(t, ChannelInFlight(11))
+	require.Equal(t, 1, routeObservations.breakers[key].successes, "the end of a settled probe is not counted again")
+
+	// First output and the end of the attempt may race; the probe counts once.
+	routeObservations.invalidate(11)
+	for range routeBreakerOpenFailures {
+		recordBreaker(11, key.model, false)
+	}
+	expireBreakerCooldown(t, 11, key.model)
+	racing := routeTestContext(t)
+	ch, selErr = SelectChannelForRequest(racing, key.model, nil)
+	require.Nil(t, selErr)
+	common.SetContextKey(racing, constant.ContextKeyChannelId, ch.Id)
+	MarkRouteAttemptSent(racing, info)
+	value, _ := racing.Get("route_attempt")
+	attempt := value.(*routeAttempt)
+	var both sync.WaitGroup
+	both.Go(func() { attempt.markOutput(time.Now()) })
+	both.Go(func() { FinishRouteAttempt(racing, info, nil) })
+	both.Wait()
+	state := routeObservations.breakers[key]
+	require.Equal(t, 1, state.successes)
+	require.Nil(t, state.probe)
 }
 
 func TestRouteAdmissionFullBeforeCoolingFallback(t *testing.T) {

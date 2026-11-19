@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 403,
+    "extension": 404,
     "removed": 45
   },
   "files": [
@@ -12895,7 +12895,7 @@
       "path": "service/route_admission_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f1f376cd9a0b142be96810b16c5a12f0a561a8627e1a09b47b3a263af4e58509"
+      "local_sha256": "f87711751e148fd33a3ee9bd2a2991f1ba102335a33285aa0a7f4f5ce1e43efb"
     },
     {
       "path": "service/route_affinity.go",
@@ -12926,7 +12926,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0f3a89e4fdfa9ec605a285d080ed5b03cede7fd577393bd41de6882cf0da36da",
+      "local_sha256": "0293bfcbc971a4e6de84cd1a696a9fc4e7c8572101bf8c9f94947db53b051767",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13134,6 +13134,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "a2629edab9d4ea840641d31a9e26df04d91acace6494e10d4ac2b263f8ba37cf"
+    },
+    {
+      "path": "service/route_probe_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fa92edf7f7b3374d17f3d02a9ca898cc9f482a261ffbe4d482dab9cf9ddf98a3"
     },
     {
       "path": "service/route_quality.go",

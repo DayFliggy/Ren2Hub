@@ -29,6 +29,8 @@ type routeAttempt struct {
 	lastOutput     atomic.Int64
 	streamEvents   atomic.Int64
 	requestEnded   atomic.Bool
+	stream         bool
+	breakerSettled atomic.Bool
 	status         atomic.Int64
 	cooldown       atomic.Int64
 	estimated      atomic.Bool
@@ -92,8 +94,20 @@ func ObserveRouteBinaryOutput(c *gin.Context) {
 
 func (a *routeAttempt) markOutput(now time.Time) {
 	instant := now.UnixNano()
-	a.firstOutput.CompareAndSwap(0, instant)
+	if a.firstOutput.CompareAndSwap(0, instant) {
+		a.settleStreamProbe()
+	}
 	a.lastOutput.Store(instant)
+}
+
+// settleStreamProbe 在流式探测的首个内容事件时按成功结算熔断：首输出是流式的成功界，
+// 结算会清掉打开状态里匹配的许可，下一个请求即可领取探测。只结算熔断，渠道并发槽
+// 仍到尝试结束才释放。首输出与结束可能在不同 goroutine，breakerSettled 保证只记一次。
+func (a *routeAttempt) settleStreamProbe() {
+	if !a.bound || !a.stream || a.probe == nil || !a.breakerSettled.CompareAndSwap(false, true) {
+		return
+	}
+	routeObservations.recordBreaker(a.epoch, routeBreakerKey{a.channelID, a.model}, a.probe, true)
 }
 
 // ObserveRouteResponse 由传输层在收到上游 429 时按 Retry-After 或缺头的短冷却期限将渠道降档。
@@ -137,6 +151,7 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 		admission: c.GetString("route_admission_source"), quality: c.GetInt("route_selected_quality"),
 		price: c.GetFloat64("route_price_factor"), cacheMode: routeCacheContext(c).mode,
 		probe: currentRouteProbe(c), model: name, epoch: epoch, bound: bound, operation: routeOperation(c),
+		stream: info != nil && info.IsStream,
 	})
 }
 
@@ -191,8 +206,12 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 }
 
 // recordAttemptBreaker 以第一个有内容的事件为流式请求的成功界：之后的中断、取消或
-// 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。
+// 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。已在首输出时
+// 结算的流式探测不再计入。
 func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome) {
+	if !attempt.breakerSettled.CompareAndSwap(false, true) {
+		return
+	}
 	switch {
 	case stream && attempt.firstOutput.Load() != 0:
 		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, true)
