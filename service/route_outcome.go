@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
@@ -64,11 +65,21 @@ func (a *routeAttempt) emptyStreamOutcome() (perfmetrics.Outcome, string) {
 	return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput
 }
 
+// accountErrorSignals are the credential, quota, rate-limit and permission
+// codes and types that the native classifier (pkg/perf_metrics) lists as
+// failures. Message text never overrules them.
+var accountErrorSignals = map[string]bool{
+	"invalid_api_key": true, "api_key_invalid": true, "api_key_expired": true, "api_key_service_blocked": true,
+	"invalid_authentication": true, "authentication_error": true, "unauthenticated": true,
+	"permission_denied": true, "permission_error": true, "access_denied": true,
+	"insufficient_quota": true, "quota_exceeded": true, "resource_exhausted": true,
+	"rate_limit_exceeded": true, "rate_limit_error": true, "insufficient_user_quota": true, "pre_consume_token_quota_failed": true,
+}
+
 // requestContextOverflow recognizes a context overflow that the upstream
 // reported without a recognizable code, for example a reseller's code-less
-// 500. Account and rate-limit statuses are never overruled by message text,
-// and only the error object's message is read, never the raw response body,
-// so request content echoed elsewhere cannot match.
+// 500. Account and rate-limit statuses, codes and types are never overruled
+// by message text.
 func (a *routeAttempt) requestContextOverflow(apiErr *types.NewAPIError) bool {
 	if apiErr == nil || RelayErrorSource(apiErr) != "upstream" {
 		return false
@@ -77,6 +88,11 @@ func (a *routeAttempt) requestContextOverflow(apiErr *types.NewAPIError) bool {
 	for _, status := range []int{root.StatusCode, int(a.status.Load())} {
 		switch status {
 		case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusTooManyRequests:
+			return false
+		}
+	}
+	for _, signal := range []string{string(root.GetErrorCode()), root.ToOpenAIError().Type} {
+		if accountErrorSignals[strings.ToLower(signal)] {
 			return false
 		}
 	}
@@ -93,9 +109,12 @@ func rootRelayError(apiErr *types.NewAPIError) *types.NewAPIError {
 	}
 }
 
-// upstreamErrorMessage returns the message field of the upstream error object.
-// The wrapped Go error is not used: with show-body enabled it embeds the whole
-// response body.
+// upstreamErrorMessage returns the normalized upstream error message. It is
+// the error object's message, or, when the body had no error object, the
+// message the native handler took from top-level fields such as detail
+// (service/error.go); OpenRouter metadata is already appended to it
+// (relaykit/types/error.go). All of it is upstream error text. The wrapped Go
+// error is not used: with show-body enabled it embeds the whole response body.
 func upstreamErrorMessage(apiErr *types.NewAPIError) string {
 	switch relayErr := apiErr.RelayError.(type) {
 	case types.OpenAIError:
@@ -106,23 +125,42 @@ func upstreamErrorMessage(apiErr *types.NewAPIError) string {
 	return ""
 }
 
+// quotedText matches double-quoted, curly-quoted and backtick spans: request
+// content an upstream echoes back. Single quotes are kept because they are
+// also apostrophes ("This model's maximum context length").
+var quotedText = regexp.MustCompile("\"[^\"]*\"|“[^”]*”|`[^`]*`")
+
 // contextOverflowMessage holds the overflow phrases of OpenAI-compatible,
-// Anthropic and Gemini upstreams in one table.
+// Anthropic and Gemini upstreams in one table. Error codes and complete
+// overflow sentences match alone; a phrase that only names the limit, such as
+// "maximum context length", also needs overflow wording, so a fault that
+// merely mentions the setting does not match.
 func contextOverflowMessage(message string) bool {
-	text := strings.ToLower(message)
+	text := quotedText.ReplaceAllString(strings.ToLower(message), "")
 	if text == "" {
 		return false
 	}
-	for _, phrase := range []string{"context_length_exceeded", "context_too_large", "maximum context length", "max context length", "prompt is too long"} {
+	for _, phrase := range []string{"context_length_exceeded", "context_too_large", "prompt is too long"} {
 		if strings.Contains(text, phrase) {
 			return true
 		}
 	}
-	exceeded := strings.Contains(text, "exceed") || strings.Contains(text, "too large") || strings.Contains(text, "too long")
-	if exceeded && (strings.Contains(text, "context window") || strings.Contains(text, "context length")) {
+	if strings.Contains(text, "input token count") && strings.Contains(text, "exceeds the maximum") {
 		return true
 	}
-	return strings.Contains(text, "input token count") && strings.Contains(text, "exceeds the maximum")
+	limit := false
+	for _, phrase := range []string{"maximum context length", "max context length", "context window", "context length"} {
+		limit = limit || strings.Contains(text, phrase)
+	}
+	if !limit {
+		return false
+	}
+	for _, phrase := range []string{"exceed", "too large", "too long", "reached", "resulted in", "you requested", "reduce the length", "greater than", "more than"} {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // routeFailureCode names a failed attempt in the breaker snapshot: the root

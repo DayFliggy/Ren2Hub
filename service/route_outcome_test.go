@@ -117,6 +117,13 @@ func TestRouteOutcomeIgnoresWrappedContextOverflow(t *testing.T) {
 		{"credential status keeps counting", http.StatusUnauthorized, overflow, false},
 		{"rate limit keeps counting", http.StatusTooManyRequests, overflow, false},
 		{"phrase outside the error object", http.StatusInternalServerError, `{"error":{"message":"upstream failed"},"detail":"maximum context length is 8192 tokens"}`, true},
+		// A descriptive phrase without overflow wording is a channel fault.
+		{"configuration fault naming the setting", http.StatusInternalServerError, `{"error":{"message":"failed to load maximum context length configuration"}}`, false},
+		// An explicit credential, quota or rate code is never overruled by text, even on a 500.
+		{"credential code on a 500", http.StatusInternalServerError, `{"error":{"code":"invalid_api_key","type":"invalid_request_error","message":"This model's maximum context length is 8192 tokens. However, your messages resulted in 9000 tokens."}}`, false},
+		{"quota type on a 500", http.StatusInternalServerError, `{"error":{"type":"insufficient_quota","message":"Request exceeds the context window of this model"}}`, false},
+		// Quoted text is request content the upstream echoed back.
+		{"phrase only in a quoted echo", http.StatusInternalServerError, `{"error":{"message":"upstream rejected the input \"why is the maximum context length exceeded so often\""}}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := routeOutcomeTestContext(t)
