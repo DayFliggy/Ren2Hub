@@ -154,7 +154,7 @@ func TestChannelWriteUpdatesRoutingWithoutChangingServerFields(t *testing.T) {
 		Balance: 44.5, BalanceUpdatedTime: 55, UsedQuota: 66,
 	}
 	require.NoError(t, channel.Insert())
-	payload := fmt.Sprintf(`{"id":%d,"channel_ratio":"1.0","max_concurrency":2,"in_flight":123,"lab":{"id":"client-lab","name":"client name","source":"client"},"created_time":111,"test_time":222,"response_time":333,"balance":444,"balance_updated_time":555,"used_quota":666}`, channel.Id)
+	payload := fmt.Sprintf(`{"id":%d,"channel_ratio":"1.0","max_concurrency":2,"in_flight":123,"lab":{"id":"client-lab","name":"client name","source":"client"},"routing_quality":{"model":"client-model","band":2,"reason":"client"},"created_time":111,"test_time":222,"response_time":333,"balance":444,"balance_updated_time":555,"used_quota":666}`, channel.Id)
 	response := putUpdateChannel(t, 2, common.RoleAdminUser, payload)
 	require.Contains(t, response.Body.String(), `"success":true`, "an unchanged ratio in canonical or equivalent form stays editable")
 	var saved model.Channel

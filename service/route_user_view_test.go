@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -127,10 +128,18 @@ func TestRoutePreviewUsesRequestedStreamBucket(t *testing.T) {
 	require.Equal(t, TokenRouteOrderingWeightedPerRequest, baseline.Ordering)
 	require.False(t, baseline.Stream)
 	require.Len(t, baseline.Entries, 2)
-	first := baseline.Entries[0].ChannelID
-	for range routeMinimumSamples {
-		RecordRouteObservation(first, "route-model", relayconstant.RelayModeChatCompletions, true, true, 20000)
+	first, second := baseline.Entries[0].ChannelID, baseline.Entries[1].ChannelID
+	// 排序读质量评估器发布的快照：降档要有同组的参考渠道，样本只写进流式桶。
+	now := time.Now()
+	for _, id := range []int{first, second} {
+		routeQualities.invalidate(id)
+		t.Cleanup(func() { routeQualities.invalidate(id) })
 	}
+	for range routeMinimumSamples {
+		routeQualities.add(routeQualityKey{"route-model", routeObservationKey{first, "route-model", relayconstant.RelayModeChatCompletions, true}}, true, 20000, 0, 0, now)
+		routeQualities.add(routeQualityKey{"route-model", routeObservationKey{second, "route-model", relayconstant.RelayModeChatCompletions, true}}, true, 100, 0, 0, now)
+	}
+	routeQualities.evaluate(now)
 	streamQuery := query
 	streamQuery.Stream = true
 	streamed, err := PreviewTokenRouting(context.Background(), 17, 7, streamQuery)

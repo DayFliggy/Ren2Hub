@@ -89,6 +89,7 @@ var channelOperationalFields = map[string]struct{}{
 var channelReadOnlyFields = map[string]struct{}{
 	"in_flight":            {},
 	"lab":                  {},
+	"routing_quality":      {},
 	"created_time":         {},
 	"test_time":            {},
 	"response_time":        {},
