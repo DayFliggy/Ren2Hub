@@ -91,7 +91,16 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 // payload. A raw payload does not mark the first output: latency, breaker
 // success and probe settlement follow what the client was sent.
 func (a *routeAttempt) observeRawFrame(data string) {
-	if a.firstOutput.Load() != 0 || a.rawPayload.Load() {
+	if a.firstOutput.Load() != 0 {
+		return
+	}
+	// Read the request-caused end before the payload short-circuit: the same
+	// hidden tail frame can carry both a tool call and a length limit, and the
+	// end reason decides the ignored outcome.
+	if streamEventEnd(data) == streamEndRequest {
+		a.requestEnded.Store(true)
+	}
+	if a.rawPayload.Load() {
 		return
 	}
 	if streamEventHasOutput(data) {
@@ -99,8 +108,6 @@ func (a *routeAttempt) observeRawFrame(data string) {
 		return
 	}
 	switch streamEventEnd(data) {
-	case streamEndRequest:
-		a.requestEnded.Store(true)
 	case streamEndNormal:
 		a.rawCompleted.Store(true)
 	case streamEndUnproven:

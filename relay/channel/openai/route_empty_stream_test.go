@@ -95,6 +95,9 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 	stopWithUsage := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":0,"total_tokens":9}}`
 	// The same hidden tail frame carrying a named tool call is output.
 	toolWithUsage := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":9,"completion_tokens":0,"total_tokens":9}}`
+	// The hidden tail frame ends the request at a length limit while carrying a
+	// tool call: the reason is the length limit, not a missing output.
+	toolAtLengthLimit := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"length"}],"usage":{"prompt_tokens":9,"completion_tokens":0,"total_tokens":9}}`
 	for _, tc := range []struct {
 		name, outcome, reason string
 		frames, client        []string
@@ -110,6 +113,7 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 		{name: "conflicting output aliases", outcome: "ignored", reason: "no_visible_output", frames: []string{role, stop, conflictingOutput}, client: []string{role, stop}},
 		{name: "stop only in the unforwarded usage tail frame", outcome: "failure", reason: "empty_stream", frames: []string{role, stopWithUsage}, client: []string{role}},
 		{name: "tool call only in the unforwarded usage tail frame", outcome: "ignored", reason: "no_visible_output", frames: []string{role, toolWithUsage}, client: []string{role}},
+		{name: "tool call at a length limit in the unforwarded usage tail frame", outcome: "ignored", reason: "request_terminated", frames: []string{role, toolAtLengthLimit}, client: []string{role}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, ev := runRouteStream(t, "/v1/chat/completions", types.RelayFormatOpenAI, openai.OaiStreamHandler, tc.frames, true)

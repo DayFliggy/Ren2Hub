@@ -8362,7 +8362,7 @@
       "path": "relay/channel/openai/route_empty_stream_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2868a3c6b42df2b74de3557b7aec1c11909ecc291c42e2a1f72c69692fc096f5"
+      "local_sha256": "3885cab920a04b5653bf687c0a701accbb067d93df671e00686cbdb4c9088f44"
     },
     {
       "path": "relay/channel/openai/route_usage_evidence_test.go",
@@ -13004,7 +13004,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aca033907d427367af551acd1b7245d85176a5d18b52ca37f1530bc4f480be2f",
+      "local_sha256": "0829f06b5da26b128be06d76a4bb3ad955af3e9b0b9f10fd6d1e81ad71197ec1",
       "reasons": [
         "concurrency",
         "token-routing"
