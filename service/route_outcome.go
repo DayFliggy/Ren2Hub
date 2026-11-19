@@ -133,11 +133,16 @@ func upstreamErrorMessage(apiErr *types.NewAPIError) string {
 // also apostrophes ("This model's maximum context length").
 var quotedText = regexp.MustCompile("\"[^\"]*\"|“[^”]*”|`[^`]*`")
 
+// contextLimitReport is the canonical limit report of OpenAI-compatible
+// upstreams, "This model's maximum context length is 128000 tokens": stating
+// the limit as a number is itself the overflow report.
+var contextLimitReport = regexp.MustCompile(`\bmax(imum)? context length is \d`)
+
 // contextOverflowMessage holds the overflow phrases of OpenAI-compatible,
-// Anthropic and Gemini upstreams in one table. Error codes and complete
-// overflow sentences match alone; a phrase that only names the limit, such as
-// "maximum context length", also needs overflow wording, so a fault that
-// merely mentions the setting does not match.
+// Anthropic and Gemini upstreams in one table. Error codes, complete overflow
+// sentences and the numeric limit report match alone; a phrase that only
+// names the limit, such as "maximum context length", also needs overflow
+// wording, so a fault that merely mentions the setting does not match.
 func contextOverflowMessage(message string) bool {
 	text := quotedText.ReplaceAllString(strings.ToLower(message), "")
 	if text == "" {
@@ -149,6 +154,9 @@ func contextOverflowMessage(message string) bool {
 		}
 	}
 	if strings.Contains(text, "input token count") && strings.Contains(text, "exceeds the maximum") {
+		return true
+	}
+	if contextLimitReport.MatchString(text) {
 		return true
 	}
 	limit := false

@@ -13183,7 +13183,7 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4dd57f26a30eaa471d51506b9eb065fef530170a8aedf4405bdedb6a104b68b6",
+      "local_sha256": "bb025ac5044abae0bd4c9171bfe737204c53a50d60479cc243738f486bb0f9c6",
       "reasons": [
         "token-routing",
         "ops-metrics"
@@ -13197,7 +13197,7 @@
       "path": "service/route_outcome_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "490ef096714cff5095bb29e3ba367a372538b744d5d1a5934c6e247c744a7b98"
+      "local_sha256": "d2adf96b8c3f39881184324e6e9de2f8cdae15893897beb5622b7bf35d7545cf"
     },
     {
       "path": "service/route_pin_test.go",

@@ -143,6 +143,8 @@ func TestRouteOutcomeIgnoresWrappedContextOverflow(t *testing.T) {
 		"context length too long for the selected model",
 		"Error code context_length_exceeded from provider",
 		"max context length reached",
+		// The limit report of OpenAI-compatible upstreams, verbatim from the plan.
+		"This model's maximum context length is 128000 tokens",
 	} {
 		t.Run(message, func(t *testing.T) {
 			c := routeOutcomeTestContext(t)
