@@ -13331,7 +13331,7 @@
       "path": "service/route_stream_output_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "624acb95aab714da8d836a1a1e1463d6a80b05898605377a22e30da712f38cd3"
+      "local_sha256": "17626e1879d925916a4f5ddb51b2c79233159050168e507731cbe8cc44516e41"
     },
     {
       "path": "service/route_task_poll.go",

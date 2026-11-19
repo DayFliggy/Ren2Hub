@@ -82,6 +82,8 @@ func TestRouteLatencyWaitsForEffectiveOutputAndResetsPerAttempt(t *testing.T) {
 	ObserveRouteStreamOutput(c, `{"type":"response.created"}`)
 	FinishRouteAttempt(c, info, nil)
 	row = routeObservations.get(912, "delayed-model", 1, true)
-	require.Equal(t, 2, row.Samples)
-	require.Equal(t, 1, row.LatencySamples, "control-only success has no invented latency")
+	// A control-only stream without a completion is ignored (no_visible_output):
+	// it writes neither a sample nor an invented latency.
+	require.Equal(t, 1, row.Samples)
+	require.Equal(t, 1, row.LatencySamples)
 }
