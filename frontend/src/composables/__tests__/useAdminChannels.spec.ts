@@ -135,7 +135,7 @@ describe('native channel management', () => {
     expect(toast.warning).toHaveBeenCalledWith('common.publicationPending')
     expect(toast.error).not.toHaveBeenCalled()
   })
-  it('uses native listing, search and multi-key creation without business groups', async () => {
+  it('uses native listing, search and single creation without business groups', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue(page)
     const post = vi.spyOn(api, 'post').mockResolvedValue(null)
     const state = await setup()
@@ -147,15 +147,10 @@ describe('native channel management', () => {
       expect.objectContaining({ keyword: 'Native', p: 1, page_size: 20 }),
       expect.any(Object)
     )
-    expect(
-      await state.createChannel(input, {
-        multiKey: true,
-        multiKeyMode: 'polling',
-      })
-    ).toBe(true)
+    expect(await state.createChannel(input)).toBe(true)
     expect(post).toHaveBeenCalledWith(
       '/api/channel/',
-      { mode: 'multi_to_single', multi_key_mode: 'polling', channel: input },
+      { mode: 'single', channel: input },
       { signal: expect.any(AbortSignal) }
     )
   })
@@ -178,15 +173,6 @@ describe('native channel management', () => {
           { input_index: 0, channel_id: 101 },
           { input_index: 1, channel_id: 102 },
         ],
-      },
-    },
-    {
-      name: 'merged keys',
-      options: { multiKey: true, multiKeyMode: 'polling' },
-      result: {
-        id: 101,
-        ids: [101],
-        results: [{ input_index: 0, channel_id: 101 }],
       },
     },
   ])(
@@ -338,20 +324,9 @@ describe('native channel management', () => {
     })
   })
   it('queries balances only for channel types with a backend balance branch', async () => {
-    const multiKey = {
-      ...channel,
-      id: 102,
-      channel_info: {
-        is_multi_key: true,
-        multi_key_mode: 'random' as const,
-        multi_key_size: 2,
-        multi_key_status_list: null,
-      },
-    }
     const unsupported = [
       { ...channel, id: 103, type: 3 },
       { ...channel, id: 104, type: 14 },
-      multiKey,
     ]
     const supported = [
       channel,
@@ -361,7 +336,7 @@ describe('native channel management', () => {
     ]
     vi.spyOn(api, 'get').mockResolvedValue({
       items: [...unsupported, ...supported],
-      total: 7,
+      total: 6,
       type_counts: {},
     })
     const request = vi

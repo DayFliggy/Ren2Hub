@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { api } from '@/api/client'
 import { clearAuthBundle } from '@/api/authSession'
+import PluginCredentials from '../components/PluginCredentials.vue'
 import PluginLoginDialog from '../components/PluginLoginDialog.vue'
 import {
   parsePluginLoginStep,
@@ -68,11 +69,13 @@ describe('plugin login contracts', () => {
       .mockResolvedValueOnce({ step: { type: 'done' } })
       .mockResolvedValueOnce({ channel_id: 4, step: { type: 'done' } })
     const signal = new AbortController().signal
-    await startPluginLogin(4, null, true, signal)
+    // A channel holds one credential: a login replaces it, so the request
+    // names no key line and never asks to add one.
+    await startPluginLogin(4, signal)
     expect(post).toHaveBeenNthCalledWith(
       1,
       '/api/channel/4/plugin_login',
-      { add: true },
+      {},
       { signal }
     )
     await continuePluginLogin(4, 'state', { fields: { otp: '123' } }, signal)
@@ -104,7 +107,7 @@ describe('plugin login contracts', () => {
         })
     )
     const wrapper = mount(PluginLoginDialog, {
-      props: { channelId: 4, add: true },
+      props: { channelId: 4 },
       global,
     })
     expect(post).toHaveBeenCalledTimes(1)
@@ -141,7 +144,7 @@ describe('plugin login contracts', () => {
       .mockResolvedValueOnce({ step: { type: 'pending', interval: 1 } })
       .mockResolvedValueOnce({ step: { type: 'done' } })
     const wrapper = mount(PluginLoginDialog, {
-      props: { channelId: 4, add: true },
+      props: { channelId: 4 },
       global,
     })
     await flushPromises()
@@ -168,7 +171,7 @@ describe('plugin login contracts', () => {
       },
     })
     const wrapper = mount(PluginLoginDialog, {
-      props: { channelId: 4, add: true },
+      props: { channelId: 4 },
       global,
     })
     await flushPromises()
@@ -193,7 +196,7 @@ describe('plugin login contracts', () => {
       step: { type: 'redirect', url: 'https://provider.test' },
     })
     const wrapper = mount(PluginLoginDialog, {
-      props: { channelId: 4, add: true },
+      props: { channelId: 4 },
       global,
     })
     await flushPromises()
@@ -211,7 +214,7 @@ describe('plugin login contracts', () => {
       step: { type: 'pending', interval: 1 },
     })
     const wrapper = mount(PluginLoginDialog, {
-      props: { channelId: 4, add: true },
+      props: { channelId: 4 },
       global,
     })
     await flushPromises()
@@ -219,6 +222,43 @@ describe('plugin login contracts', () => {
     await vi.advanceTimersByTimeAsync(5000)
     expect(post).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('done')).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+describe('plugin credentials', () => {
+  const buttons = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.findAll('button').map((button) => button.text())
+  it('offers one sign-in when the channel has no credential', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ items: [] })
+    const wrapper = mount(PluginCredentials, {
+      props: { channelId: 4, canWrite: true },
+      global,
+    })
+    await flushPromises()
+    expect(buttons(wrapper)).toEqual(['pluginExtensions.signIn'])
+    wrapper.unmount()
+  })
+  it('logs the stored credential in again and offers no second account', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      items: [{ label: 'fixture@example.com' }],
+    })
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ flow: 'state', step: { type: 'pending' } })
+    const wrapper = mount(PluginCredentials, {
+      props: { channelId: 4, canWrite: true },
+      global,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('fixture@example.com')
+    expect(buttons(wrapper)).toEqual(['pluginExtensions.relogin'])
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith(
+      '/api/channel/4/plugin_login',
+      {},
+      expect.any(Object)
+    )
     wrapper.unmount()
   })
 })

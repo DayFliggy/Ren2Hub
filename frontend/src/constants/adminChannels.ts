@@ -223,20 +223,15 @@ const BALANCE_QUERY_TYPES: ReadonlySet<number> = new Set([
   1, 8, 10, 12, 13, 20, 25, 40, 43, 58, 59, 60,
 ])
 
-/** UpdateChannelBalance also rejects every multi-key channel. */
 export function supportsBalanceQuery(
-  channel: Pick<AdminChannel, 'type' | 'channel_info'>
+  channel: Pick<AdminChannel, 'type'>
 ): boolean {
-  return (
-    channel.type === 61 ||
-    (BALANCE_QUERY_TYPES.has(channel.type) &&
-      channel.channel_info?.is_multi_key !== true)
-  )
+  return channel.type === 61 || BALANCE_QUERY_TYPES.has(channel.type)
 }
 
 /**
  * Mirrors channelSensitiveFields in controller/channel_authz.go: the upstream
- * edit-form list plus channel_ratio and key_mode. Without ChannelSensitiveWrite
+ * edit-form list plus channel_ratio. Without ChannelSensitiveWrite
  * the edit form sends none of them, so UpdateChannel keeps the stored values
  * and skips the type-specific validation they would trigger.
  */
@@ -251,7 +246,6 @@ export const CHANNEL_SENSITIVE_UPDATE_FIELDS: readonly string[] = [
   'settings',
   'other',
   'channel_ratio',
-  'key_mode',
 ]
 
 export function withoutSensitiveChannelFields(
@@ -282,33 +276,6 @@ export function adminChannelStatusLabelKey(
   if (status === 1) return 'channels.statusEnabled'
   if (status === 2) return 'channels.statusDisabled'
   return 'channels.statusAutoDisabled'
-}
-
-export interface MultiKeyAvailability {
-  enabled: number
-  total: number
-  /** 1-based key positions, matching the native key numbering. */
-  disabled: Array<{ position: number; status: 2 | 3 }>
-}
-
-/**
- * Native multi_key_status_list stores disabled keys only, so the enabled
- * count is the key total minus its entries. Returns null for single-key
- * channels, which have no per-key state to show.
- */
-export function multiKeyAvailability(
-  channel: Pick<AdminChannel, 'channel_info'>
-): MultiKeyAvailability | null {
-  const info = channel.channel_info
-  if (!info?.is_multi_key || info.multi_key_size <= 0) return null
-  const disabled = Object.entries(info.multi_key_status_list ?? {})
-    .map(([index, status]) => ({ position: Number(index) + 1, status }))
-    .sort((left, right) => left.position - right.position)
-  return {
-    enabled: Math.max(0, info.multi_key_size - disabled.length),
-    total: info.multi_key_size,
-    disabled,
-  }
 }
 
 export function adminChannelResponseTone(

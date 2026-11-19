@@ -28,7 +28,6 @@ export const pluginExtensionMessages = {
     bindingFollowsPlugin: '按插件建议的范围运行，不受这里的绑定影响',
     login: '插件账号登录',
     signIn: '登录账号',
-    addAccount: '添加账号',
     relogin: '重新登录',
     saveBeforeLogin: '先保存渠道，再登录插件账号。',
     openLogin: '打开授权页面',
@@ -234,7 +233,6 @@ export const pluginExtensionMessages = {
       'Runs where its plugin suggests; this binding has no effect',
     login: 'Plugin account login',
     signIn: 'Log in',
-    addAccount: 'Add account',
     relogin: 'Log in again',
     saveBeforeLogin:
       'Save the channel before logging in to the plugin account.',

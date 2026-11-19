@@ -27,6 +27,19 @@ vi.mock('@/stores/app', () => ({
     featureStatus: () => (mocks.enabled ? 'live' : 'disabled'),
   }),
 }))
+const global = {
+  plugins: [
+    createI18n({
+      legacy: false,
+      locale: 'en',
+      missingWarn: false,
+      fallbackWarn: false,
+    }),
+  ],
+  stubs: {
+    ConsoleModal: { template: '<div><slot /><slot name="footer" /></div>' },
+  },
+}
 function setup(patch: Partial<AdminChannel> = {}) {
   const save = vi.fn().mockResolvedValue(true)
   const editing = {
@@ -43,19 +56,7 @@ function setup(patch: Partial<AdminChannel> = {}) {
   } as AdminChannel
   const wrapper = mount(ChannelFormModal, {
     props: { open: true, editing, save, fetchModels: vi.fn() },
-    global: {
-      plugins: [
-        createI18n({
-          legacy: false,
-          locale: 'en',
-          missingWarn: false,
-          fallbackWarn: false,
-        }),
-      ],
-      stubs: {
-        ConsoleModal: { template: '<div><slot /><slot name="footer" /></div>' },
-      },
-    },
+    global,
   })
   return { wrapper, save, editing }
 }
@@ -132,39 +133,43 @@ describe('channel model prefill integration', () => {
     })
     wrapper.unmount()
   })
-  it('appends keys and updates strategy without exposing existing keys', async () => {
+  it('creates a channel from one key or a batch of keys, never a key list', async () => {
     mocks.canSensitiveWrite = true
-    const { wrapper, save } = setup({
-      channel_info: {
-        is_multi_key: true,
-        multi_key_mode: 'random',
-        multi_key_size: 2,
-        multi_key_status_list: null,
+    const wrapper = mount(ChannelFormModal, {
+      props: {
+        open: true,
+        editing: null,
+        save: vi.fn().mockResolvedValue(true),
+        fetchModels: vi.fn(),
       },
+      global,
     })
     expect(
-      (
-        wrapper.get('textarea[name="admin-channel-key-multi"]')
-          .element as HTMLTextAreaElement
-      ).value
-    ).toBe('')
+      wrapper
+        .get('[role="radiogroup"][aria-label="channels.addMode"]')
+        .findAll('[role="radio"]')
+        .map((mode) => mode.text())
+    ).toEqual(['channels.addModeSingle', 'channels.addModeMulti'])
+    wrapper.unmount()
+  })
+  it('replaces the key of an existing channel in one field', async () => {
+    mocks.canSensitiveWrite = true
+    const { wrapper, save } = setup()
+    expect(
+      wrapper.find('textarea[name="admin-channel-key-multi"]').exists()
+    ).toBe(false)
     await wrapper
-      .get('textarea[name="admin-channel-key-multi"]')
+      .get('input[name="admin-channel-key"]')
       .setValue('new-fixture-key')
-    const strategy = wrapper
-      .findAll('select')
-      .find((select) => select.find('option[value="polling"]').exists())!
-    await strategy.setValue('polling')
     await wrapper
       .findAll('button')
       .find((button) => button.text().includes('channels.saveChannel'))!
       .trigger('click')
     await flushPromises()
-    expect(save.mock.calls[0]![0]).toMatchObject({
-      key: 'new-fixture-key',
-      key_mode: 'append',
-      multi_key_mode: 'polling',
-    })
+    const update = save.mock.calls[0]![0]
+    expect(update.key).toBe('new-fixture-key')
+    expect(update).not.toHaveProperty('key_mode')
+    expect(update).not.toHaveProperty('multi_key_mode')
     wrapper.unmount()
   })
   it('preserves existing settings and plugin bindings when enabling Responses WebSocket', async () => {

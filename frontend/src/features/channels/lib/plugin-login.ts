@@ -2,7 +2,6 @@ import { api } from '@/api/client'
 import type { LocalizedTextValue } from '@/features/task-plugins/types'
 export const PLUGIN_LOGIN_BROADCAST_CHANNEL = 'ren2hub-plugin-login'
 export type PluginCredentialSummary = {
-  index: number
   label?: string
   account_id?: string
   expires_at?: number
@@ -82,15 +81,14 @@ export function parsePluginLoginStep(value: unknown): PluginLoginStep {
   }
   throw new Error('Invalid plugin login response')
 }
+/** A login replaces the channel's one credential, so it names no key line. */
 export async function startPluginLogin(
   channelId: number,
-  keyIndex: number | null,
-  add: boolean,
   signal?: AbortSignal
 ) {
   const data = await api.post<{ flow: string; step: unknown }>(
     `/api/channel/${channelId}/plugin_login`,
-    add ? { add: true } : { key_index: keyIndex },
+    {},
     { signal }
   )
   if (typeof data.flow !== 'string' || !data.flow)

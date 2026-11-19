@@ -34,7 +34,6 @@ import { formatQuota, relativeTime } from '@/utils/format'
 import { formatDecimal } from '@/utils/decimal'
 
 import ChannelInlineNumber from './ChannelInlineNumber.vue'
-import ChannelKeyStatus from './ChannelKeyStatus.vue'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 
 type ChannelAction = 'priority' | 'weight' | 'status' | 'balance'
@@ -362,10 +361,6 @@ function responseDisplay(channel: AdminChannel): {
                   "
                   :channel="channel"
                   mobile
-                />
-                <ChannelKeyStatus
-                  v-if="visibleFields.includes('status')"
-                  :channel="channel"
                 />
               </div>
             </header>

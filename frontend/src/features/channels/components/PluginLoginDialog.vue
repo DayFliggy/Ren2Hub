@@ -15,11 +15,7 @@ import {
   type PluginLoginInput,
   type PluginLoginStep,
 } from '../lib/plugin-login'
-const props = defineProps<{
-  channelId: number
-  keyIndex?: number | null
-  add?: boolean
-}>()
+const props = defineProps<{ channelId: number }>()
 const emit = defineEmits<{ close: []; done: [] }>()
 const { t, locale } = useI18n()
 const step = ref<PluginLoginStep | null>(null)
@@ -110,12 +106,7 @@ async function send(input?: PluginLoginInput) {
       )
       if (isCurrent(current)) receive(next)
     } else {
-      const result = await startPluginLogin(
-        props.channelId,
-        props.keyIndex ?? null,
-        props.add ?? false,
-        request.signal
-      )
+      const result = await startPluginLogin(props.channelId, request.signal)
       if (isCurrent(current)) {
         flow.value = result.flow
         receive(result.step)

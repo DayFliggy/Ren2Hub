@@ -11,7 +11,7 @@ const props = defineProps<{ channelId: number; canWrite: boolean }>()
 const { t } = useI18n()
 const credentials = ref<PluginCredentialSummary[]>([])
 const error = ref('')
-const login = ref<{ keyIndex: number | null; add: boolean } | null>(null)
+const login = ref(false)
 let request: AbortController | undefined
 async function load() {
   request?.abort()
@@ -29,7 +29,7 @@ async function load() {
 watch(
   () => props.channelId,
   () => {
-    login.value = null
+    login.value = false
     void load()
   },
   { immediate: true }
@@ -42,40 +42,32 @@ onBeforeUnmount(() => request?.abort())
       {{ error }}
     </p>
     <div
-      v-for="credential in credentials"
-      :key="credential.index"
+      v-for="(credential, index) in credentials"
+      :key="index"
       class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] p-2"
     >
       <span class="break-all text-sm">{{
         credential.label ||
         credential.account_id ||
-        `${t('pluginExtensions.credential')} ${credential.index + 1}`
+        t('pluginExtensions.credential')
       }}</span
       ><ConsoleButton
         v-if="canWrite"
         size="sm"
         variant="secondary"
-        @click="login = { keyIndex: credential.index, add: false }"
+        @click="login = true"
         >{{ t('pluginExtensions.relogin') }}</ConsoleButton
       >
     </div>
     <ConsoleButton
-      v-if="canWrite"
+      v-if="canWrite && !credentials.length"
       size="sm"
-      @click="login = { keyIndex: null, add: credentials.length > 0 }"
-      >{{
-        t(
-          credentials.length
-            ? 'pluginExtensions.addAccount'
-            : 'pluginExtensions.signIn'
-        )
-      }}</ConsoleButton
+      @click="login = true"
+      >{{ t('pluginExtensions.signIn') }}</ConsoleButton
     ><PluginLoginDialog
       v-if="login"
       :channel-id="channelId"
-      :key-index="login.keyIndex"
-      :add="login.add"
-      @close="login = null"
+      @close="login = false"
       @done="load"
     />
   </div>

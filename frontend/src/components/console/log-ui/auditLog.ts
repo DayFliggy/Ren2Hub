@@ -91,7 +91,6 @@ export const AUDIT_LOG_ACTION_LABEL_KEYS: Record<string, string> = {
   'channel.tag_edit': 'auditLogs.actions.channelTagEdit',
   'channel.tag_batch_set': 'auditLogs.actions.channelTagBatchSet',
   'channel.copy': 'auditLogs.actions.channelCopy',
-  'channel.multi_key_manage': 'auditLogs.actions.channelMultiKeyManage',
   'channel.upstream_apply': 'auditLogs.actions.channelUpstreamApply',
   'channel.upstream_apply_all': 'auditLogs.actions.channelUpstreamApplyAll',
   'channel.upstream_detect_all': 'auditLogs.actions.channelUpstreamDetectAll',

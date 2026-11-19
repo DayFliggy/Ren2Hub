@@ -35,7 +35,7 @@ for (const theme of ['light', 'dark'] as const) {
     await waitForStablePage(page)
     await page.getByRole('button', { name: '新建渠道', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '新建渠道', exact: true })
-    await dialog.getByRole('radio', { name: '多密钥渠道', exact: true }).click()
+    await dialog.getByRole('radio', { name: '批量密钥', exact: true }).click()
     const controls = dialog.locator(
       'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):visible, textarea:visible, select:visible'
     )

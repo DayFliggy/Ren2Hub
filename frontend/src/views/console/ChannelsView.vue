@@ -44,7 +44,6 @@ import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSy
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
 import ChannelStatusBadge from '@/components/console/channels/ChannelStatusBadge.vue'
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
-import ChannelKeyStatus from '@/components/console/channels/ChannelKeyStatus.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
 import ChannelTestPickerDialog from '@/components/console/channels/ChannelTestPickerDialog.vue'
@@ -72,7 +71,6 @@ import {
   hasInvalidModelMapping,
   isRetiredChannelType,
   labDisplayName,
-  multiKeyAvailability,
   sanitizeAdminChannelVisibleFields,
   supportsBalanceQuery,
 } from '@/constants/adminChannels'
@@ -1261,9 +1259,6 @@ function routeQualitySummary(row: AdminChannelTableRow) {
               <ChannelStatusBadge
                 :channel="channelFromRow(row as AdminChannelTableRow)"
               />
-              <ChannelKeyStatus
-                :channel="channelFromRow(row as AdminChannelTableRow)"
-              />
             </div>
           </template>
           <template #cell-priority="{ row }">
@@ -1694,18 +1689,6 @@ function routeQualitySummary(row: AdminChannelTableRow) {
         <div>
           <dt class="text-[var(--text-tertiary)]">{{ t('channels.lab') }}</dt>
           <dd class="mt-1">{{ labDisplayName(runtimeChannel.lab) }}</dd>
-        </div>
-        <div
-          v-if="multiKeyAvailability(runtimeChannel)"
-          class="col-span-2"
-          data-channel-runtime-keys
-        >
-          <dt class="text-[var(--text-tertiary)]">
-            {{ t('channels.keyStatus') }}
-          </dt>
-          <dd class="mt-1">
-            <ChannelKeyStatus :channel="runtimeChannel" detailed />
-          </dd>
         </div>
       </dl>
       <ChannelProviderStatus

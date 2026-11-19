@@ -305,16 +305,17 @@ for (const [theme, width] of [
     })
     await createDialog
       .locator('[name="admin-channel-name"]')
-      .fill('Multi-Key Fixture')
+      .fill('Single-Key Fixture')
+    // A channel holds one key: the dialog offers one key or a batch of
+    // channels, never a key list on one channel.
+    await expect(
+      createDialog
+        .getByRole('radiogroup', { name: '添加模式' })
+        .getByRole('radio')
+    ).toHaveText(['单密钥', '批量密钥'])
     await createDialog
-      .getByRole('radio', { name: '多密钥渠道', exact: true })
-      .click()
-    await createDialog
-      .locator('[name="admin-channel-key-multi"]')
-      .fill('fixture-key-a\nfixture-key-b')
-    await createDialog
-      .getByRole('combobox', { name: '密钥选择策略', exact: true })
-      .selectOption('polling')
+      .locator('[name="admin-channel-key"]')
+      .fill('fixture-key-a')
     await createDialog
       .getByPlaceholder('选择模型或添加自定义模型', { exact: true })
       .fill('fixture-model')
@@ -323,7 +324,7 @@ for (const [theme, width] of [
       .press('Enter')
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
-      path: test.info().outputPath('multi-key-channel.png'),
+      path: test.info().outputPath('new-channel.png'),
       fullPage: true,
     })
     await createDialog
@@ -331,14 +332,14 @@ for (const [theme, width] of [
       .click()
     await expect(createDialog).toHaveCount(0)
     expect(created).toMatchObject({
-      mode: 'multi_to_single',
-      multi_key_mode: 'polling',
+      mode: 'single',
       channel: {
-        name: 'Multi-Key Fixture',
-        key: 'fixture-key-a\nfixture-key-b',
+        name: 'Single-Key Fixture',
+        key: 'fixture-key-a',
         models: 'fixture-model',
       },
     })
+    expect(created).not.toHaveProperty('multi_key_mode')
     await assertNoHorizontalOverflow(page)
   })
 }

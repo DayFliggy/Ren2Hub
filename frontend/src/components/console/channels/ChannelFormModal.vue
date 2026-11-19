@@ -108,11 +108,6 @@ const visibleFieldSettings = computed(() =>
     (field.types as readonly number[]).includes(form.type)
   )
 )
-const multiKeyMode = ref<'random' | 'polling'>('random')
-const keyMode = ref<'append' | 'replace'>('append')
-const existingMultiKey = computed(
-  () => props.editing?.channel_info?.is_multi_key === true
-)
 const validOverrides = computed(() => {
   try {
     parseChannelObject(paramOverride.value)
@@ -271,7 +266,7 @@ const form = reactive({
   enabled: true,
   // Credentials
   key: '',
-  addMode: 'single' as 'single' | 'multi' | 'multiKey',
+  addMode: 'single' as 'single' | 'multi',
   baseUrl: '',
   // Models
   models: '',
@@ -556,9 +551,6 @@ watch(
     form.enabled = ch ? ch.status === 1 : true
     form.key = ''
     form.addMode = 'single'
-    multiKeyMode.value =
-      ch?.channel_info?.multi_key_mode === 'polling' ? 'polling' : 'random'
-    keyMode.value = 'append'
     paramOverride.value =
       typeof ch?.param_override === 'string' ? ch.param_override : ''
     headerOverride.value =
@@ -724,11 +716,6 @@ async function submit() {
         base.param_override = paramOverride.value.trim()
       if (headerOverride.value !== (props.editing?.header_override ?? ''))
         base.header_override = headerOverride.value.trim()
-      if (
-        existingMultiKey.value &&
-        multiKeyMode.value !== props.editing?.channel_info?.multi_key_mode
-      )
-        base.multi_key_mode = multiKeyMode.value
     }
     if (canSensitiveWrite.value) {
       const otherSettings = { ...originalOtherSettings.value }
@@ -778,9 +765,6 @@ async function submit() {
       }
       const created = await props.save(input, {
         batchKeys: form.addMode === 'multi',
-        ...(form.addMode === 'multiKey'
-          ? { multiKey: true, multiKeyMode: multiKeyMode.value }
-          : {}),
       })
       if (created) emit('close')
       return
@@ -790,8 +774,6 @@ async function submit() {
     // ChannelSensitiveWrite can still save routing-level edits.
     const replacementKey = loginPlugin.value ? '' : form.key.trim()
     if (canSensitiveWrite.value && replacementKey) base.key = replacementKey
-    if (canSensitiveWrite.value && replacementKey && existingMultiKey.value)
-      base.key_mode = keyMode.value
     const update = canSensitiveWrite.value
       ? base
       : withoutSensitiveChannelFields(base)
@@ -1149,7 +1131,6 @@ async function submit() {
                   v-for="mode in [
                     { value: 'single', label: t('channels.addModeSingle') },
                     { value: 'multi', label: t('channels.addModeMulti') },
-                    { value: 'multiKey', label: t('channels.addModeMultiKey') },
                   ]"
                   :key="mode.value"
                   type="button"
@@ -1161,9 +1142,7 @@ async function submit() {
                       ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
                       : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
                   "
-                  @click="
-                    form.addMode = mode.value as 'single' | 'multi' | 'multiKey'
-                  "
+                  @click="form.addMode = mode.value as 'single' | 'multi'"
                 >
                   {{ mode.label }}
                 </button>
@@ -1176,12 +1155,12 @@ async function submit() {
                 t('channels.apiKeyLabel') + (editing === null ? ' *' : '')
               "
               :hint="
-                form.addMode !== 'single' || existingMultiKey
+                form.addMode === 'multi'
                   ? t('channels.apiKeyMultiHint')
                   : t('channels.apiKeyHint')
               "
             >
-              <template v-if="form.addMode === 'single' && !existingMultiKey">
+              <template v-if="form.addMode === 'single'">
                 <TextInput
                   v-model="form.key"
                   type="password"
@@ -1203,41 +1182,6 @@ async function submit() {
                 />
               </template>
             </FormField>
-            <div
-              v-if="form.addMode === 'multiKey' || existingMultiKey"
-              class="mt-3 grid gap-3 sm:grid-cols-2"
-            >
-              <FormField :label="t('channels.multiKeyStrategy')"
-                ><select
-                  v-model="multiKeyMode"
-                  :aria-label="t('channels.multiKeyStrategy')"
-                  :disabled="!canSensitiveWrite"
-                  class="channel-form-textarea"
-                >
-                  <option value="random">
-                    {{ t('channels.multiKeyRandom') }}
-                  </option>
-                  <option value="polling">
-                    {{ t('channels.multiKeyPolling') }}
-                  </option>
-                </select></FormField
-              >
-              <FormField
-                v-if="existingMultiKey"
-                :label="t('channels.keyUpdateMode')"
-                ><select
-                  v-model="keyMode"
-                  :aria-label="t('channels.keyUpdateMode')"
-                  :disabled="!canSensitiveWrite"
-                  class="channel-form-textarea"
-                >
-                  <option value="append">{{ t('channels.keyAppend') }}</option>
-                  <option value="replace">
-                    {{ t('channels.keyReplace') }}
-                  </option>
-                </select></FormField
-              >
-            </div>
           </div>
         </div>
       </section>

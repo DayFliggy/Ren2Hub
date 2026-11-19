@@ -472,14 +472,7 @@ export function useAdminChannels() {
       await api.post<AdminChannelCreateResult>(
         '/api/channel/',
         {
-          mode: options?.multiKey
-            ? 'multi_to_single'
-            : options?.batchKeys
-              ? 'batch'
-              : 'single',
-          ...(options?.multiKey
-            ? { multi_key_mode: options.multiKeyMode ?? 'random' }
-            : {}),
+          mode: options?.batchKeys ? 'batch' : 'single',
           channel: input,
         },
         { signal }
