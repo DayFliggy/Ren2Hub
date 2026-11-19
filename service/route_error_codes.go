@@ -56,7 +56,7 @@ var localRouteErrorCodes = []string{
 	string(types.ErrorCodeBadResponseBody), string(types.ErrorCodeEmptyResponse), string(types.ErrorCodeAwsInvokeError),
 	string(types.ErrorCodeModelNotFound), string(types.ErrorCodePromptBlocked), string(types.ErrorCodeQueryDataError),
 	string(types.ErrorCodeUpdateDataError), string(types.ErrorCodeInsufficientUserQuota), string(types.ErrorCodePreConsumeTokenQuotaFailed),
-	routeReasonContextOverflow, routeReasonEmptyStream, routeReasonNoVisibleOutput, routeReasonRequestTerminate,
+	routeReasonContextOverflow, routeReasonEmptyStream, routeReasonNoVisibleOutput, routeReasonRequestTerminate, routeReasonNoGeneration,
 }
 
 // routeErrorCodes is the one table of error codes routing reads: the account

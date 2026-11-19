@@ -22,6 +22,7 @@ const (
 	routeReasonEmptyStream      = "empty_stream"
 	routeReasonNoVisibleOutput  = "no_visible_output"
 	routeReasonRequestTerminate = "request_terminated"
+	routeReasonNoGeneration     = "no_generation"
 )
 
 // routeOutcome is the single place that turns the native classification into
@@ -34,11 +35,17 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 	if outcome == perfmetrics.OutcomeFailure && a.requestContextOverflow(apiErr) {
 		return perfmetrics.OutcomeIgnored, routeReasonContextOverflow
 	}
-	// A realtime connection is not one generation, and a request that does not
-	// ask for generation (ObserveRouteGenerate) has nothing to generate:
-	// neither is an empty stream when it ends without output.
+	// A request that does not ask for generation (ObserveRouteGenerate) and
+	// produced no output says nothing about generation: it is neither an empty
+	// stream nor a success that could close a breaker or add quality samples.
+	// Its upstream failures keep the native classification above.
+	if outcome == perfmetrics.OutcomeSuccess && a.noGeneration && a.firstOutput.Load() == 0 {
+		return perfmetrics.OutcomeIgnored, routeReasonNoGeneration
+	}
+	// A realtime connection is not one generation: connecting and closing
+	// without asking for a response is not an empty stream.
 	if outcome == perfmetrics.OutcomeSuccess && info.IsStream && info.RelayMode != relayconstant.RelayModeRealtime &&
-		!a.noGeneration && a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
+		a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
 		return a.emptyStreamOutcome()
 	}
 	return outcome, ""

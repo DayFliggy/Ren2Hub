@@ -2371,7 +2371,7 @@
       "path": "controller/responses_websocket_generate_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d590057217dadcc294c21b0ab00064433606491d859d47a75c16dfd0b3398eb1",
+      "local_sha256": "5b3f6b7fb31ccb9a56249efd537b5f3ab53c259a4f0c6dd5d9e8575a8c351ed0",
       "reasons": [
         "token-routing"
       ],
@@ -9935,7 +9935,7 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "5eff80a23e4c69573bb6598fec1a14205a59202833abdce7b8033557395a5b07",
-      "local_sha256": "0aefce4dd8d9442d94f6a3ba49f1732fd32cd232a4f3938b30395923a75b7194",
+      "local_sha256": "0cba71572f9fbe047161ac74b9ef9f1d99711d5523f63922176a9cedf2eccd01",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -9944,7 +9944,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 runCall 另把 response.create 的 generate 交给 service.ObserveRouteGenerate（不要求生成的请求不判空流），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 buildResponsesWSCreatePayload 把最终出站事件交给 service.ObserveRouteGenerate（实际不要求生成且没有输出的请求在路由上记 ignored），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -13004,7 +13004,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0829f06b5da26b128be06d76a4bb3ad955af3e9b0b9f10fd6d1e81ad71197ec1",
+      "local_sha256": "ac9eb2fdb57af7b54ed09b8a51950c54899be1669a1d399b4460ad79bff807cf",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13166,7 +13166,7 @@
       "path": "service/route_error_codes.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cb63aa415ea6e93775d33f284c2e5ac85001bb3e9305f52a3d4a872607d7588d",
+      "local_sha256": "ec6fc85e5d57caa19c618f627c9a8cf7c03eddb2cbf82431fcfaee75f28693d1",
       "reasons": [
         "token-routing",
         "ops-metrics"
@@ -13217,7 +13217,7 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "57968aa2443f98c5cb8541b8c604454d51f7d8601483f0c2b793a0160c09af32",
+      "local_sha256": "494b4d82db29e3c15807226e9d85e8dec9febed02c84b68f6d1e592d2075df94",
       "reasons": [
         "token-routing",
         "ops-metrics"

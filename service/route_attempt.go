@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -199,13 +198,15 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 	})
 }
 
-// ObserveRouteGenerate records the generate member of a Responses WebSocket
-// response.create. With generate:false the upstream only takes the input and
-// generates nothing (clients use it to warm a connection up), so its empty
-// completion is the normal result and keeps the native outcome. Each create
-// runs in its own context; call it before MarkRouteAttemptSent.
-func ObserveRouteGenerate(c *gin.Context, generate []byte) {
-	c.Set("route_no_generation", string(bytes.TrimSpace(generate)) == "false")
+// ObserveRouteGenerate reads the generate member of the response.create event
+// a Responses WebSocket request sends upstream, after parameter overrides and
+// outbound plugins. With generate:false the upstream only takes the input and
+// generates nothing (clients use it to warm a connection up); routing ignores
+// such a completion without output (routeOutcome). Each create runs in its own
+// context and rebuilds its event on every retry; call it with the final event
+// before MarkRouteAttemptSent.
+func ObserveRouteGenerate(c *gin.Context, event []byte) {
+	c.Set("route_no_generation", gjson.GetBytes(event, "generate").Type == gjson.False)
 }
 
 // FinishRouteAttempt records at most one sample and releases the attempt's channel slot.

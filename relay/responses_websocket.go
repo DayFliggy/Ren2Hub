@@ -245,7 +245,6 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	policy := service.RequestPolicy(c)
 	modelName := create.Request.Model
 	common.SetContextKey(c, appconstant.ContextKeyIsStream, true)
-	service.ObserveRouteGenerate(c, create.Generate)
 	started := time.Now()
 	var info *relaycommon.RelayInfo
 	billingPrepared := false
@@ -799,6 +798,7 @@ func buildResponsesWSCreatePayload(c *gin.Context, info *relaycommon.RelayInfo, 
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
+	service.ObserveRouteGenerate(c, event)
 	return event, nil
 }
 
