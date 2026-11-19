@@ -87,7 +87,7 @@ func resetRouteObservations(t *testing.T) {
 	rows, breakers, cooldowns, changed, floor, last := s.rows, s.breakers, s.cooldowns, s.changed, s.staleFloor, s.lastPrune
 	s.rows = map[routeObservationKey]RouteObservationSnapshot{}
 	s.breakers = map[routeBreakerKey]routeBreakerState{}
-	s.cooldowns = map[int]int64{}
+	s.cooldowns = map[int]routeCooldown{}
 	s.changed = map[int]uint64{}
 	s.staleFloor = 0
 	t.Cleanup(func() {

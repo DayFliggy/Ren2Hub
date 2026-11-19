@@ -116,3 +116,16 @@ func contextOverflowMessage(message string) bool {
 	}
 	return strings.Contains(text, "input token count") && strings.Contains(text, "exceeds the maximum")
 }
+
+// routeFailureCode names a failed attempt in the breaker snapshot: the root
+// error code, the stream's terminal error code, or the routing reason such as
+// empty_stream. It never carries the upstream message.
+func routeFailureCode(info *relaycommon.RelayInfo, apiErr *types.NewAPIError, reason string) string {
+	if apiErr != nil {
+		return string(rootRelayError(apiErr).GetErrorCode())
+	}
+	if code := info.StreamStatus.OutcomeSnapshot().ErrorCode; code != "" {
+		return code
+	}
+	return reason
+}

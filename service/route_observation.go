@@ -35,7 +35,7 @@ type routeObservationStore struct {
 	mu        sync.Mutex
 	rows      map[routeObservationKey]RouteObservationSnapshot
 	breakers  map[routeBreakerKey]routeBreakerState
-	cooldowns map[int]int64
+	cooldowns map[int]routeCooldown
 	lastPrune int64
 	epoch     uint64
 	changed   map[int]uint64
@@ -50,7 +50,7 @@ type routeObservationStore struct {
 var routeObservations = routeObservationStore{
 	rows:      make(map[routeObservationKey]RouteObservationSnapshot),
 	breakers:  make(map[routeBreakerKey]routeBreakerState),
-	cooldowns: make(map[int]int64),
+	cooldowns: make(map[int]routeCooldown),
 	changed:   make(map[int]uint64),
 }
 
@@ -109,8 +109,8 @@ func (s *routeObservationStore) pruneLocked(now int64) {
 			delete(s.breakers, key)
 		}
 	}
-	for id, until := range s.cooldowns {
-		if now >= until {
+	for id, cooldown := range s.cooldowns {
+		if now >= cooldown.until {
 			delete(s.cooldowns, id)
 		}
 	}

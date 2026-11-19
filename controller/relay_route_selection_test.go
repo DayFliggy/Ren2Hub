@@ -152,11 +152,13 @@ func TestRelayScanSummaryIsAdminOnly(t *testing.T) {
 	model.FormatAdminLogs(admin)
 	require.Contains(t, admin[0].Other, `"full_skips":0`)
 	require.Contains(t, admin[0].Other, `"reason":"selected"`)
+	require.Contains(t, admin[0].Other, fmt.Sprintf(`"ranked":[{"channel_id":%d,`, fixture.channel.Id))
 	user, total, err := model.GetUserLogs(fixture.user.Id, filter, 0, 10)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, total)
 	require.NotContains(t, user[0].Other, "request_policy")
 	require.NotContains(t, user[0].Other, "full_skips")
+	require.NotContains(t, user[0].Other, "ranked")
 }
 
 func TestRelayPrechargeRejectionKeepsSelectedScan(t *testing.T) {

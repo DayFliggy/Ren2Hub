@@ -202,13 +202,14 @@ func ReleaseRouteChannel(c *gin.Context) {
 
 // routeScan describes one automatic selection, including a scan that exits before relay starts.
 type routeScan struct {
-	Round      int   `json:"round"`
-	Candidates int   `json:"candidates"`
-	FullSkips  int   `json:"full_skips"`
-	DurationUS int64 `json:"duration_us"`
-	Cooling    int   `json:"cooling,omitempty"`
-	Open       int   `json:"open,omitempty"`
-	ProbeBusy  int   `json:"probe_busy,omitempty"`
+	Round      int                  `json:"round"`
+	Candidates int                  `json:"candidates"`
+	FullSkips  int                  `json:"full_skips"`
+	DurationUS int64                `json:"duration_us"`
+	Cooling    int                  `json:"cooling,omitempty"`
+	Open       int                  `json:"open,omitempty"`
+	ProbeBusy  int                  `json:"probe_busy,omitempty"`
+	Ranked     []routeScanCandidate `json:"ranked,omitempty"`
 }
 
 func (s *routeScan) record(c *gin.Context, channel *model.Channel, err error) {

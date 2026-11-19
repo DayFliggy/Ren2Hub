@@ -2,9 +2,11 @@ package service
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -50,11 +52,20 @@ func TestAutomaticRouteScanSummaries(t *testing.T) {
 	require.Equal(t, 2, strings.Count(output.String(), "route_scan "))
 	other := model.NewLogOther()
 	AppendRelayLogAdminInfo(c, nil, other)
+	type ranked struct {
+		ChannelID   int     `json:"channel_id"`
+		Health      int     `json:"health"`
+		Priority    int64   `json:"priority"`
+		Weight      uint    `json:"weight"`
+		PriceFactor float64 `json:"price_factor"`
+		Skip        string  `json:"skip"`
+	}
 	type scan struct {
 		Round      int
 		Candidates int
 		FullSkips  int    `json:"full_skips"`
 		DurationUS *int64 `json:"duration_us"`
+		Ranked     []ranked
 	}
 	var payload struct {
 		Admin struct {
@@ -77,6 +88,54 @@ func TestAutomaticRouteScanSummaries(t *testing.T) {
 	require.Equal(t, "selected", payload.Admin.Events[0].Decision.Reason)
 	require.Equal(t, 0, payload.Admin.Events[1].Scan.FullSkips)
 	require.Equal(t, "no_candidate", payload.Admin.Events[1].Decision.Reason)
+	// ranked follows the actual visits: the higher priority channel was full.
+	require.Equal(t, []ranked{
+		{ChannelID: 11, Priority: 10, Weight: 100, PriceFactor: 1, Skip: "full"},
+		{ChannelID: 22, Priority: 0, Weight: 100, PriceFactor: 1},
+	}, payload.Admin.Events[0].Scan.Ranked)
+	require.Empty(t, payload.Admin.Events[1].Scan.Ranked, "nothing was visited")
+
+	// An open channel and a cooling channel are skipped in the first pass;
+	// the cooling channel is visited again as the fallback and selected.
+	ReleaseRouteChannel(first)
+	resetRouteObservations(t)
+	for range routeBreakerOpenFailures {
+		recordBreaker(11, "route-model", false)
+	}
+	routeObservations.coolDown(routeObservations.epoch, 22, routeCooldown{until: time.Now().Add(time.Minute).UnixMilli(), source: "retry_after"})
+	paused := routeTestContext(t)
+	channel, selectErr = SelectChannelForRequest(paused, "route-model", nil)
+	require.Nil(t, selectErr)
+	require.Equal(t, 22, channel.Id)
+	events := RequestPolicy(paused).Events()
+	require.Len(t, events, 1)
+	var visits []string
+	for _, entry := range events[0].Scan.Ranked {
+		visits = append(visits, fmt.Sprint(entry.ChannelID, ":", entry.Skip))
+	}
+	require.Equal(t, []string{"11:open", "22:cooling", "22:"}, visits)
+	require.Equal(t, routeWorstHealth, events[0].Scan.Ranked[0].Health)
+
+	// At most eight visits are kept.
+	for id := 31; id <= 39; id++ {
+		createRouteChannel(t, db, id, "route-model")
+		for range routeBreakerOpenFailures {
+			recordBreaker(id, "route-model", false)
+		}
+	}
+	for range routeBreakerOpenFailures {
+		recordBreaker(22, "route-model", false)
+	}
+	crowded := routeTestContext(t)
+	_, selectErr = SelectChannelForRequest(crowded, "route-model", nil)
+	require.NotNil(t, selectErr)
+	events = RequestPolicy(crowded).Events()
+	require.Len(t, events, 1)
+	require.Equal(t, 11, events[0].Scan.Candidates)
+	require.Len(t, events[0].Scan.Ranked, 8)
+	for _, entry := range events[0].Scan.Ranked {
+		require.Equal(t, "open", entry.Skip)
+	}
 }
 
 func TestBoundAndManualRoutesDoNotEmitScan(t *testing.T) {

@@ -409,7 +409,7 @@ func TestDeletedChannelKeepsInFlightCountAndObservationsForReusedID(t *testing.T
 	for range routeBreakerOpenFailures {
 		recordRouteBreaker(staleEpoch, 11, "m", false)
 	}
-	routeObservations.coolDown(staleEpoch, 11, time.Now().Add(time.Minute).UnixMilli())
+	routeObservations.coolDown(staleEpoch, 11, routeCooldown{until: time.Now().Add(time.Minute).UnixMilli(), source: "retry_after"})
 	health, weight := routeObservations.routeHealth(11, "m")
 	require.Zero(t, health, "attempts sent before the delete cannot demote the new channel")
 	require.Equal(t, 1.0, weight)

@@ -107,7 +107,7 @@ func (a *routeAttempt) settleStreamProbe() {
 	if !a.bound || !a.stream || a.probe == nil || !a.breakerSettled.CompareAndSwap(false, true) {
 		return
 	}
-	routeObservations.recordBreaker(a.epoch, routeBreakerKey{a.channelID, a.model}, a.probe, true)
+	routeObservations.recordBreaker(a.epoch, routeBreakerKey{a.channelID, a.model}, a.probe, routeBreakerSample{success: true})
 }
 
 // ObserveRouteResponse 由传输层在收到上游 429 时按 Retry-After 或缺头的短冷却期限将渠道降档。
@@ -120,9 +120,9 @@ func ObserveRouteResponse(c *gin.Context, resp *http.Response) {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		return
 	}
-	if until, ok := retryAfterUntil(resp.Header, time.Now()); ok {
-		attempt.cooldown.Store(until)
-		routeObservations.coolDown(attempt.epoch, attempt.channelID, until)
+	if cooldown, ok := retryAfterUntil(resp.Header, time.Now()); ok {
+		attempt.cooldown.Store(cooldown.until)
+		routeObservations.coolDown(attempt.epoch, attempt.channelID, cooldown)
 	}
 }
 
@@ -174,7 +174,8 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 		now := time.Now()
 		evidence := attempt.finalEvidence(c, info, apiErr, now)
 		outcome := perfmetrics.Outcome(evidence.Outcome)
-		recordAttemptBreaker(attempt, info.IsStream, outcome)
+		failure := routeBreakerSample{status: evidence.Status, code: routeFailureCode(info, apiErr, evidence.OutcomeReason)}
+		recordAttemptBreaker(attempt, info.IsStream, outcome, failure)
 		state := RequestPolicy(c)
 		state.mu.Lock()
 		attachRouteEvidence(state.events, state.Attempts, attempt.channelID, &evidence)
@@ -208,16 +209,15 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 // recordAttemptBreaker 以第一个有内容的事件为流式请求的成功界：之后的中断、取消或
 // 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。已在首输出时
 // 结算的流式探测不再计入。
-func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome) {
+func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome, failure routeBreakerSample) {
 	if !attempt.breakerSettled.CompareAndSwap(false, true) {
 		return
 	}
+	key := routeBreakerKey{attempt.channelID, attempt.model}
 	switch {
-	case stream && attempt.firstOutput.Load() != 0:
-		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, true)
-	case outcome == perfmetrics.OutcomeSuccess:
-		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, true)
+	case stream && attempt.firstOutput.Load() != 0, outcome == perfmetrics.OutcomeSuccess:
+		routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, routeBreakerSample{success: true})
 	case outcome == perfmetrics.OutcomeFailure:
-		routeObservations.recordBreaker(attempt.epoch, routeBreakerKey{attempt.channelID, attempt.model}, attempt.probe, false)
+		routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, failure)
 	}
 }

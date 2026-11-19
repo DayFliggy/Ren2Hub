@@ -17,7 +17,7 @@ import (
 )
 
 func recordRouteBreaker(epoch uint64, channelID int, model string, success bool) {
-	routeObservations.recordBreaker(epoch, routeBreakerKey{channelID, model}, nil, success)
+	routeObservations.recordBreaker(epoch, routeBreakerKey{channelID, model}, nil, routeBreakerSample{success: success})
 }
 
 func recordBreaker(channelID int, modelName string, success bool) {
@@ -89,7 +89,7 @@ func TestRouteBreakerHalfOpenWeightAndRecovery(t *testing.T) {
 		probe, class, _ := routeObservations.claimProbe(key, epoch, false, false)
 		require.Equal(t, routeAvailable, class)
 		require.NotNil(t, probe)
-		routeObservations.recordBreaker(epoch, key, probe, success)
+		routeObservations.recordBreaker(epoch, key, probe, routeBreakerSample{success: success})
 	}
 	finishProbe(false)
 	health, _ = routeObservations.routeHealth(11, "m")
@@ -215,15 +215,15 @@ func TestHeaderless429CooldownExpiresAfterFiveSeconds(t *testing.T) {
 func TestRetryAfterParsing(t *testing.T) {
 	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 	header := func(value string) http.Header { return http.Header{"Retry-After": []string{value}} }
-	until, ok := retryAfterUntil(header("30"), now)
+	cooldown, ok := retryAfterUntil(header("30"), now)
 	require.True(t, ok)
-	require.Equal(t, now.Add(30*time.Second).UnixMilli(), until)
-	until, ok = retryAfterUntil(header(now.Add(2*time.Minute).Format(http.TimeFormat)), now)
+	require.Equal(t, now.Add(30*time.Second).UnixMilli(), cooldown.until)
+	cooldown, ok = retryAfterUntil(header(now.Add(2*time.Minute).Format(http.TimeFormat)), now)
 	require.True(t, ok)
-	require.Equal(t, now.Add(2*time.Minute).UnixMilli(), until)
-	until, ok = retryAfterUntil(header("999999999999"), now)
+	require.Equal(t, now.Add(2*time.Minute).UnixMilli(), cooldown.until)
+	cooldown, ok = retryAfterUntil(header("999999999999"), now)
 	require.True(t, ok)
-	require.Equal(t, now.Add(routeObservationTTL).UnixMilli(), until, "the cooldown is capped by the observation TTL")
+	require.Equal(t, now.Add(routeObservationTTL).UnixMilli(), cooldown.until, "the cooldown is capped by the observation TTL")
 	for _, value := range []string{"", "  ", "0", "-5", "-9223372036854775807", "soon", now.Add(-time.Minute).Format(http.TimeFormat)} {
 		_, ok = retryAfterUntil(header(value), now)
 		require.False(t, ok, value)

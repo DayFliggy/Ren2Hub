@@ -105,7 +105,7 @@ func TestStrictAffinityHonorsOpenBreaker(t *testing.T) {
 		setupAffinityChannels(t)
 		resetRouteObservations(t)
 		c, key := enableRouteAffinity(t, "strict", 22)
-		routeObservations.coolDown(routeObservations.epoch, 22, time.Now().Add(time.Minute).UnixMilli())
+		routeObservations.coolDown(routeObservations.epoch, 22, routeCooldown{until: time.Now().Add(time.Minute).UnixMilli(), source: "retry_after"})
 		selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
 		require.Nil(t, selectErr)
 		require.Equal(t, 22, selected.Id)

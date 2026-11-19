@@ -61,11 +61,56 @@ func acquireHealthyRoute(c *gin.Context, channel *model.Channel, modelName strin
 	return selected, nil
 }
 
+// routeScanRankedLimit bounds the visits a scan keeps for administrators.
+const routeScanRankedLimit = 8
+
+// routeScanCandidate is one visit of an automatic scan in visiting order, with
+// the ranking inputs of the visited channel and the reason it was skipped.
+type routeScanCandidate struct {
+	ChannelID   int     `json:"channel_id"`
+	Health      int     `json:"health"`
+	Band        int     `json:"band"`
+	CacheBand   *int    `json:"cache_band,omitempty"`
+	Priority    int64   `json:"priority"`
+	Weight      int     `json:"weight"`
+	Load        int     `json:"load"`
+	PriceFactor float64 `json:"price_factor"`
+	Explore     bool    `json:"explore,omitempty"`
+	Skip        string  `json:"skip,omitempty"`
+}
+
+// noteVisit records an automatic visit until the limit is reached.
+func (s *routeScan) noteVisit(c *gin.Context, ranks map[int]routeRank, channel *model.Channel, skip string) {
+	if len(s.Ranked) >= routeScanRankedLimit {
+		return
+	}
+	r := ranks[channel.Id]
+	entry := routeScanCandidate{ChannelID: channel.Id, Health: r.health, Band: r.band, Priority: channel.GetPriority(),
+		Weight: channel.GetWeight(), Load: r.load, PriceFactor: r.price, Explore: channel.Id == c.GetInt("route_explore_channel"), Skip: skip}
+	if r.cacheKnown {
+		entry.CacheBand = &r.cacheBand
+	}
+	s.Ranked = append(s.Ranked, entry)
+}
+
+func routeRanksByChannel(c *gin.Context) map[int]routeRank {
+	ranks, _ := common.GetContextKeyType[[]routeRank](c, "route_rank_candidates")
+	byID := make(map[int]routeRank, len(ranks))
+	for _, r := range ranks {
+		byID[r.channel.Id] = r
+	}
+	return byID
+}
+
 // 先扫描可用渠道；只有不存在可用者时才考虑仅冷却渠道。第二轮仍复核熔断与容量。
 func (s *routeScan) acquire(c *gin.Context, rows []*model.Channel, modelName string, automatic bool) (*model.Channel, error) {
 	var cooling []*model.Channel
 	var earliest int64
 	var blocked int
+	var ranks map[int]routeRank
+	if automatic {
+		ranks = routeRanksByChannel(c)
+	}
 	visit := func(channel *model.Channel, fallback bool) (*model.Channel, error) {
 		var selected *model.Channel
 		var err error
@@ -74,6 +119,7 @@ func (s *routeScan) acquire(c *gin.Context, rows []*model.Channel, modelName str
 		} else {
 			selected, err = acquireRouteChannel(c, channel)
 		}
+		skip := ""
 		var pause *routePauseError
 		switch {
 		case errors.As(err, &pause):
@@ -81,22 +127,33 @@ func (s *routeScan) acquire(c *gin.Context, rows []*model.Channel, modelName str
 			case routeCooling:
 				cooling = append(cooling, channel)
 				s.Cooling++
+				skip = "cooling"
 			case routeOpen:
 				blocked++
 				s.Open++
 				if earliest == 0 || pause.until < earliest {
 					earliest = pause.until
 				}
+				skip = "open"
 			case routeProbeBusy:
 				blocked++
 				s.ProbeBusy++
+				skip = "probe_busy"
 			}
 		case errors.Is(err, ErrConcurrencyFull):
 			s.FullSkips++
+			skip = "full"
 		case errors.Is(err, errConcurrencyResourceDeleted):
 			// 在读取候选后被删除，继续候选扫描。
+			skip = "deleted"
 		default:
+			if automatic && err == nil {
+				s.noteVisit(c, ranks, channel, "")
+			}
 			return selected, err
+		}
+		if automatic {
+			s.noteVisit(c, ranks, channel, skip)
 		}
 		return nil, nil
 	}

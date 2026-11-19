@@ -101,14 +101,14 @@ func TestRouteProbeLeaseLifecycle(t *testing.T) {
 	newProbe := currentRouteProbe(c)
 	require.NotNil(t, newProbe)
 	routeObservations.releaseProbe(old)
-	routeObservations.recordBreaker(old.epoch, key, old, true)
+	routeObservations.recordBreaker(old.epoch, key, old, routeBreakerSample{success: true})
 	class, _ := routeObservations.availability(key)
 	require.Equal(t, routeProbeBusy, class, "late completion cannot clear a subsequent probe")
 	routeObservations.invalidate(11)
 	for range routeBreakerOpenFailures {
 		recordBreaker(11, key.model, false)
 	}
-	routeObservations.recordBreaker(newProbe.epoch, key, newProbe, true)
+	routeObservations.recordBreaker(newProbe.epoch, key, newProbe, routeBreakerSample{success: true})
 	ReleaseRouteChannel(c)
 	class, _ = routeObservations.availability(key)
 	require.Equal(t, routeOpen, class, "late completion cannot close the replaced configuration")
@@ -165,7 +165,7 @@ func TestRouteAdmissionFullBeforeCoolingFallback(t *testing.T) {
 	permit, err := AcquireChannelConcurrency(context.Background(), &model.Channel{Id: 11, MaxConcurrency: 1})
 	require.NoError(t, err)
 	defer permit.Release()
-	routeObservations.coolDown(routeObservations.epoch, 22, time.Now().Add(time.Minute).UnixMilli())
+	routeObservations.coolDown(routeObservations.epoch, 22, routeCooldown{until: time.Now().Add(time.Minute).UnixMilli(), source: "retry_after"})
 	_, failure := SelectChannelForRequest(routeTestContext(t), "m", nil)
 	require.Equal(t, http.StatusTooManyRequests, failure.StatusCode)
 	for range routeBreakerOpenFailures {
@@ -185,7 +185,7 @@ func TestPreferEscapesCoolingAndStrictStillSends(t *testing.T) {
 			setupAffinityChannels(t)
 			resetRouteObservations(t)
 			c, key := enableRouteAffinity(t, mode, 22)
-			routeObservations.coolDown(routeObservations.epoch, 22, time.Now().Add(time.Minute).UnixMilli())
+			routeObservations.coolDown(routeObservations.epoch, 22, routeCooldown{until: time.Now().Add(time.Minute).UnixMilli(), source: "retry_after"})
 			channel, err := SelectChannelForRequest(c, "route-model", nil)
 			require.Nil(t, err)
 			want := 11

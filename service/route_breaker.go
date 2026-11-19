@@ -37,12 +37,43 @@ type routeFailureBucket struct {
 	total, failures uint32
 }
 
-// openUntil 为 0 表示闭合；非 0 时 openUntil 之前是打开，之后是半开。
+// Why a breaker opened, reported in the Root-only routing snapshot.
+const (
+	routeTriggerConsecutive = "consecutive"
+	routeTriggerWindowRate  = "window_rate"
+	routeTriggerProbeFailed = "probe_failed"
+)
+
+// openUntil 为 0 表示闭合；非 0 时 openUntil 之前是打开，之后是半开。trigger、openedAt
+// 和 reopens 描述当前这次打开，闭合时随状态一起清空；lastStatus 和 lastErrorCode 是最近
+// 一次失败的状态码与错误码，不含上游消息。
 type routeBreakerState struct {
 	failures, successes  int
 	openUntil, updatedAt int64
 	probe                *routeProbe
 	window               [6]routeFailureBucket
+	trigger              string
+	openedAt             int64
+	reopens              int
+	lastStatus           int
+	lastErrorCode        string
+}
+
+// routeBreakerSample is one attempt counted by the breaker; status and code
+// describe a failure.
+type routeBreakerSample struct {
+	success bool
+	status  int
+	code    string
+}
+
+// routeErrorCodeLimit bounds the stored error code, which comes from the upstream.
+const routeErrorCodeLimit = 64
+
+// routeCooldown is a channel's 429 cooldown; source is retry_after or headerless.
+type routeCooldown struct {
+	until  int64
+	source string
 }
 
 // 每个许可是唯一对象，旧许可的完成或释放不会影响其它探测或其它配置代际。
@@ -51,7 +82,8 @@ type routeProbe struct {
 	epoch uint64
 }
 
-func (s *routeBreakerState) count(now int64, success bool) bool {
+// count adds one sample and returns the trigger when the breaker must open.
+func (s *routeBreakerState) count(now int64, success bool) string {
 	tick := now / routeBreakerBucketDuration.Milliseconds()
 	bucket := &s.window[tick%int64(len(s.window))]
 	if bucket.tick != tick {
@@ -71,10 +103,27 @@ func (s *routeBreakerState) count(now int64, success bool) bool {
 			failed += uint64(b.failures)
 		}
 	}
-	return s.failures >= routeBreakerOpenFailures || total >= routeBreakerWindowSamples && 2*failed >= total
+	switch {
+	case s.failures >= routeBreakerOpenFailures:
+		return routeTriggerConsecutive
+	case total >= routeBreakerWindowSamples && 2*failed >= total:
+		return routeTriggerWindowRate
+	}
+	return ""
 }
 
-func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey, probe *routeProbe, success bool) {
+func (s *routeBreakerState) noteFailure(sample routeBreakerSample) {
+	if sample.success {
+		return
+	}
+	code := sample.code
+	if len(code) > routeErrorCodeLimit {
+		code = code[:routeErrorCodeLimit]
+	}
+	s.lastStatus, s.lastErrorCode = sample.status, code
+}
+
+func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey, probe *routeProbe, sample routeBreakerSample) {
 	if key.id <= 0 || key.model == "" {
 		return
 	}
@@ -94,14 +143,16 @@ func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey,
 			return
 		}
 		state.probe = nil
-		if success {
+		if sample.success {
 			state.successes++
 			if state.successes == routeBreakerCloseSuccesses {
 				state = routeBreakerState{}
 				state.count(now, true)
 			}
 		} else {
-			state = routeBreakerState{openUntil: now + routeBreakerCooldown.Milliseconds()}
+			state = routeBreakerState{openUntil: now + routeBreakerCooldown.Milliseconds(),
+				trigger: routeTriggerProbeFailed, openedAt: now, reopens: state.reopens + 1}
+			state.noteFailure(sample)
 		}
 	} else {
 		if probe != nil {
@@ -110,8 +161,10 @@ func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey,
 		if !present && len(s.breakers) >= routeObservationCapacity && !s.makeBreakerRoomLocked(now) {
 			return
 		}
-		if state.count(now, success) {
+		state.noteFailure(sample)
+		if trigger := state.count(now, sample.success); trigger != "" {
 			state.openUntil = now + routeBreakerCooldown.Milliseconds()
+			state.trigger, state.openedAt = trigger, now
 		}
 	}
 	state.updatedAt = now
@@ -151,8 +204,8 @@ func (s *routeObservationStore) availabilityLocked(key routeBreakerKey, now int6
 		return routeOpen, state.openUntil
 	case state.probe != nil:
 		return routeProbeBusy, 0
-	case now < s.cooldowns[key.id]:
-		return routeCooling, s.cooldowns[key.id]
+	case now < s.cooldowns[key.id].until:
+		return routeCooling, s.cooldowns[key.id].until
 	default:
 		return routeAvailable, 0
 	}
@@ -216,10 +269,16 @@ type RouteBreakerSnapshot struct {
 	State         string `json:"state"`
 	OpenUntil     int64  `json:"open_until"`
 	ProbeInFlight bool   `json:"probe_in_flight"`
+	Trigger       string `json:"trigger"`
+	LastStatus    int    `json:"last_status,omitempty"`
+	LastErrorCode string `json:"last_error_code,omitempty"`
+	OpenedAt      int64  `json:"opened_at"`
+	Reopens       int    `json:"reopens"`
 }
 type RouteCooldownSnapshot struct {
-	ChannelID int   `json:"channel_id"`
-	Until     int64 `json:"until"`
+	ChannelID int    `json:"channel_id"`
+	Until     int64  `json:"until"`
+	Source    string `json:"source"`
 }
 
 func (s *routeObservationStore) healthSnapshot() ([]RouteBreakerSnapshot, []RouteCooldownSnapshot) {
@@ -235,11 +294,13 @@ func (s *routeObservationStore) healthSnapshot() ([]RouteBreakerSnapshot, []Rout
 		if now >= state.openUntil {
 			label = "half_open"
 		}
-		breakers = append(breakers, RouteBreakerSnapshot{key.id, key.model, label, state.openUntil, state.probe != nil})
+		breakers = append(breakers, RouteBreakerSnapshot{ChannelID: key.id, Model: key.model, State: label, OpenUntil: state.openUntil,
+			ProbeInFlight: state.probe != nil, Trigger: state.trigger, LastStatus: state.lastStatus, LastErrorCode: state.lastErrorCode,
+			OpenedAt: state.openedAt, Reopens: state.reopens})
 	}
-	for id, until := range s.cooldowns {
-		if until > now {
-			cooldowns = append(cooldowns, RouteCooldownSnapshot{id, until})
+	for id, cooldown := range s.cooldowns {
+		if cooldown.until > now {
+			cooldowns = append(cooldowns, RouteCooldownSnapshot{ChannelID: id, Until: cooldown.until, Source: cooldown.source})
 		}
 	}
 	s.mu.Unlock()
@@ -253,17 +314,17 @@ func (s *routeObservationStore) healthSnapshot() ([]RouteBreakerSnapshot, []Rout
 	return breakers, cooldowns
 }
 
-// coolDown 只延长不缩短渠道的 429 冷却。
-func (s *routeObservationStore) coolDown(epoch uint64, channelID int, until int64) {
+// coolDown 只延长不缩短渠道的 429 冷却；来源随生效的那次冷却。
+func (s *routeObservationStore) coolDown(epoch uint64, channelID int, cooldown routeCooldown) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if channelID <= 0 || s.staleLocked(epoch, channelID) || until <= s.cooldowns[channelID] {
+	if channelID <= 0 || s.staleLocked(epoch, channelID) || cooldown.until <= s.cooldowns[channelID].until {
 		return
 	}
 	if _, ok := s.cooldowns[channelID]; !ok && len(s.cooldowns) >= routeObservationCapacity {
 		now := time.Now().UnixMilli()
 		for id, end := range s.cooldowns {
-			if end <= now {
+			if end.until <= now {
 				delete(s.cooldowns, id)
 			}
 		}
@@ -272,34 +333,34 @@ func (s *routeObservationStore) coolDown(epoch uint64, channelID int, until int6
 			return
 		}
 	}
-	s.cooldowns[channelID] = until
+	s.cooldowns[channelID] = cooldown
 }
 
-// retryAfterUntil 计算上游 429 的冷却截止时间。缺头使用短冷却，显式值仅接受有效的等待期。
-func retryAfterUntil(header http.Header, now time.Time) (int64, bool) {
+// retryAfterUntil 计算上游 429 的冷却。缺头使用短冷却，显式值仅接受有效的等待期。
+func retryAfterUntil(header http.Header, now time.Time) (routeCooldown, bool) {
 	values, present := header["Retry-After"]
 	if !present {
-		return now.Add(routeHeaderless429Cooldown).UnixMilli(), true
+		return routeCooldown{now.Add(routeHeaderless429Cooldown).UnixMilli(), "headerless"}, true
 	}
 	if len(values) == 0 {
-		return 0, false
+		return routeCooldown{}, false
 	}
 	value := strings.TrimSpace(values[0])
 	var wait time.Duration
 	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
 		if seconds <= 0 {
-			return 0, false
+			return routeCooldown{}, false
 		}
 		wait = time.Duration(min(seconds, int64(routeObservationTTL/time.Second))) * time.Second
 	} else if at, err := http.ParseTime(value); err == nil {
 		wait = at.Sub(now)
 	} else {
-		return 0, false
+		return routeCooldown{}, false
 	}
 	if wait <= 0 {
-		return 0, false
+		return routeCooldown{}, false
 	}
-	return now.Add(min(wait, routeObservationTTL)).UnixMilli(), true
+	return routeCooldown{now.Add(min(wait, routeObservationTTL)).UnixMilli(), "retry_after"}, true
 }
 
 // evictForInsertLocked 在表满时为一个新键腾位置：先删过期项，仍满就删最旧的一项，
