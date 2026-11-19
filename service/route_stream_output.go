@@ -10,12 +10,13 @@ import (
 
 // Only recognize payload-bearing fields of supported wire formats, as defined
 // by the relaykit DTOs and the pass-through wire formats. Unknown events yield
-// no latency sample rather than treating metadata as model output. A stream
-// without recognized content counts as empty only when its handler gives the
-// raw upstream frames to ObserveRouteUsage and a normal completion marker
-// (streamEventEnd) is seen. An unknown payload followed by such a marker
-// therefore still counts as empty, except a Responses terminal that lists
-// output items: only a missing or empty output proves the response was empty.
+// no latency sample rather than treating metadata as model output. The same
+// check runs on raw upstream frames (ObserveRouteUsage): a stream without
+// recognized client content counts as empty only when the raw frames show a
+// normal completion (streamEventEnd) and no payload. A raw payload this check
+// does not recognize, followed by a normal completion, therefore still counts
+// as empty; only a Responses terminal is stricter, where listed items that are
+// not known empty messages (responsesOutputEmpty) count as payload.
 func streamEventHasOutput(data string) bool {
 	var event map[string]json.RawMessage
 	if common.Unmarshal([]byte(data), &event) != nil || (len(event["error"]) > 0 && !bytes.Equal(event["error"], []byte("null"))) {
@@ -210,6 +211,10 @@ const (
 	// streamEndRequest: the request caused the end (filtering, safety,
 	// refusal or a length limit).
 	streamEndRequest
+	// streamEndUnproven: a completed Responses terminal lists output items
+	// that are neither recognized content nor known empty messages, such as
+	// encrypted reasoning; they are payload, not proof of an empty response.
+	streamEndUnproven
 )
 
 // requestEndReasons are end reasons the request caused. Matching is
@@ -232,9 +237,8 @@ var normalEndReasons = map[string]bool{
 // prompt block, and the Responses terminal and incomplete reason. A Responses
 // terminal (response.completed, or response.done with status completed, as the
 // native handler accepts both) is a normal completion only when its output is
-// missing or empty: listed items the content check did not recognize, such as
-// encrypted reasoning, do not prove an empty response. A request-caused reason
-// wins over a normal one in the same event.
+// proven empty (responsesOutputEmpty); otherwise it is streamEndUnproven. A
+// request-caused reason wins over a normal one in the same event.
 func streamEventEnd(data string) streamEnd {
 	var event struct {
 		Type    string `json:"type"`
@@ -276,7 +280,10 @@ func streamEventEnd(data string) streamEnd {
 	case "message_stop":
 		end = streamEndNormal
 	case "response.completed", "response.done":
-		if (event.Type == "response.completed" || event.Response.Status == "completed") && len(event.Response.Output) == 0 {
+		if event.Type == "response.completed" || event.Response.Status == "completed" {
+			if !responsesOutputEmpty(event.Response.Output) {
+				return streamEndUnproven
+			}
 			end = streamEndNormal
 		}
 	}
@@ -290,4 +297,29 @@ func streamEventEnd(data string) streamEnd {
 		}
 	}
 	return end
+}
+
+// responsesOutputEmpty reports a Responses output that is proven empty:
+// missing, an empty array, or only message items whose content is empty or
+// holds only text parts with empty text, the common shape of an empty answer
+// from a reseller.
+func responsesOutputEmpty(output []json.RawMessage) bool {
+	for _, raw := range output {
+		var item struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		}
+		if common.Unmarshal(raw, &item) != nil || item.Type != "message" {
+			return false
+		}
+		for _, part := range item.Content {
+			if part.Type != "output_text" && part.Type != "text" || part.Text != "" {
+				return false
+			}
+		}
+	}
+	return true
 }

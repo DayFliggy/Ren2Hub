@@ -45,14 +45,15 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 
 // emptyStreamOutcome judges a stream that ended natively successful after
 // observed events without one content event. It fails the channel only when
-// the handler gave the raw upstream frames to ObserveRouteUsage, the upstream
-// marked a normal completion and the usage reports no output. A handler that
-// shows only converted frames (Cohere, PaLM, Xunfei, Zhipu, image, TTS) may
-// hide billed output, a usage conflict leaves the output count unknown, and
-// without a completion marker the content check may have missed a payload
-// kind; a wrong failure would open a healthy channel's breaker, so these are
-// neither punished nor credited. Streams whose handler never reports events
-// keep the native result.
+// the raw upstream frames (ObserveRouteUsage) prove the response empty: they
+// mark a normal completion, carry no payload, no request-caused end is seen on
+// either side and the usage reports no output. Converted frames cannot prove
+// it: a converter may drop a payload it does not translate and make up a
+// stop. A handler that shows only converted frames (Cohere, PaLM, Xunfei,
+// Zhipu, image, TTS) therefore never fails here, a usage conflict leaves the
+// output count unknown, and a wrong failure would open a healthy channel's
+// breaker, so these are neither punished nor credited. Streams whose handler
+// never reports events keep the native result.
 func (a *routeAttempt) emptyStreamOutcome() (perfmetrics.Outcome, string) {
 	a.usageMu.Lock()
 	u := a.usage
@@ -62,7 +63,7 @@ func (a *routeAttempt) emptyStreamOutcome() (perfmetrics.Outcome, string) {
 		return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput
 	case a.requestEnded.Load():
 		return perfmetrics.OutcomeIgnored, routeReasonRequestTerminate
-	case a.completed.Load() && a.rawObserved.Load():
+	case a.rawCompleted.Load() && !a.rawPayload.Load():
 		return perfmetrics.OutcomeFailure, routeReasonEmptyStream
 	}
 	return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput

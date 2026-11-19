@@ -93,6 +93,8 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 	// Many resellers send stop and usage in one tail frame; without
 	// include_usage the native handler does not forward it.
 	stopWithUsage := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":0,"total_tokens":9}}`
+	// The same hidden tail frame carrying a named tool call is output.
+	toolWithUsage := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":9,"completion_tokens":0,"total_tokens":9}}`
 	for _, tc := range []struct {
 		name, outcome, reason string
 		frames, client        []string
@@ -107,6 +109,7 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 		{name: "no completion marker", outcome: "ignored", reason: "no_visible_output", frames: []string{role}, client: []string{role}},
 		{name: "conflicting output aliases", outcome: "ignored", reason: "no_visible_output", frames: []string{role, stop, conflictingOutput}, client: []string{role, stop}},
 		{name: "stop only in the unforwarded usage tail frame", outcome: "failure", reason: "empty_stream", frames: []string{role, stopWithUsage}, client: []string{role}},
+		{name: "tool call only in the unforwarded usage tail frame", outcome: "ignored", reason: "no_visible_output", frames: []string{role, toolWithUsage}, client: []string{role}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, ev := runRouteStream(t, "/v1/chat/completions", types.RelayFormatOpenAI, openai.OaiStreamHandler, tc.frames, true)
@@ -121,10 +124,12 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 	}
 }
 
-// Only a terminal event whose output is missing or empty proves an empty
-// response; response.done with status completed is the same completion as
-// response.completed. Output items the content check does not recognize, such
-// as encrypted reasoning, are not proof of an empty response.
+// Only the raw upstream terminal can prove an empty response: an output that
+// is missing, an empty array, or only messages with no text. Listed items the
+// content check does not recognize, such as encrypted reasoning, are payload,
+// also when the stream is converted to chat and the converter makes up a
+// stop frame. response.done with status completed is the same completion as
+// response.completed.
 func TestRouteEvidenceResponsesTerminals(t *testing.T) {
 	created := `{"type":"response.created","sequence_number":0,"response":{"id":"resp_1","object":"response","status":"in_progress","output":[]}}`
 	terminal := func(kind, output string) string {
@@ -132,21 +137,35 @@ func TestRouteEvidenceResponsesTerminals(t *testing.T) {
 	}
 	encrypted := `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"gAAAAABencrypted"}`
 	unknown := `{"type":"future_output","id":"fo_1","status":"completed"}`
-	for _, tc := range []struct {
-		name, outcome, reason string
-		frames                []string
+	emptyMessage := `{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[]}`
+	emptyText := `{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"","annotations":[]}]}`
+	for _, entry := range []struct {
+		name    string
+		path    string
+		format  types.RelayFormat
+		handler streamHandler
 	}{
-		{"empty response.completed", "failure", "empty_stream", []string{created, terminal("response.completed", "[]")}},
-		{"empty response.done", "failure", "empty_stream", []string{created, terminal("response.done", "[]")}},
-		{"encrypted reasoning only", "ignored", "no_visible_output", []string{created,
-			`{"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":` + encrypted + `}`, terminal("response.completed", "["+encrypted+"]")}},
-		{"unknown output item", "ignored", "no_visible_output", []string{created, terminal("response.completed", "["+unknown+"]")}},
+		{"direct", "/v1/responses", types.RelayFormatOpenAIResponses, openai.OaiResponsesStreamHandler},
+		{"to chat", "/v1/chat/completions", types.RelayFormatOpenAI, openai.OaiResponsesToChatStreamHandler},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, ev := runRouteStream(t, "/v1/responses", types.RelayFormatOpenAIResponses, openai.OaiResponsesStreamHandler, tc.frames, false)
-			require.Equal(t, tc.outcome, ev.Get("outcome").String())
-			require.Equal(t, tc.reason, ev.Get("outcome_reason").String())
-		})
+		for _, tc := range []struct {
+			name, outcome, reason string
+			frames                []string
+		}{
+			{"empty response.completed", "failure", "empty_stream", []string{created, terminal("response.completed", "[]")}},
+			{"empty response.done", "failure", "empty_stream", []string{created, terminal("response.done", "[]")}},
+			{"message without content", "failure", "empty_stream", []string{created, terminal("response.completed", "["+emptyMessage+"]")}},
+			{"message with empty text", "failure", "empty_stream", []string{created, terminal("response.completed", "["+emptyText+"]")}},
+			{"encrypted reasoning only", "ignored", "no_visible_output", []string{created,
+				`{"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":` + encrypted + `}`, terminal("response.completed", "["+encrypted+"]")}},
+			{"unknown output item", "ignored", "no_visible_output", []string{created, terminal("response.completed", "["+unknown+"]")}},
+		} {
+			t.Run(entry.name+" "+tc.name, func(t *testing.T) {
+				_, ev := runRouteStream(t, entry.path, entry.format, entry.handler, tc.frames, false)
+				require.Equal(t, tc.outcome, ev.Get("outcome").String())
+				require.Equal(t, tc.reason, ev.Get("outcome_reason").String())
+			})
+		}
 	}
 }
 

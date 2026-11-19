@@ -29,8 +29,8 @@ type routeAttempt struct {
 	lastOutput     atomic.Int64
 	streamEvents   atomic.Int64
 	requestEnded   atomic.Bool
-	completed      atomic.Bool
-	rawObserved    atomic.Bool
+	rawCompleted   atomic.Bool
+	rawPayload     atomic.Bool
 	breakerOnce    sync.Once
 	status         atomic.Int64
 	cooldown       atomic.Int64
@@ -77,21 +77,32 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 		attempt.markOutput(time.Now())
 		return
 	}
-	attempt.noteStreamEnd(data)
+	// A converted frame may carry a stop the converter made up, so only its
+	// request-caused end counts; completion is proven by raw frames.
+	if attempt.firstOutput.Load() == 0 && streamEventEnd(data) == streamEndRequest {
+		attempt.requestEnded.Store(true)
+	}
 }
 
-// noteStreamEnd records how the upstream ended the generation, from a client
-// frame or a raw upstream frame. The end only matters while the stream has
-// produced nothing.
-func (a *routeAttempt) noteStreamEnd(data string) {
-	if a.firstOutput.Load() != 0 {
+// observeRawFrame records what one raw upstream frame says, for the empty
+// stream judgment only: a request-caused end, a normal completion, or a
+// payload. A raw payload does not mark the first output: latency, breaker
+// success and probe settlement follow what the client was sent.
+func (a *routeAttempt) observeRawFrame(data string) {
+	if a.firstOutput.Load() != 0 || a.rawPayload.Load() {
+		return
+	}
+	if streamEventHasOutput(data) {
+		a.rawPayload.Store(true)
 		return
 	}
 	switch streamEventEnd(data) {
 	case streamEndRequest:
 		a.requestEnded.Store(true)
 	case streamEndNormal:
-		a.completed.Store(true)
+		a.rawCompleted.Store(true)
+	case streamEndUnproven:
+		a.rawPayload.Store(true)
 	}
 }
 

@@ -7993,7 +7993,7 @@
       "path": "relay/channel/gemini/route_empty_stream_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "634524f0c8cc6a64c560bd6a0ce396df19b256653b9d8f5977ef9099aa747f0d"
+      "local_sha256": "762f747d83cf276457609e2a437dd272afe5d703579dbc7269171ab58a1ad607"
     },
     {
       "path": "relay/channel/jimeng/adaptor.go",
@@ -8349,7 +8349,7 @@
       "path": "relay/channel/openai/route_empty_stream_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c226ed444a55c48479fc40c8671a2f4dc752ba36f5d06e9952efa69fc679212d"
+      "local_sha256": "e85fc9bb8eebda1139bdd719e396f4b9d4bb416a4d229ff4606d309dbddf679b"
     },
     {
       "path": "relay/channel/openai/route_usage_evidence_test.go",
@@ -12990,7 +12990,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a05a62216017ca4e5ca6c640288722a8abf5b24e505c376a94483d7799edb2f0",
+      "local_sha256": "3a022dc8748cf690777964283ea638c9916b9f896a39f948d4ad0ff16e198ad5",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13203,7 +13203,7 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cd7bdd8552f9b9cda07f6a618f5862e7a29f17e7ca30379185d0d42a223b6331",
+      "local_sha256": "f81ca201ba6a8000b443a1cc8fd933424bb3d243213292504055123e89a52e2a",
       "reasons": [
         "token-routing",
         "ops-metrics"
@@ -13312,7 +13312,7 @@
       "path": "service/route_stream_output.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "12aedc79e79073518a98584643052592b605719efd42e4390587fbab5e0e90fc",
+      "local_sha256": "d50c97e3507e754133799e65af87e40f2dbf3c661d8736718c3e65c4206ac439",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13368,7 +13368,7 @@
       "path": "service/route_usage.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3ec2d1bc1c5fb284dba4b8351250fcf8c577cd2c76e6e8a442ea539a1548c085",
+      "local_sha256": "f69814c38554dc5abb7022f018b234fd0f2649e44f960e7530757c8c89d06d6d",
       "reasons": [
         "token-routing",
         "ops-metrics"
