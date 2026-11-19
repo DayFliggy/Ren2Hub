@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 415,
+    "extension": 416,
     "removed": 45
   },
   "files": [
@@ -2366,6 +2366,19 @@
       "status": "upstream_equal",
       "upstream_sha256": "d77dfc84c78ad00b68d0b15663d1945a7e6ce16cdd67574205886ea7261a9c5f",
       "local_sha256": "d77dfc84c78ad00b68d0b15663d1945a7e6ce16cdd67574205886ea7261a9c5f"
+    },
+    {
+      "path": "controller/responses_websocket_generate_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d590057217dadcc294c21b0ab00064433606491d859d47a75c16dfd0b3398eb1",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "b388140acfd80369ec6243b16869daff1b4051f4",
+        "basis": "Responses WebSocket 预热（generate:false）不判空流的判别测试；同一入口下要求生成的空完成仍是 empty_stream。"
+      }
     },
     {
       "path": "controller/responses_websocket_plugin_test.go",
@@ -9922,7 +9935,7 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "5eff80a23e4c69573bb6598fec1a14205a59202833abdce7b8033557395a5b07",
-      "local_sha256": "95290ef8735154e0093d1ac24f774daed9a9839cd2bbea8c0d4b0a43a0597797",
+      "local_sha256": "0aefce4dd8d9442d94f6a3ba49f1732fd32cd232a4f3938b30395923a75b7194",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -9931,7 +9944,7 @@
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 runCall 另把 response.create 的 generate 交给 service.ObserveRouteGenerate（不要求生成的请求不判空流），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -9949,7 +9962,8 @@
           "relay/responses_websocket.go#7",
           "relay/responses_websocket.go#8",
           "relay/responses_websocket.go#9"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -12990,7 +13004,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3a022dc8748cf690777964283ea638c9916b9f896a39f948d4ad0ff16e198ad5",
+      "local_sha256": "aca033907d427367af551acd1b7245d85176a5d18b52ca37f1530bc4f480be2f",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13203,7 +13217,7 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f81ca201ba6a8000b443a1cc8fd933424bb3d243213292504055123e89a52e2a",
+      "local_sha256": "57968aa2443f98c5cb8541b8c604454d51f7d8601483f0c2b793a0160c09af32",
       "reasons": [
         "token-routing",
         "ops-metrics"

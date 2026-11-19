@@ -34,10 +34,11 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 	if outcome == perfmetrics.OutcomeFailure && a.requestContextOverflow(apiErr) {
 		return perfmetrics.OutcomeIgnored, routeReasonContextOverflow
 	}
-	// A realtime connection is not one generation: connecting and closing
-	// without asking for a response is not an empty stream.
+	// A realtime connection is not one generation, and a request that does not
+	// ask for generation (ObserveRouteGenerate) has nothing to generate:
+	// neither is an empty stream when it ends without output.
 	if outcome == perfmetrics.OutcomeSuccess && info.IsStream && info.RelayMode != relayconstant.RelayModeRealtime &&
-		a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
+		!a.noGeneration && a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
 		return a.emptyStreamOutcome()
 	}
 	return outcome, ""

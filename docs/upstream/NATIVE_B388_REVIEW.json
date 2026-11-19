@@ -33597,6 +33597,91 @@
           "basis": "定时 Key 恢复的接点：只有调度发起的运行在渠道测试之后调用扩展文件 controller/channel_key_recovery.go 的 recoverAutoDisabledKeys，三种测试模式都执行，只在开启自动启用时发请求；提供商插件渠道和文本重复的 Key 不参与。"
         }
       ]
+    },
+    "relay/responses_websocket.go": {
+      "local_sha256": "0aefce4dd8d9442d94f6a3ba49f1732fd32cd232a4f3938b30395923a75b7194",
+      "hunks": [
+        {
+          "header": "@@ -120,7 +120,6 @@",
+          "sha256": "7127a9bb68c10c2ac374bd32c7f161338e4d655820c646b1f589069180f96616",
+          "basis": "删除 WS session lockedGroup，业务分组已退役。（原审查 relay/responses_websocket.go#1）"
+        },
+        {
+          "header": "@@ -245,6 +244,8 @@",
+          "sha256": "283b32f2a2f2f9d90458b086fb7b9559ca9cbd53d5e200d78b9a81c716546735",
+          "basis": "设置 IsStream 上下文，供流式观测/插件消费者使用（原审查 relay/responses_websocket.go#3）；另把 response.create 的 generate 交给 service.ObserveRouteGenerate：generate:false 只写入输入、不要求生成，它的空完成沿用原生结果、不判空流（逻辑在扩展文件 service/route_attempt.go 与 service/route_outcome.go）。"
+        },
+        {
+          "header": "@@ -259,9 +260,13 @@",
+          "sha256": "dcf46c8706c86085c82d292fb91a810dffd06fe629572add80febeb1b1998af0",
+          "basis": "移除 group fallback，保留 FinishRouteAttempt 释放/记录同一次尝试。（原审查 relay/responses_websocket.go#4）"
+        },
+        {
+          "header": "@@ -272,6 +277,13 @@",
+          "sha256": "55140d11eb42e9a67db56996bc8d5a0bf1dd07f363444e4b33d6ea5ebce12625",
+          "basis": "WS 会话使用用户并发 permit，立即拒绝超限。（原审查 relay/responses_websocket.go#5）"
+        },
+        {
+          "header": "@@ -286,7 +298,7 @@",
+          "sha256": "77535246b4c58a75d3aeb8c6629eebcbeefa0e69084965d5c758c2b739fde355",
+          "basis": "请求插件入口与出站拒绝写终止错误日志前记录最终的策略决策（RecordTerminalRelayErrorLog），见 SYNC_LEDGER.md#自动选渠诊断接点。"
+        },
+        {
+          "header": "@@ -301,6 +313,9 @@",
+          "sha256": "1884ec82ea6041422b70e3bdda80678b4c76d566330f80777a8e83b1c6ddc44b",
+          "basis": "本地路由读取错误保留500映射，用于真实 CheckLockedTokenRoute 产品策略读取失败，不混同上游错误。（原审查 relay/responses_websocket.go#6）"
+        },
+        {
+          "header": "@@ -317,16 +332,23 @@",
+          "sha256": "442075280a6d7a8eb1b4b18e97075f909d34d588bad849c55e20d567dea5d06e",
+          "basis": "MarkSent、无组 RetryParam、当下一候选本地准入拒绝时保留已有上游错误的优先级，以及本地选路失败关闭码。（原审查 relay/responses_websocket.go#7）"
+        },
+        {
+          "header": "@@ -340,13 +362,13 @@",
+          "sha256": "b265e26769b7428ea73e4dab19528ac0ea172c6178eb1868aebf6c403bca8ce2",
+          "basis": "切换实际渠道后重建 ChannelMeta/计费准备，使倍率与真实选路一致。（原审查 relay/responses_websocket.go#8）"
+        },
+        {
+          "header": "@@ -360,6 +382,7 @@",
+          "sha256": "fa93f657c84711f33b423517471a08f2f83f791edb8bd31afc6978b93bf84ebb",
+          "basis": "拨号失败完成本次 RouteAttempt 并释放/观测。（原审查 relay/responses_websocket.go#9）"
+        },
+        {
+          "header": "@@ -371,11 +394,12 @@",
+          "sha256": "086a69acee1d57ad93ec1da331dac680aeefe4e00b513647a75ea190953f1fb0",
+          "basis": "发送前 MarkSent 且删除 lockedGroup。（原审查 relay/responses_websocket.go#10）"
+        },
+        {
+          "header": "@@ -545,6 +569,8 @@",
+          "sha256": "a6b501d8c9037ec3faa736d66aaf5e0b4a0349f4ad1fd62b35a1de67e6c14976",
+          "basis": "WS 服务端事件保留统一输出观测（原审查 relay/responses_websocket.go#11）；原始帧同时交给 ObserveRouteUsage，按路由尝试记录用量字段存在性和空流的原始帧证据。"
+        },
+        {
+          "header": "@@ -650,6 +676,9 @@",
+          "sha256": "571f9cd52650b26b6e2a9bdde2e286a1ab331b6918f1c9eda10432bc068cbdac",
+          "basis": "保留 CheckLockedTokenRoute 对当前 token 路由策略的复核；缓存读取错误不新增分类。（原审查 relay/responses_websocket.go#12）"
+        },
+        {
+          "header": "@@ -692,18 +721,10 @@",
+          "sha256": "deefddfd643eb182b07e1a95b5dd4e4e1d86bfd80deb6ad11dd42318e6991914",
+          "basis": "移除 group 复核；保留 acquirePinnedRoute 对当前原渠道策略/并发即时准入。（原审查 relay/responses_websocket.go#13）"
+        },
+        {
+          "header": "@@ -714,7 +735,7 @@",
+          "sha256": "369ffd52e8670d6b828866cbc5238a9234a7f9ee3af40ff9ce29387ad6b570f5",
+          "basis": "BeginUpstreamAttempt 重置尝试观测并移除 group。（原审查 relay/responses_websocket.go#14）"
+        },
+        {
+          "header": "@@ -760,7 +781,7 @@",
+          "sha256": "3fd20c76508db6d126028622cd256b6377374631f64874bbb683161752a18504",
+          "basis": "请求插件入口与出站拒绝写终止错误日志前记录最终的策略决策（RecordTerminalRelayErrorLog），见 SYNC_LEDGER.md#自动选渠诊断接点。"
+        },
+        {
+          "header": "@@ -1092,7 +1113,7 @@",
+          "sha256": "51412c94863b227e88648af7983f23702a8ca1e32a4c0daf6389b5ffbcf9f211",
+          "basis": "SelectChannel 调用使用无组本地路由签名。（原审查 relay/responses_websocket.go#16）"
+        }
+      ]
     }
   }
 }

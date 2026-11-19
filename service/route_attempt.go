@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,7 @@ type routeAttempt struct {
 	epoch          uint64
 	bound          bool
 	operation      int
+	noGeneration   bool
 	firstOutput    atomic.Int64
 	lastOutput     atomic.Int64
 	streamEvents   atomic.Int64
@@ -186,7 +188,17 @@ func MarkRouteAttemptSent(c *gin.Context, info *relaycommon.RelayInfo) {
 		admission: c.GetString("route_admission_source"), quality: c.GetInt("route_selected_quality"),
 		price: c.GetFloat64("route_price_factor"), cacheMode: routeCacheContext(c).mode,
 		probe: currentRouteProbe(c), model: name, epoch: epoch, bound: bound, operation: routeOperation(c),
+		noGeneration: c.GetBool("route_no_generation"),
 	})
+}
+
+// ObserveRouteGenerate records the generate member of a Responses WebSocket
+// response.create. With generate:false the upstream only takes the input and
+// generates nothing (clients use it to warm a connection up), so its empty
+// completion is the normal result and keeps the native outcome. Each create
+// runs in its own context; call it before MarkRouteAttemptSent.
+func ObserveRouteGenerate(c *gin.Context, generate []byte) {
+	c.Set("route_no_generation", string(bytes.TrimSpace(generate)) == "false")
 }
 
 // FinishRouteAttempt records at most one sample and releases the attempt's channel slot.
