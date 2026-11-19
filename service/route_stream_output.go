@@ -10,8 +10,12 @@ import (
 
 // Only recognize payload-bearing fields of supported wire formats, as defined
 // by the relaykit DTOs and the pass-through wire formats. Unknown events yield
-// no latency sample rather than treating metadata as model output; a stream
-// with only unknown events is not counted as empty either (see streamEventEnd).
+// no latency sample rather than treating metadata as model output. A stream
+// without recognized content counts as empty only when its handler gives the
+// raw upstream frames to ObserveRouteUsage and a normal completion marker
+// (streamEventEnd) is seen. An unknown payload followed by such a marker
+// therefore still counts as empty, except a Responses terminal that lists
+// output items: only a missing or empty output proves the response was empty.
 func streamEventHasOutput(data string) bool {
 	var event map[string]json.RawMessage
 	if common.Unmarshal([]byte(data), &event) != nil || (len(event["error"]) > 0 && !bytes.Equal(event["error"], []byte("null"))) {
@@ -139,15 +143,32 @@ func objectHasPayload(raw json.RawMessage, fields ...string) bool {
 }
 
 // objectHasValue reports whether any of the fields holds a non-empty JSON
-// value: not null, "", [] or {}.
+// value: not null, an empty string, an empty array or an empty object,
+// whatever the whitespace.
 func objectHasValue(raw json.RawMessage, fields ...string) bool {
 	var object map[string]json.RawMessage
 	if common.Unmarshal(raw, &object) != nil {
 		return false
 	}
 	for _, field := range fields {
-		switch value := string(bytes.TrimSpace(object[field])); value {
-		case "", "null", `""`, "[]", "{}":
+		var value any
+		if len(object[field]) == 0 || common.Unmarshal(object[field], &value) != nil {
+			continue
+		}
+		switch v := value.(type) {
+		case nil:
+		case string:
+			if v != "" {
+				return true
+			}
+		case []any:
+			if len(v) > 0 {
+				return true
+			}
+		case map[string]any:
+			if len(v) > 0 {
+				return true
+			}
 		default:
 			return true
 		}
@@ -206,15 +227,14 @@ var normalEndReasons = map[string]bool{
 	"end_turn": true, "stop_sequence": true, "tool_use": true,
 }
 
-// normalEndEvents are terminal events that only follow a normal completion
-// or carry the end reason before them: Claude message_stop and Responses
-// response.completed.
-var normalEndEvents = map[string]bool{"message_stop": true, "response.completed": true}
-
 // streamEventEnd reads the end of the supported wire formats: chat
 // finish_reason, Claude stop_reason and message_stop, Gemini finishReason and
-// prompt block, and the Responses completed event and incomplete reason. A
-// request-caused reason wins over a normal one in the same event.
+// prompt block, and the Responses terminal and incomplete reason. A Responses
+// terminal (response.completed, or response.done with status completed, as the
+// native handler accepts both) is a normal completion only when its output is
+// missing or empty: listed items the content check did not recognize, such as
+// encrypted reasoning, do not prove an empty response. A request-caused reason
+// wins over a normal one in the same event.
 func streamEventEnd(data string) streamEnd {
 	var event struct {
 		Type    string `json:"type"`
@@ -231,6 +251,8 @@ func streamEventEnd(data string) streamEnd {
 			BlockReason string `json:"blockReason"`
 		} `json:"promptFeedback"`
 		Response struct {
+			Status            string            `json:"status"`
+			Output            []json.RawMessage `json:"output"`
 			IncompleteDetails struct {
 				Reason string `json:"reason"`
 			} `json:"incomplete_details"`
@@ -250,8 +272,13 @@ func streamEventEnd(data string) streamEnd {
 		reasons = append(reasons, candidate.FinishReason)
 	}
 	end := streamEndNone
-	if normalEndEvents[event.Type] {
+	switch event.Type {
+	case "message_stop":
 		end = streamEndNormal
+	case "response.completed", "response.done":
+		if (event.Type == "response.completed" || event.Response.Status == "completed") && len(event.Response.Output) == 0 {
+			end = streamEndNormal
+		}
 	}
 	for _, reason := range reasons {
 		reason = strings.ToLower(reason)

@@ -21,6 +21,9 @@ func TestStreamOutputExcludesControlAndUsageFrames(t *testing.T) {
 		`{"error":{"message":"failed"},"choices":[{"delta":{"content":"ignored"}}]}`,
 		`{"choices":[{"delta":{"tool_calls":[{"id":"call_metadata"}]}}]}`,
 		`{"type":"session.created"}`, `{"type":"response.output_text.delta","delta":""}`,
+		// Empty arrays and objects with whitespace are still empty.
+		`{"type":"response.output_item.done","item":{"type":"web_search_call","action":{ },"results":[ ]}}`,
+		`{"type":"content_block_start","content_block":{"type":"web_search_tool_result","content":[ ` + "\n" + ` ]}}`,
 	} {
 		require.False(t, streamEventHasOutput(data), data)
 	}

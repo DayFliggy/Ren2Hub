@@ -31,7 +31,9 @@ func finishRouteAttempt(t *testing.T, c *gin.Context, info *relaycommon.RelayInf
 	t.Helper()
 	RequestPolicy(c).BeginAttempt(&model.Channel{Id: 11})
 	MarkRouteAttemptSent(c, info)
+	// As the native chat handler does: the raw frame, then the client frame.
 	for _, frame := range frames {
+		ObserveRouteUsage(c, "openai", []byte(frame))
 		ObserveRouteStreamOutput(c, frame)
 	}
 	FinishRouteAttempt(c, info, apiErr)
@@ -181,7 +183,11 @@ func TestEmptyCompletedStreamIsRouteFailure(t *testing.T) {
 		name, dialect, usage, outcome, reason string
 		frames                                []string
 		status                                func(*relaycommon.StreamStatus)
+		// converted: the handler shows only converted frames, never the raw ones.
+		converted bool
 	}{
+		{name: "converted frames only", outcome: "ignored", reason: "no_visible_output", frames: []string{roleOnly, stop}, converted: true},
+		{name: "conflicting output aliases", dialect: "openai", usage: `{"usage":{"completion_tokens":7,"output_tokens":5}}`, outcome: "ignored", reason: "no_visible_output", frames: []string{roleOnly, stop}},
 		{name: "upstream reported output tokens", dialect: "openai", usage: `{"usage":{"prompt_tokens":5,"completion_tokens":7}}`, outcome: "ignored", reason: "no_visible_output", frames: []string{roleOnly, stop}},
 		{name: "content filter", outcome: "ignored", reason: "request_terminated", frames: []string{roleOnly, `{"choices":[{"index":0,"delta":{},"finish_reason":"content_filter"}]}`}},
 		{name: "length limit", outcome: "ignored", reason: "request_terminated", frames: []string{roleOnly, `{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}`}},
@@ -213,6 +219,13 @@ func TestEmptyCompletedStreamIsRouteFailure(t *testing.T) {
 				ObserveRouteUsage(c, tc.dialect, []byte(tc.usage))
 			}
 			for _, frame := range tc.frames {
+				if !tc.converted {
+					dialect := tc.dialect
+					if dialect == "" {
+						dialect = "openai"
+					}
+					ObserveRouteUsage(c, dialect, []byte(frame))
+				}
 				ObserveRouteStreamOutput(c, frame)
 			}
 			FinishRouteAttempt(c, info, nil)

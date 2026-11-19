@@ -73,8 +73,13 @@ func (u *routeUsage) merge(object gjson.Result, count *usageCount, aliases ...st
 
 // ObserveRouteUsage accepts the actual wire dialect before conversion or token
 // estimation. Reading the normalized DTO would turn omitted counts into zeros.
+// The raw frame also carries the upstream's end of generation, which the
+// client frames may not show: a chat tail frame with usage is not forwarded
+// unless the client asked for usage.
 func ObserveRouteUsage(c *gin.Context, dialect string, body []byte) {
 	if a := currentRouteAttempt(c); a != nil && a.bound {
+		a.rawObserved.Store(true)
+		a.noteStreamEnd(string(body))
 		a.observeUsage(dialect, body)
 	}
 }

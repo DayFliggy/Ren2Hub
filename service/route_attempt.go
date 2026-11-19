@@ -30,6 +30,7 @@ type routeAttempt struct {
 	streamEvents   atomic.Int64
 	requestEnded   atomic.Bool
 	completed      atomic.Bool
+	rawObserved    atomic.Bool
 	breakerOnce    sync.Once
 	status         atomic.Int64
 	cooldown       atomic.Int64
@@ -76,15 +77,21 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 		attempt.markOutput(time.Now())
 		return
 	}
-	// The end only matters while the stream has produced nothing.
-	if attempt.firstOutput.Load() != 0 {
+	attempt.noteStreamEnd(data)
+}
+
+// noteStreamEnd records how the upstream ended the generation, from a client
+// frame or a raw upstream frame. The end only matters while the stream has
+// produced nothing.
+func (a *routeAttempt) noteStreamEnd(data string) {
+	if a.firstOutput.Load() != 0 {
 		return
 	}
 	switch streamEventEnd(data) {
 	case streamEndRequest:
-		attempt.requestEnded.Store(true)
+		a.requestEnded.Store(true)
 	case streamEndNormal:
-		attempt.completed.Store(true)
+		a.completed.Store(true)
 	}
 }
 

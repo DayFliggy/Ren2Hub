@@ -88,6 +88,11 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 	audio := chatChunk(`{"audio":{"id":"audio_1","data":"UklGRg==","transcript":"hi"}}`, "")
 	audioMeta := chatChunk(`{"audio":{"id":"audio_1","expires_at":1710003600}}`, "")
 	refusal := chatChunk(`{"refusal":"I can't help with that."}`, "")
+	// Two output aliases that disagree: the count is unknown, not zero.
+	conflictingOutput := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[],"usage":{"prompt_tokens":9,"completion_tokens":7,"output_tokens":5,"total_tokens":16}}`
+	// Many resellers send stop and usage in one tail frame; without
+	// include_usage the native handler does not forward it.
+	stopWithUsage := `{"id":"chatcmpl-e","object":"chat.completion.chunk","created":1710000000,"model":"empty-test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":0,"total_tokens":9}}`
 	for _, tc := range []struct {
 		name, outcome, reason string
 		frames, client        []string
@@ -100,6 +105,8 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 		{name: "refusal only", outcome: "success", frames: []string{role, refusal, stop}, client: []string{role, refusal, stop}},
 		{name: "audio metadata only", outcome: "failure", reason: "empty_stream", frames: []string{role, audioMeta, stop}, client: []string{role, audioMeta, stop}},
 		{name: "no completion marker", outcome: "ignored", reason: "no_visible_output", frames: []string{role}, client: []string{role}},
+		{name: "conflicting output aliases", outcome: "ignored", reason: "no_visible_output", frames: []string{role, stop, conflictingOutput}, client: []string{role, stop}},
+		{name: "stop only in the unforwarded usage tail frame", outcome: "failure", reason: "empty_stream", frames: []string{role, stopWithUsage}, client: []string{role}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, ev := runRouteStream(t, "/v1/chat/completions", types.RelayFormatOpenAI, openai.OaiStreamHandler, tc.frames, true)
@@ -108,6 +115,35 @@ func TestRouteEvidenceMarksEmptyStream(t *testing.T) {
 				want += "data: " + frame + "\n\n"
 			}
 			require.Equal(t, want+"data: [DONE]\n\n", body, "the client bytes do not depend on the routing outcome")
+			require.Equal(t, tc.outcome, ev.Get("outcome").String())
+			require.Equal(t, tc.reason, ev.Get("outcome_reason").String())
+		})
+	}
+}
+
+// Only a terminal event whose output is missing or empty proves an empty
+// response; response.done with status completed is the same completion as
+// response.completed. Output items the content check does not recognize, such
+// as encrypted reasoning, are not proof of an empty response.
+func TestRouteEvidenceResponsesTerminals(t *testing.T) {
+	created := `{"type":"response.created","sequence_number":0,"response":{"id":"resp_1","object":"response","status":"in_progress","output":[]}}`
+	terminal := func(kind, output string) string {
+		return `{"type":"` + kind + `","sequence_number":3,"response":{"id":"resp_1","object":"response","status":"completed","output":` + output + `,"usage":{"input_tokens":5,"output_tokens":0,"total_tokens":5}}}`
+	}
+	encrypted := `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"gAAAAABencrypted"}`
+	unknown := `{"type":"future_output","id":"fo_1","status":"completed"}`
+	for _, tc := range []struct {
+		name, outcome, reason string
+		frames                []string
+	}{
+		{"empty response.completed", "failure", "empty_stream", []string{created, terminal("response.completed", "[]")}},
+		{"empty response.done", "failure", "empty_stream", []string{created, terminal("response.done", "[]")}},
+		{"encrypted reasoning only", "ignored", "no_visible_output", []string{created,
+			`{"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":` + encrypted + `}`, terminal("response.completed", "["+encrypted+"]")}},
+		{"unknown output item", "ignored", "no_visible_output", []string{created, terminal("response.completed", "["+unknown+"]")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ev := runRouteStream(t, "/v1/responses", types.RelayFormatOpenAIResponses, openai.OaiResponsesStreamHandler, tc.frames, false)
 			require.Equal(t, tc.outcome, ev.Get("outcome").String())
 			require.Equal(t, tc.reason, ev.Get("outcome_reason").String())
 		})
