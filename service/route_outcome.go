@@ -15,7 +15,12 @@ import (
 // Reasons why the routing outcome of an attempt differs from the native
 // classification. Only routing health, quality and observations read them;
 // retries, the native performance metrics and the client response do not.
-const routeReasonContextOverflow = "request_context_overflow"
+const (
+	routeReasonContextOverflow  = "request_context_overflow"
+	routeReasonEmptyStream      = "empty_stream"
+	routeReasonNoVisibleOutput  = "no_visible_output"
+	routeReasonRequestTerminate = "request_terminated"
+)
 
 // routeOutcome is the single place that turns the native classification into
 // the routing outcome of one attempt.
@@ -27,7 +32,28 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 	if outcome == perfmetrics.OutcomeFailure && a.requestContextOverflow(apiErr) {
 		return perfmetrics.OutcomeIgnored, routeReasonContextOverflow
 	}
+	if outcome == perfmetrics.OutcomeSuccess && info.IsStream && a.firstOutput.Load() == 0 && a.streamEvents.Load() > 0 {
+		return a.emptyStreamOutcome()
+	}
 	return outcome, ""
+}
+
+// emptyStreamOutcome judges a stream that ended normally after observed events
+// without one content event. Streams whose handler never reports events keep
+// the native result, so an unobserved handler is not mistaken for empty.
+func (a *routeAttempt) emptyStreamOutcome() (perfmetrics.Outcome, string) {
+	a.usageMu.Lock()
+	u := a.usage
+	a.usageMu.Unlock()
+	switch {
+	case !u.conflict && (u.output.value > 0 || u.thinking.value > 0):
+		// The content check may have missed a payload kind; neither punish
+		// nor credit the channel.
+		return perfmetrics.OutcomeIgnored, routeReasonNoVisibleOutput
+	case a.requestEnded.Load():
+		return perfmetrics.OutcomeIgnored, routeReasonRequestTerminate
+	}
+	return perfmetrics.OutcomeFailure, routeReasonEmptyStream
 }
 
 // requestContextOverflow recognizes a context overflow that the upstream

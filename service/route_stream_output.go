@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -20,6 +21,14 @@ func streamEventHasOutput(data string) bool {
 	case "response.output_text.delta", "response.text.delta", "response.refusal.delta", "response.reasoning_text.delta",
 		"response.reasoning_summary_text.delta", "response.function_call_arguments.delta",
 		"response.audio.delta", "response.output_audio.delta", "response.audio_transcript.delta":
+		return nonemptyString(event["delta"])
+	case "image_generation.partial_image", "image_generation.completed", "image_edit.partial_image", "image_edit.completed":
+		return nonemptyString(event["b64_json"]) || nonemptyString(event["url"])
+	case "response.image_generation_call.partial_image":
+		return nonemptyString(event["partial_image_b64"])
+	case "speech.audio.delta":
+		return nonemptyString(event["audio"])
+	case "transcript.text.delta":
 		return nonemptyString(event["delta"])
 	case "content_block_delta":
 		return objectHasPayload(event["delta"], "text", "thinking", "partial_json", "data")
@@ -125,6 +134,59 @@ func outputItemHasPayload(raw json.RawMessage) bool {
 	}
 	for _, part := range append(item.Content, item.Summary...) {
 		if objectHasPayload(part, "text", "refusal") {
+			return true
+		}
+	}
+	return false
+}
+
+// requestEndReasons are end reasons the request caused: content filtering,
+// safety, refusal and length limits. Matching is case-insensitive because
+// Gemini reports them in upper case.
+var requestEndReasons = map[string]bool{
+	"content_filter": true, "content_policy_violation": true, "safety": true, "refusal": true,
+	"length": true, "max_tokens": true, "max_output_tokens": true, "model_context_window_exceeded": true,
+	"recitation": true, "blocklist": true, "prohibited_content": true, "spii": true, "image_safety": true,
+}
+
+// streamEventEndsForRequest reads the end reason of the supported wire
+// formats: chat finish_reason, Claude stop_reason, Gemini finishReason and
+// prompt block, and the Responses incomplete reason.
+func streamEventEndsForRequest(data string) bool {
+	var event struct {
+		Choices []struct {
+			FinishReason string `json:"finish_reason"`
+		} `json:"choices"`
+		Delta struct {
+			StopReason string `json:"stop_reason"`
+		} `json:"delta"`
+		Candidates []struct {
+			FinishReason string `json:"finishReason"`
+		} `json:"candidates"`
+		PromptFeedback struct {
+			BlockReason string `json:"blockReason"`
+		} `json:"promptFeedback"`
+		Response struct {
+			IncompleteDetails struct {
+				Reason string `json:"reason"`
+			} `json:"incomplete_details"`
+		} `json:"response"`
+	}
+	if common.Unmarshal([]byte(data), &event) != nil {
+		return false
+	}
+	reasons := []string{event.Delta.StopReason, event.Response.IncompleteDetails.Reason}
+	for _, choice := range event.Choices {
+		reasons = append(reasons, choice.FinishReason)
+	}
+	for _, candidate := range event.Candidates {
+		reasons = append(reasons, candidate.FinishReason)
+	}
+	if event.PromptFeedback.BlockReason != "" {
+		return true
+	}
+	for _, reason := range reasons {
+		if requestEndReasons[strings.ToLower(reason)] {
 			return true
 		}
 	}

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 402,
+    "extension": 403,
     "removed": 45
   },
   "files": [
@@ -8301,6 +8301,12 @@
       }
     },
     {
+      "path": "relay/channel/openai/route_empty_stream_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "7e9911a69f80b707cc267bce00afe463a2a883d87ad3bd87a703dbb15da7295f"
+    },
+    {
       "path": "relay/channel/openai/route_usage_evidence_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -12920,7 +12926,7 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9928e57ded169e9e9a1bf95fceb95b3ea694a6d6d70d3d71f7a8f0ceb5fde37e",
+      "local_sha256": "0f3a89e4fdfa9ec605a285d080ed5b03cede7fd577393bd41de6882cf0da36da",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13107,21 +13113,21 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5aeaca5d505afcd3f8484fb36a2297eb7e43038715a4ffe73aa4355ff2a0d009",
+      "local_sha256": "8c94061dff3552623b900741cc2723ffd3323214678cae1b0894e76646c19ef4",
       "reasons": [
         "token-routing",
         "ops-metrics"
       ],
       "review": {
         "target": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "basis": "自动路由证据的结果收窄：上游把上下文超长包成无可识别错误码的失败时，只对熔断、质量和观测样本改记 ignored；重试、原生性能统计和客户响应不变。"
+        "basis": "自动路由证据的结果收窄与判定：上游把上下文超长包成无可识别错误码的失败时改记 ignored；流式正常结束但没有内容事件时按上游输出用量和请求级结束原因记 ignored 或 failure。只影响熔断、质量和观测样本；重试、原生性能统计和客户响应不变。"
       }
     },
     {
       "path": "service/route_outcome_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0ececd8b16fb38ca0296ebe8ffd4e916bfee17fb6acb85def8bf0e96e1064640"
+      "local_sha256": "a74f3d1eae1d70b56e553aec8d47e780b91d4e37f637e22240a6051693fded57"
     },
     {
       "path": "service/route_pin_test.go",
@@ -13210,7 +13216,7 @@
       "path": "service/route_stream_output.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "44d8637cecb9c5cfba1b60c36c0b6e0135b8b68592ef3faf302519d29d0cc5fe",
+      "local_sha256": "2573c7d2bbbe4abcb085938cd23a7813c55da0168fd21e940f563024dfbb03ea",
       "reasons": [
         "concurrency",
         "token-routing"

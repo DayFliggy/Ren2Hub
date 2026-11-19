@@ -27,6 +27,8 @@ type routeAttempt struct {
 	operation      int
 	firstOutput    atomic.Int64
 	lastOutput     atomic.Int64
+	streamEvents   atomic.Int64
+	requestEnded   atomic.Bool
 	status         atomic.Int64
 	cooldown       atomic.Int64
 	estimated      atomic.Bool
@@ -59,6 +61,7 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 	if attempt == nil {
 		return
 	}
+	attempt.streamEvents.Add(1)
 	// Responses terminals can replay all previously delivered content. Only a
 	// terminal-only response may use that replay as its first observed output.
 	if attempt.firstOutput.Load() != 0 {
@@ -69,6 +72,11 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 	}
 	if streamEventHasOutput(data) {
 		attempt.markOutput(time.Now())
+		return
+	}
+	// The end reason only matters while the stream has produced nothing.
+	if attempt.firstOutput.Load() == 0 && streamEventEndsForRequest(data) {
+		attempt.requestEnded.Store(true)
 	}
 }
 

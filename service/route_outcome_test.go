@@ -145,3 +145,77 @@ func TestRouteOutcomeIgnoresWrappedContextOverflow(t *testing.T) {
 		})
 	}
 }
+
+// A stream that ends normally without one content event served nothing. It is
+// a channel failure unless the upstream reported output the content check did
+// not see, or ended the stream for a reason the request caused.
+func TestEmptyCompletedStreamIsRouteFailure(t *testing.T) {
+	key := routeBreakerKey{11, "route-model"}
+	newInfo := func() *relaycommon.RelayInfo {
+		status := relaycommon.NewStreamStatus()
+		status.SetEndReason(relaycommon.StreamEndReasonDone, nil)
+		return &relaycommon.RelayInfo{OriginModelName: "route-model", RelayMode: 1, IsStream: true, StartTime: time.Now(), StreamStatus: status}
+	}
+	roleOnly := `{"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}`
+	stop := `{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`
+
+	t.Run("role delta and stop opens after five", func(t *testing.T) {
+		c := routeOutcomeTestContext(t)
+		for range routeBreakerOpenFailures {
+			ev := finishRouteAttempt(t, c, newInfo(), nil, roleOnly, stop)
+			require.Equal(t, "failure", ev.Outcome)
+			require.Equal(t, "empty_stream", ev.OutcomeReason)
+		}
+		class, _ := routeObservations.availability(key)
+		require.Equal(t, routeOpen, class)
+	})
+
+	for _, tc := range []struct {
+		name, dialect, usage, outcome, reason string
+		frames                                []string
+		status                                func(*relaycommon.StreamStatus)
+	}{
+		{name: "upstream reported output tokens", dialect: "openai", usage: `{"usage":{"prompt_tokens":5,"completion_tokens":7}}`, outcome: "ignored", reason: "no_visible_output", frames: []string{roleOnly, stop}},
+		{name: "content filter", outcome: "ignored", reason: "request_terminated", frames: []string{roleOnly, `{"choices":[{"index":0,"delta":{},"finish_reason":"content_filter"}]}`}},
+		{name: "length limit", outcome: "ignored", reason: "request_terminated", frames: []string{roleOnly, `{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}`}},
+		{name: "tool call delta", outcome: "success", frames: []string{`{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"lookup","arguments":""}}]}}]}`, `{"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`}},
+		{name: "no observed event", outcome: "success"},
+		{name: "image stream", outcome: "success", frames: []string{`{"type":"image_generation.partial_image","b64_json":"aW1n","partial_image_index":0}`, `[DONE]`}},
+		{name: "speech stream", outcome: "success", frames: []string{`{"type":"speech.audio.delta","audio":"UklGRg=="}`, `{"type":"speech.audio.done","usage":{"output_tokens":4}}`}},
+		{name: "responses completed with empty output", dialect: "openai", usage: `{"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":0}}}`, outcome: "failure", reason: "empty_stream",
+			frames: []string{`{"type":"response.created","response":{"status":"in_progress","output":[]}}`, `{"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":0}}}`},
+			status: (*relaycommon.StreamStatus).MarkCompleted},
+		{name: "claude end turn without output", dialect: "claude", usage: `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":0}}`, outcome: "failure", reason: "empty_stream",
+			frames: []string{`{"type":"message_start","message":{"role":"assistant","content":[]}}`, `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":0}}`, `{"type":"message_stop"}`}},
+		{name: "claude refusal", dialect: "claude", usage: `{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}`, outcome: "ignored", reason: "request_terminated",
+			frames: []string{`{"type":"message_start","message":{"role":"assistant","content":[]}}`, `{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}`, `{"type":"message_stop"}`}},
+		{name: "gemini safety block", outcome: "ignored", reason: "request_terminated", frames: []string{`{"candidates":[{"content":{"parts":[]},"finishReason":"SAFETY"}]}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := routeOutcomeTestContext(t)
+			info := newInfo()
+			if tc.status != nil {
+				tc.status(info.StreamStatus)
+			}
+			RequestPolicy(c).BeginAttempt(&model.Channel{Id: 11})
+			MarkRouteAttemptSent(c, info)
+			if tc.usage != "" {
+				ObserveRouteUsage(c, tc.dialect, []byte(tc.usage))
+			}
+			for _, frame := range tc.frames {
+				ObserveRouteStreamOutput(c, frame)
+			}
+			FinishRouteAttempt(c, info, nil)
+			events := RequestPolicy(c).Events()
+			ev := events[len(events)-1].RouteAttempt
+			require.NotNil(t, ev)
+			require.Equal(t, tc.outcome, ev.Outcome)
+			require.Equal(t, tc.reason, ev.OutcomeReason)
+			failures := 0
+			if tc.outcome == "failure" {
+				failures = 1
+			}
+			require.Equal(t, failures, routeObservations.breakers[key].failures)
+		})
+	}
+}
