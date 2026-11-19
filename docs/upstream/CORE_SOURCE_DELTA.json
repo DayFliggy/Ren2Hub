@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 864,
     "adapted": 298,
-    "extension": 411,
+    "extension": 412,
     "removed": 45
   },
   "files": [
@@ -2256,6 +2256,12 @@
       "status": "adapted",
       "upstream_sha256": "b31ce3fef1fc721142f7932828bf1b027c6ff87c60b193ae0934545289fc6806",
       "local_sha256": "60f9c77fc8d4fc02a58a8c8e34118ac9810371e18a2c4c32ece089cfb3b7e739"
+    },
+    {
+      "path": "controller/relay_param_override_entry_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c6909f3752275a23ff64aa6c036d9314a89f6d6666282602721274419a6265b9"
     },
     {
       "path": "controller/relay_route_cooldown_test.go",
