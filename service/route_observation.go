@@ -57,25 +57,10 @@ var routeObservations = routeObservationStore{
 // BeginRouteObservation must run before reading the selected channel configuration.
 // A later publication invalidates even a request that has not reached transport yet.
 func BeginRouteObservation(c *gin.Context) {
-	c.Set("route_observation_epoch", RouteConfigEpoch())
-}
-
-// RouteConfigEpoch returns the current routing configuration epoch. Read it
-// before reading a channel's configuration: a result obtained with that
-// configuration is current only while routeConfigChangedSince is false.
-func RouteConfigEpoch() uint64 {
 	routeObservations.mu.Lock()
-	defer routeObservations.mu.Unlock()
-	return routeObservations.epoch
-}
-
-// routeConfigChangedSince reports whether a change of the channel was
-// published after epoch was read. A change committed but not yet published is
-// not seen.
-func routeConfigChangedSince(epoch uint64, channelID int) bool {
-	routeObservations.mu.Lock()
-	defer routeObservations.mu.Unlock()
-	return routeObservations.staleLocked(epoch, channelID)
+	epoch := routeObservations.epoch
+	routeObservations.mu.Unlock()
+	c.Set("route_observation_epoch", epoch)
 }
 
 func (s *routeObservationStore) invalidate(channelID int) {
@@ -135,7 +120,10 @@ func (s *routeObservationStore) pruneLocked(now int64) {
 // Callers classify an actually sent attempt once. Local rejection and cancellation
 // never reach this recorder. Empty samples remain distinguishable from healthy ones.
 func RecordRouteObservation(channelID int, model string, operation int, stream, success bool, latencyMS int64) {
-	recordRouteObservation(RouteConfigEpoch(), channelID, model, operation, stream, success, latencyMS)
+	routeObservations.mu.Lock()
+	epoch := routeObservations.epoch
+	routeObservations.mu.Unlock()
+	recordRouteObservation(epoch, channelID, model, operation, stream, success, latencyMS)
 }
 
 func recordRouteObservation(epoch uint64, channelID int, model string, operation int, stream, success bool, latencyMS int64) {

@@ -33239,66 +33239,6 @@
   },
   "round5_adjudication_count": 1,
   "current_file_reviews": {
-    "controller/channel-test.go": {
-      "local_sha256": "b42d03ed347874f16cd7acbd443fc5829694f02009ba270de5f80d2496318c68",
-      "hunks": [
-        {
-          "header": "@@ -48,9 +48,6 @@",
-          "sha256": "555e6b9b49fa5fe684bd50546eb89814abda8640fc224b3bf31b14a39b661913",
-          "basis": "专用 Codex/type57 退役：删除端点与强制 stream 测试特殊分支，对应原审查 controller/channel-test.go#1。"
-        },
-        {
-          "header": "@@ -99,9 +96,24 @@",
-          "sha256": "3881bfaf969631df7c83f5974920cfb8b69545bcccef4a62faeaebcb6c0ae19b",
-          "basis": "真实渠道测试纳入本地路由观测，重新读渠道配置避免使用过期并发和倍率（原审查 #2）；另加定时 Key 恢复的接点：可选的 keyUnderTest 存在时不开始路由观测，并把重读的渠道收窄到被测 Key（逻辑在扩展文件 controller/channel_key_recovery.go）。"
-        },
-        {
-          "header": "@@ -124,9 +136,6 @@",
-          "sha256": "7312c841ead63da79dd99d69f3cf9781eac21383d6616c4eba9b2e63b8cbb89f",
-          "basis": "真实渠道测试纳入本地路由观测，对应原审查 controller/channel-test.go#3。"
-        },
-        {
-          "header": "@@ -203,13 +212,24 @@",
-          "sha256": "2b5b3db310cf744d1d56b7cd22a2274a760eaf0b8a09ee200b23957c4a159ca9",
-          "basis": "无业务组且用户与渠道无等待并发上限同时覆盖管理测试，对应原审查 controller/channel-test.go#4。"
-        },
-        {
-          "header": "@@ -282,6 +302,7 @@",
-          "sha256": "ba655d47ab1c569640fda6c77ec8895975b24b821acf5c0e59568f131eb4a6a2",
-          "basis": "真实渠道测试纳入本地路由观测，对应原审查 controller/channel-test.go#5。"
-        },
-        {
-          "header": "@@ -556,7 +577,6 @@",
-          "sha256": "c11074ddff02ad098da9cb3396e9f552bc681ff89b761660c2edd8d5c8113a9b",
-          "basis": "渠道测试日志去组并按基础价×渠道倍率记录，对应原审查 controller/channel-test.go#6。"
-        },
-        {
-          "header": "@@ -604,8 +624,8 @@",
-          "sha256": "15af339a45faac1fb3d52eb239d3a62430f9b27b1194f6a778e661da1bb9688f",
-          "basis": "渠道测试日志去组并按基础价×渠道倍率记录，对应原审查 controller/channel-test.go#7。"
-        },
-        {
-          "header": "@@ -707,10 +727,6 @@",
-          "sha256": "6427d979e0dcd11c4cd7cdae4ef5ac8468f9f00e594ac9662447b0cf2a13c2fe",
-          "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#8。"
-        },
-        {
-          "header": "@@ -965,7 +981,7 @@",
-          "sha256": "de5604ead9c34a915826101250aee6c820f81b53a872fed50cd99c4441a6efe3",
-          "basis": "专用 Codex/type57 退役，对应原审查 controller/channel-test.go#9。"
-        },
-        {
-          "header": "@@ -1145,6 +1161,7 @@",
-          "sha256": "242d2a799b93ef5c93a7ee1bf534baceb940d687ee318d42bb79608a52f102d8",
-          "basis": "定时 Key 恢复的接点：记录本次运行是否由调度发起（载荷 Mode 为空）；管理员“测试全部”入队时 Mode=scheduled_all，不执行 Key 恢复。"
-        },
-        {
-          "header": "@@ -1152,6 +1169,9 @@",
-          "sha256": "70d5cc02f0229e3aeae98cc5a68a26769f23159c2dc61d3fd710c5ca10351068",
-          "basis": "定时 Key 恢复的接点：只有调度发起的运行在渠道测试之后调用扩展文件 controller/channel_key_recovery.go 的 recoverAutoDisabledKeys，三种测试模式都执行，只在开启自动启用时发请求；提供商插件渠道和文本重复的 Key 不参与。"
-        }
-      ]
-    },
     "controller/model.go": {
       "local_sha256": "fb835c6974aad5078f975063a776fb07d4f63d6ece295f0b9d1a0ca5d2dac656",
       "hunks": [

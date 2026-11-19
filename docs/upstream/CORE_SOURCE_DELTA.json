@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 868,
     "adapted": 295,
-    "extension": 417,
+    "extension": 415,
     "removed": 46
   },
   "files": [
@@ -962,18 +962,17 @@
       "path": "controller/channel-test.go",
       "status": "adapted",
       "upstream_sha256": "2854ae6987e4f6d458de553dca6a06c48c0f88cced1ed608e5bb29f0f382a4d0",
-      "local_sha256": "b42d03ed347874f16cd7acbd443fc5829694f02009ba270de5f80d2496318c68",
+      "local_sha256": "a333a78bbe1beec6396554f95f60999bf7d5b1cd3a463485995bfbccf20c89eb",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "retired",
-        "scheduled-key-recovery",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9 另含定时 Key 恢复的两个接点，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel-test.go#1, controller/channel-test.go#2, controller/channel-test.go#3, controller/channel-test.go#4, controller/channel-test.go#5, controller/channel-test.go#6, controller/channel-test.go#7, controller/channel-test.go#8, controller/channel-test.go#9",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -986,8 +985,7 @@
           "controller/channel-test.go#7",
           "controller/channel-test.go#8",
           "controller/channel-test.go#9"
-        ],
-        "current_hunk_review": true
+        ]
       }
     },
     {
@@ -1147,25 +1145,6 @@
       "local_sha256": "ad5d4127f7adac4b386660b552b3424c668caa0200554909dc1c5dab50e4c30b"
     },
     {
-      "path": "controller/channel_key_recovery.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "983db3de9b5694d607e7d08fe66f769897118da2ac862b7fda68ad5ea0dd9f96",
-      "reasons": [
-        "scheduled-key-recovery"
-      ],
-      "review": {
-        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "定时 Key 恢复：选取每渠道最久没测过的至多 3 个自动停用 Key，经原生 testChannel 用该 Key 单独测试，成功后调用 service.EnableRecoveredChannelKey。"
-      }
-    },
-    {
-      "path": "controller/channel_key_recovery_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "81ea1fb44ed1fd0d5f1c31af32f0c2ffe5f85d61c68ebeac7069e40c5b1b2070"
-    },
-    {
       "path": "controller/channel_lab.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -1260,6 +1239,12 @@
       "status": "adapted",
       "upstream_sha256": "7964e71216eff499e0117533534c1583e9ea413618df4fff4182aeb9c53d2ce9",
       "local_sha256": "b316e50a7637a79fb5889e91602ceab9d8a4d19d143f37b1d76bf23f7467dad4"
+    },
+    {
+      "path": "controller/channel_test_recovery_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "11ff65b41c236da232d5d31f0a176e43cc60d54497f98cea02c1dcfee44ce8a4"
     },
     {
       "path": "controller/channel_test_request_test.go",
@@ -11803,19 +11788,6 @@
       "local_sha256": "2d506e2c492cb9108ee6f326b72ba95df470a49b53e719be1adef4ab55d027d9"
     },
     {
-      "path": "service/channel_key_recovery.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "a575dd417ee872aca194b98b68d25b6b5c40f73ad2948824b632ad9ade031b49",
-      "reasons": [
-        "scheduled-key-recovery"
-      ],
-      "review": {
-        "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "定时 Key 恢复的写入：经上游的 UpdateScheduledChannelLocked 与 SetScheduledChannelKeyStatus 在行锁内只把仍是自动停用的同一 Key 改回启用，并按 EnableChannel 的方式通知。"
-      }
-    },
-    {
       "path": "service/channel_request.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -13206,7 +13178,7 @@
       "path": "service/route_observation.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f749ef36b51b78337f9525827fe2a34c089142441599161efcb72129caa40488",
+      "local_sha256": "7778660e707664d4ce2e41cfb2f7aabd7e8c3eb08ad16a92ceaf9892b4a97c35",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -14896,11 +14868,6 @@
     "backup-payment-links": {
       "basis": "钱包备用支付：原生 TopUpLink 之外由管理员维护最多 10 个名称加 http(s) 链接，保存时校验；/api/user/topup/info 返回合并列表，支付合规未确认时为空；逻辑在扩展文件。",
       "authority": "SYNC_LEDGER.md#备用支付接点",
-      "kind": "approved_contract"
-    },
-    "scheduled-key-recovery": {
-      "basis": "定时渠道测试在开启自动启用时，用被测 Key 发一次与渠道测试相同的真实请求，恢复多 Key 渠道里被自动停用的 Key；每轮每渠道最多 3 个，失败不改状态，不写路由健康；只在调度发起的运行里执行，人工禁用的 Key 和渠道、提供商插件渠道、文本重复的 Key 不碰。",
-      "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }
   },
