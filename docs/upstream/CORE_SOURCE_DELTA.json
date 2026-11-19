@@ -12953,7 +12953,7 @@
       "path": "service/route_affinity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "070c160aab39780ab56d7a90aae0562da6b5d2a57238ff3ae8328db5bebfab3b",
+      "local_sha256": "d9176c4ef10783d499ba9146cad3d48e2abe27b7458ebf09d9c2070d24347940",
       "reasons": [
         "concurrency",
         "token-routing"

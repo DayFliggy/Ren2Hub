@@ -75,7 +75,8 @@ func clearAffinityIfStillBound(c *gin.Context, channelID int) {
 	}
 	current, found, err := getChannelAffinityCache().Get(cacheKey)
 	if err != nil {
-		common.SysError(common.LogText("channel affinity cache get before clear failed: key=%s, err=%v", cacheKey, err))
+		// The key holds the session value, so it is not logged.
+		common.SysError(common.LogText("channel affinity cache get before clear failed: err=%v", err))
 		return
 	}
 	if !found || current != channelID {
