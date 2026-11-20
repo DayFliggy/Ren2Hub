@@ -125,7 +125,8 @@ func runChannelMutationLockRace(t *testing.T, db *gorm.DB, operation string) {
 		}).Error)
 	}
 	fixture := raceFixture{db: db, token: Token{UserId: 901, Key: "channel-lock-token"}, ids: map[string]int{"A": lowID, "B": highID}}
-	require.NoError(t, fixture.token.InsertWithRouting(TokenRouteManual))
+	require.NoError(t, fixture.token.Insert())
+	require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: fixture.token.Id, Mode: TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 	require.NoError(t, fixture.save(fixture.route(1, "A", "B")))
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		var physicalOrder []int

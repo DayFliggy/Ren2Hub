@@ -153,14 +153,15 @@ func seedRaceToken(t *testing.T, db *gorm.DB, index int, labels []string) raceFi
 		require.NoError(t, fixture.token.Insert())
 		return fixture
 	}
-	require.NoError(t, fixture.token.InsertWithRouting(TokenRouteManual))
+	require.NoError(t, fixture.token.Insert())
+	require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: fixture.token.Id, Mode: TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 	_, err := SaveTokenRouting(context.Background(), fixture.token.UserId, fixture.token.Id, fixture.route(1, labels...), fixture.allowed())
 	require.NoError(t, err)
 	return fixture
 }
 
 func (f raceFixture) route(version int64, labels ...string) TokenRouting {
-	route := TokenRouting{TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: version}}
+	route := TokenRouting{TokenRouteProfile: TokenRouteProfile{SelectedOnly: true, Mode: TokenRouteOrdered, Version: version}}
 	for _, label := range labels {
 		route.Entries = append(route.Entries, TokenRouteEntry{ChannelID: f.ids[label], Enabled: true})
 	}
@@ -346,7 +347,8 @@ func runMultiTokenDeleteRace(t *testing.T, db *gorm.DB) {
 	hardDelete := raceFixture{db: db, token: Token{UserId: userID}}.hardDeleteOwner(t)
 	for _, id := range []int{highID, lowID} {
 		token := Token{Id: id, UserId: userID, Key: fmt.Sprintf("routing-multi-%d", id)}
-		require.NoError(t, token.InsertWithRouting(TokenRouteManual))
+		require.NoError(t, token.Insert())
+		require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: token.Id, Mode: TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 	}
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		requireUnorderedLockReachesHighIDFirst(t, db, userID, lowID, highID)

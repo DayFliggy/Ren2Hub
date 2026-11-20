@@ -140,7 +140,8 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	if err := LoadTokenRouteConstraints(c); err != nil {
 		return nil, tokenRouteScopeFailure(c, err)
 	}
-	if !pinned && !HasPrivateTokenRoute(c) && (retry == nil || retry.GetRetry() == 0) {
+	emptySelection := tokenRouteHasNoEnabledChannels(c)
+	if !pinned && !emptySelection && !hasOrderedTokenRoute(c) && (retry == nil || retry.GetRetry() == 0) {
 		if row, selectErr, decided := selectAffinityChannel(c, modelName); decided {
 			return row, selectErr
 		}
@@ -151,7 +152,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		// The selector already logged this scan, including failures before the relay starts.
 		return nil, classifyRouteLoadFailure(err)
 	}
-	if channel == nil && pinned {
+	if channel == nil && pinned && !emptySelection {
 		channel, err := model.CacheGetChannel(pin.ChannelId)
 		if err != nil {
 			return nil, &ChannelSelectError{StatusCode: http.StatusBadRequest, MessageID: i18n.MsgDistributorInvalidChannelId}

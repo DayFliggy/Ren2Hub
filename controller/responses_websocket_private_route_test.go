@@ -34,7 +34,7 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 				}, func(f *responsesWSBillingTest) string {
 					require.NoError(t, model.DB.Model(f.user).Update("role", common.RoleAdminUser).Error)
 					if scenario != "automatic pin revoked" && scenario != "unchanged automatic pin" {
-						require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, Mode: model.TokenRouteManual, Version: 1}).Error)
+						require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: 1}).Error)
 						require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: f.channel.Id, Enabled: true}).Error)
 						t.Cleanup(func() {
 							require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteEntry{}).Error)
@@ -123,7 +123,7 @@ func TestResponsesWebSocketPrivatePinAbilityQueryFailure(t *testing.T) {
 				}
 			}, func(f *responsesWSBillingTest) string {
 				require.NoError(t, model.DB.Model(f.user).Update("role", common.RoleAdminUser).Error)
-				require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, Mode: model.TokenRouteManual, Version: 1}).Error)
+				require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: 1}).Error)
 				require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: f.channel.Id, Enabled: true}).Error)
 				t.Cleanup(func() {
 					require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteEntry{}).Error)

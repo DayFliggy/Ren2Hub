@@ -365,7 +365,7 @@ func runEndpointRouteCase(t *testing.T, database *gorm.DB, tc endpointRouteCase)
 		require.NoError(t, database.Create(&model.Task{TaskID: "task-route-origin", UserId: endpointRouteUserID, ChannelId: named["alternate"].Id, Platform: constant.TaskPlatform(key), Status: model.TaskStatusSuccess}).Error)
 	}
 	if len(tc.manual) > 0 {
-		route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}}
+		route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered}}
 		allowed := map[int]bool{}
 		for _, name := range tc.manual {
 			id := named[name].Id

@@ -80,7 +80,7 @@ func loadRouteScope(ctx context.Context, tokenID int) (routeScope, error) {
 }
 
 // LoadTokenRouteConstraints runs once per authenticated request (including each
-// response.create). A saved empty manual route is a deny-all filter.
+// response.create). A selected-only route with no enabled entries excludes every channel.
 func LoadTokenRouteConstraints(c *gin.Context) error {
 	if c == nil {
 		return nil
@@ -97,8 +97,7 @@ func LoadTokenRouteConstraints(c *gin.Context) error {
 		return err
 	}
 	c.Set(ginKeyTokenRouteScope, scope)
-	c.Set("token_route_version", scope.route.Version)
-	if scope.route.Mode != model.TokenRouteManual {
+	if !scope.route.SelectedOnly {
 		return nil
 	}
 	ids := make([]int, 0, len(scope.route.Entries))
@@ -125,13 +124,18 @@ func requestRouteScope(c *gin.Context) (routeScope, error) {
 	return value.(routeScope), nil
 }
 
-func HasPrivateTokenRoute(c *gin.Context) bool {
+func tokenRouteHasNoEnabledChannels(c *gin.Context) bool {
 	for _, filter := range GetChannelConstraints(c).Filters {
-		if filter.Kind == dto.FilterTokenRoute {
+		if filter.Kind == dto.FilterTokenRoute && len(filter.ChannelIDs) == 0 {
 			return true
 		}
 	}
 	return false
+}
+
+func hasOrderedTokenRoute(c *gin.Context) bool {
+	scope, ok := common.GetContextKeyType[routeScope](c, ginKeyTokenRouteScope)
+	return ok && scope.route.Mode == model.TokenRouteOrdered
 }
 
 // CheckLockedTokenRoute 服务长连接：每次都从库重读路由和模型限制，会话中途的变更立即生效。

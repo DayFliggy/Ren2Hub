@@ -40,15 +40,15 @@ type RouteChannel struct {
 
 const routeReasonChannelUnavailable = "channel_unavailable"
 
-func routeChannelReason(channel *model.Channel, route model.TokenRouting, manual bool) string {
+func routeChannelReason(channel *model.Channel, route model.TokenRouting, applyList bool) string {
 	if !model.ChannelRoutable(channel) {
 		return routeReasonChannelUnavailable
 	}
-	return routePolicyReason(channel, route, manual)
+	return routePolicyReason(channel, route, applyList)
 }
 
 // routePolicyReason 只判 Key 侧策略（倍率上限、手动列表）；渠道可用性由调用方先判。
-func routePolicyReason(channel *model.Channel, route model.TokenRouting, manual bool) string {
+func routePolicyReason(channel *model.Channel, route model.TokenRouting, applyList bool) string {
 	ratio, err := model.NormalizeChannelRatio(channel.ChannelRatio)
 	if err != nil {
 		return "invalid_channel_ratio"
@@ -63,7 +63,7 @@ func routePolicyReason(channel *model.Channel, route model.TokenRouting, manual 
 			return "channel_ratio_exceeded"
 		}
 	}
-	if manual && route.Mode == model.TokenRouteManual {
+	if applyList && route.SelectedOnly {
 		for _, entry := range route.Entries {
 			if entry.ChannelID == channel.Id {
 				if entry.Enabled {
@@ -90,7 +90,7 @@ func routeCandidates(ctx context.Context, scope routeScope, modelName string, fi
 	if err != nil {
 		return nil, err
 	}
-	if route.Mode == model.TokenRouteManual {
+	if route.Mode == model.TokenRouteOrdered {
 		positions := make(map[int]int, len(route.Entries))
 		for i, e := range route.Entries {
 			positions[e.ChannelID] = i
@@ -104,7 +104,7 @@ func CatalogRouteChannels(ctx context.Context, userID, tokenID int) ([]RouteChan
 	return catalogRouteChannels(ctx, userID, tokenID, true)
 }
 
-func catalogRouteChannels(ctx context.Context, userID, tokenID int, manual bool) ([]RouteChannel, error) {
+func catalogRouteChannels(ctx context.Context, userID, tokenID int, applyList bool) ([]RouteChannel, error) {
 	route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto}}
 	var token *model.Token
 	if tokenID > 0 {
@@ -164,7 +164,7 @@ func catalogRouteChannels(ctx context.Context, userID, tokenID int, manual bool)
 		if len(item.Models) == 0 {
 			continue
 		}
-		item.FilterReason = routeChannelReason(row, route, manual)
+		item.FilterReason = routeChannelReason(row, route, applyList)
 		item.Eligible = item.FilterReason == ""
 		result = append(result, item)
 	}
@@ -253,7 +253,7 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 		return nil, err
 	}
 	pin, pinned, _ := GetChannelConstraints(c).ResolvedPin()
-	manual := HasPrivateTokenRoute(c)
+	ordered := scope.route.Mode == model.TokenRouteOrdered
 	var scan routeScan
 	started := time.Now()
 	rows, err := routeCandidates(c.Request.Context(), scope, modelName, GetChannelConstraints(c).Filters)
@@ -271,15 +271,15 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 				available = append(available, channel)
 			}
 		}
-		automatic := !manual && !pinned
+		automatic := !ordered && !pinned
 		if automatic {
 			orderRuntimeRoutes(c, available, modelName, routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream))
 		}
 		selected, err = scan.acquire(c, available, modelName, automatic)
 		if selected != nil {
 			source := "auto"
-			if manual {
-				source = "manual"
+			if ordered {
+				source = "ordered"
 			}
 			if pinned {
 				source = "pin"
@@ -289,7 +289,7 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 			}
 		}
 	}
-	if !manual && !pinned {
+	if !ordered && !pinned {
 		scan.DurationUS = time.Since(started).Microseconds()
 		scan.record(c, selected, err)
 	} else if err != nil {
@@ -393,7 +393,10 @@ func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName stri
 	if affinityInfo, _ := c.Get(ginKeyChannelAffinityLogInfo); affinityInfo != nil {
 		gate = affinityRouteGate(c)
 	}
-	if pinned || HasPrivateTokenRoute(c) {
+	if err := LoadTokenRouteConstraints(c); err != nil {
+		return nil, tokenRouteScopeFailure(c, err)
+	}
+	if pinned || hasOrderedTokenRoute(c) {
 		gate = boundCapacityOnly
 	}
 	channel, err := acquireBoundRouteChannel(c, channelID, modelName, gate)

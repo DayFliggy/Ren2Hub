@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -35,8 +34,8 @@ func TestTokenRoutingAPIPersistsAndClearsChannelRatioCap(t *testing.T) {
 		want        *string
 	}{
 		{"auto", `"1.500"`, common.GetPointer("1.5")},
-		{"manual", `"0.125"`, common.GetPointer("0.125")},
-		{"manual", `null`, nil},
+		{"auto", `"0.125"`, common.GetPointer("0.125")},
+		{"auto", `null`, nil},
 	} {
 		body := fmt.Sprintf(`{"mode":%q,"version":%d,"entries":[],"max_channel_ratio":%s}`, tc.mode, i, tc.input)
 		w := request(http.MethodPut, body, PutTokenRouting)
@@ -99,58 +98,20 @@ func TestTokenRoutingAPIIsolationConflictAndPublicProjection(t *testing.T) {
 	require.NotContains(t, w.Body.String(), "upstream-private")
 	require.NotContains(t, w.Body.String(), "hidden-model")
 	require.Contains(t, w.Body.String(), "channel_unavailable")
-	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"manual","version":0,"entries":[{"channel_id":22,"enabled":true}]}`, PutTokenRouting)
+	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"ordered","selected_only":true,"version":0,"entries":[{"channel_id":22,"enabled":true}]}`, PutTokenRouting)
 	require.Equal(t, 403, w.Code)
-	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"manual","version":0,"entries":[{"channel_id":11,"enabled":true}]}`, PutTokenRouting)
+	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"ordered","selected_only":true,"version":0,"entries":[{"channel_id":11,"enabled":true}]}`, PutTokenRouting)
 	require.Equal(t, 200, w.Code)
 	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"auto","version":0,"entries":[]}`, PutTokenRouting)
 	require.Equal(t, 409, w.Code)
 	require.Contains(t, w.Body.String(), "ROUTING_VERSION_CONFLICT")
-	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"manual","version":1,"entries":[]}`, PutTokenRouting)
-	require.Equal(t, 200, w.Code)
-	require.Contains(t, w.Body.String(), `"mode":"manual"`)
-	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"auto","version":2,"entries":[]}`, PutTokenRouting)
-	require.Equal(t, 200, w.Code)
-	require.Contains(t, w.Body.String(), `"version":3`)
-	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"manual","entries":[]}`, PutTokenRouting)
+	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"ordered","selected_only":true,"version":1,"entries":[]}`, PutTokenRouting)
 	require.Equal(t, 400, w.Code)
-}
-
-func TestTokenRoutingCreationHonorsWritePermission(t *testing.T) {
-	db := setupTokenControllerTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.CasbinRule{}, &model.AuthzRole{}))
-	previousMaster := common.IsMasterNode
-	common.IsMasterNode = true
-	t.Cleanup(func() { common.IsMasterNode = previousMaster })
-	require.NoError(t, authz.Init(db))
-	create := func(name string) *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest(http.MethodPost, "/api/token/", strings.NewReader(`{"name":"`+name+`","type":"manual","unlimited_quota":true,"expired_time":-1}`))
-		c.Request.Header.Set("Content-Type", "application/json")
-		c.Set("id", 17)
-		c.Set("role", common.RoleCommonUser)
-		AddToken(c)
-		return w
-	}
-	w := create("manual")
+	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"auto","version":1,"entries":[]}`, PutTokenRouting)
 	require.Equal(t, 200, w.Code)
-	require.Contains(t, w.Body.String(), `"success":true`)
-	var token model.Token
-	require.NoError(t, db.Where("user_id = ?", 17).First(&token).Error)
-	view, err := model.ReadTokenRouting(t.Context(), token.Id)
-	require.NoError(t, err)
-	require.Equal(t, model.TokenRouteManual, view.Mode)
-	require.Empty(t, view.Entries)
-	responses := buildMaskedTokenResponses([]*model.Token{&token})
-	require.NoError(t, fillTokenRoutingModes(responses))
-	require.Equal(t, model.TokenRouteManual, responses[0].Type)
-	require.NoError(t, authz.SetUserPermissions(17, authz.PermissionsMap{authz.ResourceRouting: {authz.ActionWrite: false}}))
-	w = create("forbidden")
-	require.Equal(t, http.StatusForbidden, w.Code)
-	var count int64
-	require.NoError(t, db.Model(&model.Token{}).Count(&count).Error)
-	require.Equal(t, int64(1), count)
+	require.Contains(t, w.Body.String(), `"version":2`)
+	w = request(17, http.MethodPut, "/api/token/27/routing", `{"mode":"ordered","selected_only":true,"entries":[]}`, PutTokenRouting)
+	require.Equal(t, 400, w.Code)
 }
 
 func TestTokenRoutingPreviewIsOwnedReadOnlyAndExplainsConstraints(t *testing.T) {
@@ -168,7 +129,7 @@ func TestTokenRoutingPreviewIsOwnedReadOnlyAndExplainsConstraints(t *testing.T) 
 		require.NoError(t, db.Create(&ch).Error)
 		require.NoError(t, db.Create(&model.Ability{ChannelId: ch.Id, Model: ch.Models, Enabled: ch.Status == 1}).Error)
 	}
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 72, Mode: "manual", Version: 3, MaxChannelRatio: common.GetPointer("1")}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 72, Mode: "ordered", SelectedOnly: true, Version: 3, MaxChannelRatio: common.GetPointer("1")}).Error)
 	entries := []model.TokenRouteEntry{}
 	for i, id := range []int{2, 4, 5, 3, 1} {
 		entries = append(entries, model.TokenRouteEntry{TokenID: 72, ChannelID: id, Position: i, Enabled: true})
@@ -197,7 +158,7 @@ func TestTokenRoutingPreviewIsOwnedReadOnlyAndExplainsConstraints(t *testing.T) 
 		} `json:"data"`
 	}
 	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &result))
-	require.Equal(t, "manual", result.Data.Mode)
+	require.Equal(t, "ordered", result.Data.Mode)
 	require.Equal(t, 3, result.Data.Version)
 	require.Len(t, result.Data.Entries, 5)
 	require.Equal(t, "protocol_unavailable", result.Data.Entries[0].Reason)
@@ -211,7 +172,7 @@ func TestTokenRoutingPreviewIsOwnedReadOnlyAndExplainsConstraints(t *testing.T) 
 	require.Equal(t, 400, request(71, "model=fixture&path=https://invalid.example").Code)
 	require.Equal(t, 400, request(71, "model=fixture&path=/v1/responses&stream=maybe").Code)
 	require.Contains(t, request(71, "model=fixture&path=/v1/responses&stream=true").Body.String(), `"stream":true`)
-	require.Contains(t, w.Body.String(), `"ordering":"manual"`)
+	require.Contains(t, w.Body.String(), `"ordering":"ordered"`)
 	require.Contains(t, w.Body.String(), `"transport":"http"`)
 	ws := request(71, "model=fixture&path=/v1/responses&transport=websocket")
 	require.Equal(t, 200, ws.Code)

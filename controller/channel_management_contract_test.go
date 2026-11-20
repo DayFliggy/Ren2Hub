@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -157,7 +158,8 @@ func TestChannelDeletionReleasesRouteEntriesAndConcurrency(t *testing.T) {
 			createContractChannel(t, model.Channel{Id: 8301, Type: constant.ChannelTypeOpenAI, Name: "deleted", Key: "k", Models: "gpt-4o", Status: tc.status})
 			createContractChannel(t, model.Channel{Id: 8302, Type: constant.ChannelTypeOpenAI, Name: "kept", Key: "k", Models: "gpt-4o"})
 			token := &model.Token{UserId: 7, Key: "route-cleanup-" + tc.name, Name: "route"}
-			require.NoError(t, token.InsertWithRouting(model.TokenRouteManual))
+			require.NoError(t, token.Insert())
+			require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: token.Id, Mode: model.TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 			for position, channelID := range []int{8301, 8302, 8399} {
 				require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: token.Id, ChannelID: channelID, Position: position, Enabled: true}).Error)
 			}
@@ -273,4 +275,60 @@ func TestChannelRoutingFieldsAreRejectedBeforeWrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, stored.MaxConcurrency)
 	assert.Equal(t, "1.5", stored.ChannelRatio)
+}
+
+func TestDeletedSelectedChannelsDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []struct{ kind, env string }{{"sqlite", ""}, {"mysql", "TEST_MYSQL_DSN"}, {"postgres", "TEST_POSTGRES_DSN"}} {
+		t.Run(dialect.kind, func(t *testing.T) {
+			if dialect.env != "" && os.Getenv(dialect.env) == "" {
+				t.Skipf("%s not configured", dialect.env)
+			}
+			db := modelManagementDB(t, dialect.kind, os.Getenv(dialect.env))
+			require.NoError(t, db.AutoMigrate(&model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
+			createContractChannel(t, model.Channel{Id: 8302, Type: constant.ChannelTypeOpenAI, Key: "other", Models: "route-model"})
+			for _, tc := range []struct {
+				name               string
+				handler            gin.HandlerFunc
+				method, path, body string
+				params             gin.Params
+				status             int
+			}{
+				{"single", DeleteChannel, http.MethodDelete, "/api/channel/8301", "", gin.Params{{Key: "id", Value: "8301"}}, 1},
+				{"batch", DeleteChannelBatch, http.MethodPost, "/api/channel/batch", `{"ids":[8301]}`, nil, 1},
+				{"disabled", DeleteDisabledChannel, http.MethodDelete, "/api/channel/disabled", "", nil, common.ChannelStatusManuallyDisabled},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					createContractChannel(t, model.Channel{Id: 8301, Type: constant.ChannelTypeOpenAI, Key: "selected", Models: "route-model", Status: tc.status})
+					tokens := map[string]*model.Token{}
+					for _, mode := range []string{"auto", "ordered"} {
+						token := &model.Token{UserId: 7, Key: tc.name + "-" + mode}
+						require.NoError(t, token.Insert())
+						var profile model.TokenRouteProfile
+						require.NoError(t, common.Unmarshal([]byte(fmt.Sprintf(`{"token_id":%d,"mode":%q,"selected_only":true,"version":1}`, token.Id, mode)), &profile))
+						require.NoError(t, db.Create(&profile).Error)
+						require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: token.Id, ChannelID: 8301, Enabled: true}).Error)
+						tokens[mode] = token
+					}
+					response := serveChannelAdmin(t, tc.handler, tc.method, tc.path, tc.body, tc.params)
+					require.Contains(t, response.Body.String(), `"success":true`)
+					for mode, token := range tokens {
+						t.Run(mode, func(t *testing.T) {
+							view, err := model.ReadTokenRouting(t.Context(), token.Id)
+							require.NoError(t, err)
+							require.Empty(t, view.Entries)
+							require.Equal(t, mode, view.Mode)
+							c, _ := newAuthenticatedContext(t, http.MethodPost, "/v1/chat/completions", nil, 7)
+							common.SetContextKey(c, constant.ContextKeyTokenId, token.Id)
+							channel, selErr := service.SelectChannelForRequest(c, "route-model", nil)
+							defer service.ReleaseRouteChannel(c)
+							require.Nil(t, channel)
+							require.NotNil(t, selErr)
+							require.Equal(t, 503, selErr.StatusCode)
+							require.EqualValues(t, "model_not_found", selErr.Code)
+						})
+					}
+				})
+			}
+		})
+	}
 }

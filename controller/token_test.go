@@ -513,7 +513,8 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 func TestUpdateTokenReturnsSavedRoutingType(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	token := model.Token{UserId: 1, Name: "manual-before", Key: "manual-route-update-key", Status: common.TokenStatusEnabled, UnlimitedQuota: true, ExpiredTime: -1}
-	require.NoError(t, token.InsertWithRouting(model.TokenRouteManual))
+	require.NoError(t, token.Insert())
+	require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: token.Id, Mode: model.TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 
 	body := map[string]any{"id": token.Id, "name": "manual-after", "unlimited_quota": true, "expired_time": -1}
 	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
@@ -527,7 +528,7 @@ func TestUpdateTokenReturnsSavedRoutingType(t *testing.T) {
 		Key  string `json:"key"`
 	}
 	require.NoError(t, common.Unmarshal(response.Data, &detail))
-	require.Equal(t, model.TokenRouteManual, detail.Type)
+	require.Equal(t, model.TokenRouteOrdered, detail.Type)
 	require.Equal(t, "manual-after", detail.Name)
 	require.Equal(t, token.GetMaskedKey(), detail.Key)
 	require.NotContains(t, recorder.Body.String(), token.Key)
@@ -1014,4 +1015,43 @@ func verifyAPITokenAudit(t *testing.T) {
 		require.NoError(t, model.DB.Model(&model.Token{}).Where("name = ?", "audit-down").Count(&count).Error)
 		assert.EqualValues(t, 1, count)
 	})
+}
+
+func TestTokenListAndDetailRoutingScope(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	for index, tc := range []struct {
+		mode     string
+		selected bool
+		count    int
+	}{{"auto", false, 0}, {"auto", true, 2}, {"ordered", true, 1}, {"auto", true, 0}} {
+		t.Run(fmt.Sprintf("%s-%t-%d", tc.mode, tc.selected, tc.count), func(t *testing.T) {
+			userID := index + 1
+			token := seedToken(t, db, userID, t.Name(), t.Name())
+			if tc.selected {
+				var profile model.TokenRouteProfile
+				require.NoError(t, common.Unmarshal([]byte(fmt.Sprintf(`{"token_id":%d,"mode":%q,"selected_only":true,"version":1}`, token.Id, tc.mode)), &profile))
+				require.NoError(t, db.Create(&profile).Error)
+				for i := range tc.count {
+					require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: token.Id, ChannelID: i + 1, Position: i, Enabled: i == 0}).Error)
+				}
+			}
+			check := func(row map[string]any) {
+				require.Equal(t, tc.mode, row["type"])
+				require.Equal(t, tc.selected, row["selected_only"])
+				require.Equal(t, float64(tc.count), row["route_channel_count"])
+			}
+			ctx, w := newAuthenticatedContext(t, http.MethodGet, "/api/token/", nil, userID)
+			GetAllTokens(ctx)
+			var page struct{ Items []map[string]any }
+			require.NoError(t, common.Unmarshal(decodeAPIResponse(t, w).Data, &page))
+			require.Len(t, page.Items, 1)
+			check(page.Items[0])
+			ctx, w = newAuthenticatedContext(t, http.MethodGet, "/api/token/"+strconv.Itoa(token.Id), nil, userID)
+			ctx.Params = gin.Params{{Key: "id", Value: strconv.Itoa(token.Id)}}
+			GetToken(ctx)
+			var row map[string]any
+			require.NoError(t, common.Unmarshal(decodeAPIResponse(t, w).Data, &row))
+			check(row)
+		})
+	}
 }

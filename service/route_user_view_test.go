@@ -93,7 +93,7 @@ func TestRoutePreviewListsOnlyChannelsServingTheModel(t *testing.T) {
 	view, err := model.ReadTokenRouting(context.Background(), 7)
 	require.NoError(t, err)
 	_, err = model.SaveTokenRouting(context.Background(), 17, 7, model.TokenRouting{
-		TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual, Version: view.Version, MaxChannelRatio: &maxRatio},
+		TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: view.Version, MaxChannelRatio: &maxRatio},
 		Entries:           []model.TokenRouteEntry{{ChannelID: 88, Enabled: true}, {ChannelID: 33, Enabled: true}, {ChannelID: 22, Enabled: true}, {ChannelID: 11, Enabled: true}},
 	}, map[int]bool{88: true, 33: true, 22: true, 11: true})
 	require.NoError(t, err)
@@ -152,5 +152,5 @@ func TestRoutePreviewUsesRequestedStreamBucket(t *testing.T) {
 	saveRouteTest(t, 22, 11)
 	manual, err := PreviewTokenRouting(context.Background(), 17, 7, query)
 	require.NoError(t, err)
-	require.Equal(t, TokenRouteOrderingManual, manual.Ordering)
+	require.Equal(t, TokenRouteOrderingOrdered, manual.Ordering)
 }
