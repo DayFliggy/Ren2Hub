@@ -26,6 +26,7 @@ IMAGES = {"mysql": "mysql:8.4", "postgres": "postgres:15.19"}
 MATRIX_TESTS = {
     "middleware": ("TestRouteTaskPluginEndpointUsesSelectedChannel", "TestTaskPluginEndpointScanDiagnostics"),
     "model": (
+        "TestUnfinishedTaskQueriesDatabaseMatrix",
         "TestTokenRoutingDatabases", "TestTokenRouteChannelMutationLockOrderDatabases",
         "TestAuthCacheIntegrityDatabaseMatrix", "TestGmpayAndTicketDatabaseContracts",
         "TestCoreEmptyDatabaseInitialization", "TestAffiliateLedgerMigrationAndIdempotencyDatabases",
