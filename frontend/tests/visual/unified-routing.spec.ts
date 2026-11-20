@@ -242,8 +242,16 @@ for (const theme of ['light', 'dark'] as const) {
                 data: {
                   page: 1,
                   page_size: 10,
-                  total: 1,
-                  items: [nativeToken],
+                  total: 2,
+                  items: [
+                    nativeToken,
+                    {
+                      ...nativeToken,
+                      id: 8,
+                      name: 'Ordered Key',
+                      route_channel_count: 2,
+                    },
+                  ],
                 },
               },
             })
@@ -274,16 +282,47 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(chip).toHaveText(/所选渠道已不可用/)
       await expect(chip).toHaveAttribute('title', /没有可用渠道/)
       if (theme === 'dark') {
-        // The warning keeps its status colour; only neutral type labels are muted.
-        const colors = await chip.evaluate((element) => {
-          const probe = document.createElement('span')
-          probe.style.color = 'var(--status-warning-text)'
-          document.body.append(probe)
-          const expected = getComputedStyle(probe).color
-          probe.remove()
-          return { actual: getComputedStyle(element).color, expected }
-        })
-        expect(colors.actual).toBe(colors.expected)
+        // B1 Studio mutes auxiliary route labels on desktop and mobile alike;
+        // the warning for deleted channels keeps its status colour.
+        const paint = (
+          target: typeof chip,
+          color: string,
+          background: string
+        ) =>
+          target.evaluate(
+            (element, tokens) => {
+              const probe = document.createElement('span')
+              probe.style.color = `var(${tokens.color})`
+              probe.style.background = `var(${tokens.background})`
+              document.body.append(probe)
+              const expected = getComputedStyle(probe)
+              const result = {
+                color: getComputedStyle(element).color,
+                background: getComputedStyle(element).backgroundColor,
+                expectedColor: expected.color,
+                expectedBackground: expected.backgroundColor,
+              }
+              probe.remove()
+              return result
+            },
+            { color, background }
+          )
+        const neutral = await paint(
+          page.getByText('顺序 · 2 条渠道', { exact: true }).filter({
+            visible: true,
+          }),
+          '--text-secondary',
+          '--surface-muted'
+        )
+        expect(neutral.color).toBe(neutral.expectedColor)
+        expect(neutral.background).toBe(neutral.expectedBackground)
+        const warning = await paint(
+          chip,
+          '--status-warning-text',
+          '--status-warning-soft'
+        )
+        expect(warning.color).toBe(warning.expectedColor)
+        expect(warning.background).toBe(warning.expectedBackground)
       }
       await assertNoHorizontalOverflow(page)
       await captureEvidence(page, {

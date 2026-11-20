@@ -631,12 +631,14 @@ onBeforeUnmount(() => {
 }
 
 /* B1 Studio: route-type labels are auxiliary and stay neutral; the warning for
-   deleted selected channels keeps its status colour. !important overrides the
-   chip's inline tone style. */
+   deleted selected channels keeps its status colour. DataTable renders the td,
+   so the scope anchor is this page's own [data-key-page] and the rest goes in
+   :deep(). !important overrides the chip's inline tone style. */
 html.dark
   [data-key-page]
-  td[headers$='-type']
-  :deep([data-handdrawn='chip']:not([data-route-warning])) {
+  :deep(
+    td[headers$='-type'] [data-handdrawn='chip']:not([data-route-warning])
+  ) {
   background: var(--surface-muted) !important;
   color: var(--text-secondary) !important;
   border-left-color: var(--border-default) !important;
