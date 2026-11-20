@@ -37,6 +37,8 @@
 - HTTP 分发器检查精确拼写的模型字段，透传渠道发送原文。当上游按大小写不敏感规则绑定模型时，`model` 与 `Model` 等变体可能使选模、权限及计费判断与上游执行不一致（`middleware/distributor.go:301`、`relay/compatible_handler.go:101`）。
 - Responses WebSocket 逐帧解码 `response.create` 并保留正文，透传上游可能以不同规则消费同一帧。HTTP 请求体检查无法覆盖后续帧（`relay/responses_websocket.go:1016`、`relay/responses_request.go:53`）。
 
+本地用模拟上游的不变量测试确认了表达式参数、multipart 图片、requestpatch 嵌套改写和透传 model/Model 四条路径；真实供应商对重复键的取值、Responses WebSocket 帧和视频任务 multipart 未验证。
+
 ## 待核实
 
 - xAI X Search 已按抓取的帖子数和用户数记录用量（`relay/channel/xai/web_search.go:17`）。该计数与供应商实际账单的关系待核实。
