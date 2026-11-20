@@ -10,7 +10,11 @@
 
 首轮拒绝或重试结束时可能没有对应的数据库日志行。按请求 ID 搜索服务端 `route_scan`，可查当轮满载、无候选、存储错误，或在发送前被本地拒绝的选中结果。后一种记录含 `channel_id` 和 `request_status`，例如预扣被拒时为 403。Token 路由配置读取失败发生在候选查询之前，此时查询 `route_scope stage=token_route_scope result=error`。
 
-上游返回额度错误码 `insufficient_quota`、`insufficient_user_quota`、`pre_consume_token_quota_failed`，或归一化错误消息含 `Your credit balance is too low`、`You exceeded your current quota` 时，路由将其记为渠道失败，计入熔断和动态质量，尝试证据记录 `outcome_reason=upstream_quota`。额度 429 仍按响应头设置渠道冷却，同时计入模型熔断。本网关的用户或令牌额度拒绝不触发这条规则。
+上游结构化错误码 `insufficient_quota`、`insufficient_user_quota`、`pre_consume_token_quota_failed` 在任意 HTTP 状态下都属于额度信号。非 429 响应还识别 Anthropic 的余额不足文案。错误类型须为通用的 `invalid_request_error` 或 `upstream_error`，OpenAI 兼容格式须没有独立错误码。去除首尾空白后，消息须以 `Your credit balance is too low` 开头。引号内的回显、明确的其他错误码以及普通限流均排除。429 只按结构化额度码识别。Gemini 每分钟限流的 `RESOURCE_EXHAUSTED` 即使带额度文案，也按普通 429 处理，生效冷却期间不计熔断。
+
+额度信号计入模型熔断和动态质量，尝试证据记录 `outcome_reason=upstream_quota`。额度 429 同时设置渠道冷却。本地用户余额、令牌额度、钱包预扣拒绝，以及已取消、超时或标记为业务拒绝的请求均不触发额度分类。流式请求已经输出首个内容事件后，不再用额度信号改写最终分类，熔断按首输出结算成功。
+
+充值后，已打开的熔断在本轮约 1 分钟的暂停期结束时进入半开，连续 3 次真实探测成功后恢复。质量每 5 分钟评估一次。成功率降档至少经过 15 分钟才可恢复，降档后的新样本和参考样本各须达到 50，成功率差小于 2 个百分点且重新评估回到正常档。旧失败样本在约一小时内退出窗口，质量排序可能滞后约一小时。若新流量或参考样本不足，降档可持续更久。
 
 自动停用和定时测试成功后的启用都会发布渠道配置，并清除这条渠道各模型的熔断与动态质量记录。一个模型的测试成功后，同渠道持续故障的其他模型也从空记录重新积累失败。
 
