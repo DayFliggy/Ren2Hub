@@ -389,7 +389,7 @@
       "path": "common/log_text.zh-CN.json",
       "status": "adapted",
       "upstream_sha256": "043c1e8d6e47f17366bcde90b9f223a1c442b8c535b9e0ea36a4a8c995291a02",
-      "local_sha256": "3aa08caf8845bfb02bda76e1f7a2896499a8a1652761cdd1833a77b48aabe739",
+      "local_sha256": "252b47d59f38f7f2fa2b3fc197081c88466c1d2f13ec888a5e41976e227d4fdf",
       "reasons": [
         "single-key-channel"
       ],

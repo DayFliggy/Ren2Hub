@@ -6,8 +6,8 @@
  "verification": "仅记录源码处置；测试结果见各提交说明的“测试：”行。",
  "counts": {
   "not_applicable": 5,
-  "absorbed": 16,
-  "adapted": 28,
+  "absorbed": 15,
+  "adapted": 29,
   "absorbed_with_local_diff": 1,
   "vue_adapted": 17,
   "vue_partial": 18
@@ -511,8 +511,8 @@
    ],
    "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
    "local_sha256": "badb0aee339db24a6ff28f203fc40d4ba2bbec06426e288c026416fdbc83f3b9",
-   "disposition": "absorbed",
-   "basis": "与上游终点一致。请求触发的本地错误不禁用渠道、不换渠重试；上一窗口已提前吸收。"
+   "disposition": "adapted",
+   "basis": "吸收上游改动：请求触发的本地错误不禁用渠道、不换渠重试（上一窗口已提前吸收），错误分类与上游一致。保留接点：自动停用通知 scheduledPlugins.disabled 按渠道调用，删除上游的 UsingKey 参数（single-key-channel）。"
   },
   {
    "path": "service/channel_select.go",

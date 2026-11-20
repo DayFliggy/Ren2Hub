@@ -679,7 +679,7 @@
   "ping interval seconds: %d": "ping 间隔: %d 秒",
   "pinned task plugin does not support the requested protocol form": "选定的任务插件不支持本次请求的调用方式（流式、后台或同步）",
   "plugin credential refresh after a rejection failed: plugin=%s channel_id=%d": "上游拒绝插件凭证后刷新失败: plugin=%s channel_id=%d",
-  "plugin credential refresh failed: plugin=%s channel_id=%d key_index=%d category=%s": "插件凭证刷新失败: plugin=%s channel_id=%d key_index=%d category=%s",
+  "plugin credential refresh failed: plugin=%s channel_id=%d category=%s": "插件凭证刷新失败: plugin=%s channel_id=%d category=%s",
   "plugin credential refresh: query channels failed: %v": "插件凭证刷新: 查询渠道失败: %v",
   "plugin credential revoke failed: plugin=%s channel_id=%d category=%s": "撤销插件凭证失败: plugin=%s channel_id=%d category=%s",
   "plugin credentialRejected failed: plugin=%s channel_id=%d": "插件的 credentialRejected 钩子执行失败: plugin=%s channel_id=%d",
@@ -865,5 +865,5 @@
   "zhipu_image_missing_url": "智谱图片接口没有返回 URL",
   "¥%.6f quota": "¥%.6f 额度",
   "＄%.6f quota": "＄%.6f 额度",
-  "plugin scheduled failed: plugin=%s channel_id=%d key_index=%d category=%s": "插件定时任务失败：plugin=%s channel_id=%d key_index=%d category=%s"
+  "plugin scheduled failed: plugin=%s channel_id=%d category=%s": "插件定时任务失败：plugin=%s channel_id=%d category=%s"
 }

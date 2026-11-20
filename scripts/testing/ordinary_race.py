@@ -15,7 +15,7 @@ from native_restored import InvalidEvidence, digest, regular_path, require, veri
 
 STAGE = 'ordinary_race'
 SELECTION = 'scripts/testing/race_selection.json'
-FROZEN_SELECTION = 'c2af741ca57e1ecb4ea5aff81e9511febc7a7aad28061e0b074e68277d765bc2'
+FROZEN_SELECTION = '7afa686929a83c071986538c8e14d733d009544fb0f053e7e229db60348c18f5'
 IMAGE = logger.IMAGE
 DOCKER = logger.DOCKER
 

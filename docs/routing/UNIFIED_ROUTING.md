@@ -24,7 +24,7 @@ prefer 模式的会话亲和在亲和渠道合格时直接使用；渠道被禁�
 
 Responses WS 按每次 create 重新认证、资格检查及占槽，空闲连接不占；不在连接内换渠道。Realtime 占整次连续会话。异步任务只在提交或实际轮询 HTTP 时占渠道槽，不在后台等待期间持槽。轮询时渠道满载或读取上限失败只跳过本轮，不计上游失败；准入时发现渠道已删除同样只跳过本轮；原生批量轮询读不到渠道时把任务判为失败且不退款，与上游相同，见[原生回归的行为变化](../upstream/NATIVE_B388_DISCLOSURES.md)。普通 HTTP 成功路径中，客户端断开不自动取消已发送的供应商请求；渠道槽位保持到供应商尝试结束，之后结算一次、释放一次。这个合同不承诺对失败响应禁止重试，也不承诺立即退款。
 
-已接受任务的续作固定原渠道，不因 Key 偏好变化重放到其他渠道。插件原任务引用和 Midjourney 续作（change、simple-change、modal、video、action、image-seed）的原渠道准入由 `service.AcquireOriginTaskRouteChannel` 判定：只豁免手动列表，仍比较 Key 的最高渠道倍率。超限在渠道占槽、预扣、发送之前拒绝，不换渠道；没有上限或恰好等于上限允许。普通任务返回 400 `channel_ratio_exceeded`，MJ handler 保留自身封装；经 Distribute 提前拒绝的 MJ 提交仍使用 OpenAI 错误体。请求级路径、WS 和插件身份过滤器，渠道存在/启用、倍率合法及即时容量照常检查。找到 MJ 原任务后只准入一次、轮换一次 Key。
+已接受任务的续作固定原渠道，不因 Key 偏好变化重放到其他渠道。插件原任务引用和 Midjourney 续作（change、simple-change、modal、video、action、image-seed）的原渠道准入由 `service.AcquireOriginTaskRouteChannel` 判定：只豁免手动列表，仍比较 Key 的最高渠道倍率。超限在渠道占槽、预扣、发送之前拒绝，不换渠道；没有上限或恰好等于上限允许。普通任务返回 400 `channel_ratio_exceeded`，MJ handler 保留自身封装；经 Distribute 提前拒绝的 MJ 提交仍使用 OpenAI 错误体。请求级路径、WS 和插件身份过滤器，渠道存在/启用、倍率合法及即时容量照常检查。找到 MJ 原任务后只准入一次，使用原渠道的 Key。
 
 原渠道删除或禁用返回 400 `origin_task_channel_disabled`，满载 429，原渠道准入或 ApplyChannelPin 的存储故障 500；插件准备阶段仍沿上游统一返回 400 `origin_task_channel_disabled` 且不暴露底层错误；image-seed 的封装例外见上文。Key 模型限制保留上游现状。原生 remix 在原渠道上下文未初始化时仍可能发生 NewAPI 共有的 nil pointer panic，阻断后续预扣和发送。这个问题以及原模型推导、原生平台核对、remix 动作、ID 和继承倍率都与上游相同，没有在本地修复，见[等待上游](../upstream/WAITING_UPSTREAM.md)；不能声称这些路径已可用。插件原任务平台校验仍使用准备阶段候选元数据，尚不等同于实际执行插件的归属校验。
 
