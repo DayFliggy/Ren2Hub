@@ -177,7 +177,9 @@ describe('live API contracts', () => {
           id: 7,
           name: 'vip-key',
           key: 'sk-12**********7890',
-          type: 'manual',
+          type: 'ordered',
+          selected_only: true,
+          route_channel_count: 3,
           status: 1,
           used_quota: 120,
           remain_quota: 880,
@@ -195,7 +197,9 @@ describe('live API contracts', () => {
     })
 
     expect(page.items[0]).toMatchObject({
-      type: 'manual',
+      type: 'ordered',
+      selected_only: true,
+      route_channel_count: 3,
       allow_user_quota_query: false,
       model_limits: ['gpt-4o', 'claude-3-7-sonnet'],
       ip_limits: ['127.0.0.1', '10.0.0.1'],
@@ -208,12 +212,49 @@ describe('live API contracts', () => {
     )
   })
 
+  it('rejects a retired manual type and requires the route scope and entry count', () => {
+    const token = {
+      id: 7,
+      name: 'scoped-key',
+      key: 'sk-****',
+      type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
+      status: 1,
+      used_quota: 0,
+      remain_quota: 0,
+      unlimited_quota: true,
+      expired_time: -1,
+      created_time: 1,
+    }
+    const parse = (item: Record<string, unknown>) =>
+      parseTokenPage({ page: 1, page_size: 20, total: 1, items: [item] })
+        .items[0]
+    expect(parse(token)).toMatchObject({
+      type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
+    })
+    for (const field of [
+      { type: 'manual' },
+      { selected_only: undefined },
+      { selected_only: 'true' },
+      { route_channel_count: undefined },
+      { route_channel_count: -1 },
+      { route_channel_count: 1.5 },
+    ]) {
+      expectInvalidResponse(() => parse({ ...token, ...field }))
+    }
+  })
+
   it('requires explicit boolean wallet-query permission and treats old responses as disabled', () => {
     const token = {
       id: 1,
       name: 'wallet-query',
       key: 'sk-****',
       type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
       status: 1,
       used_quota: 0,
       remain_quota: 0,

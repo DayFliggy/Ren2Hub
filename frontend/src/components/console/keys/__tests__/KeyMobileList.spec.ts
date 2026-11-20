@@ -10,6 +10,8 @@ const token: TokenSummary = {
   name: 'Production key',
   key_preview: 'sk-prod...1234',
   type: 'auto',
+  selected_only: false,
+  route_channel_count: 0,
   status: 1,
   used_quota: '250',
   remain_quota: 750,
@@ -20,7 +22,7 @@ const token: TokenSummary = {
   created_time: 1_722_000_000,
 }
 
-async function mountList() {
+async function mountList(tokens: TokenSummary[] = [token]) {
   await loadMessageDomain('console')
   await setLocale('zh-CN')
 
@@ -34,7 +36,7 @@ async function mountList() {
   }
   const wrapper = mount(KeyMobileList, {
     props: {
-      tokens: [token],
+      tokens,
       selectedIds: [],
       allSelected: false,
       isToggling: () => false,
@@ -54,8 +56,42 @@ describe('KeyMobileList', () => {
       'Production key'
     )
     expect(wrapper.text()).toContain('sk-prod...1234')
-    expect(wrapper.text()).toContain('自动令牌')
+    expect(wrapper.get('[data-token-type]').text()).toBe('自动 · 全平台')
     expect(wrapper.text()).toContain('永不过期')
+  })
+
+  it('names the routing scope and flags a selection whose channels were deleted', async () => {
+    const { wrapper } = await mountList([
+      {
+        ...token,
+        id: 1,
+        type: 'ordered',
+        selected_only: true,
+        route_channel_count: 1,
+      },
+      {
+        ...token,
+        id: 2,
+        type: 'auto',
+        selected_only: true,
+        route_channel_count: 4,
+      },
+      {
+        ...token,
+        id: 3,
+        type: 'auto',
+        selected_only: true,
+        route_channel_count: 0,
+      },
+    ])
+    const types = wrapper.findAll('[data-token-type]')
+    expect(types.map((item) => item.text())).toEqual([
+      '顺序 · 1 条渠道',
+      '自动 · 4 条渠道',
+      expect.stringContaining('所选渠道已不可用'),
+    ])
+    expect(types[2]!.find('[data-route-warning]').exists()).toBe(true)
+    expect(types[0]!.find('[data-route-warning]').exists()).toBe(false)
   })
 
   it('keeps selection and every row action reachable', async () => {

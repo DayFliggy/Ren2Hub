@@ -50,6 +50,8 @@ export const nativeTokenFixture = {
   name: 'Fixture key',
   key: 'sk-***fixture',
   type: 'auto',
+  selected_only: false,
+  route_channel_count: 0,
   status: 1,
   used_quota: 0,
   remain_quota: 0,

@@ -262,7 +262,12 @@ export function parseLogStat(value: unknown): LogStatContract {
 export function parseToken(value: unknown, endpoint: string): TokenSummary {
   if (!isRecord(value)) invalidResponse(endpoint)
   const type = requiredString(value.type, endpoint)
-  if (type !== 'auto' && type !== 'manual') invalidResponse(endpoint)
+  if (type !== 'auto' && type !== 'ordered') invalidResponse(endpoint)
+  const routeChannelCount = requiredStrictInteger(
+    value.route_channel_count,
+    endpoint
+  )
+  if (routeChannelCount < 0) invalidResponse(endpoint)
   const allowIps = value.allow_ips
   if (
     allowIps !== undefined &&
@@ -278,6 +283,8 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
     name: requiredString(value.name, endpoint, false),
     key_preview: requiredString(value.key, endpoint),
     type,
+    selected_only: requiredBoolean(value.selected_only, endpoint),
+    route_channel_count: routeChannelCount,
     allow_user_quota_query:
       value.allow_user_quota_query === undefined
         ? false

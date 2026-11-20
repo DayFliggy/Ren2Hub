@@ -1,5 +1,5 @@
-/** Each API key independently selects automatic or manual routing. */
-export type TokenType = 'manual' | 'auto'
+/** Each API key routes automatically or in its saved order. */
+export type TokenType = 'auto' | 'ordered'
 
 /** One upstream channel bound to a token; array order = routing priority. */
 export interface TokenChannel {
@@ -13,6 +13,10 @@ export interface TokenItem {
   name: string
   key: string
   type: TokenType
+  /** false = all platform channels; true = only the saved route entries. */
+  selected_only: boolean
+  /** Saved route entries, enabled or not; 0 with selected_only means calls are rejected. */
+  route_channel_count: number
   allow_user_quota_query?: boolean
   status: number // Native: 1 enabled, 2 disabled, 3 expired, 4 exhausted
   used_quota: string
