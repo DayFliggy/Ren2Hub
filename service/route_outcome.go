@@ -18,6 +18,7 @@ import (
 // classification. Only routing health, quality and observations read them;
 // retries, the native performance metrics and the client response do not.
 const (
+	routeReasonUpstreamQuota    = "upstream_quota"
 	routeReasonContextOverflow  = "request_context_overflow"
 	routeReasonEmptyStream      = "empty_stream"
 	routeReasonNoVisibleOutput  = "no_visible_output"
@@ -32,6 +33,9 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 		return perfmetrics.OutcomeIgnored, ""
 	}
 	outcome := perfmetrics.ClassifyRelayOutcome(c.Request.Context(), info, apiErr)
+	if upstreamQuotaFailure(apiErr) && c.Request.Context().Err() == nil && !errors.Is(apiErr, context.Canceled) && !info.PerformanceBusinessRejection {
+		return perfmetrics.OutcomeFailure, routeReasonUpstreamQuota
+	}
 	if outcome == perfmetrics.OutcomeFailure && a.requestContextOverflow(apiErr) {
 		return perfmetrics.OutcomeIgnored, routeReasonContextOverflow
 	}
@@ -49,6 +53,21 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 		return a.emptyStreamOutcome()
 	}
 	return outcome, ""
+}
+
+// Upstream quota exhaustion belongs to the channel credential. A local
+// wallet rejection can carry the same code and must not penalize the channel.
+func upstreamQuotaFailure(apiErr *types.NewAPIError) bool {
+	if apiErr == nil || RelayErrorSource(apiErr) != "upstream" {
+		return false
+	}
+	root := rootRelayError(apiErr)
+	switch root.GetErrorCode() {
+	case "insufficient_quota", types.ErrorCodeInsufficientUserQuota, types.ErrorCodePreConsumeTokenQuotaFailed:
+		return true
+	}
+	message := upstreamErrorMessage(root)
+	return strings.Contains(message, "Your credit balance is too low") || strings.Contains(message, "You exceeded your current quota")
 }
 
 // emptyStreamOutcome judges a stream that ended natively successful after

@@ -234,7 +234,7 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 		evidence := attempt.finalEvidence(c, info, apiErr, now)
 		outcome := perfmetrics.Outcome(evidence.Outcome)
 		failure := routeBreakerSample{status: evidence.Status, code: routeFailureCode(info, apiErr, evidence.OutcomeReason)}
-		recordAttemptBreaker(attempt, info.IsStream, outcome, failure)
+		recordAttemptBreaker(attempt, info.IsStream, &evidence, failure)
 		state := RequestPolicy(c)
 		state.mu.Lock()
 		attachRouteEvidence(state.events, state.Attempts, attempt.channelID, &evidence)
@@ -267,16 +267,17 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 
 // recordAttemptBreaker 以第一个有内容的事件为流式请求的成功界：之后的中断、取消或
 // 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。已在首输出时
-// 结算的流式探测不再计入；结算仍在写时等它写完。429 时渠道有生效冷却（本次写入或已有
+// 结算的流式探测不再计入；结算仍在写时等它写完。额度类失败计入熔断。普通 429 时渠道有生效冷却（本次写入或已有
 // 更长的冷却，见 ObserveRouteResponse）的失败由冷却处理，不写熔断样本：不计失败也不清零连续失败；探测许可由
 // ReleaseRouteChannel 归还，熔断既不推进也不重开。
-func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome, failure routeBreakerSample) {
+func recordAttemptBreaker(attempt *routeAttempt, stream bool, evidence *RouteAttemptEvidence, failure routeBreakerSample) {
 	attempt.breakerOnce.Do(func() {
 		key := routeBreakerKey{attempt.channelID, attempt.model}
+		outcome := perfmetrics.Outcome(evidence.Outcome)
 		switch {
 		case stream && attempt.firstOutput.Load() != 0, outcome == perfmetrics.OutcomeSuccess:
 			routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, routeBreakerSample{success: true})
-		case outcome == perfmetrics.OutcomeFailure && attempt.cooldown.Load() != 0:
+		case outcome == perfmetrics.OutcomeFailure && evidence.CooldownUntil != 0 && evidence.OutcomeReason != routeReasonUpstreamQuota:
 		case outcome == perfmetrics.OutcomeFailure:
 			routeObservations.recordBreaker(attempt.epoch, key, attempt.probe, failure)
 		}
