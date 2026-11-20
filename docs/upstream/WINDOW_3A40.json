@@ -67,7 +67,7 @@
     "288dea549"
    ],
    "upstream_sha256": "1a801031417f7d34137cd029aec52135c46cb0bd871a11cdd67e38dc10a78d7a",
-   "local_sha256": "3aa51596150d9e5907c64d2ddb9b9b68a20fed0916cca1f8536b6f4d679e99bc",
+   "local_sha256": "b84678b74531b0e96854d42c49976d0866d14f1a82d65ee5980394d516d563a8",
    "disposition": "not_applicable",
    "basis": "Ren2Hub 的 AGENTS.md 是本地改写，上游改的是维护者跳过 agent 模板的说明。"
   },
@@ -145,7 +145,7 @@
     "57345547b"
    ],
    "upstream_sha256": "3f114abe6a8192d747e85b5215dc803c0b0729fb675c7eb42d1204abf1198f70",
-   "local_sha256": "4251f4602a3741cccb007274618ceef7fcbb3f1c5fe90080484259878262e8ca",
+   "local_sha256": "7d2d2d3a90e966ed30b506f09baf82e1395db2a4d2ef56bf39dbee4ffce6f4d1",
    "disposition": "adapted",
    "basis": "吸收 Plugin scope 与多插件共享渠道类型的说明，删掉业务分组措辞。"
   },
@@ -189,7 +189,7 @@
     "57345547b"
    ],
    "upstream_sha256": "07368d97236b38126701028a043e1121dba421c1a262637c616c0f6d81fba9fe",
-   "local_sha256": "427f38de3e25bce5275e349abbbe79b43e11ffc44ffee56a90e2f36989f78b29",
+   "local_sha256": "99bda12b257df46ade1746613c9015c8e38119cf59e278e1f298122e3e079964",
    "disposition": "adapted",
    "basis": "请求插件声明 meta.scope、管理员确认一次后按插件范围运行；一个内置渠道类型可被多个插件声明。 吸收上游改动，保留既有本地差异，逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。"
   },
@@ -211,7 +211,7 @@
     "ce8fc49e4"
    ],
    "upstream_sha256": "427962e1109534ae14701076dd2c430d1ffec08db04b0a0f5a14e0f2214db3fc",
-   "local_sha256": "ea2ffafd254f8c6b5f3f70197b5dd35f26894278a0c5420d68469ba4f309b52c",
+   "local_sha256": "601a2dbe35e1c39a7f1383f388eb01babed2dcc4a9597931334921127fac17c4",
    "disposition": "adapted",
    "basis": "本地 BatchSetChannelTag 已用行锁事务在同一事务内加锁重读后重建能力，生产行为等价，保留本地实现；逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。"
   },
@@ -222,7 +222,7 @@
     "ce8fc49e4"
    ],
    "upstream_sha256": "547dddbdf2435b470988c0b65c8be631950a0b8ac49cd37a65f4affc0a9c991e",
-   "local_sha256": "b45797af5e1d210a293653c2e79d9884ebef8742a325789d08c2e3d02dc4d925",
+   "local_sha256": "aaca2f379f001b410d39fb9d930098dda489fb5d79b0b0769be7cd0621c98d03",
    "disposition": "adapted",
    "basis": "带入上游 TestBatchSetChannelTagDatabaseMatrix，去掉 Group、每渠道能力数按本地 2，登记三库矩阵。"
   },
@@ -510,7 +510,7 @@
     "1c63cc8c9"
    ],
    "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
-   "local_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
+   "local_sha256": "badb0aee339db24a6ff28f203fc40d4ba2bbec06426e288c026416fdbc83f3b9",
    "disposition": "absorbed",
    "basis": "与上游终点一致。请求触发的本地错误不禁用渠道、不换渠重试；上一窗口已提前吸收。"
   },
@@ -532,7 +532,7 @@
     "1c63cc8c9"
    ],
    "upstream_sha256": "968428cae7e49a5dde6dfadde47b876adf9677a2bb8ab26056ffc7c9ff32e12f",
-   "local_sha256": "99994c57cad54863fd0fae727bf4722c69cca12014450e37cedd92b2a5e679a4",
+   "local_sha256": "56ec856753744444dd5a8cfd9d93e9dad30969305d826796313b31eeecd5bc69",
    "disposition": "adapted",
    "basis": "请求触发的本地错误不禁用渠道、不换渠重试；上一窗口已提前吸收。 吸收上游改动，保留既有本地差异（测试按本地合同调整，如无业务分组）。"
   },
@@ -543,7 +543,7 @@
     "1c63cc8c9"
    ],
    "upstream_sha256": "f4c0eb4c06c5489bb359004dc0eadc71dde5a4cc2c7fae2a588072cdeadeacd3",
-   "local_sha256": "6db0b0670bdf20e15e263ce38c66086034123c1740af5ef29b0c690a5acd22c0",
+   "local_sha256": "461eabbddb3e8565e70003bd6dd7fa7364634e68ecaccd86bd412d7989580d2e",
    "disposition": "adapted",
    "basis": "请求触发的本地错误不禁用渠道、不换渠重试；上一窗口已提前吸收。 吸收上游改动，保留既有本地差异，逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。"
   },
