@@ -620,6 +620,10 @@ func executeTaskSubmissionWith(
 		relayInfo.StreamStatus = nil
 		relayInfo.PerformanceBusinessRejection = false
 		relayInfo.PerformanceOutputTokens = 0
+		relayInfo.RetryIndex = retryParam.GetRetry()
+		relayInfo.RuntimeHeadersOverride = nil
+		relayInfo.UseRuntimeHeadersOverride = false
+
 		stage = "select_channel"
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
 			diagnostics.cancelled("before_attempt", retryParam.GetRetry()+1)
