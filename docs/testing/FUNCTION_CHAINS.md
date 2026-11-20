@@ -70,13 +70,13 @@
 
 ## Token 与私有路由
 
-- 入口与权限：带 `token_id` 的模型目录经真实 `SetApiRouter` 的 `--go 'router:^TestModelCatalogForAKeyRequiresRoutingReadScope$'`（PAT 缺 `routing:read` 得 403）。缺口，私有路由本身没有经生产路由的 HTTP 测试，router 只断言 `/api/token/:id/routing` 的 4 条路由各声明一次，不核对权限。接近的是真实 `UserAuth` 与 `RequirePermission` 手工挂载的 `--go 'controller:^(TestAccessTokenCommonUserRoutingGrantAndEnforcement|TestAddManualRoutingTokenRequiresPATRoutingScope)$'`；中继侧经真实路由的 `--go 'router:^TestNativeCountReusesManualRoutesAndRejectsUnsupportedChannels$'`。
+- 入口与权限：带 `token_id` 的模型目录经真实 `SetApiRouter` 的 `--go 'router:^TestModelCatalogForAKeyRequiresRoutingReadScope$'`（PAT 缺 `routing:read` 得 403）。缺口，私有路由本身没有经生产路由的 HTTP 测试，router 只断言 `/api/token/:id/routing` 的 4 条路由各声明一次，不核对权限。接近的是真实 `UserAuth` 与 `RequirePermission` 手工挂载的 `--go 'controller:^(TestAccessTokenCommonUserRoutingGrantAndEnforcement|TestTokenCreationRequiresOnlyKeyWrite)$'`；中继侧经真实路由的 `--go 'router:^TestNativeCountReusesManualRoutesAndRejectsUnsupportedChannels$'`。
 - 合同两侧：缺口，没有生产侧夹具，`tokenRouting.spec.ts`、`TokenRoutingView.spec.ts` 和 `unified-routing.spec.ts` 用手写模拟。
-- 三库矩阵：`--db TestTokenRoutingDatabases TestTokenRouteChannelMutationLockOrderDatabases`，含保存与删除渠道、删除 Token、硬删除用户之间的屏障竞争和锁顺序。
+- 三库矩阵：`--db TestTokenRoutingDatabases TestTokenRouteChannelMutationLockOrderDatabases TestDeletedSelectedChannelsDatabaseMatrix`，含保存与删除渠道、删除 Token、硬删除用户之间的屏障竞争和锁顺序。
 - 并发：缺口，race 选择里没有 Token 路由组，竞争只在上面的三库测试里；`--go 'service:^TestBusyManualChannelScansNextAndAllBusyReturns429$'`。
-- 负向与重复：`--go 'controller:^(TestAccessTokenCommonUserRoutingGrantAndEnforcement|TestAddManualRoutingTokenRequiresPATRoutingScope|TestTokenRoutingCreationHonorsWritePermission|TestTokenRoutingAPIIsolationConflictAndPublicProjection|TestUpdateTokenRoutingReadFailureIsAnError)$' 'model:^(TestSaveTokenRoutingRejectsDeletedChannels|TestTokenRouteVersionOwnershipAndEmptyManual|TestHardDeleteUserRemovesTokenRouting)$' 'service/authz:^TestTokenRoutingUserPermissionDoesNotGrantAdministration$' 'service:^(TestRouteCandidateDatabaseErrorIsNotEmptyAvailability|TestRoutePreviewListsOnlyChannelsServingTheModel)$' 'relay:^(TestTokenRouteWebSocketPinnedAbilityRevocation|TestTokenRouteWebSocketRechecksEachCreate)$'`。
-- 升级种子：旧镜像的 billing 与 management 阶段建立手动路由，`upgrade_snapshot` 对 `token_route_profiles`、`token_route_entries`、`tokens` 取哈希。只比较行指纹，不验证升级后按旧路由中继。
-- 真实后端：`core.spec.ts` 的“每 Key 路由通过页面保存并在刷新后保持”，只切换手动和自动；`run.py routing` 的路由合同。
+- 负向与重复：`--go 'controller:^(TestAccessTokenCommonUserRoutingGrantAndEnforcement|TestTokenCreationRequiresOnlyKeyWrite|TestTokenListAndDetailRoutingScope|TestTokenRoutingAPIIsolationConflictAndPublicProjection|TestUpdateTokenRoutingReadFailureIsAnError)$' 'model:^(TestSaveTokenRoutingRejectsDeletedChannels|TestTokenRouteVersionOwnershipAndEmptyManual|TestHardDeleteUserRemovesTokenRouting)$' 'service/authz:^TestTokenRoutingUserPermissionDoesNotGrantAdministration$' 'service:^(TestRouteCandidateDatabaseErrorIsNotEmptyAvailability|TestRoutePreviewListsOnlyChannelsServingTheModel)$' 'relay:^(TestTokenRouteWebSocketPinnedAbilityRevocation|TestTokenRouteWebSocketRechecksEachCreate)$'`。
+- 升级种子：旧镜像的 billing 与 management 阶段建立令牌渠道列表，`upgrade_snapshot` 对 `token_route_profiles`、`token_route_entries`、`tokens` 取哈希。只比较行指纹，不验证升级后按旧路由中继。
+- 真实后端：`core.spec.ts` 的“每 Key 路由通过页面保存并在刷新后保持”，只切换顺序和自动；`run.py routing` 的路由合同。
 - 缺口：`RegisterTokenRoutingRoutes` 没有 HTTP 测试，把读写权限对调不会让任何 Go 测试失败。
 
 ## 渠道选择与倍率
