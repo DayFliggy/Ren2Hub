@@ -116,12 +116,12 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 最近一次正式发布
 
-2026-11-17 17:32 UTC，从 `96b70e3ab` 普通升级，回退目标也是它。内容：独有功能审计的修复（GMPay 空链上交易号的父订单回调、原生计数脱离路由健康、工单附件预算、加赠窗口只统计同步结算、备用支付链接校验），管理员按订单回收邀请返利，以及删除仪表盘的联系悬浮按钮。没有表结构变化，public 表仍是 46 张。
+2026-11-20 12:55 UTC，从 `d352118b7` 普通升级，回退目标也是它。内容：自动路由按健康、质量与缓存复用证据调度及其诊断；路由吸收（上游 #8345、上下文溢出不计渠道健康、无内容的完成流计为失败、流式半开探测在首个内容结算、严格会话亲和服从熔断、熔断与冷却诊断）；一条渠道一把 Key（含提供商插件渠道）与 NewAPI `3a407cc9b` 同步；冷却期内的 429 不再计入熔断；prefer 亲和在绑定渠道严重降档时退出；令牌自动/顺序路由（`selected_only` 选择范围、删空后拒绝、创建只接受自动）；上游额度耗尽计入熔断与路由质量。表结构只增加 `token_route_profiles.selected_only` 列，public 表仍是 46 张。
 
-- 应用提交 `d352118b7c3d938b394d65a1c9ca917a2887d6b8`，根提交 `4be1ec0f1e719c8bda913d722dd9925e8fbc7979`，镜像 `sha256:0632d264f512250319da45e985bc73db120035388bce4e473a733d23b6587ef1`。
-- 本地门禁按改动定向运行：registry、Go 点名用例、三库 `TestGmpayAndTicketDatabaseContracts`、`TestAffiliateTopUpReversalConcurrencyDatabases`、`TestFixedPriceBillingDatabaseMatrix`、`TestTaskPollingContractDatabaseMatrix`、`TestDoubaoRelayedImageStreamSettlement`，新增并发路径在 golang:1.26.10 容器里 `-race -count=3`，Python 236 项、Vitest 178 例、前端静态检查、7 个视觉 spec 38 例、镜像构建。没有运行全量档位。
-- 范围候选 `--scope auto,billing`（`upgrade`、`billing`、`management`）从正式 `96b70e3ab` 镜像做升级演练，`candidate_success=true`、`deployment_eligible=true`。
-- routing 同一镜像单独运行，退出 2：必测 30 项通过，其余是发布豁免清单登记的上游缺陷及其阻断，没有新增项，不计为通过。
+- 应用提交 `76397d074efde95b6ca2def0f998d702da2d60c3`，根提交 `fd87f83af7bc184e117b7524339ce663504ae43e`，镜像 `sha256:885627b1512a679e3d1a0f55406c1c349c3fb9872446e0819e1374bd0ecbd8c5`。
+- 本地门禁按改动定向：沿用各开发线在其终点的证据（单 Key 线的单测层与 restored 75 项；令牌路由后端线的 service、relay、middleware、router 整包，model 与 controller 分批，race 107 项，三库登记用例；前端线的 Vitest、静态检查与视觉 spec），并在发布提交上补跑 service 整包 446 项、controller 分批 614 项（3 项按环境跳过）、relay 整包 93 项、race service 69 项和构建。没有运行全量档位。
+- 范围候选 `--scope auto`（`upgrade`、`management`、`routing-workload`）从正式 `d352118b7` 镜像做升级演练，`candidate_success=true`、`deployment_eligible=true`。
+- routing 同一镜像单独运行，退出 2：必测 33 项通过，其余是发布豁免清单登记的上游缺陷 `nil_ChannelMeta_in_ResolveOriginTask` 及其阻断的 6 项；诊断 12 项和 30 项阻断、restored 75 项与冻结清单一致，普通 race 124 项通过。退出 2 不计为通过。
 
 现场核验、备份和回退边界见工作区的服务器档案（`docs/server/SERVER_PROFILE.md`）。
 
