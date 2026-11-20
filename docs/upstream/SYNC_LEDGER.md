@@ -103,7 +103,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 等待上游的项
 
-共有问题、上线前须复核的安全项及待核实的协议行为统一登记在[等待上游](WAITING_UPSTREAM.md)。
+共有问题、上线前须复核的安全项及待核实的协议行为统一登记在[等待上游](WAITING_UPSTREAM.md)。这些项未经批准不另造本地修复；重新启动时按最新上游复核。
 
 ## 测试与诊断约定
 
