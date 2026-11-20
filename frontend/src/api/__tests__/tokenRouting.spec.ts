@@ -9,7 +9,8 @@ vi.mock('@/api/client', () => ({ api: { get: vi.fn(), put: vi.fn() } }))
 beforeEach(() => vi.resetAllMocks())
 const route = (): TokenRoute => ({
   token_id: 7,
-  mode: 'manual',
+  mode: 'ordered',
+  selected_only: true,
   version: 4,
   max_channel_ratio: '1.25',
   entries: [
@@ -19,12 +20,12 @@ const route = (): TokenRoute => ({
 })
 const previewQuery = { model: 'fixture', path: '/v1/responses', stream: false }
 const previewResponse = () => ({
-  mode: 'manual',
+  mode: 'ordered',
   version: 4,
   model: 'fixture',
   path: '/v1/responses',
   stream: true,
-  ordering: 'manual',
+  ordering: 'ordered',
   transport: 'http',
   entries: [
     {
@@ -36,11 +37,12 @@ const previewResponse = () => ({
   ],
 })
 describe('native token routing', () => {
-  it('saves the ordered manual list and version without retired groups or policies', async () => {
+  it('saves the ordered list, scope and version without retired groups or policies', async () => {
     vi.mocked(api.put).mockResolvedValue({ ...route(), version: 5 })
     const result = await tokenRoutingApi.save(7, route())
     expect(api.put).toHaveBeenCalledWith('/api/token/7/routing', {
-      mode: 'manual',
+      mode: 'ordered',
+      selected_only: true,
       version: 4,
       max_channel_ratio: '1.25',
       entries: [
@@ -50,21 +52,54 @@ describe('native token routing', () => {
     })
     expect(result.version).toBe(5)
   })
-  it('clears manual entries when switching to automatic routing', async () => {
+  it('keeps selected channels when automatic routing is limited to them', async () => {
+    vi.mocked(api.put).mockResolvedValue({ ...route(), mode: 'auto' })
+    await tokenRoutingApi.save(7, { ...route(), mode: 'auto' })
+    expect(api.put).toHaveBeenCalledWith('/api/token/7/routing', {
+      mode: 'auto',
+      selected_only: true,
+      version: 4,
+      max_channel_ratio: '1.25',
+      entries: [
+        { channel_id: 9, enabled: true },
+        { channel_id: 2, enabled: false },
+      ],
+    })
+  })
+  it('sends no entries when automatic routing uses every platform channel', async () => {
     vi.mocked(api.put).mockResolvedValue({
       ...route(),
       mode: 'auto',
+      selected_only: false,
       entries: [],
     })
-    await tokenRoutingApi.save(7, { ...route(), mode: 'auto' })
+    await tokenRoutingApi.save(7, {
+      ...route(),
+      mode: 'auto',
+      selected_only: false,
+    })
     expect(api.put).toHaveBeenCalledWith(
       '/api/token/7/routing',
-      expect.objectContaining({ mode: 'auto', entries: [] })
+      expect.objectContaining({
+        mode: 'auto',
+        selected_only: false,
+        entries: [],
+      })
     )
+  })
+  it('reads a selected scope whose channels were all deleted', () => {
+    expect(
+      parseTokenRoute({ ...route(), mode: 'auto', entries: [] })
+    ).toMatchObject({ mode: 'auto', selected_only: true, entries: [] })
   })
   it('rejects an old profile, invalid mode or non-numeric version', () => {
     expect(() => parseTokenRoute({ groups: [] })).toThrow()
     expect(() => parseTokenRoute({ ...route(), mode: 'priority' })).toThrow()
+    expect(() => parseTokenRoute({ ...route(), mode: 'manual' })).toThrow()
+    expect(() =>
+      parseTokenRoute({ ...route(), selected_only: undefined })
+    ).toThrow()
+    expect(() => parseTokenRoute({ ...route(), selected_only: 1 })).toThrow()
     expect(() => parseTokenRoute({ ...route(), version: '4' })).toThrow()
   })
   it('previews the saved configuration without a write', async () => {
@@ -85,11 +120,11 @@ describe('native token routing', () => {
       },
       { signal }
     )
-    expect(result).toMatchObject({ stream: true, ordering: 'manual' })
+    expect(result).toMatchObject({ stream: true, ordering: 'ordered' })
     expect(result.entries[0]!.eligible).toBe(false)
     expect(api.put).not.toHaveBeenCalled()
   })
-  it.each(['manual', 'weighted_random_per_request'] as const)(
+  it.each(['ordered', 'weighted_random_per_request'] as const)(
     'accepts the %s preview ordering',
     async (ordering) => {
       vi.mocked(api.get).mockResolvedValue({ ...previewResponse(), ordering })
@@ -101,6 +136,8 @@ describe('native token routing', () => {
     { transport: 'invalid' },
     { transport: undefined },
     { ordering: 'weighted' },
+    { ordering: 'manual' },
+    { mode: 'manual' },
     { ordering: undefined },
     { stream: 'true' },
     { stream: undefined },

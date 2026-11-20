@@ -107,6 +107,16 @@ const channelById = computed(
 const enabledCount = computed(
   () => data.value?.entries.filter((entry) => entry.enabled).length ?? 0
 )
+const ordered = computed(() => data.value?.mode === 'ordered')
+const selectedOnly = computed(() => Boolean(data.value?.selected_only))
+/** Saved selected scope with no entries left: the backend rejects calls until it is reconfigured. */
+const savedOrphaned = ref(false)
+const allDisabled = computed(
+  () =>
+    selectedOnly.value &&
+    Boolean(data.value?.entries.length) &&
+    enabledCount.value === 0
+)
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError && error.code === 'preview_path_unsupported')
@@ -132,6 +142,7 @@ async function load(): Promise<void> {
   saving.value = false
   invalidatePreview()
   data.value = null
+  savedOrphaned.value = false
   channels.value = []
   selected.value = ''
   maxRatio.value = ''
@@ -157,6 +168,24 @@ async function load(): Promise<void> {
   }
   ;[data.value, channels.value] = result.value
   maxRatio.value = data.value.max_channel_ratio ?? ''
+  savedOrphaned.value = isOrphaned(data.value)
+}
+function isOrphaned(value: TokenRoute): boolean {
+  return value.selected_only && value.entries.length === 0
+}
+function setMode(mode: TokenRoute['mode']): void {
+  if (!canEdit.value || !data.value) return
+  data.value.mode = mode
+  // Ordered routing has no platform-wide form; it always walks the saved list.
+  if (mode === 'ordered') data.value.selected_only = true
+}
+function setSelectedOnly(value: boolean): void {
+  if (!canEdit.value || !data.value || (ordered.value && !value)) return
+  data.value.selected_only = value
+}
+function usePlatform(): void {
+  setMode('auto')
+  setSelectedOnly(false)
 }
 function updatePositions(): void {
   data.value?.entries.forEach((entry, index) => {
@@ -167,7 +196,7 @@ function add(): void {
   const id = Number(selected.value)
   if (
     !canEdit.value ||
-    data.value?.mode !== 'manual' ||
+    !data.value?.selected_only ||
     !available.value.some((channel) => channel.id === id && channel.eligible)
   )
     return
@@ -179,21 +208,27 @@ function add(): void {
   selected.value = ''
 }
 function remove(index: number): void {
-  if (!canEdit.value || data.value?.mode !== 'manual') return
+  if (!canEdit.value || !data.value?.selected_only) return
   data.value.entries.splice(index, 1)
   updatePositions()
 }
 function move(index: number, offset: number): void {
   const entries = data.value?.entries
   const target = index + offset
-  if (!canEdit.value || !entries || target < 0 || target >= entries.length)
+  if (
+    !canEdit.value ||
+    !ordered.value ||
+    !entries ||
+    target < 0 ||
+    target >= entries.length
+  )
     return
   const [entry] = entries.splice(index, 1)
   if (entry) entries.splice(target, 0, entry)
   updatePositions()
 }
 function startDrag(event: DragEvent, entry: TokenRouteEntry): void {
-  if (!canEdit.value) {
+  if (!canEdit.value || !ordered.value) {
     event.preventDefault()
     return
   }
@@ -219,6 +254,10 @@ async function save(): Promise<void> {
     saveError.value = t('routing.invalidRatio')
     return
   }
+  if (data.value.selected_only && !data.value.entries.length) {
+    saveError.value = t('routing.selectionRequired')
+    return
+  }
   // A pending request owns a snapshot, so navigation or later edits cannot alter it.
   const input: TokenRoute = {
     ...data.value,
@@ -235,6 +274,7 @@ async function save(): Promise<void> {
   if (result.ok) {
     data.value = result.value
     maxRatio.value = result.value.max_channel_ratio ?? ''
+    savedOrphaned.value = isOrphaned(result.value)
     toast.success(t('routing.saved'))
     selected.value = ''
     candidatesLoading.value = true
@@ -410,6 +450,22 @@ watch(
       >
     </div>
     <template v-else-if="data">
+      <div
+        v-if="savedOrphaned"
+        role="alert"
+        data-route-orphaned
+        class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
+      >
+        <span class="min-w-0 flex-1 basis-64">{{ t('routing.orphaned') }}</span>
+        <ConsoleButton
+          v-if="canWrite"
+          variant="secondary"
+          size="sm"
+          :disabled="!canEdit"
+          @click="usePlatform"
+          >{{ t('routing.usePlatform') }}</ConsoleButton
+        >
+      </div>
       <ConsoleCard :title="t('routing.modeTitle')">
         <template #action
           ><StatusChip tone="info">{{
@@ -419,7 +475,7 @@ watch(
         <fieldset class="grid gap-3 sm:grid-cols-2" :disabled="!canEdit">
           <legend class="sr-only">{{ t('routing.modeTitle') }}</legend>
           <label
-            v-for="mode in ['auto', 'manual'] as const"
+            v-for="mode in ['ordered', 'auto'] as const"
             :key="mode"
             class="flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
             :class="
@@ -429,34 +485,71 @@ watch(
             "
           >
             <input
-              v-model="data.mode"
               class="mt-1 shrink-0"
               type="radio"
               name="token-route-mode"
               :value="mode"
-              :aria-label="
-                mode === 'auto' ? t('routing.automatic') : t('routing.manual')
-              "
+              :checked="data.mode === mode"
+              :aria-label="t(`routing.modes.${mode}`)"
+              @change="setMode(mode)"
             />
             <span class="min-w-0"
               ><span
                 class="block text-sm font-semibold text-[var(--text-primary)]"
-                >{{
-                  mode === 'auto' ? t('routing.automatic') : t('routing.manual')
-                }}</span
+                >{{ t(`routing.modes.${mode}`) }}</span
               ><span
                 class="mt-1 block text-xs leading-relaxed text-[var(--text-tertiary)]"
-                >{{
-                  t(
-                    mode === 'auto'
-                      ? 'routing.automaticHint'
-                      : 'routing.manualHint'
-                  )
-                }}</span
+                >{{ t(`routing.modeHints.${mode}`) }}</span
               ></span
             >
           </label>
         </fieldset>
+        <div class="mt-5 border-t border-[var(--border-subtle)] pt-4">
+          <fieldset :disabled="!canEdit">
+            <legend
+              class="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
+            >
+              {{ t('routing.scopeTitle') }}
+            </legend>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label
+                v-for="scope in ['platform', 'selected'] as const"
+                :key="scope"
+                class="flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
+                :class="[
+                  selectedOnly === (scope === 'selected')
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                    : 'border-[var(--border-subtle)]',
+                  scope === 'platform' && ordered ? 'opacity-60' : '',
+                ]"
+              >
+                <input
+                  class="mt-1 shrink-0"
+                  type="radio"
+                  name="token-route-scope"
+                  :value="scope"
+                  :checked="selectedOnly === (scope === 'selected')"
+                  :disabled="scope === 'platform' && ordered"
+                  :aria-label="t(`routing.scopes.${scope}`)"
+                  @change="setSelectedOnly(scope === 'selected')"
+                />
+                <span class="min-w-0"
+                  ><span
+                    class="block text-sm font-semibold text-[var(--text-primary)]"
+                    >{{ t(`routing.scopes.${scope}`) }}</span
+                  ><span
+                    class="mt-1 block text-xs leading-relaxed text-[var(--text-tertiary)]"
+                    >{{
+                      scope === 'platform' && ordered
+                        ? t('routing.scopeOrderedOnly')
+                        : t(`routing.scopeHints.${scope}`)
+                    }}</span
+                  ></span
+                >
+              </label>
+            </div>
+          </fieldset>
+        </div>
         <p v-if="!canWrite" class="mt-4 text-sm text-[var(--text-tertiary)]">
           {{ t('routing.readOnly') }}
         </p>
@@ -464,25 +557,25 @@ watch(
 
       <ConsoleCard
         :title="
-          data.mode === 'manual'
-            ? t('routing.entriesTitle')
-            : t('routing.automatic')
+          !selectedOnly
+            ? t('routing.scopes.platform')
+            : ordered
+              ? t('routing.entriesTitle')
+              : t('routing.selectedTitle')
         "
       >
         <template #action
           ><StatusChip
-            :tone="
-              data.mode === 'manual' && !enabledCount ? 'warning' : 'neutral'
-            "
+            :tone="selectedOnly && !enabledCount ? 'warning' : 'neutral'"
             >{{
-              data.mode === 'manual'
+              selectedOnly
                 ? t('routing.selectedCount', { count: enabledCount })
-                : t('routing.platform')
+                : t('routing.scopes.platform')
             }}</StatusChip
           ></template
         >
         <div
-          v-if="data.mode === 'manual'"
+          v-if="selectedOnly"
           class="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
         >
           <FormField :label="t('routing.add')">
@@ -528,32 +621,44 @@ watch(
         <div
           class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]"
           :class="
-            data.mode === 'manual'
-              ? 'border-t border-[var(--border-subtle)] pt-4'
-              : ''
+            selectedOnly ? 'border-t border-[var(--border-subtle)] pt-4' : ''
           "
         >
           <div class="min-w-0">
-            <template v-if="data.mode === 'manual'">
+            <template v-if="selectedOnly">
               <p
                 class="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
               >
-                {{ t('routing.orderHint') }}
+                {{
+                  ordered ? t('routing.orderHint') : t('routing.autoListHint')
+                }}
+              </p>
+              <p
+                v-if="allDisabled"
+                role="alert"
+                class="mb-3 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-3 text-sm text-[var(--status-warning-text)]"
+              >
+                {{ t('routing.allDisabled') }}
               </p>
               <EmptyState
                 v-if="!data.entries.length"
                 :title="t('routing.empty')"
                 :hint="t('routing.emptyHint')"
               />
-              <ol
+              <component
+                :is="ordered ? 'ol' : 'ul'"
                 v-else
                 class="sibling-space-y-2"
-                :aria-label="t('routing.entriesTitle')"
+                :aria-label="
+                  ordered
+                    ? t('routing.entriesTitle')
+                    : t('routing.selectedTitle')
+                "
               >
                 <li
                   v-for="(entry, index) in data.entries"
                   :key="entry.channel_id"
-                  :draggable="canEdit"
+                  :draggable="canEdit && ordered"
                   :data-channel-id="entry.channel_id"
                   class="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border-subtle)] p-3"
                   :class="
@@ -564,14 +669,16 @@ watch(
                   @dragover.prevent
                   @drop.prevent="dropEntry(entry)"
                 >
-                  <GripVertical
-                    class="h-4 w-4 shrink-0 text-[var(--text-tertiary)]"
-                    aria-hidden="true"
-                  />
-                  <span
-                    class="text-xs tabular-nums text-[var(--text-tertiary)]"
-                    >{{ index + 1 }}</span
-                  >
+                  <template v-if="ordered">
+                    <GripVertical
+                      class="h-4 w-4 shrink-0 text-[var(--text-tertiary)]"
+                      aria-hidden="true"
+                    />
+                    <span
+                      class="text-xs tabular-nums text-[var(--text-tertiary)]"
+                      >{{ index + 1 }}</span
+                    >
+                  </template>
                   <div class="min-w-0 basis-36 flex-1">
                     <p
                       class="break-words text-sm font-medium text-[var(--text-primary)]"
@@ -613,18 +720,22 @@ watch(
                         :disabled="!canEdit"
                       />{{ t('routing.enabled') }}</label
                     >
-                    <IconButton
-                      :label="t('routing.up')"
-                      :disabled="!canEdit || index === 0"
-                      @click="move(index, -1)"
-                      ><ArrowUp class="h-4 w-4" aria-hidden="true"
-                    /></IconButton>
-                    <IconButton
-                      :label="t('routing.down')"
-                      :disabled="!canEdit || index === data.entries.length - 1"
-                      @click="move(index, 1)"
-                      ><ArrowDown class="h-4 w-4" aria-hidden="true"
-                    /></IconButton>
+                    <template v-if="ordered">
+                      <IconButton
+                        :label="t('routing.up')"
+                        :disabled="!canEdit || index === 0"
+                        @click="move(index, -1)"
+                        ><ArrowUp class="h-4 w-4" aria-hidden="true"
+                      /></IconButton>
+                      <IconButton
+                        :label="t('routing.down')"
+                        :disabled="
+                          !canEdit || index === data.entries.length - 1
+                        "
+                        @click="move(index, 1)"
+                        ><ArrowDown class="h-4 w-4" aria-hidden="true"
+                      /></IconButton>
+                    </template>
                     <IconButton
                       :label="t('routing.remove')"
                       tone="danger"
@@ -634,13 +745,19 @@ watch(
                     /></IconButton>
                   </div>
                 </li>
-              </ol>
+              </component>
             </template>
             <div v-else class="sibling-space-y-3">
               <p
                 class="rounded-xl border border-dashed border-[var(--border-subtle)] p-4 text-sm text-[var(--text-tertiary)]"
               >
-                {{ t('routing.autoHint') }}
+                {{ t('routing.platformHint') }}
+              </p>
+              <p
+                v-if="data.entries.length"
+                class="text-sm text-[var(--text-tertiary)]"
+              >
+                {{ t('routing.platformClearsList') }}
               </p>
             </div>
           </div>
@@ -754,9 +871,7 @@ watch(
               t('routing.previewVersion', { version: preview.version })
             }}</span
             ><StatusChip tone="info">{{
-              preview.mode === 'auto'
-                ? t('routing.automatic')
-                : t('routing.manual')
+              t(`routing.modes.${preview.mode}`)
             }}</StatusChip
             ><span class="break-all text-xs text-[var(--text-tertiary)]"
               >{{ preview.model }} · {{ preview.path }} ·
@@ -770,8 +885,8 @@ watch(
           </div>
           <p class="text-sm text-[var(--text-tertiary)]">
             {{
-              preview.ordering === 'manual'
-                ? t('routing.orderingManual')
+              preview.ordering === 'ordered'
+                ? t('routing.orderingOrdered')
                 : t('routing.orderingWeighted')
             }}
           </p>

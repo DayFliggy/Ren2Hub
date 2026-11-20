@@ -36,7 +36,8 @@ import TokenRoutingView from '../TokenRoutingView.vue'
 function config(id = 7): TokenRoute {
   return {
     token_id: id,
-    mode: 'manual',
+    mode: 'ordered',
+    selected_only: true,
     version: 1,
     max_channel_ratio: null,
     entries: [{ channel_id: id, enabled: true, position: 0 }],
@@ -56,12 +57,12 @@ function channel(id: number, eligible = true): TokenRouteChannel {
 }
 function previewResult(): TokenRoutePreview {
   return {
-    mode: 'manual',
+    mode: 'ordered',
     version: 1,
     model: 'gpt',
     path: '/v1/chat/completions',
     stream: false,
-    ordering: 'manual',
+    ordering: 'ordered',
     transport: 'http',
     entries: [
       {
@@ -187,7 +188,8 @@ it('moves channels with accessible arrow buttons and saves the visible order', a
   expect(mocks.save).toHaveBeenCalledWith(
     7,
     expect.objectContaining({
-      mode: 'manual',
+      mode: 'ordered',
+      selected_only: true,
       entries: [
         { channel_id: 8, enabled: true, position: 0 },
         { channel_id: 7, enabled: true, position: 1 },
@@ -238,34 +240,131 @@ it('adds eligible platform channels without duplicates and preserves disabled en
   })
   wrapper.unmount()
 })
-it('allows an explicitly empty manual list and explains that there is no automatic fallback', async () => {
+function radio(wrapper: VueWrapper, label: string) {
+  return wrapper.get(`input[type="radio"][aria-label="${label}"]`)
+}
+it('blocks saving selected channels with an empty list and explains why', async () => {
   const wrapper = await render()
-  expect(wrapper.get('fieldset').text()).toContain(
-    'Choose platform channels and try them in your saved order.'
-  )
-  expect(wrapper.get('fieldset').text()).not.toContain(
-    'An empty list has no available route.'
-  )
   await button(wrapper, 'Remove').trigger('click')
   expect(ids(wrapper)).toEqual([])
-  expect(wrapper.text()).toContain('Manual mode does not fall back')
+  expect(wrapper.text()).toContain(
+    'never fall back to the rest of the platform'
+  )
+  await button(wrapper, 'Save').trigger('click')
+  await flushPromises()
+  expect(mocks.save).not.toHaveBeenCalled()
+  expect(
+    wrapper.findAll('[role="alert"]').map((alert) => alert.text())
+  ).toContainEqual(expect.stringContaining('Add at least one channel'))
+  wrapper.unmount()
+})
+it('keeps ordered routing on selected channels only', async () => {
+  mocks.get.mockResolvedValue({
+    ...config(),
+    mode: 'auto',
+    selected_only: false,
+    entries: [],
+  })
+  const wrapper = await render()
+  expect(
+    (radio(wrapper, 'All platform channels').element as HTMLInputElement)
+      .checked
+  ).toBe(true)
+  await radio(wrapper, 'Ordered routing').setValue(true)
+  const platform = radio(wrapper, 'All platform channels')
+  expect((platform.element as HTMLInputElement).checked).toBe(false)
+  expect(platform.attributes('disabled')).toBeDefined()
+  expect(
+    (radio(wrapper, 'Selected channels').element as HTMLInputElement).checked
+  ).toBe(true)
+  expect(wrapper.text()).toContain('Ordered routing needs selected channels.')
+  wrapper.unmount()
+})
+it('uses every platform channel by default for automatic routing and sends no entries', async () => {
+  mocks.get.mockResolvedValue({
+    ...config(),
+    mode: 'auto',
+    selected_only: false,
+    entries: [],
+  })
+  const wrapper = await render()
+  expect(
+    wrapper.find('select[aria-label="Select a platform channel"]').exists()
+  ).toBe(false)
+  expect(wrapper.text()).toContain('This key uses every platform channel.')
   await button(wrapper, 'Save').trigger('click')
   await flushPromises()
   expect(mocks.save).toHaveBeenCalledWith(
     7,
-    expect.objectContaining({ mode: 'manual', entries: [] })
+    expect.objectContaining({ mode: 'auto', selected_only: false, entries: [] })
   )
   wrapper.unmount()
 })
-it('shows automatic routing criteria once and retains its manual-list warning', async () => {
-  mocks.get.mockResolvedValue({ ...config(), mode: 'auto', entries: [] })
+it('edits an automatic channel list without order controls and saves it with the selected scope', async () => {
+  mocks.get.mockResolvedValue({ ...config(), mode: 'auto' })
   const wrapper = await render()
-  expect(
-    wrapper.text().match(/ordered by priority, health, load and latency/g) ?? []
-  ).toHaveLength(1)
-  expect(wrapper.text()).toContain(
-    'Saving automatic mode clears the manual channel list.'
+  expect(wrapper.find('ul[aria-label="Selected channels"]').exists()).toBe(true)
+  expect(wrapper.find('button[aria-label="Move up"]').exists()).toBe(false)
+  expect(wrapper.get('[data-channel-id="7"]').attributes('draggable')).toBe(
+    'false'
   )
+  expect(wrapper.text()).toContain('their order is ignored')
+  await wrapper
+    .get('select[aria-label="Select a platform channel"]')
+    .setValue('8')
+  await button(wrapper, 'Add channel').trigger('click')
+  await wrapper
+    .get('[data-channel-id="7"] button[role="switch"]')
+    .trigger('click')
+  await button(wrapper, 'Save').trigger('click')
+  await flushPromises()
+  expect(mocks.save).toHaveBeenCalledWith(
+    7,
+    expect.objectContaining({
+      mode: 'auto',
+      selected_only: true,
+      entries: [
+        { channel_id: 7, enabled: false, position: 0 },
+        { channel_id: 8, enabled: true, position: 1 },
+      ],
+    })
+  )
+  wrapper.unmount()
+})
+it('warns that calls will be rejected when every selected channel is disabled', async () => {
+  const wrapper = await render()
+  expect(wrapper.text()).not.toContain('calls with this key will be rejected')
+  await wrapper
+    .get('[data-channel-id="7"] button[role="switch"]')
+    .trigger('click')
+  expect(
+    wrapper.findAll('[role="alert"]').map((alert) => alert.text())
+  ).toContainEqual(
+    expect.stringContaining('calls with this key will be rejected')
+  )
+  wrapper.unmount()
+})
+it('explains a saved selection whose channels were deleted and offers the platform scope', async () => {
+  mocks.get.mockResolvedValue({ ...config(), mode: 'ordered', entries: [] })
+  const wrapper = await render()
+  const alert = wrapper.get('[data-route-orphaned]')
+  expect(alert.text()).toContain('selected channels are no longer available')
+  expect(alert.text()).toContain('no available channel')
+  await button(wrapper, 'Use all platform channels').trigger('click')
+  expect(
+    (radio(wrapper, 'Automatic routing').element as HTMLInputElement).checked
+  ).toBe(true)
+  expect(
+    (radio(wrapper, 'All platform channels').element as HTMLInputElement)
+      .checked
+  ).toBe(true)
+  await button(wrapper, 'Save').trigger('click')
+  await flushPromises()
+  expect(mocks.save).toHaveBeenCalledWith(
+    7,
+    expect.objectContaining({ mode: 'auto', selected_only: false })
+  )
+  expect(wrapper.find('[data-route-orphaned]').exists()).toBe(false)
   wrapper.unmount()
 })
 it.each(['0', '1000.000000000000000001', '0.0000000000000000001', '-1', '1e2'])(
