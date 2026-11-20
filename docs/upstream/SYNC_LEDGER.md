@@ -103,7 +103,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 等待上游的项
 
-清单、源码位置和上游 issue 见[等待上游](WAITING_UPSTREAM.md)：remix 的 N1、N2、N3、A5、A7，原生与插件的实际平台归属，`draft_task` 原任务声明，MJ 与插件的存储错误分类。这些项未经批准不另造本地修复；重新启动时按最新上游复核。
+共有问题、上线前须复核的安全项及待核实的协议行为统一登记在[等待上游](WAITING_UPSTREAM.md)。
 
 ## 测试与诊断约定
 
