@@ -740,5 +740,23 @@
     "version": "",
     "license": "BSD-3-Clause",
     "text_refs": []
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "harfbuzzjs",
+    "version": "1.6.4",
+    "license": "MIT",
+    "repository": "git+https://github.com/harfbuzz/harfbuzzjs.git"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "subset-font",
+    "version": "2.9.0",
+    "license": "BSD-3-Clause",
+    "repository": "git+https://github.com/papandreou/subset-font.git"
   }
 ]
