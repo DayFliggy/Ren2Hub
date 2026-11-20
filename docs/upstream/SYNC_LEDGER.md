@@ -79,7 +79,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 一条渠道只保存一把 Key，提供商插件渠道只保存一份凭据；多个 Key 或多个账号各建一条渠道（合同 `single-key-channel`）。上游的多 Key 模式、Key 选择、按 Key 停用和 Key 级状态不吸收。原生文件里的接点：
 
-- 写入口：`POST /api/channel/` 没有 `multi_to_single` 和 `multi_key_mode`，`PUT /api/channel/` 拒绝 `key_mode` 与 `multi_key_mode`，没有 `/api/channel/multi_key/manage`；批量创建（每行一条渠道）照旧。
+- 写入口：`POST /api/channel/` 拒绝 `multi_to_single` 模式和 `multi_key_mode`、`key_mode` 字段，`PUT /api/channel/` 拒绝 `key_mode` 与 `multi_key_mode`，没有 `/api/channel/multi_key/manage`；创建（批量创建先按行拆成各渠道）和改 Key 都经 `validateSingleKey` 拒绝多行 Key，只有 Vertex 服务账号和任务插件凭据的 JSON 对象可以跨行；批量创建（每行一条渠道）照旧。
 - 运行时：`middleware/distributor.go` 直接取渠道 Key；`ChannelMeta`、上下文、`admin_info` 和请求策略事件都没有多 Key 字段；`types.NewChannelError` 不带多 Key 标记；Responses WebSocket 锁定连接只比较 Key 文本；Vertex 令牌缓存按渠道 ID；原任务续作、上游模型拉取、上游倍率识别和推理服务状态都用渠道 Key。
 - 插件凭据：登录替换渠道里的凭据，已存凭据属于本插件时把它交给 `login` 并要求同一账号；请求不再带 `add` 和 `key_index`（被拒绝），`plugin_credentials` 不带 `index`。刷新、`relogin` 停用、`scheduled` 和余额都按渠道进行；一个账号在同一插件只登录在一条渠道上，任务轮询仍按提交任务的账号分批。
 - 存储与状态：`model.Channel` 没有 `channel_info` 和 `Keys`，新安装不建 `channel_info` 列；`UpdateChannelStatusDetailed` 只写渠道状态，`DisableChannelByTag` 直接按标签停用，渠道缓存不预解析 Key。没有每渠道轮询锁，渠道行锁是每渠道的写入边界：`UpdateChannelStatusDetailed` 的状态写入，以及 Key 与凭据写入的 `UpdateChannelLocked`、`UpdateTaskPluginChannelLocked`、`UpdateScheduledChannelLocked`，都在锁住渠道行的事务里同时写渠道和能力表（SQLite 上四处共用每渠道 Key 锁），所以渠道状态和 `abilities.enabled` 总是一致；其他 `other_info` 写入方经 `UpdateChannelOtherInfo` 比较写入，遇到改动重读。

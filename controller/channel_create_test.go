@@ -3,7 +3,6 @@ package controller
 import (
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -182,50 +180,73 @@ func TestAddChannelInvalidVertexBatchDoesNotReturnResults(t *testing.T) {
 	}
 }
 
-// A channel holds one key: the retired multi-key add mode creates nothing.
+// A channel holds one key. Each refused input creates nothing on its own:
+// the retired add mode, the retired selection field, and a key list in the
+// single key. Batch mode and a multiline Vertex JSON key are covered by
+// TestAddChannelReturnsCreatedIDs.
 func TestAddChannelRejectsMultiKeyMode(t *testing.T) {
 	rootID := setupChannelCreateTest(t)
-	request := `{"mode":"multi_to_single","multi_key_mode":"polling","channel":{"name":"multi-key-add","type":1,"key":"sk-a\nsk-b","channel_ratio":"1","models":"test-model"}}`
-	response := postAddChannel(t, rootID, common.RoleRootUser, request)
-	require.Equal(t, http.StatusOK, response.Code)
-	var result map[string]any
-	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
-	assert.Equal(t, false, result["success"], response.Body.String())
-	assert.NotContains(t, result, "data")
-	var count int64
-	require.NoError(t, model.DB.Model(&model.Channel{}).Where("name = ?", "multi-key-add").Count(&count).Error)
-	assert.Zero(t, count)
+	for _, tc := range []struct{ name, body string }{
+		{"retired add mode", `{"mode":"multi_to_single","channel":{"name":"multi-key-add","type":1,"key":"sk-a","channel_ratio":"1","models":"test-model"}}`},
+		{"retired selection field", `{"mode":"single","multi_key_mode":"polling","channel":{"name":"multi-key-add","type":1,"key":"sk-a","channel_ratio":"1","models":"test-model"}}`},
+		{"key list in a single key", `{"mode":"single","channel":{"name":"multi-key-add","type":1,"key":"sk-a\nsk-b","channel_ratio":"1","models":"test-model"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := postAddChannel(t, rootID, common.RoleRootUser, tc.body)
+			require.Equal(t, http.StatusOK, response.Code)
+			var result map[string]any
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+			assert.Equal(t, false, result["success"], response.Body.String())
+			assert.NotContains(t, result, "data")
+			var count int64
+			require.NoError(t, model.DB.Model(&model.Channel{}).Where("name = ?", "multi-key-add").Count(&count).Error)
+			assert.Zero(t, count)
+		})
+	}
 }
 
-// An edit that still sends a key list mode is refused whole: append would
-// otherwise turn into replacing the stored key.
+// An edit that still sends a key list mode, or a key list as the key, is
+// refused whole: append would otherwise turn into replacing the stored key.
+// A Vertex service account JSON spans lines and is one key.
 func TestUpdateChannelRejectsMultiKeyFields(t *testing.T) {
 	rootID := setupChannelCreateTest(t)
 	channel := &model.Channel{Name: "multi-key-edit", Type: constant.ChannelTypeOpenAI, Key: "sk-stored", ChannelRatio: "1", Models: "test-model"}
 	require.NoError(t, channel.Insert())
+	vertex := &model.Channel{Name: "vertex-edit", Type: constant.ChannelTypeVertexAi, Key: `{"type":"service_account"}`, ChannelRatio: "1", Models: "test-model", Other: `{"default":"us-central1"}`}
+	require.NoError(t, vertex.Insert())
 	t.Cleanup(func() {
-		_, err := model.BatchDeleteChannels([]int{channel.Id})
+		_, err := model.BatchDeleteChannels([]int{channel.Id, vertex.Id})
 		require.NoError(t, err)
 	})
-	for name, field := range map[string]string{"key mode": `"key_mode":"append"`, "multi-key mode": `"multi_key_mode":"polling"`} {
+	for name, field := range map[string]string{
+		"key mode":       `"key":"sk-new","key_mode":"append"`,
+		"multi-key mode": `"key":"sk-new","multi_key_mode":"polling"`,
+		"key list":       `"key":"sk-a\nsk-b"`,
+	} {
 		t.Run(name, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			context, _ := gin.CreateTestContext(recorder)
-			context.Set("id", rootID)
-			context.Set("role", common.RoleRootUser)
-			body := fmt.Sprintf(`{"id":%d,"name":"renamed","key":"sk-new",%s}`, channel.Id, field)
-			context.Request = httptest.NewRequest(http.MethodPut, "/api/channel", strings.NewReader(body))
-			context.Request.Header.Set("Content-Type", "application/json")
-			UpdateChannel(context)
+			body := fmt.Sprintf(`{"id":%d,"name":"renamed",%s}`, channel.Id, field)
+			response := putUpdateChannel(t, rootID, common.RoleRootUser, body)
 			var result map[string]any
-			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &result))
-			assert.Equal(t, false, result["success"], recorder.Body.String())
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+			assert.Equal(t, false, result["success"], response.Body.String())
 			stored, err := model.GetChannelById(channel.Id, true)
 			require.NoError(t, err)
 			assert.Equal(t, "sk-stored", stored.Key)
 			assert.Equal(t, "multi-key-edit", stored.Name)
 		})
 	}
+	t.Run("multiline Vertex JSON", func(t *testing.T) {
+		key := "{\n  \"type\": \"service_account\",\n  \"project_id\": \"edit\"\n}"
+		encoded, err := common.Marshal(key)
+		require.NoError(t, err)
+		response := putUpdateChannel(t, rootID, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"key":%s}`, vertex.Id, encoded))
+		var result map[string]any
+		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+		assert.Equal(t, true, result["success"], response.Body.String())
+		stored, err := model.GetChannelById(vertex.Id, true)
+		require.NoError(t, err)
+		assert.Equal(t, key, stored.Key)
+	})
 }
 
 func TestAddChannelRollbackDoesNotReturnIDs(t *testing.T) {

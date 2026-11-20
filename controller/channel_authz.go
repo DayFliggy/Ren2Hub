@@ -1,6 +1,13 @@
 package controller
 
-import "github.com/QuantumNous/new-api/model"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+)
 
 func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, requestData map[string]any) bool {
 	if _, ok := requestData["type"]; ok && channel.Type != origin.Type {
@@ -101,6 +108,27 @@ func rejectsMultiKeyFields(requestData map[string]any) bool {
 	_, keyMode := requestData["key_mode"]
 	_, multiKeyMode := requestData["multi_key_mode"]
 	return keyMode || multiKeyMode
+}
+
+// errChannelHoldsOneKey refuses a key list or a retired key list mode.
+var errChannelHoldsOneKey = common.NewMessage("A channel holds one key; add one channel per key instead")
+
+// validateSingleKey refuses a key list stored as a channel's one key. The
+// adaptors read the whole key as one credential; only a JSON object, which the
+// Vertex service account and task plugin credential parsers decode, may span
+// lines.
+func validateSingleKey(channelType int, otherSettings dto.ChannelOtherSettings, key string) error {
+	key = strings.TrimSpace(key)
+	if !strings.ContainsAny(key, "\r\n") {
+		return nil
+	}
+	jsonKey := channelType == constant.ChannelTypeTaskPlugin ||
+		channelType == constant.ChannelTypeVertexAi && otherSettings.VertexKeyType != dto.VertexKeyTypeAPIKey
+	var object map[string]any
+	if jsonKey && common.UnmarshalJsonStr(key, &object) == nil {
+		return nil
+	}
+	return errChannelHoldsOneKey
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {

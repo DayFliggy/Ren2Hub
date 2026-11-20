@@ -740,6 +740,15 @@ func AddChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	var requestData map[string]any
+	if err := common.Unmarshal(body, &requestData); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if rejectsMultiKeyFields(requestData) {
+		common.ApiError(c, errChannelHoldsOneKey)
+		return
+	}
 	if addChannelRequest.Channel != nil {
 		clearChannelProjections(addChannelRequest.Channel)
 		if _, ok := provided.Channel["channel_ratio"]; !ok {
@@ -818,6 +827,10 @@ func AddChannel(c *gin.Context) {
 		}
 		localChannel := addChannelRequest.Channel
 		localChannel.Key = key
+		if err := validateSingleKey(localChannel.Type, localChannel.GetOtherSettings(), key); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 		if addChannelRequest.BatchAddSetKeyPrefix2Name && len(keys) > 1 {
 			keyPrefix := localChannel.Key
 			if len(localChannel.Key) > 8 {
@@ -1112,7 +1125,7 @@ func UpdateChannel(c *gin.Context) {
 	}
 	// A channel holds one key, so the retired key list modes cannot change it.
 	if rejectsMultiKeyFields(requestData) {
-		common.ApiErrorT(c, "A channel holds one key; add one channel per key instead")
+		common.ApiError(c, errChannelHoldsOneKey)
 		return
 	}
 	clearChannelReadOnlyFields(&channel, requestData)
@@ -1190,6 +1203,16 @@ func UpdateChannel(c *gin.Context) {
 	}
 	if !settingProvided {
 		keptPluginKey = originChannel.GetSetting().TaskPluginKey
+	}
+	if keyChanged {
+		keptSettings := originChannel.GetOtherSettings()
+		if channel.OtherSettings != "" {
+			keptSettings = channel.GetOtherSettings()
+		}
+		if err := validateSingleKey(keptType, keptSettings, requestedKey); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	if err := service.CheckSubmittedPluginCredentials(keptType, keptPluginKey, keptKey, originChannel.Key); err != nil {
 		common.ApiError(c, err)
