@@ -2425,7 +2425,7 @@
       "path": "controller/responses_websocket_private_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c03c6c6b65d203b9aa8ff4498b81c3207ec9da90a3c4a5d2ee4963d0a9580b3a"
+      "local_sha256": "26765552c89131cb5e8b5bc207313d31f5b405704022836b2304fe04dd67aeef"
     },
     {
       "path": "controller/responses_websocket_test.go",
@@ -2993,7 +2993,7 @@
       "path": "controller/token_routing_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7e51a4b08e100a26524fcf90b7b79093b288aaf6cdda2124c5880c9275a93ebb"
+      "local_sha256": "bbf6267da5d184232cc1da7357493e9b06f648ac5ab5022e57eda0e36ee292c5"
     },
     {
       "path": "controller/token_test.go",
@@ -5837,7 +5837,7 @@
       "path": "model/token_route_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "62ecf72176f505a3d9cfdd440b3ea063cc2b70bf9a79dd5c7b38c6077a9250d2"
+      "local_sha256": "8ecafb22b7c8689af8440ae766764eb92738e43a2acd2d50b99c2d8be20f0c52"
     },
     {
       "path": "model/token_route_race_test.go",
@@ -10042,7 +10042,7 @@
       "path": "relay/responses_websocket_token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "dbbd124aaf17c0300988f36cd498bae29351e715afcc0c2224d927722834b45a"
+      "local_sha256": "03a520957c4528c286e1b0cd4e107c7fc13443ff9689812b47c9610041e962bf"
     },
     {
       "path": "relay/task_platform_error_test.go",
@@ -13108,7 +13108,7 @@
       "path": "service/route_affinity_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cc41ed9819cbf9e32a35f77dbbd188605b71a23b55f22e8422a2f51dbce9ddef"
+      "local_sha256": "851c2e751321cbcdf6d10f18424d41430cb90db6704c3ef42eb0a752a0cf77ea"
     },
     {
       "path": "service/route_attempt.go",

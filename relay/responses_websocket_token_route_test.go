@@ -42,6 +42,7 @@ func TestTokenRouteWebSocketRechecksEachCreate(t *testing.T) {
 	err := session.restoreConnectionContext(newCall(), "route-model")
 	require.NotNil(t, err)
 	require.Equal(t, http.StatusForbidden, err.StatusCode)
+	require.EqualValues(t, "access_denied", err.GetErrorCode())
 	require.ErrorContains(t, err, "no longer available")
 	require.False(t, service.ShouldRetryRelayError(newCall(), err, 5))
 }

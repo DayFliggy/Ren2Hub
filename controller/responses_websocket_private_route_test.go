@@ -17,7 +17,7 @@ import (
 
 func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 	for _, cache := range []bool{false, true} {
-		for _, scenario := range []string{"ability revoked", "entry removed", "token model revoked", "channel ratio revoked", "route store unavailable", "automatic pin revoked", "unchanged private pin", "unchanged automatic pin"} {
+		for _, scenario := range []string{"ability revoked", "entry removed", "token model revoked", "channel ratio revoked", "route store unavailable", "automatic pin revoked", "selected auto entries disabled", "unchanged private pin", "unchanged automatic pin"} {
 			t.Run(fmt.Sprintf("cache=%t/%s", cache, scenario), func(t *testing.T) {
 				var creates atomic.Int32
 				fixture := newResponsesWSBillingTestWithSetup(t, `tier("request", fixed(0.002))`, func(ws *websocket.Conn, _ *http.Request) {
@@ -34,7 +34,17 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 				}, func(f *responsesWSBillingTest) string {
 					require.NoError(t, model.DB.Model(f.user).Update("role", common.RoleAdminUser).Error)
 					if scenario != "automatic pin revoked" && scenario != "unchanged automatic pin" {
-						require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: 1}).Error)
+						mode := model.TokenRouteOrdered
+						if scenario == "selected auto entries disabled" {
+							mode = model.TokenRouteAuto
+							// Both routes point to the counted upstream, so an outside-list retry is observable.
+							outside := *f.channel
+							outside.Id = 0
+							outside.Name = "outside selected list"
+							require.NoError(t, outside.Insert())
+							t.Cleanup(func() { require.NoError(t, outside.Delete()) })
+						}
+						require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, SelectedOnly: true, Mode: mode, Version: 1}).Error)
 						require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: f.channel.Id, Enabled: true}).Error)
 						t.Cleanup(func() {
 							require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteEntry{}).Error)
@@ -44,6 +54,9 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 					common.MemoryCacheEnabled = cache
 					if cache {
 						model.InitChannelCache()
+					}
+					if scenario == "selected auto entries disabled" {
+						return "Bearer sk-" + f.token.Key
 					}
 					return fmt.Sprintf("Bearer sk-%s-%d", f.token.Key, f.channel.Id)
 				})
@@ -63,6 +76,8 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 					if cache {
 						model.InitChannelCache()
 					}
+				case "selected auto entries disabled":
+					require.NoError(t, model.DB.Model(&model.TokenRouteEntry{}).Where("token_id = ?", fixture.token.Id).Update("enabled", false).Error)
 				case "entry removed":
 					require.NoError(t, model.DB.Where("token_id = ?", fixture.token.Id).Delete(&model.TokenRouteEntry{}).Error)
 				case "route store unavailable":
@@ -95,6 +110,9 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 						status, closeCode = http.StatusInternalServerError, websocket.CloseInternalServerErr
 					}
 					require.EqualValues(t, status, event["status"])
+					if scenario == "selected auto entries disabled" {
+						require.Equal(t, "access_denied", event["error"].(map[string]any)["code"])
+					}
 					_, _, err := fixture.client.ReadMessage()
 					require.True(t, websocket.IsCloseError(err, closeCode), "expected close %d, got %v", closeCode, err)
 					fixture.closeAndWait(t)
