@@ -131,10 +131,16 @@ class Experiment:
         self.key = self.user.api('POST', f'/api/token/{self.token_id}/key')['key']
         return self.token_id
 
-    def routing(self, ids):
+    def ordered_route_fields(self, profile):
+        # The upgrade source image may still expose the previous routing API.
+        if getattr(self.args, "upgrade_source", False) and 'selected_only' not in profile:
+            return {'mode': 'manual'}
+        return {'mode': 'ordered', 'selected_only': True}
+
+    def routing(self, ids, enabled=True):
         route = self.user.api('GET', f'/api/token/{self.token_id}/routing')
-        return self.user.api('PUT', f'/api/token/{self.token_id}/routing', {'mode': 'manual',
-            'version': route['version'], 'entries': [{'channel_id': cid, 'enabled': True} for cid in ids]})
+        return self.user.api('PUT', f'/api/token/{self.token_id}/routing', {**self.ordered_route_fields(route),
+            'version': route['version'], 'entries': [{'channel_id': cid, 'enabled': enabled} for cid in ids]})
 
     def price(self):
         save_model_pricing(self.root, self.model, {'ModelPrice': 0.002})
@@ -335,7 +341,7 @@ class Experiment:
                 require(seen[-1]=='response.completed' and 'response.output_text.delta' in seen,'ws_terminal_missing')
                 self.settled(before,1000);require(self.sends==sends+1,'ws_accepted_request_replayed')
             self.record('ws_two_creates_single_charge_each')
-            self.routing([]);before=self.balances();sends=self.sends
+            self.routing([self.channel_id], enabled=False);before=self.balances();sends=self.sends
             socket.send({'type':'response.create','model':self.model,'input':'must reject'})
             try: frame=socket.receive()
             except EOFError: frame=None
@@ -378,11 +384,11 @@ class Experiment:
         for path in ['/api/subscription/plans','/api/deployments','/api/system-info','/api/next/admin/users','/api/billing/self/events','/pg/chat/completions']:
             status,_=self.root.request('GET',path);require(status==404,'retired_route_'+path)
         self.record('retired_routes_unavailable')
-        before=self.balances();self.routing([]);sends=self.sends
+        before=self.balances();self.routing([self.channel_id], enabled=False);sends=self.sends
         require(self.relay()[0]>=400,'empty_private_route_accepted')
         require(self.sends==sends,'private_route_fell_back_to_auto');self.settled(before,0)
         route=self.routing([self.channel_id])
-        status,_=self.user.request('PUT',f'/api/token/{self.token_id}/routing',{'mode':'manual','version':route['version']-1,'entries':[]})
+        status,_=self.user.request('PUT',f'/api/token/{self.token_id}/routing',{'mode':'auto','selected_only':False,'version':route['version']-1,'entries':[]})
         require(status==409,'stale_route_revision_accepted')
         require(self.other.request('GET',f'/api/token/{self.token_id}/routing')[0] in (403,404),'foreign_route_exposed')
         require(self.relay()[0]==200,'private_route_no_longer_eligible');self.settled(before,1000)

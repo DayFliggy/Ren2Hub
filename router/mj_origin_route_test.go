@@ -83,6 +83,11 @@ func (r *mjRoute) token(t *testing.T, key string, modelLimits string) model.Toke
 // manual makes the Key's route a manual list of exactly channelIDs.
 func (r *mjRoute) manual(t *testing.T, token model.Token, channelIDs ...int) {
 	t.Helper()
+	if len(channelIDs) == 0 {
+		// Same persisted state as deletion of the last selected channel.
+		require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: token.Id, Mode: model.TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
+		return
+	}
 	entries := make([]model.TokenRouteEntry, 0, len(channelIDs))
 	allowed := map[int]bool{}
 	for position, id := range channelIDs {
@@ -90,7 +95,7 @@ func (r *mjRoute) manual(t *testing.T, token model.Token, channelIDs ...int) {
 		allowed[id] = true
 	}
 	_, err := model.SaveTokenRouting(context.Background(), mjUserID, token.Id, model.TokenRouting{
-		TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual},
+		TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered},
 		Entries:           entries,
 	}, allowed)
 	require.NoError(t, err)
@@ -204,7 +209,7 @@ func TestMidjourneyContinuationPriceLimitRejectsBeforeChargeAndSend(t *testing.T
 	continuations = append(continuations, struct{ name, path, body string }{
 		"image-seed", "/mj/task/mj-origin/image-seed", "",
 	})
-	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteManual} {
+	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteOrdered} {
 		for _, tc := range continuations {
 			t.Run(mode+"/"+tc.name, func(t *testing.T) {
 				route := newMjRoute(t)

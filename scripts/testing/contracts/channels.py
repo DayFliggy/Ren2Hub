@@ -32,11 +32,11 @@ def run_channel_contracts(experiment):
     def profile(cap=None, entries=None):
         current = user.api('GET', token_path)
         wanted = [channel_id] if entries is None else entries
-        saved = user.api('PUT', token_path, {'mode': 'manual', 'version': current['version'],
+        saved = user.api('PUT', token_path, {**experiment.ordered_route_fields(current), 'version': current['version'],
             'entries': [{'channel_id': value, 'enabled': True} for value in
                 wanted], 'max_channel_ratio': cap})
         reread = user.api('GET', token_path)
-        require(saved == reread and reread['mode'] == 'manual'
+        require(saved == reread and reread['mode'] == experiment.ordered_route_fields(current)['mode']
                 and reread['version'] == current['version'] + 1
                 and [row['channel_id'] for row in reread['entries']] == wanted
                 and all(row['enabled'] for row in reread['entries']), 'routing_save_readback_mismatch')

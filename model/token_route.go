@@ -13,7 +13,7 @@ import (
 
 const (
 	TokenRouteAuto       = "auto"
-	TokenRouteManual     = "manual"
+	TokenRouteOrdered    = "ordered"
 	MaxTokenRouteEntries = 100
 )
 
@@ -27,6 +27,7 @@ var (
 type TokenRouteProfile struct {
 	TokenID         int     `json:"token_id" gorm:"primaryKey;autoIncrement:false"`
 	Mode            string  `json:"mode" gorm:"type:varchar(16);not null"`
+	SelectedOnly    bool    `json:"selected_only" gorm:"not null;default:false"`
 	MaxChannelRatio *string `json:"max_channel_ratio" gorm:"type:varchar(64)"`
 	Version         int64   `json:"version" gorm:"not null"`
 }
@@ -56,7 +57,7 @@ func readTokenRouting(db *gorm.DB, tokenID int) (TokenRouting, error) {
 	if result.RowsAffected == 0 {
 		return view, nil
 	}
-	if view.Mode != TokenRouteAuto && view.Mode != TokenRouteManual {
+	if view.Mode != TokenRouteAuto && view.Mode != TokenRouteOrdered {
 		return view, ErrTokenRouteInvalid
 	}
 	err := db.Where("token_id = ?", tokenID).Order("position asc, channel_id asc").Find(&view.Entries).Error
@@ -69,10 +70,10 @@ func ValidateTokenRouting(input TokenRouting) error {
 			return ErrTokenRouteInvalid
 		}
 	}
-	if input.Mode != TokenRouteAuto && input.Mode != TokenRouteManual || input.Version < 0 || len(input.Entries) > MaxTokenRouteEntries {
+	if input.Mode != TokenRouteAuto && input.Mode != TokenRouteOrdered || input.Version < 0 || len(input.Entries) > MaxTokenRouteEntries {
 		return ErrTokenRouteInvalid
 	}
-	if input.Mode == TokenRouteAuto && len(input.Entries) != 0 {
+	if input.Mode == TokenRouteOrdered && !input.SelectedOnly || input.SelectedOnly != (len(input.Entries) > 0) {
 		return ErrTokenRouteInvalid
 	}
 	seen := make(map[int]bool, len(input.Entries))
@@ -125,7 +126,7 @@ func SaveTokenRouting(ctx context.Context, userID, tokenID int, input TokenRouti
 		if err := lockRouteChannels(tx, input.Entries); err != nil {
 			return err
 		}
-		profile := TokenRouteProfile{TokenID: tokenID, Mode: input.Mode, MaxChannelRatio: input.MaxChannelRatio, Version: current.Version + 1}
+		profile := TokenRouteProfile{TokenID: tokenID, Mode: input.Mode, SelectedOnly: input.SelectedOnly, MaxChannelRatio: input.MaxChannelRatio, Version: current.Version + 1}
 		if current.Version == 0 {
 			if err := tx.Create(&profile).Error; err != nil {
 				if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(strings.ToLower(err.Error()), "unique constraint") || strings.Contains(strings.ToLower(err.Error()), "duplicate") {
@@ -134,7 +135,7 @@ func SaveTokenRouting(ctx context.Context, userID, tokenID int, input TokenRouti
 				return err
 			}
 		} else {
-			update := tx.Model(&TokenRouteProfile{}).Where("token_id = ? AND version = ?", tokenID, current.Version).Updates(map[string]any{"mode": profile.Mode, "max_channel_ratio": profile.MaxChannelRatio, "version": profile.Version})
+			update := tx.Model(&TokenRouteProfile{}).Where("token_id = ? AND version = ?", tokenID, current.Version).Updates(map[string]any{"mode": profile.Mode, "selected_only": profile.SelectedOnly, "max_channel_ratio": profile.MaxChannelRatio, "version": profile.Version})
 			if update.Error != nil {
 				return update.Error
 			}
@@ -183,36 +184,31 @@ func lockRouteChannels(tx *gorm.DB, entries []TokenRouteEntry) error {
 	return nil
 }
 
-func (token *Token) InsertWithRouting(mode string) error {
-	if mode == "" || mode == TokenRouteAuto {
-		return token.Insert()
-	}
-	if mode != TokenRouteManual {
-		return ErrTokenRouteInvalid
-	}
-	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(token).Error; err != nil {
-			return err
-		}
-		return tx.Create(&TokenRouteProfile{TokenID: token.Id, Mode: mode, Version: 1}).Error
-	})
+type TokenRoutingSummary struct {
+	TokenID           int
+	Mode              string
+	SelectedOnly      bool
+	RouteChannelCount int
 }
 
-// TokenRoutingModes is used only by dashboard views, never by key validation.
-func TokenRoutingModes(tokenIDs []int) (map[int]string, error) {
-	modes := make(map[int]string, len(tokenIDs))
+// TokenRoutingModes reads mode, scope and count in one statement so an editor
+// saving a new version cannot mix old settings with the new entry count.
+func TokenRoutingModes(tokenIDs []int) (map[int]TokenRoutingSummary, error) {
+	modes := make(map[int]TokenRoutingSummary, len(tokenIDs))
 	if len(tokenIDs) == 0 {
 		return modes, nil
 	}
-	var profiles []TokenRouteProfile
-	if err := DB.Where("token_id IN ?", tokenIDs).Find(&profiles).Error; err != nil {
+	var profiles []TokenRoutingSummary
+	count := DB.Model(&TokenRouteEntry{}).Select("count(*)").Where("token_id = profiles.token_id")
+	err := DB.Model(&TokenRouteProfile{}).Table("(?) AS profiles", DB.Model(&TokenRouteProfile{}).Select("token_id, mode, selected_only")).Select("profiles.*, (?) AS route_channel_count", count).Where("profiles.token_id IN ?", tokenIDs).Scan(&profiles).Error
+	if err != nil {
 		return nil, err
 	}
 	for _, profile := range profiles {
-		if profile.Mode != TokenRouteAuto && profile.Mode != TokenRouteManual {
+		if profile.Mode != TokenRouteAuto && profile.Mode != TokenRouteOrdered {
 			return nil, fmt.Errorf("%w: token %d", ErrTokenRouteInvalid, profile.TokenID)
 		}
-		modes[profile.TokenID] = profile.Mode
+		modes[profile.TokenID] = profile
 	}
 	return modes, nil
 }

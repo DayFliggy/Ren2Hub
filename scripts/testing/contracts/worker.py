@@ -30,6 +30,7 @@ def execute():
                            state=private / ('upgrade-plugin-' + quantity + '.json' if upgrade_plugin else 'plugin-state.json'),
                            phase='after-restart' if after else 'before-restart',
                            snapshot=True, usage_quantity=quantity,
+                           upgrade_source=stage in ('upgrade-baseline', 'upgrade-management'),
                            resume_state=stage == 'upgrade-resume-p', prepare_only=stage == 'upgrade-prepare-p',
                            upgrade_attachment_phase=attachment_phase,
                            upgrade_attachment_state=private / 'upgrade-attachment.json' if attachment_phase else None,

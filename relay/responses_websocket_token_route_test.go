@@ -25,7 +25,9 @@ func TestTokenRouteWebSocketRechecksEachCreate(t *testing.T) {
 	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Model: "route-model", Enabled: true}).Error)
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
+	var profile model.TokenRouteProfile
+	require.NoError(t, common.Unmarshal([]byte(`{"token_id":7,"mode":"auto","selected_only":true,"version":1}`), &profile))
+	require.NoError(t, db.Create(&profile).Error)
 	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
 	session := responsesWSSession{lockedChannelID: 11, lockedKey: "ws-test", lockedContext: map[constant.ContextKey]any{constant.ContextKeyChannelBaseUrl: channel.GetBaseURL(), constant.ContextKeyChannelHeaderOverride: channel.GetHeaderOverride()}}
 	newCall := func() *gin.Context {
@@ -51,7 +53,7 @@ func TestTokenRouteWebSocketStorageFailureIsNotRevocation(t *testing.T) {
 	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Model: "route-model", Enabled: true}).Error)
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: 1}).Error)
 	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
 	profileReads := 0
 	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:ws-route-second-read-error", func(tx *gorm.DB) {
@@ -87,7 +89,7 @@ func TestTokenRouteWebSocketPinnedAbilityRevocation(t *testing.T) {
 	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Model: "route-model", Enabled: true}).Error)
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: 1}).Error)
 	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
 	session := responsesWSSession{lockedChannelID: 11, lockedKey: "ws-test", lockedContext: map[constant.ContextKey]any{constant.ContextKeyChannelBaseUrl: channel.GetBaseURL(), constant.ContextKeyChannelHeaderOverride: channel.GetHeaderOverride()}}
 	newCall := func() *gin.Context {

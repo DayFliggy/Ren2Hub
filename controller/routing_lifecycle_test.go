@@ -128,7 +128,7 @@ func TestHTTPRetryReservesExpensiveChannelBeforeDispatch(t *testing.T) {
 			ch := &model.Channel{Name: "expensive-retry", Key: "test-upstream", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "ws-billing", BaseURL: &second.URL, ChannelRatio: "3"}
 			require.NoError(t, model.DB.Create(ch).Error)
 			require.NoError(t, ch.AddAbilities(nil))
-			_, err := model.SaveTokenRouting(context.Background(), fixture.user.Id, fixture.token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}, Entries: []model.TokenRouteEntry{{ChannelID: fixture.channel.Id, Enabled: true}, {ChannelID: ch.Id, Enabled: true}}}, map[int]bool{fixture.channel.Id: true, ch.Id: true})
+			_, err := model.SaveTokenRouting(context.Background(), fixture.user.Id, fixture.token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered}, Entries: []model.TokenRouteEntry{{ChannelID: fixture.channel.Id, Enabled: true}, {ChannelID: ch.Id, Enabled: true}}}, map[int]bool{fixture.channel.Id: true, ch.Id: true})
 			require.NoError(t, err)
 			req, err := http.NewRequest(http.MethodPost, fixture.gatewayURL+"/v1/responses", strings.NewReader(`{"model":"ws-billing","input":"retry"}`))
 			require.NoError(t, err)

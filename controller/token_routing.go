@@ -12,6 +12,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// Creation always starts with the platform-wide automatic route.
+func validTokenCreationType(raw []byte) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var mode string
+	return common.Unmarshal(raw, &mode) == nil && mode == model.TokenRouteAuto
+}
+
 func tokenRoutingID(c *gin.Context) (int, bool) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
@@ -59,6 +68,7 @@ func PutTokenRouting(c *gin.Context) {
 		return
 	}
 	var input struct {
+		SelectedOnly    bool                    `json:"selected_only"`
 		Mode            string                  `json:"mode"`
 		Version         *int64                  `json:"version"`
 		MaxChannelRatio *string                 `json:"max_channel_ratio"`
@@ -68,7 +78,7 @@ func PutTokenRouting(c *gin.Context) {
 		tokenRoutingError(c, model.ErrTokenRouteInvalid)
 		return
 	}
-	view, err := service.PutTokenRouting(c.Request.Context(), c.GetInt("id"), id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: input.Mode, Version: *input.Version, MaxChannelRatio: input.MaxChannelRatio}, Entries: input.Entries})
+	view, err := service.PutTokenRouting(c.Request.Context(), c.GetInt("id"), id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: input.Mode, SelectedOnly: input.SelectedOnly, Version: *input.Version, MaxChannelRatio: input.MaxChannelRatio}, Entries: input.Entries})
 	if err != nil {
 		tokenRoutingError(c, err)
 		return
@@ -101,8 +111,13 @@ func fillTokenRoutingModes(responses []*tokenResponse) error {
 		return err
 	}
 	for _, response := range responses {
-		if response != nil && modes[response.Id] != "" {
-			response.Type = modes[response.Id]
+		if response == nil {
+			continue
+		}
+		if summary, ok := modes[response.Id]; ok {
+			response.Type = summary.Mode
+			response.SelectedOnly = summary.SelectedOnly
+			response.RouteChannelCount = summary.RouteChannelCount
 		}
 	}
 	return nil

@@ -328,7 +328,7 @@ func TestNativeCountReusesManualRoutesAndRejectsUnsupportedChannels(t *testing.T
 
 	allowed := map[int]bool{firstChannel.Id: true, secondChannel.Id: true, unsupportedChannel.Id: true}
 	routing, err := model.SaveTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{
-		TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual},
+		TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered},
 		Entries:           []model.TokenRouteEntry{{ChannelID: secondChannel.Id, Position: 0, Enabled: true}, {ChannelID: firstChannel.Id, Position: 1, Enabled: true}},
 	}, allowed)
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestNativeCountReusesManualRoutesAndRejectsUnsupportedChannels(t *testing.T
 	require.JSONEq(t, `{"totalTokens":2}`, result.Body.String())
 	require.Equal(t, before+1, secondCalls.Load())
 	_, err = model.SaveTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{
-		TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual, Version: routing.Version},
+		TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: routing.Version},
 		Entries:           []model.TokenRouteEntry{{ChannelID: unsupportedChannel.Id, Position: 0, Enabled: true}},
 	}, allowed)
 	require.NoError(t, err)

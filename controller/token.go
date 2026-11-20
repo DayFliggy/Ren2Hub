@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -18,14 +18,16 @@ import (
 )
 
 type tokenRequest struct {
-	Type string `json:"type"`
+	Type json.RawMessage `json:"type"`
 	model.Token
 	// 指针区分“未传”和显式 false：新建时未传即开启，更新时未传则保留原值。
 	AllowUserQuotaQuery *bool `json:"allow_user_quota_query"`
 }
 
 type tokenResponse struct {
-	Type string `json:"type"`
+	Type              string `json:"type"`
+	SelectedOnly      bool   `json:"selected_only"`
+	RouteChannelCount int    `json:"route_channel_count"`
 	*model.Token
 }
 
@@ -233,12 +235,8 @@ func AddToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if request.Type != "" && request.Type != model.TokenRouteAuto && request.Type != model.TokenRouteManual {
+	if !validTokenCreationType(request.Type) {
 		tokenRoutingError(c, model.ErrTokenRouteInvalid)
-		return
-	}
-	if request.Type == model.TokenRouteManual && !requestCan(c, authz.RoutingWrite) {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "code": "ROUTING_FORBIDDEN", "message": "Unauthorized, insufficient privileges"})
 		return
 	}
 	token := request.Token
@@ -291,7 +289,7 @@ func AddToken(c *gin.Context) {
 		AllowIps:           token.AllowIps,
 	}
 	cleanToken.AllowUserQuotaQuery = request.AllowUserQuotaQuery == nil || *request.AllowUserQuotaQuery
-	err = cleanToken.InsertWithRouting(request.Type)
+	err = cleanToken.Insert()
 	if err != nil {
 		common.ApiError(c, err)
 		return

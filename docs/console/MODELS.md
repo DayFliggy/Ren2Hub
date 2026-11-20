@@ -2,7 +2,7 @@
 
 `/models` 面向登录用户，展示当前用户能用的渠道和每个渠道上的模型报价。页面读取两个接口，分别加载，互不阻塞：
 
-- `GET /api/user/model-catalog`（`service/model_catalog.go` 的 `BuildModelCatalog`）返回渠道、模型和每个“模型 × 渠道”的报价。报价是模型基础价和该渠道的 `channel_ratio`，前端按 `frontend/src/utils/modelMarket.ts` 投影成按 Token、按次或动态表达式的价格行。可选的 `token_id` 把目录收窄到某个 Key 的路由范围；这与 `/api/token/:id/routing/channels` 是同一份投影，带 scope 的访问令牌因此另需 `routing:read`，否则返回 403 `ACCESS_TOKEN_SCOPE_DENIED`。浏览器会话不受影响。
+- `GET /api/user/model-catalog`（`service/model_catalog.go` 的 `BuildModelCatalog`）返回渠道、模型和每个“模型 × 渠道”的报价。报价是模型基础价和该渠道的 `channel_ratio`，前端按 `frontend/src/utils/modelMarket.ts` 投影成按 Token、按次或动态表达式的价格行。可选的 `token_id` 把目录收窄到某个 Key 的路由范围；自动与顺序路由都遵守所选渠道范围。路由编辑器的 `/api/token/:id/routing/channels` 另列全平台候选，带 scope 的访问令牌因此另需 `routing:read`，否则返回 403 `ACCESS_TOKEN_SCOPE_DENIED`。浏览器会话不受影响。
 - `GET /api/perf-metrics/summary?hours=24` 是原生的按模型聚合指标，跨全部渠道统计。它失败时只在指标位置显示错误，不隐藏价格。
 
 页面有三种视图：按模型聚合、按渠道分货架、比价矩阵，选择保存在 localStorage 的 `ren2hub_models_view`。筛选项是关键词、渠道、计费方式、模型类型（由端点推断）和价格排序。目录刷新失败时清空旧数据再显示错误，避免展示上一个权限范围的结果。

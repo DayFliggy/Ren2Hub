@@ -12,7 +12,7 @@ Vue支持简体中文与英语，翻译遵循现行接口单位和权限。后�
 | 已用额度     | Used quota            | 原生used_quota统计                             |
 | 预扣         | Pre-consumption       | NewAPI请求生命周期内预先扣减额度               |
 | 渠道倍率     | Channel ratio         | 渠道配置的价格倍率，费用为模型基础价乘渠道倍率 |
-| 私有路由     | Private routing       | 每Token一份有序渠道列表，只缩小授权候选        |
+| 顺序路由     | Ordered routing       | 按令牌所选列表顺序使用合格且有容量的渠道        |
 | 自动路由     | Automatic routing     | 按优先级、权重和亲和在可用渠道中自动选择       |
 | 工单         | Support ticket        | 用户与支持人员的消息及附件                     |
 | 充值         | Top-up                | 通过原生订单向钱包增加额度                     |

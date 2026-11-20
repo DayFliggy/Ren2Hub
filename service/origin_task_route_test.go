@@ -39,8 +39,8 @@ func TestOriginTaskPinKeepsOriginalChannelDespiteKeyRoute(t *testing.T) {
 	require.Equal(t, 22, ordinary.Id, "a request without an origin task still follows the manual list")
 }
 
-func TestOriginTaskPinHonorsKeyPriceLimit(t *testing.T) {
-	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteManual} {
+func TestOriginTaskPinHonorsPriceLimitOutsideSelectedChannels(t *testing.T) {
+	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteOrdered} {
 		for _, tc := range []struct {
 			name    string
 			ceiling *string

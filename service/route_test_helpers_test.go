@@ -96,7 +96,7 @@ func resetRouteObservations(t *testing.T) {
 }
 func saveRouteTest(t *testing.T, entries ...int) {
 	t.Helper()
-	r := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}}
+	r := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered}}
 	allowed := map[int]bool{}
 	for _, id := range entries {
 		r.Entries = append(r.Entries, model.TokenRouteEntry{ChannelID: id, Enabled: true})
@@ -104,4 +104,15 @@ func saveRouteTest(t *testing.T, entries ...int) {
 	}
 	_, err := model.SaveTokenRouting(context.Background(), 17, 7, r, allowed)
 	require.NoError(t, err)
+}
+
+func seedSelectedRoute(t *testing.T, mode string, entries ...model.TokenRouteEntry) {
+	t.Helper()
+	var profile model.TokenRouteProfile
+	require.NoError(t, common.Unmarshal([]byte(fmt.Sprintf(`{"token_id":7,"mode":%q,"selected_only":true,"version":1}`, mode)), &profile))
+	require.NoError(t, model.DB.Create(&profile).Error)
+	for i, entry := range entries {
+		entry.TokenID, entry.Position = 7, i
+		require.NoError(t, model.DB.Create(&entry).Error)
+	}
 }

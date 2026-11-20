@@ -39,7 +39,10 @@ func rateChannels(t *testing.T, boundMS int64) {
 
 func TestPreferAffinityLeavesSeverelyDowngradedChannel(t *testing.T) {
 	t.Run("band 2 leaves for a better channel and the success rebinds", func(t *testing.T) {
-		setupAffinityChannels(t)
+		db := setupAffinityChannels(t)
+		createRouteChannel(t, db, 33, "route-model")
+		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 33).Update("priority", 10000).Error)
+		seedSelectedRoute(t, "auto", model.TokenRouteEntry{ChannelID: 22, Enabled: true}, model.TokenRouteEntry{ChannelID: 11, Enabled: true})
 		isolateRouteQualities(t)
 		rateChannels(t, 20000)
 		c, key := enableRouteAffinity(t, "prefer", 22)

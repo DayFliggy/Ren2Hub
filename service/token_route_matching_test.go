@@ -33,7 +33,7 @@ func TestTokenRouteCandidatesConcreteModelNormalization(t *testing.T) {
 	require.False(t, channels[2].Eligible)
 	require.Equal(t, 11, channels[0].ID)
 	require.Equal(t, []string{"gpt-4-gizmo-audit"}, channels[0].Models, "the editor must not imply wildcard authorization")
-	view, err := PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}, Entries: []model.TokenRouteEntry{{ChannelID: 11, Enabled: true}}})
+	view, err := PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered}, Entries: []model.TokenRouteEntry{{ChannelID: 11, Enabled: true}}})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, view.Version)
 	preview, err := PreviewTokenRouting(context.Background(), user.Id, token.Id, TokenRoutePreviewQuery{Model: "gpt-4-gizmo-audit", Path: "/v1/chat/completions"})
@@ -52,7 +52,7 @@ func TestTokenRouteCandidatesConcreteModelNormalization(t *testing.T) {
 		require.Nil(t, apiErr)
 		require.Equal(t, 11, selected.Id)
 	}
-	_, err = PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual, Version: 1}, Entries: []model.TokenRouteEntry{{ChannelID: 22, Enabled: true}}})
+	_, err = PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{SelectedOnly: true, Mode: model.TokenRouteOrdered, Version: 1}, Entries: []model.TokenRouteEntry{{ChannelID: 22, Enabled: true}}})
 	require.ErrorIs(t, err, model.ErrTokenRouteForbidden)
 }
 

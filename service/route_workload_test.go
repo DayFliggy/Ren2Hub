@@ -24,6 +24,9 @@ func TestAutomaticRoutingWorkload(t *testing.T) {
 		createRouteChannel(t, db, id, "workload")
 		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", id).Update("priority", 100-id).Error)
 	}
+	createRouteChannel(t, db, 1, "workload")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 1).Update("priority", 1000).Error)
+	seedSelectedRoute(t, "auto", model.TokenRouteEntry{ChannelID: 33, Enabled: true}, model.TokenRouteEntry{ChannelID: 22, Enabled: true}, model.TokenRouteEntry{ChannelID: 11, Enabled: true})
 	synctest.Test(t, func(t *testing.T) {
 		successes, calls := 0, 0
 		for n := range 72 {
@@ -33,6 +36,7 @@ func TestAutomaticRoutingWorkload(t *testing.T) {
 			for round := range 3 {
 				channel, selErr := SelectChannelForRequest(c, "workload", &RetryParam{Retry: &round})
 				require.Nil(t, selErr)
+				require.NotEqual(t, 1, channel.Id, "channel outside the selected list")
 				calls++
 				AppendUsedChannel(c, channel.Id)
 				common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)

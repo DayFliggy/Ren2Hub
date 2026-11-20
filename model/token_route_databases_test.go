@@ -70,7 +70,8 @@ func TestTokenRoutingDatabases(t *testing.T) {
 				require.NoError(t, sqlDB.Close())
 			})
 			token := Token{UserId: 17, Key: "routing-db-fixture"}
-			require.NoError(t, token.InsertWithRouting(TokenRouteManual))
+			require.NoError(t, token.Insert())
+			require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: token.Id, Mode: TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 			for _, id := range []int{11, 22} {
 				require.NoError(t, db.Create(&Channel{Id: id, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model"}).Error)
 				require.NoError(t, db.Create(&Ability{ChannelId: id, Model: "route-model", Enabled: true}).Error)
@@ -79,7 +80,7 @@ func TestTokenRoutingDatabases(t *testing.T) {
 			require.NoError(t, selectionErr)
 			require.Len(t, rows, 2)
 			ctx := context.Background()
-			input := TokenRouting{TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: 1}, Entries: []TokenRouteEntry{{ChannelID: 11, Enabled: true}, {ChannelID: 22, Enabled: false}}}
+			input := TokenRouting{TokenRouteProfile: TokenRouteProfile{SelectedOnly: true, Mode: TokenRouteOrdered, Version: 1}, Entries: []TokenRouteEntry{{ChannelID: 11, Enabled: true}, {ChannelID: 22, Enabled: false}}}
 			var wg sync.WaitGroup
 			outcomes := make(chan error, 8)
 			for range 8 {
@@ -117,9 +118,11 @@ func TestTokenRoutingDatabases(t *testing.T) {
 
 			// 删除渠道后的孤儿条目，以及硬删除用户时连同软删除令牌的路由，都要清干净。
 			owner := Token{UserId: 18, Key: "routing-db-owner"}
-			require.NoError(t, owner.InsertWithRouting(TokenRouteManual))
+			require.NoError(t, owner.Insert())
+			require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: owner.Id, Mode: TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 			retired := Token{UserId: 18, Key: "routing-db-retired"}
-			require.NoError(t, retired.InsertWithRouting(TokenRouteManual))
+			require.NoError(t, retired.Insert())
+			require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: retired.Id, Mode: TokenRouteOrdered, SelectedOnly: true, Version: 1}).Error)
 			require.NoError(t, db.Delete(&retired).Error)
 			require.NoError(t, db.Create(&[]TokenRouteEntry{{TokenID: owner.Id, ChannelID: 11, Enabled: true}, {TokenID: owner.Id, ChannelID: 22, Position: 1, Enabled: true}, {TokenID: retired.Id, ChannelID: 11, Enabled: true}}).Error)
 			require.NoError(t, db.Delete(&Channel{}, 22).Error)

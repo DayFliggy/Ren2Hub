@@ -10,7 +10,7 @@ import (
 
 // 自动模式的加权随机按每个请求的 request id 重新计算，预览给出的只是其中一种排列。
 const (
-	TokenRouteOrderingManual             = "manual"
+	TokenRouteOrderingOrdered            = "ordered"
 	TokenRouteOrderingWeightedPerRequest = "weighted_random_per_request"
 )
 
@@ -65,6 +65,13 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 	if err != nil {
 		return out, err
 	}
+	if route.Mode == model.TokenRouteAuto && route.SelectedOnly {
+		selected := make(map[int]bool, len(route.Entries))
+		for _, entry := range route.Entries {
+			selected[entry.ChannelID] = entry.Enabled
+		}
+		rows = slices.DeleteFunc(rows, func(row *model.Channel) bool { return !selected[row.Id] })
+	}
 	ids := make([]int, 0, len(rows))
 	byID := map[int]*model.Channel{}
 	for _, row := range rows {
@@ -115,8 +122,8 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 		}
 		return item
 	}
-	if route.Mode == model.TokenRouteManual {
-		out.Ordering = TokenRouteOrderingManual
+	if route.Mode == model.TokenRouteOrdered {
+		out.Ordering = TokenRouteOrderingOrdered
 		for _, entry := range route.Entries {
 			item := project(entry.ChannelID)
 			if !entry.Enabled {

@@ -2,11 +2,11 @@
 
 核心以平台渠道为最小单位。一条渠道一把 Key，提供商插件渠道一份凭据，所以选中渠道就选定了发出请求的凭据，渠道状态、熔断和冷却都不区分 Key。业务分组及组间价格、跨组重试均退役；旧组库在迁移之前拒绝启动。NewAPI 是唯一上游，协议、认证、错误重试和任务生命周期仍以其原生实现为基础。
 
-每个 Key 使用自动或手动模式。自动候选来自全平台，受渠道状态、模型与原生端点支持、Key 模型限制及最高渠道倍率约束。手动模式使用一份有序列表，只跳过禁用、不合格、超倍率及满载渠道；空列表返回无可用渠道，不回退自动。缓存和数据库只提供事实，由同一资格服务和选择器决策。与上游 `GetChannel` 一样，声明了请求精确模型名的渠道优先；只有这些渠道在全部规则（含 Key 倍率上限和手动列表）之后一个都不剩，才改用归一化模型名（例如去掉 `@` 修饰）匹配。预览同样按这条规则，只声明归一化名的渠道在有精确渠道可用时标为 `exact_model_preferred`。
+每个 Key 可在全平台自动选路，也可在所选渠道内自动或顺序选路。没有配置时使用全平台。指定列表后只使用启用的条目，全部停用或被管理员删光时返回 503 `model_not_found`。顺序模式按条目顺序检查容量，自动模式在候选集合内使用健康、质量、权重、负载和会话亲和。两种方式都检查渠道状态、模型、端点和 Key 倍率上限。缓存和数据库只提供事实，由同一资格服务和选择器决策。与上游 `GetChannel` 一样，声明了请求精确模型名的渠道优先；只有这些渠道在全部规则（含 Key 倍率上限和所选渠道列表）之后一个都不剩，才改用归一化模型名（例如去掉 `@` 修饰）匹配。预览同样按这条规则，只声明归一化名的渠道在有精确渠道可用时标为 `exact_model_preferred`。
 
 自动路由先按健康准入选择，再比较动态质量档、管理员默认优先级、正权重、负载档和请求内加权随机顺序。同档同默认优先级且都有限额时，以在途数占上限的四分位分档；都无限额时使用绝对在途桶，混合组直接进入末级。相同负载档的价格系数为 `max(0.85, sqrt(组内最低倍率 / 渠道倍率))`。等权两家相差两倍价时，便宜渠道约占 54%。
 
-每轮普通自动扫描在管理员日志的 `admin_info.request_policy` 中记录 `scan` 事件。按请求从 1 编号，`candidates` 为静态筛选后的候选数，`full_skips` 只统计实际拿槽时遇满的次数，`duration_us` 从候选查询计至准入结束，以微秒计。结果见 `decision.reason`（`selected`、`full`、`no_candidate`、`error`）。`ranked` 按实际访问顺序列出最多 8 次访问，每项含 `channel_id`、`health`、`band`、已知时的 `cache_band`、`priority`、`weight`、`load`、`price_factor`、探索标记 `explore`，以及被跳过时的 `skip`（`full`、`cooling`、`open`、`probe_busy`、`deleted`）；技术错误中止扫描时，导致中止的那个候选作为最后一项记入，`skip` 为 `limit_unavailable`（读不到并发上限）或 `error`，返回的 HTTP 错误不变；冷却渠道在兜底轮被再次访问时会出现两次。每项约 100 字节，最长约 170 字节，一条 `scan` 最多增加约 1.4 KB。普通用户的日志不含 `request_policy`，也就看不到 `ranked`。任务消费日志也通过管理员的 `request_policy` 字段提供扫描摘要。亲和直达、固定和手动路由均不产生自动扫描摘要。共享插件端点预选后，正式复用渠道时才记入选中事件。原始模型名未匹配而转入插件解码时，按最终选路记录；实际满载或存储故障会记录失败。
+每轮普通自动扫描在管理员日志的 `admin_info.request_policy` 中记录 `scan` 事件。按请求从 1 编号，`candidates` 为静态筛选后的候选数，`full_skips` 只统计实际拿槽时遇满的次数，`duration_us` 从候选查询计至准入结束，以微秒计。结果见 `decision.reason`（`selected`、`full`、`no_candidate`、`error`）。`ranked` 按实际访问顺序列出最多 8 次访问，每项含 `channel_id`、`health`、`band`、已知时的 `cache_band`、`priority`、`weight`、`load`、`price_factor`、探索标记 `explore`，以及被跳过时的 `skip`（`full`、`cooling`、`open`、`probe_busy`、`deleted`）；技术错误中止扫描时，导致中止的那个候选作为最后一项记入，`skip` 为 `limit_unavailable`（读不到并发上限）或 `error`，返回的 HTTP 错误不变；冷却渠道在兜底轮被再次访问时会出现两次。每项约 100 字节，最长约 170 字节，一条 `scan` 最多增加约 1.4 KB。普通用户的日志不含 `request_policy`，也就看不到 `ranked`。任务消费日志也通过管理员的 `request_policy` 字段提供扫描摘要。亲和直达、固定和顺序路由均不产生自动扫描摘要。共享插件端点预选后，正式复用渠道时才记入选中事件。原始模型名未匹配而转入插件解码时，按最终选路记录；实际满载或存储故障会记录失败。
 
 首轮拒绝或重试结束时可能没有对应的数据库日志行。按请求 ID 搜索服务端 `route_scan`，可查当轮满载、无候选、存储错误，或在发送前被本地拒绝的选中结果。后一种记录含 `channel_id` 和 `request_status`，例如预扣被拒时为 403。Token 路由配置读取失败发生在候选查询之前，此时查询 `route_scope stage=token_route_scope result=error`。
 
@@ -24,13 +24,13 @@ prefer 模式的会话亲和在亲和渠道合格时直接使用；渠道被禁�
 
 Responses WS 按每次 create 重新认证、资格检查及占槽，空闲连接不占；不在连接内换渠道。Realtime 占整次连续会话。异步任务只在提交或实际轮询 HTTP 时占渠道槽，不在后台等待期间持槽。轮询时渠道满载或读取上限失败只跳过本轮，不计上游失败；准入时发现渠道已删除同样只跳过本轮；原生批量轮询读不到渠道时把任务判为失败且不退款，与上游相同，见[原生回归的行为变化](../upstream/NATIVE_B388_DISCLOSURES.md)。普通 HTTP 成功路径中，客户端断开不自动取消已发送的供应商请求；渠道槽位保持到供应商尝试结束，之后结算一次、释放一次。这个合同不承诺对失败响应禁止重试，也不承诺立即退款。
 
-已接受任务的续作固定原渠道，不因 Key 偏好变化重放到其他渠道。插件原任务引用和 Midjourney 续作（change、simple-change、modal、video、action、image-seed）的原渠道准入由 `service.AcquireOriginTaskRouteChannel` 判定：只豁免手动列表，仍比较 Key 的最高渠道倍率。超限在渠道占槽、预扣、发送之前拒绝，不换渠道；没有上限或恰好等于上限允许。普通任务返回 400 `channel_ratio_exceeded`，MJ handler 保留自身封装；经 Distribute 提前拒绝的 MJ 提交仍使用 OpenAI 错误体。请求级路径、WS 和插件身份过滤器，渠道存在/启用、倍率合法及即时容量照常检查。找到 MJ 原任务后只准入一次，使用原渠道的 Key。
+已接受任务的续作固定原渠道，不因 Key 偏好变化重放到其他渠道。插件原任务引用和 Midjourney 续作（change、simple-change、modal、video、action、image-seed）的原渠道准入由 `service.AcquireOriginTaskRouteChannel` 判定：只豁免所选渠道列表，仍比较 Key 的最高渠道倍率。超限在渠道占槽、预扣、发送之前拒绝，不换渠道；没有上限或恰好等于上限允许。普通任务返回 400 `channel_ratio_exceeded`，MJ handler 保留自身封装；经 Distribute 提前拒绝的 MJ 提交仍使用 OpenAI 错误体。请求级路径、WS 和插件身份过滤器，渠道存在/启用、倍率合法及即时容量照常检查。找到 MJ 原任务后只准入一次，使用原渠道的 Key。
 
 原渠道删除或禁用返回 400 `origin_task_channel_disabled`，满载 429，原渠道准入或 ApplyChannelPin 的存储故障 500；插件准备阶段仍沿上游统一返回 400 `origin_task_channel_disabled` 且不暴露底层错误；image-seed 的封装例外见上文。Key 模型限制保留上游现状。原生 remix 在原渠道上下文未初始化时仍可能发生 NewAPI 共有的 nil pointer panic，阻断后续预扣和发送。这个问题以及原模型推导、原生平台核对、remix 动作、ID 和继承倍率都与上游相同，没有在本地修复，见[等待上游](../upstream/WAITING_UPSTREAM.md)；不能声称这些路径已可用。插件原任务平台校验仍使用准备阶段候选元数据，尚不等同于实际执行插件的归属校验。
 
 不存在或不属于当前用户的原任务、管理员指定渠道、存储失败与模型限制的错误顺序沿用共有实现；不承诺所有入口均在选路之前返回同一种不存在错误。MJ image-seed 仍使用吞掉数据库错误的旧查询，共有错误分类待上游处理。完整范围、源码位置与诊断见[等待上游列表](../upstream/WAITING_UPSTREAM.md)。
 
-共享插件端点沿用上游的类别锁定：首次选中普通渠道后，重试不跨到插件渠道，反向亦然，手动列表顺延也受该规则约束。另有两项与上游相同的限制。先选路后解码，普通渠道胜出时不建立插件原任务 pin。选路不按 stream/sync/background 过滤插件候选，只支持 background 的插件渠道胜出时，stream/sync 请求返回 400。管理员可以把这类插件渠道的优先级调到可用普通渠道之下来规避；优先级相同时，健康、负载、延迟和权重排序仍可能选中插件渠道，普通渠道全部不可用时也会落到插件渠道。
+共享插件端点沿用上游的类别锁定：首次选中普通渠道后，重试不跨到插件渠道，反向亦然，顺序列表顺延也受该规则约束。另有两项与上游相同的限制。先选路后解码，普通渠道胜出时不建立插件原任务 pin。选路不按 stream/sync/background 过滤插件候选，只支持 background 的插件渠道胜出时，stream/sync 请求返回 400。管理员可以把这类插件渠道的优先级调到可用普通渠道之下来规避；优先级相同时，健康、负载、延迟和权重排序仍可能选中插件渠道，普通渠道全部不可用时也会落到插件渠道。
 
 主要接点为 `service/route_candidates.go`、`service/channel_select.go`、`service/concurrency.go`、`service/route_attempt.go`、`service/billing_session.go`。接口与版本冲突见[网关 API](GATEWAY_API.md)，不恢复 `/api/next` 或第二套路由管线。
 

@@ -12475,7 +12475,7 @@
         "hunk_header": "@@ -17,18 +17,17 @@",
         "hunk_sha256": "a18011bb0f89138f5a15d2db93c8cd8d1be4403288754ecb37963d3be2f30556",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "ModelRequest去Group，增加Stream/StreamFormat供路由观测；删除由Playground/组解析退役产生的imports。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12508,7 +12508,7 @@
         "hunk_header": "@@ -416,6 +425,16 @@",
         "hunk_sha256": "345e7de122d64cf1cd4b7cf313235fc17c97a26c572d54e0d190e48f455ac276",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "抽取共享ChannelSelectError格式化，因为端点预选和最终Distribute均消费同一路由错误合同；避免两个文案逻辑漂移。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12541,7 +12541,7 @@
         "hunk_header": "@@ -450,6 +469,9 @@",
         "hunk_sha256": "ff3bca82b08d2af26bfad551cd8eb4b2a5c7bb3182395425b698baf7992ba9e8",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "MJ在准入前查原任务并固定原渠道，避免先占普通路由渠道再切原账号。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12574,7 +12574,7 @@
         "hunk_header": "@@ -470,7 +492,7 @@",
         "hunk_sha256": "c71505bec8dd52e1663b59f8ed1bdcf57a9b639f12ff6742711cb7777425d460",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "video remix读取完整ModelRequest，保留stream维度供真实观测。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12607,7 +12607,7 @@
         "hunk_header": "@@ -485,7 +507,7 @@",
         "hunk_sha256": "21256ad59101d6847a0b376a205d468b8174589eed3d50af1d436658e85a60c5",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "video submit读取完整ModelRequest，保留stream维度。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12640,7 +12640,7 @@
         "hunk_header": "@@ -498,7 +520,13 @@",
         "hunk_sha256": "febdc3288220fd83457976b8f2cec17ed40bf9ad3248fec7235b53389baa5e28",
         "disposition": "split",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "保留countTokens分支的严格模型路径解析和NativeCount mode；不把计数契约扩为全部Gemini生成action allowlist。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12673,7 +12673,7 @@
         "hunk_header": "@@ -508,7 +536,7 @@",
         "hunk_sha256": "6829577912a6aa32319e6a4cb3c3910cb0602db9852eefcf04fc2a716b42542c",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "普通JSON请求复制完整ModelRequest以保留stream观测。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12706,7 +12706,7 @@
         "hunk_header": "@@ -539,7 +567,7 @@",
         "hunk_sha256": "40de1a9ab72e7d2e0ff8acca58bb3a7be9bfaa82abd4e874f9ff98b5c50427e5",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "表单音频等读取完整ModelRequest以保留stream维度。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12739,7 +12739,7 @@
         "hunk_header": "@@ -551,29 +579,19 @@",
         "hunk_sha256": "098d4983639bbf5ffc86513d3c9e5b860a8faadd46ef74ebfb2b00353903681f",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "audio translation/transcription保留stream维度；移除退役Playground特殊模型/分组解析。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12772,7 +12772,7 @@
         "hunk_header": "@@ -584,13 +602,7 @@",
         "hunk_sha256": "a2cd83656b5b64f15ae827186b45b1448be38f13b37d917a1468cc57454258d4",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "TokenModelLimitAllows委托service唯一实现，HTTP/WS/预览和本地路由使用相同alias/modifier规则；原生匹配语义不扩展。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12805,7 +12805,7 @@
         "hunk_header": "@@ -615,6 +627,10 @@",
         "hunk_sha256": "1bc4f42a69f3af82be64d6e4311ce40633998f383a71aa3a02adb05c57abc851",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "SetupContext保存实际选中channel_ratio和route_selected_channel，供计费快照/路由观察实际读取。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12838,7 +12838,7 @@
         "hunk_header": "@@ -50,8 +49,21 @@",
         "hunk_sha256": "685fee41b2e3b3136e555efeae21623f88ec53947903b049c534bc4fb59d9260",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "保存插件准备前真实stream维度供observations；原任务pin仍执行token模型限制，不能借固定原渠道绕过本地token路由/模型权限。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12904,7 +12904,7 @@
         "hunk_header": "@@ -78,40 +90,40 @@",
         "hunk_sha256": "56ba9a558d8341e82b684d299c9ff3196c88b2f84eabef8aa0461ae3290a657c",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "退役Playground组校验；复用或获取用户permit并统一释放渠道permit；重用端点选择时重新准入实际渠道，不从旧快照绕过容量/路由策略。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12937,7 +12937,7 @@
         "hunk_header": "@@ -120,18 +132,18 @@",
         "hunk_sha256": "03468a1ca96a8e284beba00b4b528b6bb3100b97ad9bfdb9a904f47c42668f1d",
         "disposition": "split",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "保留共享 ChannelSelectError 格式及原账号已准备marker；此段普通 SetupContext 错误提前abort本身是泛化原生错误流修复。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -12970,7 +12970,7 @@
         "hunk_header": "@@ -142,7 +154,7 @@",
         "hunk_sha256": "a97a8b546a0e5fb98171469471df77e9f7deb68be616d403320c3d93bfb08ced",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "noAvailableChannelMessage移除group参数。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -13003,7 +13003,7 @@
         "hunk_header": "@@ -155,10 +167,10 @@",
         "hunk_sha256": "14587fc30f117a21ea52f8723eb9d049c2ed371ccad1b959a82ad3ad5617a1b7",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "无可用渠道日志/i18n移除group，保留原生插件身份对客户端隐藏、服务器诊断行为。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -13036,7 +13036,7 @@
         "hunk_header": "@@ -314,7 +326,7 @@",
         "hunk_sha256": "c8c718097672734a4712af256aa7e77cc1efc163f6c65f6f3fff728065a320e7",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "读取JSON路由模型时改取model/stream/stream_format供观测；保持原生body存储/游标机制。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -13069,7 +13069,7 @@
         "hunk_header": "@@ -322,10 +334,6 @@",
         "hunk_sha256": "3f7de57ddbb60f32561f871f83c25d1f9739973b61841d6d53bb469ad27c8e92",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "删除group字符串解析。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -13102,7 +13102,7 @@
         "hunk_header": "@@ -333,8 +341,9 @@",
         "hunk_sha256": "97fe86daf53eb82277717af63c18a051f0180809d379b4350beb4601d6467661",
         "disposition": "retain_contract",
-        "concrete_contract": "即时并发、自动/手动路由及原账号、stream观测、native-count、无组/退役Playground。",
+        "concrete_contract": "即时并发、自动/顺序路由及原账号、stream观测、native-count、无组/退役Playground。",
         "actual_review": "ModelRequest返回stream两维，删除group。",
         "necessary_integration_points": [
           "与data-review middleware/task_plugin.go共享permit/selection.Request，不重复占槽。",
@@ -25860,7 +25860,7 @@
         "hunk_header": "@@ -120,7 +120,6 @@",
         "hunk_sha256": "7127a9bb68c10c2ac374bd32c7f161338e4d655820c646b1f589069180f96616",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "删除 WS session lockedGroup，业务分组已退役。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -25890,7 +25890,7 @@
         "hunk_header": "@@ -371,11 +388,12 @@",
         "hunk_sha256": "bb5e9fee72e3e3725eded71a5972bef56f310251a5ba1bdfd82009fe825fed37",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "发送前 MarkSent 且删除 lockedGroup。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -25920,7 +25920,7 @@
         "hunk_header": "@@ -545,6 +563,7 @@",
         "hunk_sha256": "b2b3b206a515474643c312c5e667dfb76f7b8a08fbfea49f6047c738b67ec6ed",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "WS 服务端事件保留统一输出观测。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -25950,7 +25950,7 @@
         "hunk_header": "@@ -650,10 +669,16 @@",
         "hunk_sha256": "92655804a8fb216432ed743441173cf18dd1b01a82f60a91fa4e35efb9412906",
         "disposition": "split",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "保留 CheckLockedTokenRoute 对当前 token 路由策略的复核；缓存读取错误不新增分类。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -25980,7 +25980,7 @@
         "hunk_header": "@@ -692,18 +717,10 @@",
         "hunk_sha256": "f58832c411c879b780eb72673004ef406da196639e7e0de3c4ec2b418c7b303d",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "移除 group 复核；保留 acquirePinnedRoute 对当前原渠道策略/并发即时准入。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26010,7 +26010,7 @@
         "hunk_header": "@@ -714,7 +731,7 @@",
         "hunk_sha256": "20c1db71ae203ee159e2d7f746a5a8ada8289e336c3a521cf2f81a069fc8050e",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "BeginUpstreamAttempt 重置尝试观测并移除 group。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26069,7 +26069,7 @@
         "hunk_header": "@@ -1092,7 +1115,7 @@",
         "hunk_sha256": "3cf3088b5914aec02e5293b3506caac42ecb6e1f034414624249ce528713943d",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "SelectChannel 调用使用无组本地路由签名。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26128,7 +26128,7 @@
         "hunk_header": "@@ -245,6 +242,7 @@",
         "hunk_sha256": "52c31a277534ec2aa7bc549de4b34745a8e7e22c93a70e0b75cf0156c591cfc4",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "设置 IsStream 上下文，供流式观测/插件消费者使用。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26158,7 +26158,7 @@
         "hunk_header": "@@ -259,9 +257,10 @@",
         "hunk_sha256": "68e03667ea6cdf5ff28f84d3ca35e8f0c5d46bf8407caf952a13e9fbae3c54c4",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "移除 group fallback，保留 FinishRouteAttempt 释放/记录同一次尝试。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26188,7 +26188,7 @@
         "hunk_header": "@@ -272,6 +271,13 @@",
         "hunk_sha256": "826ade55aabb4df8fcfca8778fab8c6d9ff198ddedc199d9e07780e5af53eaa1",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "WS 会话使用用户并发 permit，立即拒绝超限。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26218,7 +26218,7 @@
         "hunk_header": "@@ -301,6 +307,9 @@",
         "hunk_sha256": "f49d2d8504d805466eb17cf5e6e5dd722c29a9aa14dd330d3a86af946c0e60e9",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "本地路由读取错误保留500映射，用于真实 CheckLockedTokenRoute 产品策略读取失败，不混同上游错误。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26248,7 +26248,7 @@
         "hunk_header": "@@ -317,16 +326,23 @@",
         "hunk_sha256": "ae4db81f30dee33b5e637335955e697d21a09d1df2e475ba1382750f05030de0",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "MarkSent、无组 RetryParam、当下一候选本地准入拒绝时保留已有上游错误的优先级，以及本地选路失败关闭码。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26278,7 +26278,7 @@
         "hunk_header": "@@ -340,13 +356,13 @@",
         "hunk_sha256": "8fa6487fa34ad4fc5053666c9893753e31748b33d9585234879df0f4f58fd5f6",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "切换实际渠道后重建 ChannelMeta/计费准备，使倍率与真实选路一致。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -26308,7 +26308,7 @@
         "hunk_header": "@@ -360,6 +376,7 @@",
         "hunk_sha256": "8dff0a6646280b69b25b789edc4a5d18695b43fbc22d15087ce76ce36bf169bc",
         "disposition": "retain_contract",
-        "concrete_contract": "原渠道 WS 会话、有序自动/手动路由、即时并发、渠道倍率、无组与路由观测。",
+        "concrete_contract": "原渠道 WS 会话、有序自动/顺序路由、即时并发、渠道倍率、无组与路由观测。",
         "actual_review": "拨号失败完成本次 RouteAttempt 并释放/观测。",
         "necessary_integration_points": [
           "WriteClient 预算回归应通过公开实际写路径测试，不依赖被移除的私有 helper。",
@@ -27080,7 +27080,7 @@
         "hunk_header": "@@ -0,0 +1,17 @@",
         "hunk_sha256": "f510f3734a2e803cb9128c216431b0b290c845ae768d387489e2d66cd681e5b5",
         "disposition": "retain_contract",
-        "concrete_contract": "自动/手动路由产品及对象权限。",
+        "concrete_contract": "自动/顺序路由产品及对象权限。",
         "actual_review": "本地token路由读取/渠道列表/预览/写入通过UserAuth、DisableCache、RoutingRead/Write及写限流。",
         "necessary_integration_points": [
           "controller必须仍校验token所有权；原生PAT权限注册经handlePermissionRoute统一。"
@@ -34074,7 +34074,7 @@
       ]
     },
     "service/channel_select.go": {
-      "local_sha256": "adba2f1d268a4333288aefed7df4c9229b9ffff4eec7a492e07b60793de9f467",
+      "local_sha256": "5fd73389e6f9f46bf64704b712e672ee47ebf8527088be28881ca15df727ae67",
       "hunks": [
         {
           "header": "@@ -1,7 +1,6 @@",
@@ -34107,9 +34107,9 @@
           "basis": "同上：单插件固定身份经 taskPluginIdentities（token-routing）。"
         },
         {
-          "header": "@@ -289,120 +119,62 @@",
-          "sha256": "60b7df68588d4cdaf32cd03f1d5a7e56f5cb1731b228de0d150f40ee9c065f1a",
-          "basis": "删除业务分组：ChannelSelectError 与 SelectChannelForRequest 改为渠道级自动/手动路由（token-routing、concurrency、origin-task-continuation）。"
+          "header": "@@ -289,120 +119,63 @@",
+          "sha256": "70110e7e6642bcba20b90979b333dde58865b58b71391b67778b041aa2b1f122",
+          "basis": "删除业务分组：ChannelSelectError 与 SelectChannelForRequest 改为渠道级自动/顺序路由（token-routing、concurrency、origin-task-continuation）。"
         }
       ]
     },
@@ -34185,6 +34185,76 @@
           "header": "@@ -43,6 +42,24 @@",
           "sha256": "df60e7af21b8401ae71e39fb10305aa3826746ae05912a2c2666532f8e14f847",
           "basis": "删除业务分组：导入的实例带非空 groups 时拒绝，不静默变成全局实例；对应原审查 setting/request_plugin_setting/config.go#2。新增的 plugin_scope 字段与上游一致，不在本段差异内。"
+        }
+      ]
+    },
+    "controller/token.go": {
+      "local_sha256": "c2eb3070ef5df9f24687b5443d6c162d1c31ea163a5ff3b94ae9e38f18529493",
+      "hunks": [
+        {
+          "header": "@@ -1,6 +1,7 @@",
+          "sha256": "996f603b5d8d2ab87dae1eaede1cac1baeae8d00c29ff94dbe0d4c3493defc5f",
+          "basis": "创建输入需区分缺省和非法 JSON 值。"
+        },
+        {
+          "header": "@@ -10,38 +11,24 @@",
+          "sha256": "6769fb405446dcb451b31035c0152250cc9040bb0fbfb725626e8cf1daf72ed3",
+          "basis": "请求与响应表示令牌路由方式和渠道范围，移除业务分组。"
+        },
+        {
+          "header": "@@ -60,15 +47,7 @@",
+          "sha256": "1730d0199fd16c852acab0e4580e1863203b65d65a6e09224084c6a3bab38059",
+          "basis": "脱敏后投影路由摘要。"
+        },
+        {
+          "header": "@@ -79,56 +58,6 @@",
+          "sha256": "c2615e5653917510541c0b4fe41d2a9534f7b879a826f21429ca6d80ebdba2f1",
+          "basis": "移除业务分组验证。"
+        },
+        {
+          "header": "@@ -139,7 +68,12 @@",
+          "sha256": "0808bb41b94c0705eb37c771aee503f7237b2d3b5b6775cbbd69066a991244dd",
+          "basis": "分页列表读取路由范围和条目数。"
+        },
+        {
+          "header": "@@ -156,7 +90,12 @@",
+          "sha256": "b6360de6991aeee9a842502da826796064fc0c7aff4a8c7564b47c0be84a84cd",
+          "basis": "搜索结果读取路由范围和条目数。"
+        },
+        {
+          "header": "@@ -172,19 +111,12 @@",
+          "sha256": "7c6d5ffc7a60c293c54147485a7cf5bc2b048c31b47e286fca4c1a4317a184d6",
+          "basis": "详情读取路由摘要，移除组接口。"
+        },
+        {
+          "header": "@@ -303,6 +235,10 @@",
+          "sha256": "376b76c610044c747b2b899efe662ae193a5ea3fcbc9a133ac4c76951871122e",
+          "basis": "创建只接受缺省或自动路由。"
+        },
+        {
+          "header": "@@ -332,14 +268,6 @@",
+          "sha256": "c8f77b448c7a5307ff7a885f4d119a948de0ba87cdbc09b854e645520c4b63a2",
+          "basis": "删除创建令牌时的分组校验。"
+        },
+        {
+          "header": "@@ -359,9 +287,6 @@",
+          "sha256": "dd73291c7e90618a0ce7eff9c59dea969f9cd57a71db8176f1268fd2e87097f1",
+          "basis": "创建时移除组字段。"
+        },
+        {
+          "header": "@@ -459,16 +384,12 @@",
+          "sha256": "47efd138c25f1a09f52b8d98c2bcd10704479a32abc83576b3b8442c8bfd58d3",
+          "basis": "更新前读取路由摘要，移除组更新。"
+        },
+        {
+          "header": "@@ -493,9 +414,6 @@",
+          "sha256": "fe52b3a18f244700b6d6ec9f1ca803c826167fcc6cb34bc26851b284d50d6f4b",
+          "basis": "审计去除组字段。"
+        },
+        {
+          "header": "@@ -507,7 +425,7 @@",
+          "sha256": "7a088523f631ff4f6a127c7e07344a043cfcb6aff10d2a025ad4aac0e04f8987",
+          "basis": "更新响应使用脱敏路由摘要。"
         }
       ]
     }

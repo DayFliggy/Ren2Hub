@@ -55,7 +55,7 @@ func TestOriginTaskContinuationKeepsOriginalChannelDespiteRouteEdits(t *testing.
 			createRouteChannel(t, db, 11, "route-model")
 			createRouteChannel(t, db, 22, "route-model")
 			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("max_concurrency", 1).Error)
-			saveRouteTest(t, 22)
+			seedSelectedRoute(t, "auto", model.TokenRouteEntry{ChannelID: 22, Enabled: true})
 			require.NoError(t, db.Model(&model.TokenRouteProfile{}).Where("token_id = ?", 7).Update("max_channel_ratio", "1").Error)
 			common.MemoryCacheEnabled = cache
 			if cache {
@@ -139,4 +139,61 @@ func TestRouteCandidateDatabaseErrorIsNotEmptyAvailability(t *testing.T) {
 	_, apiErr := SelectChannelForRequest(routeTestContext(t), "gpt-4-gizmo-a", nil)
 	require.NotNil(t, apiErr)
 	require.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+}
+
+func TestSelectedOnlyRejectsUnavailableEntries(t *testing.T) {
+	for _, mode := range []string{"auto", "ordered"} {
+		for _, deleted := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/deleted=%t", mode, deleted), func(t *testing.T) {
+				db := setupRouteTest(t)
+				createRouteChannel(t, db, 11, "route-model")
+				createRouteChannel(t, db, 22, "route-model")
+				seedSelectedRoute(t, mode, model.TokenRouteEntry{ChannelID: 11, Enabled: deleted})
+				if deleted {
+					require.NoError(t, db.Delete(&model.Channel{}, 11).Error)
+					require.NoError(t, model.DeleteOrphanChannelRouteEntries(t.Context()))
+				}
+				channel, failure := SelectChannelForRequest(routeTestContext(t), "route-model", nil)
+				require.Nil(t, channel)
+				require.NotNil(t, failure)
+				require.Equal(t, http.StatusServiceUnavailable, failure.StatusCode)
+				require.Equal(t, types.ErrorCodeModelNotFound, failure.Code)
+			})
+		}
+	}
+}
+
+func TestUnavailableSelectionKeepsModelNotFoundResponse(t *testing.T) {
+	for _, pinned := range []bool{false, true} {
+		t.Run(fmt.Sprintf("pinned=%t", pinned), func(t *testing.T) {
+			setupAffinityChannels(t)
+			seedSelectedRoute(t, "auto", model.TokenRouteEntry{ChannelID: 22, Enabled: false})
+			c, _ := enableRouteAffinity(t, "strict", 22)
+			if pinned {
+				GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 22, Source: dto.PinSourceToken})
+			}
+			ch, failure := SelectChannelForRequest(c, "route-model", nil)
+			require.Nil(t, ch)
+			require.NotNil(t, failure)
+			require.Equal(t, http.StatusServiceUnavailable, failure.StatusCode)
+			require.Equal(t, types.ErrorCodeModelNotFound, failure.Code)
+		})
+	}
+}
+
+func TestAutomaticSelectedRouteSkipsOpenBreaker(t *testing.T) {
+	db := setupRouteTest(t)
+	resetRouteObservations(t)
+	for _, id := range []int{11, 22, 33} {
+		createRouteChannel(t, db, id, "route-model")
+		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", id).Update("priority", 100-id).Error)
+	}
+	seedSelectedRoute(t, "auto", model.TokenRouteEntry{ChannelID: 22, Enabled: true}, model.TokenRouteEntry{ChannelID: 33, Enabled: true})
+	for range routeBreakerOpenFailures {
+		recordBreaker(22, "route-model", false)
+	}
+	c := routeTestContext(t)
+	selected, failure := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, failure)
+	require.Equal(t, 33, selected.Id)
 }

@@ -29,7 +29,7 @@ STARTUP_NEUTRAL = re.compile(r'(?:frontend|docs|scripts|\.github|\.agents)/.*|[^
 
 # Shared trigger for the development runner and the scoped release verifier.
 ROUTING_WORKLOAD_PATHS = re.compile(
-    r'(?:service/(?:route_[^/]+|channel_select|channel_affinity|token_route_preview|concurrency|relay_error|usage_helpr)'
+    r'(?:service/(?:route_[^/]+|channel_select|channel_affinity|token_route|token_route_preview|concurrency|relay_error|usage_helpr)'
     r'|controller/(?:relay|relay_route_selection|routing_lifecycle)|middleware/(?:distributor|task_plugin)'
     r'|relay/responses_websocket|relay/channel/(?:openai/(?:relay-openai|relay_responses(?:_compact)?|'
     r'chat_via_responses|responses_via_chat)|claude/(?:relay-claude|relay_responses)|gemini/(?:relay-gemini(?:-native)?|'

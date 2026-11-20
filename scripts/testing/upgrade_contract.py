@@ -13,7 +13,7 @@ INSTANCES_KEY = 'request_plugin_setting.instances'
 
 # The top-up bonus release adds these columns with default 0 and replaces the
 # discount tables; every other persisted row must survive an upgrade as is.
-ADDED_COLUMNS = {'top_ups': 'bonus_quota', 'admin_quota_operations': 'bonus_quota', 'redemptions': 'bonus_quota'}
+ADDED_COLUMNS = {'token_route_profiles': 'selected_only', 'top_ups': 'bonus_quota', 'admin_quota_operations': 'bonus_quota', 'redemptions': 'bonus_quota'}
 ADDED_COLUMN_SUFFIX = '.added_column'
 LEGACY_DISCOUNT_TABLES = ('topup_discount_configs', 'topup_discount_usage_hourly', 'topup_discounts',
                           'usage_discount_configs', 'usage_discount_hourly')
@@ -101,7 +101,8 @@ def split_added_column(table, rows):
     require(len(present) == 1, 'upgrade_added_column_rows_invalid')
     if present == {False}:
         return rows, 'absent'
-    values = sorted([row['id'], row[column]] for row in rows)
+    primary_key = 'token_id' if table == 'token_route_profiles' else 'id'
+    values = sorted([row[primary_key], row[column]] for row in rows)
     stripped = [{key: value for key, value in row.items() if key != column} for row in rows]
     return stripped, {'non_default': sum(1 for _, value in values if value != 0),
                       'sha256': hashlib.sha256(json.dumps(values).encode()).hexdigest()}

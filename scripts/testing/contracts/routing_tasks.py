@@ -113,7 +113,7 @@ def lifecycle(e,plugin,model,body,amount):
 def secondary_token(e):
     original=(e.token_id,e.key)
     name='cross-key-'+e.suffix+'-'+str(len(e.tokens))
-    e.user.api('POST','/api/token/',{'name':name,'remain_quota':1000000,'expired_time':-1,'type':'manual',
+    e.user.api('POST','/api/token/',{'name':name,'remain_quota':1000000,'expired_time':-1,
                                    'model_limits_enabled':False})
     token=next(row for row in e.user.api('GET','/api/token/?p=1&page_size=100')['items'] if row['name']==name)
     e.token_id=token['id']
@@ -163,7 +163,7 @@ def plugin_origin(e):
     wait_task(e,public_id(raw))
     e.settled(before,1000)
     e.zero()
-    return {'fixture':'native API registered plugin using Sora wire protocol', 'origin_manual_list_exempt':True,
+    return {'fixture':'native API registered plugin using Sora wire protocol', 'origin_selected_list_exempt':True,
             'price_cap_enforced':True,'exact_cap_allowed':True,'full_rejected':True}
 
 

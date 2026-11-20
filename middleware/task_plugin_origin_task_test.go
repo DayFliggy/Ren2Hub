@@ -312,7 +312,7 @@ export function parseSubmitResponse() { return {taskId: "one"}; }
 export function buildQueryRequest() { return {url: "https://example.com"}; }
 export function parseTaskResult() { return {status: "SUCCESS"}; }
 `)
-	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteManual} {
+	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteOrdered} {
 		for _, ceiling := range []string{"1", "2"} {
 			t.Run(mode+"/limit="+ceiling, func(t *testing.T) {
 				setupOriginTaskDB(t)
@@ -329,11 +329,11 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 				token := model.Token{UserId: 7, Key: "origin-price-key", Status: common.TokenStatusEnabled}
 				require.NoError(t, model.DB.Create(&token).Error)
 				var entries []model.TokenRouteEntry
-				if mode == model.TokenRouteManual {
+				if mode == model.TokenRouteOrdered {
 					entries = []model.TokenRouteEntry{{ChannelID: b.Id, Enabled: true}}
 				}
 				_, err := model.SaveTokenRouting(context.Background(), 7, token.Id, model.TokenRouting{
-					TokenRouteProfile: model.TokenRouteProfile{Mode: mode, MaxChannelRatio: &ceiling},
+					TokenRouteProfile: model.TokenRouteProfile{Mode: mode, SelectedOnly: len(entries) > 0, MaxChannelRatio: &ceiling},
 					Entries:           entries,
 				}, map[int]bool{b.Id: true})
 				require.NoError(t, err)

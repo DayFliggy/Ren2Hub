@@ -364,7 +364,7 @@ def run_tickets(experiment):
 
 def route_token(experiment, client, name, model, cleanup):
     client.api("POST", "/api/token/", {"name": name, "remain_quota": 3000,
-        "expired_time": -1, "unlimited_quota": False, "type": "manual",
+        "expired_time": -1, "unlimited_quota": False,
         "model_limits_enabled": True, "model_limits": model})
     items = client.api("GET", "/api/token/?p=1&page_size=100")["items"]
     matches = [item for item in items if item["name"] == name]
@@ -421,7 +421,7 @@ def run_routing_pat(experiment, token_id, foreign_id, channel_id):
     try:
         view = business(user.request("GET", path, bearer=pat), "routing_pat_read")
         require(user.request("GET", foreign_path, bearer=pat)[0] == 404, "routing_pat_foreign_owner_read")
-        body = {"mode": "manual", "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
+        body = {**experiment.ordered_route_fields(view), "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
         require(user.request("PUT", path, body, bearer=pat)[0] == 403, "routing_read_pat_wrote")
         update = {"name": "routing-" + experiment.suffix, "scopes": ["routing:write"]}
         require(user.request("PATCH", f"/api/user/access_tokens/{identifier}", update)[0] == 403, "routing_pat_update_without_step_up")
@@ -453,7 +453,7 @@ def run_routing_candidates(experiment):
         require({item["id"] for item in candidates} == {channel_id}, "routing_model_candidate_intersection")
         require(candidates[0]["models"] == [concrete], "routing_candidates_widened_model_names")
         view = experiment.user.api("GET", path)
-        body = {"mode": "manual", "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
+        body = {**experiment.ordered_route_fields(view), "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
         view = experiment.user.api("PUT", path, body)
         query = urllib.parse.urlencode({"model": concrete, "path": "/v1/chat/completions"})
         preview = experiment.user.api("GET", path + "/preview?" + query)
@@ -496,7 +496,7 @@ def run_routing_pinned_websocket(experiment):
         key = admin.api("POST", f"/api/token/{token_id}/key")["key"]
         path = f"/api/token/{token_id}/routing"
         view = admin.api("GET", path)
-        admin.api("PUT", path, {"mode": "manual", "version": view["version"],
+        admin.api("PUT", path, {**experiment.ordered_route_fields(view), "version": view["version"],
             "entries": [{"channel_id": experiment.channel_id, "enabled": True}]})
         original = root.api("GET", f"/api/channel/{experiment.channel_id}")
         config = {name: original[name] for name in ("id", "name", "type", "models", "channel_ratio", "max_concurrency", "priority", "weight", "base_url", "setting")}
