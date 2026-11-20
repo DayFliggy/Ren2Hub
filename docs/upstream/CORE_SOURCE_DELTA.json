@@ -4413,11 +4413,12 @@
         "channel-ratio",
         "concurrency",
         "group-removal",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel.go#1, model/channel.go#10, model/channel.go#11, model/channel.go#12, model/channel.go#13, model/channel.go#14, model/channel.go#15, model/channel.go#16, model/channel.go#17, model/channel.go#18, model/channel.go#19, model/channel.go#2, model/channel.go#3, model/channel.go#4, model/channel.go#5, model/channel.go#6, model/channel.go#7, model/channel.go#8, model/channel.go#9 管理端可选质量摘要仅作响应投影，gorm 忽略。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel.go#1, model/channel.go#10, model/channel.go#11, model/channel.go#12, model/channel.go#13, model/channel.go#14, model/channel.go#15, model/channel.go#16, model/channel.go#17, model/channel.go#18, model/channel.go#19, model/channel.go#2, model/channel.go#3, model/channel.go#4, model/channel.go#5, model/channel.go#6, model/channel.go#7, model/channel.go#8, model/channel.go#9 管理端可选质量摘要仅作响应投影，gorm 忽略。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4464,11 +4465,12 @@
       "local_sha256": "41927e6f4ac643601665b13a993e7309590e0026620f38506518f0746caf69a2",
       "reasons": [
         "group-removal",
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4476,7 +4478,8 @@
           "model/channel_cache.go#2",
           "model/channel_cache.go#3",
           "model/channel_cache.go#4"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {

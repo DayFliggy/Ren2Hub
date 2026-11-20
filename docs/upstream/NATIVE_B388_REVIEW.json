@@ -33556,6 +33556,46 @@
         }
       ]
     },
+    "model/channel_cache.go": {
+      "local_sha256": "41927e6f4ac643601665b13a993e7309590e0026620f38506518f0746caf69a2",
+      "hunks": [
+        {
+          "header": "@@ -1,24 +1,17 @@",
+          "sha256": "d4f8863f48a7a4f4dbf923533403e04ff619d05c9aa82f235bb78f143c32a6f4",
+          "basis": "删除业务分组与上游随机选渠：删除 errors、math/rand、sort、strings、dto、ratio_setting 导入，它们只供分组索引和 GetRandomSatisfiedChannel 使用；删除 group2model2channels 分组索引变量（group-removal、token-routing）。"
+        },
+        {
+          "header": "@@ -48,58 +41,8 @@",
+          "sha256": "1ae2eefc3323c54a0ff54703da567034eae7bd663f2a9e1ffc24e4ee8e409453",
+          "basis": "删除业务分组：InitChannelCache 不再按分组建模型到渠道的索引（group-removal）；删除多 Key：不再预解析 Keys、不再保留轮询下标（single-key-channel）。"
+        },
+        {
+          "header": "@@ -120,108 +63,6 @@",
+          "sha256": "e486ae02e584e2d1ef55ee2095ec1a4f959e71a27acf9684ceeee2f70480e917",
+          "basis": "删除上游随机选渠：GetRandomSatisfiedChannel 由每 Token 自动或有序手动路由取代（token-routing），它按分组索引选渠（group-removal）。"
+        },
+        {
+          "header": "@@ -236,24 +77,6 @@",
+          "sha256": "bffa8250a47dff90d79fc81cb95356dceb77108b9a3489e0a96d0dcf9cbf1cf3",
+          "basis": "删除多 Key：删除 CacheGetChannelInfo，渠道没有 ChannelInfo（single-key-channel）。"
+        },
+        {
+          "header": "@@ -262,20 +85,6 @@",
+          "sha256": "09658d3d78f83f0a0dd80103036019e8b54852211a91488778c921d55e1ec597",
+          "basis": "删除业务分组：CacheUpdateChannelStatus 不再从分组索引里摘除停用渠道（group-removal）。"
+        },
+        {
+          "header": "@@ -292,8 +101,8 @@",
+          "sha256": "8205027fa026045be4f4e64483f7e14f449da0dc3b6d349a2cb54e9ae9a76231",
+          "basis": "删除多 Key：CacheUpdateChannel 更新前的调试日志不再输出轮询下标（single-key-channel）。"
+        },
+        {
+          "header": "@@ -305,7 +114,7 @@",
+          "sha256": "70eb69978a0bf156559c703f2a4241e876279e9efa0ba552ef6ea0a5a0f0536d",
+          "basis": "删除多 Key：CacheUpdateChannel 更新后的调试日志不再输出轮询下标（single-key-channel）。"
+        }
+      ]
+    },
     "model/pricing.go": {
       "local_sha256": "22907fa2c0aea5779fe2a0d93f156a366ea846ddb591464964f82c929e2ad53e",
       "hunks": [
