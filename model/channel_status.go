@@ -20,7 +20,7 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 	// periodic channel sync: the keys of busy channels change status often, and
 	// each bump reloads the whole channel cache on every node.
 	bump := usingKey == "" && status != common.ChannelStatusAutoDisabled
-	// Runs after the ability update deferred below.
+	// Runs after the status and abilities are written and published.
 	defer func() {
 		if result.Changed && bump {
 			BumpSyncTopic(SyncTopicChannels)
@@ -45,35 +45,7 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 		CacheUpdateChannelStatus(channelId, status)
 	}
 
-	shouldUpdateAbilities := false
-	defer func() {
-		if shouldUpdateAbilities {
-			err := UpdateAbilityStatus(channelId, status == common.ChannelStatusEnabled)
-			if err != nil {
-				common.SysLog(common.LogText("failed to update ability status: channel_id=%d, error=%v", channelId, err))
-			}
-		}
-	}()
-	// The status and the status reason are written from the stored row, keeping
-	// what another writer stores in other_info meanwhile.
-	written, err := UpdateChannelOtherInfo(channelId, func(channel *Channel) (map[string]any, error) {
-		shouldUpdateAbilities = false
-		// Check the stored row too, since this node's cache may be stale.
-		if status == common.ChannelStatusAutoDisabled && channel.Status == common.ChannelStatusManuallyDisabled {
-			return nil, nil
-		}
-		if channel.Status == status {
-			return nil, nil
-		}
-		info := channel.GetOtherInfo()
-		info["status_reason"] = reason
-		info["status_time"] = common.GetTimestamp()
-		channel.SetOtherInfo(info)
-		channel.Status = status
-		shouldUpdateAbilities = true
-		return map[string]any{"status": channel.Status}, nil
-	})
-	shouldUpdateAbilities = shouldUpdateAbilities && written
+	written, err := updateChannelStatusLocked(channelId, status, reason)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		common.SysLog(common.LogText("failed to update channel status: channel_id=%d, status=%d, error=%v", channelId, status, err))
 	}
@@ -88,4 +60,47 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 		}
 	}
 	return result
+}
+
+// updateChannelStatusLocked writes the status, its reason and the channel's
+// abilities in one transaction under the channel row lock (SQLite: the
+// channel key lock), the lock every writer of a channel's key or status
+// holds, so the channel and its abilities always agree. Another writer of
+// other_info finds it changed and reads it again.
+func updateChannelStatusLocked(channelID, status int, reason string) (written bool, err error) {
+	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
+		lock := sqliteChannelKeyLock(channelID)
+		lock.Lock()
+		defer lock.Unlock()
+	}
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var channel Channel
+		if err := lockForUpdate(tx).Where("id = ?", channelID).First(&channel).Error; err != nil {
+			return err
+		}
+		// Check the stored row too, since this node's cache may be stale.
+		if status == common.ChannelStatusAutoDisabled && channel.Status == common.ChannelStatusManuallyDisabled {
+			return nil
+		}
+		if channel.Status == status {
+			return nil
+		}
+		info := channel.GetOtherInfo()
+		info["status_reason"] = reason
+		info["status_time"] = common.GetTimestamp()
+		channel.SetOtherInfo(info)
+		updates := map[string]any{"status": status, "other_info": channel.OtherInfo}
+		if err := tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error; err != nil {
+			return err
+		}
+		written = true
+		return writeAbilityStatus(tx, channelID, status)
+	})
+	return written && err == nil, err
+}
+
+// writeAbilityStatus writes a channel's new status to its abilities inside
+// the transaction that writes the channel.
+func writeAbilityStatus(tx *gorm.DB, channelID, status int) error {
+	return updateAbilityStatus(tx.Where("channel_id = ?", channelID), status == common.ChannelStatusEnabled)
 }

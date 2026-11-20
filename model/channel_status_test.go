@@ -155,26 +155,29 @@ func writeAfterNextChannelRead(t *testing.T, channelID int, write func(stored *C
 
 // A writer of other_info writes back only while no other writer, on any node,
 // changed it since the read; otherwise it reads again, so both changes are
-// kept. It writes its own columns only, so a stale read never puts back the
-// key, counters or models another writer stored.
+// kept. The status writer holds the channel row lock instead, so no write
+// lands between its read and its write. Each writes its own columns only, so
+// a stale copy never puts back the key, counters or models another writer
+// stored.
 func TestChannelOtherInfoWritesKeepConcurrentChanges(t *testing.T) {
 	useScheduledChannelDatabase(t)
 	common.MemoryCacheEnabled = false
 
-	t.Run("a status change and a balance query of another node", func(t *testing.T) {
+	t.Run("a status change from a stale cache keeps another node's writes", func(t *testing.T) {
 		channel := Channel{Name: "status-race", Key: "original-key", Status: common.ChannelStatusEnabled, Models: "original-model", UsedQuota: 100}
 		require.NoError(t, channel.Insert())
-		writeAfterNextChannelRead(t, channel.Id, func(stored *Channel) map[string]any {
-			info := stored.GetOtherInfo()
-			info[channelBalanceDetailKey] = map[string]any{"amount": 7, "currency": "USD"}
-			stored.SetOtherInfo(info)
-			return map[string]any{
-				"other_info":   stored.OtherInfo,
-				"key":          "rotated-key",
-				"used_quota":   gorm.Expr("used_quota + ?", 250),
-				"models":       "concurrent-model",
-			}
-		})
+		common.MemoryCacheEnabled = true
+		t.Cleanup(func() { common.MemoryCacheEnabled = false })
+		InitChannelCache()
+		info := channel.GetOtherInfo()
+		info[channelBalanceDetailKey] = map[string]any{"amount": 7, "currency": "USD"}
+		channel.SetOtherInfo(info)
+		require.NoError(t, DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{
+			"other_info": channel.OtherInfo,
+			"key":        "rotated-key",
+			"used_quota": gorm.Expr("used_quota + ?", 250),
+			"models":     "concurrent-model",
+		}).Error)
 
 		require.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
 

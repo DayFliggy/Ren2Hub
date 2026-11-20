@@ -83,12 +83,21 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 			return nil, err
 		}
 		if len(updates) > 0 {
-			result := DB.Model(&Channel{}).Where("id = ?", channelID).Where(map[string]any{"key": stored}).Updates(updates)
-			if result.Error != nil {
-				return nil, result.Error
-			}
-			if result.RowsAffected != 1 {
-				return nil, ErrChannelKeyChanged
+			err := DB.Transaction(func(tx *gorm.DB) error {
+				result := tx.Model(&Channel{}).Where("id = ?", channelID).Where(map[string]any{"key": stored}).Updates(updates)
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected != 1 {
+					return ErrChannelKeyChanged
+				}
+				if statusChanged {
+					return writeAbilityStatus(tx, channelID, channel.Status)
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, err
 			}
 			written = true
 		}
@@ -102,7 +111,13 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 				return err
 			}
 			written = true
-			return tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error
+			if err := tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error; err != nil {
+				return err
+			}
+			if statusChanged {
+				return writeAbilityStatus(tx, channelID, channel.Status)
+			}
+			return nil
 		})
 		if err != nil {
 			return nil, err
@@ -116,9 +131,6 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 	}
 	if statusChanged {
 		CacheUpdateChannelStatus(channelID, channel.Status)
-		if err := UpdateAbilityStatus(channelID, channel.Status == common.ChannelStatusEnabled); err != nil {
-			return nil, err
-		}
 	}
 	if written {
 		if err := publishChannelRoutingIDs([]int{channelID}); err != nil {
@@ -141,8 +153,6 @@ func UpdateTaskPluginChannelLocked(channelID int, update func(channel *Channel, 
 		keyLock.Lock()
 		defer keyLock.Unlock()
 	}
-	var statusChanged bool
-	var enabled bool
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var channels []*Channel
 		if err := lockForUpdate(tx).Where("type = ?", constant.ChannelTypeTaskPlugin).Order("id").Find(&channels).Error; err != nil {
@@ -164,23 +174,23 @@ func UpdateTaskPluginChannelLocked(channelID int, update func(channel *Channel, 
 		if err := update(target, others); err != nil {
 			return err
 		}
-		statusChanged, enabled = target.Status != status, target.Status == common.ChannelStatusEnabled
 		updates := map[string]any{
 			"key":        target.Key,
 			"status":     target.Status,
 			"other_info": target.OtherInfo,
 		}
-		return tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error
+		if err := tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error; err != nil {
+			return err
+		}
+		if target.Status != status {
+			return writeAbilityStatus(tx, channelID, target.Status)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
 	}
 	defer BumpSyncTopic(SyncTopicChannels)
-	if statusChanged {
-		if err := UpdateAbilityStatus(channelID, enabled); err != nil {
-			return err
-		}
-	}
 	return publishChannelRoutingIDs([]int{channelID})
 }
 
@@ -257,7 +267,13 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 			return nil
 		}
 		written = true
-		return tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error
+		if err := tx.Model(&Channel{}).Where("id = ?", channelID).Updates(updates).Error; err != nil {
+			return err
+		}
+		if statusChanged {
+			return writeAbilityStatus(tx, channelID, channel.Status)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -280,11 +296,6 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 		channelSyncLock.Unlock()
 		CacheUpdateChannelStatus(channelID, channel.Status)
 
-	}
-	if statusChanged {
-		if err := UpdateAbilityStatus(channelID, channel.Status == common.ChannelStatusEnabled); err != nil {
-			return nil, err
-		}
 	}
 	if err := publishChannelRoutingIDs([]int{channelID}); err != nil {
 		return nil, err

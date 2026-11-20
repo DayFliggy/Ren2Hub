@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 847,
     "adapted": 315,
-    "extension": 414,
+    "extension": 415,
     "removed": 47
   },
   "files": [
@@ -389,7 +389,7 @@
       "path": "common/log_text.zh-CN.json",
       "status": "adapted",
       "upstream_sha256": "043c1e8d6e47f17366bcde90b9f223a1c442b8c535b9e0ea36a4a8c995291a02",
-      "local_sha256": "21330a9700ed78cb46a85bf51843722c2d237e769f35048421ae56207e932b0c",
+      "local_sha256": "3aa08caf8845bfb02bda76e1f7a2896499a8a1652761cdd1833a77b48aabe739",
       "reasons": [
         "single-key-channel"
       ],
@@ -4591,7 +4591,7 @@
       "path": "model/channel_plugin_credential.go",
       "status": "adapted",
       "upstream_sha256": "d0733a5981dd2637b45a8d14e0cd4dcf1e8111e87a51b1bfc20603c34e7cffc3",
-      "local_sha256": "2b4c16cdbcf9484726687f81c85cc5ebeadb1757f6c4f889fac2af1b72c7c120",
+      "local_sha256": "92dce25419b8cf9450aa4af07035304ca40b4b9257d47ee0b9a9338913fc06b6",
       "reasons": [
         "auth-cache-integrity",
         "single-key-channel",
@@ -4682,13 +4682,14 @@
       "path": "model/channel_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e05b0d90985e85a9ddf9c15222e704c5928aa5303322ad4f1e811ce25bba4e15",
+      "local_sha256": "01cc2caab5d38aa9c1badd90f52ba2915a8b8be1e3fb0d8c50ffd32d929537ad",
       "reasons": [
+        "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4697,10 +4698,16 @@
       }
     },
     {
+      "path": "model/channel_status_lock_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8554dd400d5651dc579f25e051453d4998b3e3206666f1c5a7ff6ae82bb14086"
+    },
+    {
       "path": "model/channel_status_test.go",
       "status": "adapted",
       "upstream_sha256": "547dddbdf2435b470988c0b65c8be631950a0b8ac49cd37a65f4affc0a9c991e",
-      "local_sha256": "aaca2f379f001b410d39fb9d930098dda489fb5d79b0b0769be7cd0621c98d03"
+      "local_sha256": "8f9286e4ce1bcbe56625a56decd6b8b645502d2bd7f350c439d9c55b6aa605b9"
     },
     {
       "path": "model/channel_upstream_ratio.go",

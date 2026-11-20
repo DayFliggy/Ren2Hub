@@ -591,7 +591,6 @@
   "failed to unmarshal user: %s": "解析 user 失败: %s",
   "failed to unmarshal websocket close event: %v": "解析 WebSocket 关闭事件失败: %v",
   "failed to update abilities: channel_id=%d, tag=%s, error=%v": "更新渠道的 abilities 记录失败: channel_id=%d, tag=%s, error=%v",
-  "failed to update ability status: channel_id=%d, error=%v": "更新渠道的 abilities 状态失败: channel_id=%d, error=%v",
   "failed to update balance: channel_id=%d, error=%v": "更新余额失败: channel_id=%d, error=%v",
   "failed to update channel status: channel_id=%d, status=%d, error=%v": "更新渠道状态失败: channel_id=%d, status=%d, error=%v",
   "failed to update channel used quota: channel_id=%d, delta_quota=%d, error=%v": "更新渠道已用额度失败: channel_id=%d, delta_quota=%d, error=%v",

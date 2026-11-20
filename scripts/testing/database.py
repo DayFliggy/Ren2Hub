@@ -170,6 +170,7 @@ PROVIDER_TESTS = (
     ('model', 'TestScheduledChannelLockedCancellation'),
     ('model', 'TestChannelOtherInfoWritesKeepConcurrentChanges'),
     ('model', 'TestLockedCredentialWritesPublishCommittedChanges'),
+    ('model', 'TestChannelStatusWritersKeepAbilitiesWithTheChannel'),
     ('model', 'TestMigrateSensitiveWords'),
     ('model', 'TestMigrateSensitiveWordsWithoutWords'),
 )
