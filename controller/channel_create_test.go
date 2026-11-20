@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -235,6 +236,23 @@ func TestUpdateChannelRejectsMultiKeyFields(t *testing.T) {
 			assert.Equal(t, "multi-key-edit", stored.Name)
 		})
 	}
+	t.Run("a Vertex key type change rechecks the kept key", func(t *testing.T) {
+		vertex := &model.Channel{Name: "vertex-key-type", Type: constant.ChannelTypeVertexAi, Key: "{\n  \"type\": \"service_account\"\n}", ChannelRatio: "1", Models: "test-model", Other: `{"default":"us-central1"}`}
+		require.NoError(t, vertex.Insert())
+		t.Cleanup(func() {
+			_, err := model.BatchDeleteChannels([]int{vertex.Id})
+			require.NoError(t, err)
+		})
+		renamed := putUpdateChannel(t, rootID, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"name":"vertex-renamed"}`, vertex.Id))
+		assert.Contains(t, renamed.Body.String(), `"success":true`, "an edit that keeps the key type keeps the key valid")
+		response := putUpdateChannel(t, rootID, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"settings":"{\"vertex_key_type\":\"api_key\"}"}`, vertex.Id))
+		var result map[string]any
+		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+		assert.Equal(t, false, result["success"], response.Body.String())
+		stored, err := model.GetChannelById(vertex.Id, true)
+		require.NoError(t, err)
+		assert.NotEqual(t, dto.VertexKeyTypeAPIKey, stored.GetOtherSettings().VertexKeyType)
+	})
 	t.Run("multiline Vertex JSON", func(t *testing.T) {
 		key := "{\n  \"type\": \"service_account\",\n  \"project_id\": \"edit\"\n}"
 		encoded, err := common.Marshal(key)

@@ -283,4 +283,19 @@ export function parseTaskResult() { return {}; }
 			}
 		})
 	}
+	t.Run("rebinding to an api_key plugin rechecks the kept key", func(t *testing.T) {
+		baseURL, stored := "https://example.com", `{"task_plugin_key":"lines-oauth2-jwt"}`
+		key := "{\n  \"type\": \"service_account\"\n}"
+		channel := model.Channel{Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: "rebind", Models: "doc", Key: key, BaseURL: &baseURL, Setting: &stored}
+		require.NoError(t, channel.Insert())
+		renamed := putUpdateChannel(t, 1, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"name":"rebind-renamed"}`, channel.Id))
+		assert.Contains(t, renamed.Body.String(), `"success":true`, "an edit that keeps the auth keeps the key valid")
+		response := putUpdateChannel(t, 1, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"setting":%s}`, channel.Id, setting("lines-api-key")))
+		var result map[string]any
+		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+		assert.Equal(t, false, result["success"], response.Body.String())
+		reloaded, err := model.GetChannelById(channel.Id, true)
+		require.NoError(t, err)
+		assert.Equal(t, "lines-oauth2-jwt", reloaded.GetSetting().TaskPluginKey)
+	})
 }

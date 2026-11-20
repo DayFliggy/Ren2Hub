@@ -1204,12 +1204,16 @@ func UpdateChannel(c *gin.Context) {
 	if !settingProvided {
 		keptPluginKey = originChannel.GetSetting().TaskPluginKey
 	}
-	if keyChanged {
-		keptSettings := originChannel.GetOtherSettings()
-		if channel.OtherSettings != "" {
-			keptSettings = channel.GetOtherSettings()
-		}
-		if err := validateSingleKey(keptType, keptSettings, keptPluginKey, requestedKey); err != nil {
+	// A new key, or a new way of reading the kept one (type, plugin or Vertex
+	// key type), is checked as the channel will read it.
+	originSettings, keptSettings := originChannel.GetOtherSettings(), originChannel.GetOtherSettings()
+	if channel.OtherSettings != "" {
+		keptSettings = channel.GetOtherSettings()
+	}
+	authChanged := keptType != originChannel.Type || keptPluginKey != originChannel.GetSetting().TaskPluginKey ||
+		keptSettings.VertexKeyType != originSettings.VertexKeyType
+	if keyChanged || authChanged {
+		if err := validateSingleKey(keptType, keptSettings, keptPluginKey, keptKey); err != nil {
 			common.ApiError(c, err)
 			return
 		}
