@@ -595,7 +595,8 @@ export default {
       historyUnavailable:
         '当前目录未提供历史健康序列，展示顺序不代表路由优先级。',
       tabLabel: '自动路由',
-      subtitle: '按实验室展示平台渠道；每个 API Key 独立选择路由模式。',
+      subtitle:
+        '按实验室展示全平台渠道；每个 API Key 可在路由配置里指定渠道，并选择顺序或自动路由。',
       refresh: '刷新',
       updated: '更新于 {time}',
       groupBest: '运营评分领先',
@@ -664,12 +665,13 @@ export default {
     thinkAgain: '再想想',
     createTitle: '创建令牌',
     editTitle: '编辑令牌',
-    type: {
-      label: '令牌类型',
-      manual: '手动令牌',
-      manualDesc: '按此令牌保存的平台渠道顺序选择',
-      auto: '自动令牌',
-      autoDesc: '按优先级、健康、负载和延迟选择全平台渠道',
+    route: {
+      autoPlatform: '自动 · 全平台',
+      autoSelected: '自动 · {count} 条渠道',
+      ordered: '顺序 · {count} 条渠道',
+      unavailable: '所选渠道已不可用',
+      unavailableHint:
+        '此 Key 的调用会以“没有可用渠道”失败。请在路由配置里重新选择渠道，或改回全平台渠道。',
     },
     advancedTitle: '高级设置',
     advancedSummary: '额度查询、模型与 IP 限制',
@@ -691,6 +693,9 @@ export default {
     revealTitle: '完整密钥',
     revealNote: '请妥善保管完整密钥。',
     created: '令牌已创建',
+    createdRoutingHint:
+      '新令牌默认使用自动路由和全平台渠道，可以在列表行的“路由配置”里修改。',
+    dismissHint: '关闭提示',
     updated: '令牌已更新',
     deleted: '令牌已删除',
     copied: '密钥已复制',

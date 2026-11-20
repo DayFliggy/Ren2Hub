@@ -21,6 +21,8 @@ for (const [theme, mobile] of [
       name: 'Exact budget',
       key: 'sk-masked',
       type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
       status: 1,
       used_quota: 3,
       remain_quota: 1234567,

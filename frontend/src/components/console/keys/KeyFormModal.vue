@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
-import type { TokenSummary, TokenType } from '@/types/console'
+import type { TokenSummary } from '@/types/console'
 import ChipPicker from '@/components/common/ChipPicker.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -24,13 +24,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  saved: []
+  /** created=true after a new key; routing is configured on its own page. */
+  saved: [created: boolean]
 }>()
 
 const { t } = useI18n()
 const toast = useToast()
 const form = reactive({
-  type: 'auto' as TokenType,
   allow_user_quota_query: true,
   name: '',
   model_limits: [] as string[],
@@ -56,7 +56,6 @@ watch(
   (open) => {
     if (!open) return
     const e = props.editing
-    form.type = e?.type ?? 'auto'
     form.allow_user_quota_query = e ? (e.allow_user_quota_query ?? false) : true
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
@@ -81,44 +80,6 @@ watch(
   },
   { immediate: true }
 )
-
-const typeCards = computed(() => [
-  {
-    value: 'manual' as const,
-    title: t('keys.type.manual'),
-    desc: t('keys.type.manualDesc'),
-  },
-  {
-    value: 'auto' as const,
-    title: t('keys.type.auto'),
-    desc: t('keys.type.autoDesc'),
-  },
-])
-
-function onTypeKeydown(event: KeyboardEvent, index: number) {
-  if (props.editing !== null) return
-  const last = typeCards.value.length - 1
-  let next: number
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-    next = index === last ? 0 : index + 1
-  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-    next = index === 0 ? last : index - 1
-  } else if (event.key === 'Home') {
-    next = 0
-  } else if (event.key === 'End') {
-    next = last
-  } else {
-    return
-  }
-
-  const option = typeCards.value[next]
-  if (!option) return
-  event.preventDefault()
-  form.type = option.value
-  const group = (event.currentTarget as HTMLElement).parentElement
-  const buttons = group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
-  buttons?.[next]?.focus()
-}
 
 /** Native expired_time: -1 never expires, otherwise epoch seconds. */
 function expiredTime(): number {
@@ -170,11 +131,10 @@ async function save() {
       await api.put('/api/token/', payload)
       toast.success(t('keys.updated'))
     } else {
-      payload.type = form.type
       await api.post('/api/token/', payload)
       toast.success(t('keys.created'))
     }
-    emit('saved')
+    emit('saved', !props.editing)
     emit('close')
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
@@ -192,75 +152,6 @@ async function save() {
     @close="emit('close')"
   >
     <div class="sibling-space-y-4 text-left">
-      <!-- Token type is fixed after creation. -->
-      <fieldset class="min-w-0">
-        <legend class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
-          {{ t('keys.type.label') }}
-        </legend>
-        <div
-          class="grid gap-2 sm:grid-cols-2"
-          role="radiogroup"
-          :aria-label="t('keys.type.label')"
-        >
-          <button
-            v-for="(card, index) in typeCards"
-            :key="card.value"
-            type="button"
-            role="radio"
-            :aria-checked="form.type === card.value"
-            :tabindex="form.type === card.value ? 0 : -1"
-            :disabled="editing !== null"
-            class="relative rounded-xl border px-3.5 py-3 text-left transition-colors focus-ring disabled:cursor-not-allowed"
-            :class="
-              form.type === card.value
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                : 'border-[var(--border-subtle)] bg-[var(--surface-solid)] hover:border-[var(--border-strong)] disabled:opacity-50'
-            "
-            @click="form.type = card.value"
-            @keydown="onTypeKeydown($event, index)"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <span
-                class="block text-sm font-semibold"
-                :class="
-                  form.type === card.value
-                    ? 'text-[var(--accent-text)]'
-                    : 'text-[var(--text-primary)]'
-                "
-              >
-                {{ card.title }}
-              </span>
-              <span
-                class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors"
-                :class="
-                  form.type === card.value
-                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--surface-solid)]'
-                    : 'border-[var(--border-default)] bg-[var(--surface-muted)]'
-                "
-                aria-hidden="true"
-              >
-                <svg
-                  v-if="form.type === card.value"
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </span>
-            </div>
-            <span
-              class="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]"
-              >{{ card.desc }}</span
-            >
-          </button>
-        </div>
-      </fieldset>
       <FormField :label="t('keys.nameLabel')">
         <TextInput
           v-model="form.name"

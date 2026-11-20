@@ -141,7 +141,9 @@ export async function nativeCoreFixture(
     id: 7,
     name: 'Native Key',
     key: 'sk-****1234',
-    type: 'manual',
+    type: 'ordered',
+    selected_only: true,
+    route_channel_count: 1,
     status: 1,
     remain_quota: 500000,
     used_quota: 250000,
@@ -180,7 +182,8 @@ export async function nativeCoreFixture(
   let routing = {
     token_id: 7,
     max_channel_ratio: null as string | null,
-    mode: 'manual',
+    mode: 'ordered',
+    selected_only: true,
     version: 1,
     entries: [{ channel_id: 2, enabled: true, position: 0 }],
   }
@@ -511,7 +514,7 @@ export async function nativeCoreFixture(
         stream: url.searchParams.get('stream') === 'true',
         transport: url.searchParams.get('transport') || 'http',
         ordering:
-          routing.mode === 'auto' ? 'weighted_random_per_request' : 'manual',
+          routing.mode === 'auto' ? 'weighted_random_per_request' : 'ordered',
         entries: [
           {
             channel_id: 2,

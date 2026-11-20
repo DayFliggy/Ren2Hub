@@ -10,6 +10,7 @@ import type { TokenSummary } from '@/types/console'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
 import KeyMobileList from '@/components/console/keys/KeyMobileList.vue'
+import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
 import KeyRevealModal from '@/components/console/keys/KeyRevealModal.vue'
 import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
 import { clientConfigMessages } from '@/i18n/clientConfig'
@@ -60,6 +61,7 @@ const selected = ref<Array<string | number>>([])
 const models = ref<string[]>([])
 
 const formOpen = ref(false)
+const createdNotice = ref(false)
 const editing = ref<TokenSummary | null>(null)
 const deleting = ref<TokenSummary | null>(null)
 const batchDeleting = ref(false)
@@ -69,7 +71,7 @@ const clientConfigTokenId = ref<number | null>(null)
 
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
-  { key: 'type', label: t('keys.colType'), width: '110px' },
+  { key: 'type', label: t('keys.colType'), width: '150px' },
   { key: 'key', label: t('keys.colKey') },
   { key: 'status', label: t('keys.colStatus'), width: '100px' },
   { key: 'usage', label: t('keys.colUsage'), align: 'right', width: '150px' },
@@ -82,9 +84,6 @@ const columns = computed<TableColumn[]>(() => [
     width: '264px',
   },
 ])
-
-const typeTone = (type: TokenSummary['type']) =>
-  type === 'auto' ? 'info' : 'accent'
 
 const allPageSelected = computed(
   () =>
@@ -171,6 +170,12 @@ async function toggleStatus(row: TokenSummary) {
     next.delete(row.id)
     togglingIds.value = next
   }
+}
+
+function onSaved(created: boolean) {
+  void load()
+  // Creation stays upstream-shaped (no new id), so the hint names the row action.
+  if (created && routingEnabled.value) createdNotice.value = true
 }
 
 function openCreate() {
@@ -269,6 +274,35 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <div
+        v-if="createdNotice"
+        role="status"
+        data-key-created-notice
+        class="mx-4 mb-4 flex items-start gap-2 rounded-xl border border-[var(--status-info)] bg-[var(--status-info-soft)] py-2 pl-4 pr-2 text-sm text-[var(--status-info-text)]"
+      >
+        <span class="min-w-0 flex-1 self-center">{{
+          t('keys.createdRoutingHint')
+        }}</span>
+        <IconButton
+          class="shrink-0"
+          :label="t('keys.dismissHint')"
+          @click="createdNotice = false"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </IconButton>
+      </div>
+
       <DataTable
         v-model:selected="selected"
         class="key-list-table"
@@ -296,9 +330,7 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-type="{ row }">
-          <StatusChip :tone="typeTone((row as TokenSummary).type)">
-            {{ t(`keys.type.${(row as TokenSummary).type}`) }}
-          </StatusChip>
+          <KeyRouteChip :token="row as TokenSummary" />
         </template>
 
         <template #cell-key="{ row }">
@@ -547,7 +579,7 @@ onBeforeUnmount(() => {
       :editing="editing"
       :models="models"
       @close="formOpen = false"
-      @saved="load"
+      @saved="onSaved"
     />
 
     <KeyRevealModal
@@ -598,11 +630,15 @@ onBeforeUnmount(() => {
   }
 }
 
-/* B1 Studio: type badge neutralization to prevent visual clutter against status chips */
-html.dark [data-key-page] td[headers$='-type'] :deep([data-handdrawn='chip']),
-html.dark [data-key-page] .key-list-cards :deep([data-handdrawn='chip']) {
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  border-left-color: var(--border-default);
+/* B1 Studio: route-type labels are auxiliary and stay neutral; the warning for
+   deleted selected channels keeps its status colour. !important overrides the
+   chip's inline tone style. */
+html.dark
+  [data-key-page]
+  td[headers$='-type']
+  :deep([data-handdrawn='chip']:not([data-route-warning])) {
+  background: var(--surface-muted) !important;
+  color: var(--text-secondary) !important;
+  border-left-color: var(--border-default) !important;
 }
 </style>

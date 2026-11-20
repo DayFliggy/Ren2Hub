@@ -626,7 +626,7 @@ export default {
         'Historical health is unavailable. Display order does not indicate routing priority.',
       tabLabel: 'Auto Route',
       subtitle:
-        'Platform channels grouped by lab for display. Each API key controls its own routing mode.',
+        'All platform channels, grouped by lab. Each API key can limit itself to selected channels and route in order or automatically under Routing.',
       refresh: 'Refresh',
       updated: 'Updated {time}',
       groupBest: 'Leading operating score',
@@ -696,13 +696,13 @@ export default {
     thinkAgain: 'Think again',
     createTitle: 'Create key',
     editTitle: 'Edit key',
-    type: {
-      label: 'Key type',
-      manual: 'Manual',
-      manualDesc: 'Use the platform channel order saved for this key',
-      auto: 'Auto',
-      autoDesc:
-        'Select platform channels by priority, health, load and latency',
+    route: {
+      autoPlatform: 'Auto · all platform',
+      autoSelected: 'Auto · {count} channel | Auto · {count} channels',
+      ordered: 'Ordered · {count} channel | Ordered · {count} channels',
+      unavailable: 'Selected channels unavailable',
+      unavailableHint:
+        'Calls with this key fail with “no available channel”. Choose channels again in Routing, or switch back to all platform channels.',
     },
     advancedTitle: 'Advanced settings',
     advancedSummary: 'Balance queries, model and IP restrictions',
@@ -724,6 +724,9 @@ export default {
     revealTitle: 'Full key',
     revealNote: 'Store the full key securely.',
     created: 'Key created',
+    createdRoutingHint:
+      'New keys use automatic routing across all platform channels. Change this with Routing in the key row.',
+    dismissHint: 'Dismiss',
     updated: 'Key updated',
     deleted: 'Key deleted',
     copied: 'Key copied',

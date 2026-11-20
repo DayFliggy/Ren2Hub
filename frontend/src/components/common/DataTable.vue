@@ -767,15 +767,6 @@ html.dark .data-table-body-viewport tr:hover {
   background: var(--state-hover-layer) !important;
 }
 
-/* Type badge neutralization (from B2/Studio study):
-   Neutralizes auxiliary non-status tags to avoid visual clutter,
-   while operational status chips retain their strict status semantic colors. */
-html.dark [data-key-page] td[headers$='-type'] :deep([data-handdrawn='chip']) {
-  background: var(--surface-muted) !important;
-  color: var(--text-secondary) !important;
-  border-left-color: var(--border-default) !important;
-}
-
 /* Action icons in table cells: calm at rest, responsive on hover */
 html.dark td[headers$='-actions'] button:not(:hover) {
   color: var(--text-secondary);

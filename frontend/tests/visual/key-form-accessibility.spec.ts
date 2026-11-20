@@ -30,8 +30,6 @@ for (const theme of ['light', 'dark'] as const) {
       await waitForStablePage(page)
       await page.getByRole('button', { name: '创建令牌', exact: true }).click()
       const dialog = page.getByRole('dialog')
-      const manual = dialog.getByRole('radio', { name: /手动令牌/ })
-      const auto = dialog.getByRole('radio', { name: /自动令牌/ })
       const expiry = dialog.getByRole('switch', {
         name: '过期时间',
         exact: true,
@@ -44,16 +42,11 @@ for (const theme of ['light', 'dark'] as const) {
       const expiration = dialog.locator('[name="token-expiration"]')
       const quota = dialog.locator('[name="token-quota"]')
 
-      await expect(auto).toHaveAttribute('aria-checked', 'true')
-      await auto.focus()
-      await page.keyboard.press('ArrowLeft')
-      await expect(manual).toBeFocused()
-      await expect(manual).toHaveAttribute('aria-checked', 'true')
-      await page.keyboard.press('ArrowRight')
-      await expect(auto).toBeFocused()
-      await expect(auto).toHaveAttribute('aria-checked', 'true')
+      // Creation has no routing choice; the name is the first field.
+      await expect(dialog.getByRole('radio')).toHaveCount(0)
+      await dialog.locator('[name="token-name"]').focus()
       await page.keyboard.press('Tab')
-      await expect(dialog.locator('[name="token-name"]')).toBeFocused()
+      await expect(expiry).toBeFocused()
 
       // Visually collapsed fields must also leave the keyboard sequence.
       await expiry.focus()
@@ -123,9 +116,10 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog.locator('[name="token-name"]').fill('keyboard-test')
       await dialog.getByRole('button', { name: '确认', exact: true }).click()
       await expect(dialog).toBeHidden()
+      expect(writes).toHaveLength(1)
+      expect(writes[0]).not.toHaveProperty('type')
       expect(writes).toEqual([
         expect.objectContaining({
-          type: 'auto',
           allow_user_quota_query: false,
           expired_time: -1,
           unlimited_quota: true,
@@ -175,7 +169,9 @@ for (const theme of ['light', 'dark'] as const) {
                     id: 7,
                     name: longName,
                     key: 'sk-****1234',
-                    type: 'manual',
+                    type: 'ordered',
+                    selected_only: true,
+                    route_channel_count: 0,
                     status: 1,
                     remain_quota: 500000,
                     used_quota: 250000,

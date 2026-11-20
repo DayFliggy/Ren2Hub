@@ -13,10 +13,10 @@ export const tokenRoutingMessages = {
       stream: 'Streaming request',
       streaming: 'Streaming',
       nonStreaming: 'Non-streaming',
-      orderingManual:
-        'Manual mode tries eligible channels in the saved order below.',
+      orderingOrdered:
+        'Ordered routing tries eligible channels in the saved order below.',
       orderingWeighted:
-        'Automatic mode draws a new weighted random order for every request. The list below is one sample; real requests may use a different order.',
+        'Automatic routing draws a new weighted random order for every request. The list below is one sample; real requests may use a different order.',
       reasons: {
         eligible: 'Eligible',
         entry_disabled: 'Disabled entry',
@@ -31,7 +31,7 @@ export const tokenRoutingMessages = {
         invalid_ratio_limit: 'Invalid multiplier limit',
         channel_ratio_exceeded: 'Above the multiplier limit',
         channel_concurrency_full: 'Channel concurrency limit reached',
-        not_in_manual_route: 'Not in the saved manual list',
+        not_in_manual_route: 'Not in the saved channel list',
         exact_model_preferred:
           'Skipped: another channel serves the exact model name',
       },
@@ -40,18 +40,44 @@ export const tokenRoutingMessages = {
       back: 'Back',
       modeTitle: 'Routing mode',
       keyNumber: 'Key #{id}',
-      automaticHint:
-        'Use platform channels automatically, ordered by priority, health, load and latency.',
-      manualHint: 'Choose platform channels and try them in your saved order.',
+      modes: { ordered: 'Ordered routing', auto: 'Automatic routing' },
+      modeHints: {
+        ordered:
+          'Tries your selected channels in the saved order, checking only capacity.',
+        auto: 'Picks channels by health, quality, load and admin priority. List order does not matter.',
+      },
+      scopeTitle: 'Channel scope',
+      scopes: {
+        platform: 'All platform channels',
+        selected: 'Selected channels',
+      },
+      scopeHints: {
+        platform: 'Use every channel the platform provides.',
+        selected: 'Use only the enabled channels in your list.',
+      },
+      scopeOrderedOnly: 'Ordered routing needs selected channels.',
       entriesTitle: 'Channel order',
+      selectedTitle: 'Selected channels',
       orderHint: 'Drag to reorder, or use the arrow buttons',
+      autoListHint:
+        'Automatic routing chooses among these channels; their order is ignored',
       selectedCount: '{count} enabled',
-      platform: 'All platform channels',
+      platformHint:
+        'This key uses every platform channel. Choose “Selected channels” to limit it to your own list.',
+      platformClearsList:
+        'Saving with all platform channels clears the selected channel list.',
+      allDisabled:
+        'Every channel in the list is disabled. After saving, calls with this key will be rejected; they do not fall back to platform channels.',
+      orphaned:
+        'The selected channels are no longer available, possibly removed by an administrator. Calls with this key now fail with “no available channel”. Add channels again, or switch back to all platform channels, then save.',
+      usePlatform: 'Use all platform channels',
+      selectionRequired:
+        'Add at least one channel, or use all platform channels with automatic routing.',
       policyTitle: 'Price limit',
       ratioHint:
         'Applies to both routing modes. Leave empty for no limit; otherwise enter a value up to 1000, with at most 18 decimal places.',
       emptyHint:
-        'Add a platform channel to start. Manual mode does not fall back to automatic routing.',
+        'Add at least one channel before saving. Selected channels never fall back to the rest of the platform.',
       emptyPreview: 'No matching channels in the saved configuration.',
       readOnly: 'You can view this routing configuration but cannot edit it.',
       readDenied:
@@ -63,8 +89,6 @@ export const tokenRoutingMessages = {
       unlimitedRatio: 'No multiplier limit',
       invalidRatio:
         'Enter a positive multiplier up to 1000 with at most 18 decimal places, or leave it empty.',
-      automatic: 'Automatic',
-      manual: 'Manual routing',
       add: 'Add channel',
       empty: 'No channels selected.',
       unavailable: 'Unavailable channel #{id}',
@@ -80,7 +104,6 @@ export const tokenRoutingMessages = {
         'Routing was saved, but channel candidates could not be refreshed: {error}. The previous candidate snapshot is shown. Reload before editing.',
       conflict: 'Routing changed elsewhere. Reload before saving.',
       select: 'Select a platform channel',
-      autoHint: 'Saving automatic mode clears the manual channel list.',
       noChannels: 'No platform channels are available.',
     },
   },
@@ -98,9 +121,9 @@ export const tokenRoutingMessages = {
       stream: '流式请求',
       streaming: '流式',
       nonStreaming: '非流式',
-      orderingManual: '手动模式按下方保存的顺序尝试符合条件的渠道。',
+      orderingOrdered: '顺序路由按下方保存的顺序尝试符合条件的渠道。',
       orderingWeighted:
-        '自动模式为每个请求重新按权重随机排序，下方只是其中一次抽样，实际请求的顺序可能不同。',
+        '自动路由为每个请求重新按权重随机排序，下方只是其中一次抽样，实际请求的顺序可能不同。',
       reasons: {
         eligible: '可用候选',
         entry_disabled: '条目已禁用',
@@ -115,7 +138,7 @@ export const tokenRoutingMessages = {
         invalid_ratio_limit: '倍率上限无效',
         channel_ratio_exceeded: '超过倍率上限',
         channel_concurrency_full: '渠道并发已满',
-        not_in_manual_route: '不在已保存的手动列表中',
+        not_in_manual_route: '不在已保存的渠道列表中',
         exact_model_preferred: '已有渠道支持完全相同的模型名，本渠道不参与',
       },
       title: 'Token 路由',
@@ -123,16 +146,36 @@ export const tokenRoutingMessages = {
       back: '返回',
       modeTitle: '路由方式',
       keyNumber: 'Key #{id}',
-      automaticHint: '从全平台渠道中，按优先级、健康、负载和延迟自动选择。',
-      manualHint: '选择平台渠道，按保存的顺序逐个尝试。',
+      modes: { ordered: '顺序路由', auto: '自动路由' },
+      modeHints: {
+        ordered: '按保存的顺序逐个尝试所选渠道，只检查容量。',
+        auto: '按健康、质量、负载和管理员优先级自动选择，列表顺序不影响选择。',
+      },
+      scopeTitle: '渠道范围',
+      scopes: { platform: '全平台渠道', selected: '指定渠道' },
+      scopeHints: {
+        platform: '使用平台提供的全部渠道。',
+        selected: '只使用列表中已启用的渠道。',
+      },
+      scopeOrderedOnly: '顺序路由只能使用指定渠道。',
       entriesTitle: '渠道顺序',
+      selectedTitle: '已选渠道',
       orderHint: '拖动调整顺序，或使用上下箭头',
+      autoListHint: '自动路由在这些渠道中选择，列表顺序不参与',
       selectedCount: '已启用 {count} 个渠道',
-      platform: '全平台渠道',
+      platformHint:
+        '此 Key 使用全平台渠道。如需只用自己挑选的渠道，请选择“指定渠道”。',
+      platformClearsList: '以全平台渠道保存会清空已选渠道列表。',
+      allDisabled:
+        '列表中的渠道都已停用。保存后，此 Key 的调用将被拒绝，不会回退到全平台渠道。',
+      orphaned:
+        '所选渠道已不可用，可能已被管理员删除。此 Key 的调用目前会以“没有可用渠道”失败。请重新添加渠道，或改回全平台渠道，然后保存。',
+      usePlatform: '改回全平台渠道',
+      selectionRequired: '请至少添加一个渠道，或在自动路由下改用全平台渠道。',
       policyTitle: '价格限制',
       ratioHint:
         '两种路由方式均适用。留空表示不限；最大 1000，最多 18 位小数。',
-      emptyHint: '先添加平台渠道。手动路由不会回退到自动路由。',
+      emptyHint: '保存前至少添加一个渠道。指定渠道不会回退到全平台渠道。',
       emptyPreview: '已保存的配置中没有符合条件的渠道。',
       readOnly: '你可以查看路由配置，但没有编辑权限。',
       readDenied: '你已没有查看此路由配置的权限。',
@@ -143,8 +186,6 @@ export const tokenRoutingMessages = {
       unlimitedRatio: '不限制倍率',
       invalidRatio:
         '请输入不超过 1000、最多 18 位小数的正数倍率，或留空表示不限制。',
-      automatic: '自动路由',
-      manual: '手动路由',
       add: '添加渠道',
       empty: '尚未选择渠道。',
       unavailable: '不可用渠道 #{id}',
@@ -160,7 +201,6 @@ export const tokenRoutingMessages = {
         '路由已保存，但候选渠道刷新失败：{error}。当前显示的是先前的候选快照，请重新加载后再编辑。',
       conflict: '路由已被其他操作修改，请重新加载后保存。',
       select: '选择平台渠道',
-      autoHint: '保存自动模式会清空手动渠道列表。',
       noChannels: '暂无可供选择的平台渠道。',
     },
   },

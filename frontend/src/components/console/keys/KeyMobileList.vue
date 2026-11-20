@@ -13,6 +13,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
 import IconButton from '@/components/common/IconButton.vue'
+import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import type { TokenSummary } from '@/types/console'
 import { formatDate, formatQuota } from '@/utils/format'
@@ -112,9 +113,7 @@ const { t: configT } = useI18n({
           <div class="min-w-0">
             <dt class="text-[var(--text-tertiary)]">{{ t('keys.colType') }}</dt>
             <dd class="mt-1.5" data-token-type>
-              <StatusChip :tone="token.type === 'auto' ? 'info' : 'accent'">
-                {{ t(`keys.type.${token.type}`) }}
-              </StatusChip>
+              <KeyRouteChip :token="token" />
             </dd>
           </div>
           <div class="min-w-0">
@@ -201,7 +200,9 @@ const { t: configT } = useI18n({
 
 <style scoped>
 /* B1 Studio: neutralize non-status type badge in dark mode to prevent visual clutter */
-html.dark [data-token-type] :deep([data-handdrawn='chip']) {
+html.dark
+  [data-token-type]
+  :deep([data-handdrawn='chip']:not([data-route-warning])) {
   background: var(--surface-muted) !important;
   color: var(--text-secondary) !important;
   border-left-color: var(--border-default) !important;

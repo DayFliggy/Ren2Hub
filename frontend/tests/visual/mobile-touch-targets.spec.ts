@@ -416,7 +416,8 @@ test('a scrolled select panel follows its trigger without flashing or losing its
 test('ChipPicker panel opened upward moves with its content as matches shrink', async ({
   page,
 }) => {
-  await page.setViewportSize(MOBILE)
+  // A short phone keeps the create dialog scrollable, so the field can sit low.
+  await page.setViewportSize({ width: MOBILE.width, height: 640 })
   await configureStablePage(page, { theme: 'light', authenticated: true })
   await page.route('**/api/user/models', (route) =>
     route.fulfill({
@@ -436,7 +437,7 @@ test('ChipPicker panel opened upward moves with its content as matches shrink', 
   // Put the field low in the viewport so the panel opens upward.
   await input.evaluate((element) => {
     const body = element.closest('.subtle-scroll')!
-    body.scrollTop -= 844 - element.getBoundingClientRect().bottom - 60
+    body.scrollTop -= innerHeight - element.getBoundingClientRect().bottom - 60
   })
   await input.click()
   const panel = page.locator('[data-floating-panel]')

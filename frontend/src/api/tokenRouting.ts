@@ -14,9 +14,12 @@ export interface TokenRouteEntry {
   enabled: boolean
   position: number
 }
+export type TokenRouteMode = 'auto' | 'ordered'
+/** selected_only=false uses every platform channel; true limits routing to the saved entries. */
 export interface TokenRoute {
   token_id: number
-  mode: 'auto' | 'manual'
+  mode: TokenRouteMode
+  selected_only: boolean
   version: number
   max_channel_ratio: string | null
   entries: TokenRouteEntry[]
@@ -42,13 +45,17 @@ function parseMaxRatio(value: unknown): string | null {
 export function parseTokenRoute(value: unknown): TokenRoute {
   if (
     !isRecord(value) ||
-    (value.mode !== 'auto' && value.mode !== 'manual') ||
+    (value.mode !== 'auto' && value.mode !== 'ordered') ||
     !Array.isArray(value.entries)
   )
     invalidResponse('/api/token/:id/routing')
   return {
     token_id: requiredStrictInteger(value.token_id, '/api/token/:id/routing'),
     mode: value.mode,
+    selected_only: requiredBoolean(
+      value.selected_only,
+      '/api/token/:id/routing'
+    ),
     version: requiredStrictInteger(value.version, '/api/token/:id/routing'),
     max_channel_ratio: parseMaxRatio(value.max_channel_ratio),
     entries: value.entries.map((entry) => {
@@ -70,13 +77,13 @@ export interface TokenRoutePreviewQuery {
 }
 export interface TokenRoutePreview {
   transport: RouteTransport
-  mode: 'auto' | 'manual'
+  mode: TokenRouteMode
   version: number
   model: string
   path: string
   stream: boolean
   /** Automatic order is drawn per request, so its preview is one sample. */
-  ordering: 'manual' | 'weighted_random_per_request'
+  ordering: 'ordered' | 'weighted_random_per_request'
   entries: Array<{
     channel_id: number
     name?: string
@@ -104,9 +111,9 @@ export const tokenRoutingApi = {
     )
     if (
       !isRecord(value) ||
-      (value.mode !== 'auto' && value.mode !== 'manual') ||
+      (value.mode !== 'auto' && value.mode !== 'ordered') ||
       (value.transport !== 'http' && value.transport !== 'websocket') ||
-      (value.ordering !== 'manual' &&
+      (value.ordering !== 'ordered' &&
         value.ordering !== 'weighted_random_per_request') ||
       !Array.isArray(value.entries)
     )
@@ -141,21 +148,22 @@ export const tokenRoutingApi = {
     id: number,
     value: Pick<
       TokenRoute,
-      'mode' | 'version' | 'entries' | 'max_channel_ratio'
+      'mode' | 'selected_only' | 'version' | 'entries' | 'max_channel_ratio'
     >
   ) {
+    // The platform scope stores no entries, so a hidden draft list is dropped here.
     return parseTokenRoute(
       await api.put(endpoint(id), {
         mode: value.mode,
+        selected_only: value.selected_only,
         version: value.version,
         max_channel_ratio: value.max_channel_ratio,
-        entries:
-          value.mode === 'auto'
-            ? []
-            : value.entries.map(({ channel_id, enabled }) => ({
-                channel_id,
-                enabled,
-              })),
+        entries: value.selected_only
+          ? value.entries.map(({ channel_id, enabled }) => ({
+              channel_id,
+              enabled,
+            }))
+          : [],
       })
     )
   },

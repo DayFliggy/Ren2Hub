@@ -215,27 +215,71 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
     })
     await test.step('每 Key 路由通过页面保存并在刷新后保持', async () => {
       await page.locator(`a[href="/keys/${tokenId}/routing"]:visible`).click()
-      for (const mode of ['manual', 'auto'] as const) {
-        const radio = page.getByRole('radio', {
-          name: mode === 'manual' ? '手动路由' : '自动路由',
-          exact: true,
-        })
-        await radio.check()
-        const saved = page.waitForResponse(
-          (response) =>
-            new URL(response.url()).pathname ===
-              `/api/token/${tokenId}/routing` &&
-            response.request().method() === 'PUT'
+      // The empty install has no channels, so this flow checks the default
+      // scope, the client-side block on an empty ordered list, and a saved
+      // platform scope; selected-channel saves are covered with fixtures.
+      const orderedMode = page.getByRole('radio', {
+        name: '顺序路由',
+        exact: true,
+      })
+      const automatic = page.getByRole('radio', {
+        name: '自动路由',
+        exact: true,
+      })
+      const platform = page.getByRole('radio', {
+        name: '全平台渠道',
+        exact: true,
+      })
+      const selectedScope = page.getByRole('radio', {
+        name: '指定渠道',
+        exact: true,
+      })
+      const save = page.getByRole('button', { name: '保存', exact: true })
+      await expect(automatic).toBeChecked()
+      await expect(platform).toBeChecked()
+      const writes: string[] = []
+      const recordWrite = (request: import('@playwright/test').Request) => {
+        if (
+          request.method() === 'PUT' &&
+          new URL(request.url()).pathname === `/api/token/${tokenId}/routing`
         )
-        await page.getByRole('button', { name: '保存', exact: true }).click()
-        const response = await saved
-        expect(response.status()).toBe(200)
-        const body = await response.json()
-        expect(body.success).toBe(true)
-        expect(body.data.mode).toBe(mode)
-        await page.reload()
-        await expect(radio).toBeChecked()
+          writes.push(request.url())
       }
+      page.on('request', recordWrite)
+      try {
+        await orderedMode.check()
+        await expect(selectedScope).toBeChecked()
+        await expect(platform).toBeDisabled()
+        await save.click()
+        await expect(
+          page.getByRole('alert').filter({ hasText: '请至少添加一个渠道' })
+        ).toBeVisible()
+        expect(writes).toEqual([])
+      } finally {
+        page.off('request', recordWrite)
+      }
+      await automatic.check()
+      await platform.check()
+      const saved = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname ===
+            `/api/token/${tokenId}/routing` &&
+          response.request().method() === 'PUT'
+      )
+      await save.click()
+      const response = await saved
+      expect(response.status()).toBe(200)
+      const body = await response.json()
+      expect(body.success).toBe(true)
+      expect(body.data).toMatchObject({
+        mode: 'auto',
+        selected_only: false,
+        entries: [],
+        version: 1,
+      })
+      await page.reload()
+      await expect(automatic).toBeChecked()
+      await expect(platform).toBeChecked()
       await layout(page, 'Key 路由')
       await page.screenshot({
         path: info.outputPath('token-routing.png'),

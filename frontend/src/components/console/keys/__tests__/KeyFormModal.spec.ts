@@ -58,6 +58,8 @@ describe('KeyFormModal', () => {
         id: 7,
         name: 'runtime-unit',
         type: 'auto',
+        selected_only: false,
+        route_channel_count: 0,
         remain_quota: quota,
         used_quota: '0',
         unlimited: false,
@@ -79,19 +81,17 @@ describe('KeyFormModal', () => {
           '/api/token/',
           expect.objectContaining({ remain_quota: quota })
         )
+        expect(wrapper.emitted('saved')).toEqual([[false]])
       } finally {
         wrapper.unmount()
         configureQuotaDisplay({ quota_per_unit: 500_000 })
       }
     }
   )
-  it('defaults new tokens to auto and keeps advanced restrictions hidden until expanded', async () => {
+  it('offers no routing choice on creation and keeps advanced restrictions hidden until expanded', async () => {
     const wrapper = mountForm()
-    const typeOptions = [...document.body.querySelectorAll('[role="radio"]')]
 
-    expect(typeOptions).toHaveLength(2)
-    expect(typeOptions[0].getAttribute('aria-checked')).toBe('false')
-    expect(typeOptions[1].getAttribute('aria-checked')).toBe('true')
+    expect(document.body.querySelectorAll('[role="radio"]')).toHaveLength(0)
     expect(advancedTrigger().getAttribute('aria-expanded')).toBe('false')
     expect(document.querySelector('[name="token-custom-key"]')).toBeNull()
     expect(
@@ -117,6 +117,8 @@ describe('KeyFormModal', () => {
       name: 'restricted',
       key_preview: 'sk-abc••••wxyz',
       type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
       status: 1,
       used_quota: '0',
       remain_quota: 0,
@@ -143,7 +145,7 @@ describe('KeyFormModal', () => {
     wrapper.unmount()
   })
 
-  it('preserves the default balance permission when advanced settings stay closed', async () => {
+  it('creates a key without a routing type and reports the creation', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(null)
     const wrapper = mountForm()
     try {
@@ -161,8 +163,10 @@ describe('KeyFormModal', () => {
       await flushPromises()
       expect(post).toHaveBeenCalledWith(
         '/api/token/',
-        expect.objectContaining({ allow_user_quota_query: true, type: 'auto' })
+        expect.objectContaining({ allow_user_quota_query: true })
       )
+      expect(post.mock.calls[0]![1]).not.toHaveProperty('type')
+      expect(wrapper.emitted('saved')).toEqual([[true]])
     } finally {
       wrapper.unmount()
     }
@@ -174,6 +178,8 @@ describe('KeyFormModal', () => {
       name: 'private-balance',
       key_preview: 'sk-****1234',
       type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
       status: 1,
       used_quota: '0',
       remain_quota: 0,
@@ -215,6 +221,8 @@ describe('KeyFormModal', () => {
       id: 2,
       name: 'original',
       type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
       remain_quota: 1,
       used_quota: '0',
       unlimited: false,
@@ -276,6 +284,8 @@ describe('KeyFormModal expiry', () => {
       id: 3,
       name: 'expiring',
       type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
       remain_quota: 0,
       used_quota: '0',
       unlimited: true,
