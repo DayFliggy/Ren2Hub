@@ -17,6 +17,9 @@ import (
 // prefer 模式下渠道不合格、暂停或满载时退回正常选路，存储等技术错误不当作“不合格”
 // 处理，照常返回 500。
 func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Channel, selectErr *ChannelSelectError, decided bool) {
+	// Each selection decides afresh whether the request leaves its binding; a
+	// preselection the request gave up does not carry over.
+	c.Set(ginKeyAffinityExitFrom, 0)
 	preferred, found := GetPreferredChannelByAffinity(c, modelName)
 	if !found {
 		return nil, nil, false
@@ -33,7 +36,6 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		return row, nil, true
 	}
 	if err == nil {
-		c.Set(ginKeyAffinityExitFrom, 0)
 		MarkChannelAffinityUsed(c, row.Id)
 		if !routePreselecting(c) {
 			source := "prefer"
@@ -74,7 +76,7 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 }
 
 // ginKeyAffinityExitFrom holds the binding the request's last affinity
-// selection left for another channel, 0 once a selection used it.
+// selection left for another channel, 0 when that selection did not leave one.
 const ginKeyAffinityExitFrom = "channel_affinity_exit_from"
 
 // affinityExitKeepsBinding reports a request that left its binding for one

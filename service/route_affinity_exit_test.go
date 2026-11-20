@@ -75,6 +75,53 @@ func TestPreferAffinityLeavesSeverelyDowngradedChannel(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, 22, bound, "the request left the binding without moving it")
 	})
+	t.Run("a reselection after a plugin preselection left the binding writes the first binding", func(t *testing.T) {
+		db := setupAffinityChannels(t)
+		createRouteChannel(t, db, 33, "route-model")
+		isolateRouteQualities(t)
+		rateChannels(t, 20000)
+		c, key := enableRouteAffinity(t, "prefer", 22)
+		operation_setting.GetChannelAffinitySetting().SwitchOnSuccess = false
+		preselected, selectErr := PreselectTaskPluginEndpointChannel(c, "route-model")
+		require.Nil(t, selectErr)
+		require.Equal(t, 11, preselected.Id)
+		// The binding expires and the preselected channel is disabled before
+		// the request reacquires it, so it selects again without a binding.
+		_, err := getChannelAffinityCache().DeleteMany([]string{key})
+		require.NoError(t, err)
+		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", preselected.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
+		reacquired, selectErr := ReacquireSelectedRouteChannel(c, preselected.Id, "route-model")
+		require.Nil(t, selectErr)
+		require.Nil(t, reacquired)
+		selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+		require.Nil(t, selectErr)
+		require.NotNil(t, selected)
+
+		c.Set("channel_id", selected.Id)
+		RecordChannelAffinity(c, selected.Id)
+		bound, found := affinityBinding(t, key)
+		require.True(t, found, "a session without a binding gets its first one")
+		require.Equal(t, selected.Id, bound)
+	})
+	t.Run("a reacquired plugin preselection that left the binding keeps it", func(t *testing.T) {
+		setupAffinityChannels(t)
+		isolateRouteQualities(t)
+		rateChannels(t, 20000)
+		c, key := enableRouteAffinity(t, "prefer", 22)
+		operation_setting.GetChannelAffinitySetting().SwitchOnSuccess = false
+		preselected, selectErr := PreselectTaskPluginEndpointChannel(c, "route-model")
+		require.Nil(t, selectErr)
+		require.Equal(t, 11, preselected.Id)
+		reacquired, selectErr := ReacquireSelectedRouteChannel(c, preselected.Id, "route-model")
+		require.Nil(t, selectErr)
+		require.Equal(t, 11, reacquired.Id)
+
+		c.Set("channel_id", reacquired.Id)
+		RecordChannelAffinity(c, reacquired.Id)
+		bound, found := affinityBinding(t, key)
+		require.True(t, found)
+		require.Equal(t, 22, bound)
+	})
 	t.Run("band 1 keeps the bound channel", func(t *testing.T) {
 		setupAffinityChannels(t)
 		isolateRouteQualities(t)

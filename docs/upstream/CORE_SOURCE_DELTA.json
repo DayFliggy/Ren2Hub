@@ -13076,7 +13076,7 @@
       "path": "service/route_affinity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e0d911fd65be35d4420fb8d22e233ab70e97d181cf8b4cc1e4df2f0913ad48f5",
+      "local_sha256": "3efa439d1bd7fdb592a533c1bb10ae394030d44fb36b5a0879ef0d70c3250c18",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13095,7 +13095,7 @@
       "path": "service/route_affinity_exit_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7254fdd450e63d53ac590cd5a61d14eb310784f8918b98b712fd2c53d99ff505"
+      "local_sha256": "a67bba6b48a135df062e11885ae2a76b22d01beccaaea7fdd59ccca5a869bfd8"
     },
     {
       "path": "service/route_affinity_strict_test.go",
