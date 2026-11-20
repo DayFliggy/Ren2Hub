@@ -120,11 +120,10 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | frontend | development | npm | `vite` | `8.1.5` | MIT | [79](#license-79) |
 | frontend | development | npm | `vitest` | `4.1.11` | MIT | [80](#license-80) |
 | frontend | development | npm | `vue-tsc` | `3.3.8` | MIT | [81](#license-81) |
-| backend | production | Go | `github.com/HugoSmits86/nativewebp` | `v1.3.0` | MIT | [82](#license-82) |
-| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.3` | MIT | [7](#license-7) |
-| backend | production | Go | `github.com/ledongthuc/pdf` | `v0.0.0-20261020125853-5e46805f718e` | BSD-3-Clause | [83](#license-83) |
-| frontend | development | npm | `harfbuzzjs` | `1.6.4` | MIT | [84](#license-84) |
-| frontend | development | npm | `subset-font` | `2.9.0` | BSD-3-Clause | [85](#license-85) |
+| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.4` | MIT | [7](#license-7) |
+| backend | production | Go | `github.com/ledongthuc/pdf` | `v0.0.0-20261020125853-5e46805f718e` | BSD-3-Clause | [82](#license-82) |
+| frontend | development | npm | `harfbuzzjs` | `1.6.4` | MIT | [83](#license-83) |
+| frontend | development | npm | `subset-font` | `2.9.0` | BSD-3-Clause | [84](#license-84) |
 
 ## Supplied license texts
 
@@ -637,7 +636,7 @@ SOFTWARE.
 ### License 7
 
 - `github.com/Calcium-Ion/go-epay v0.0.6 — LICENSE`
-- `github.com/MoeForge/moego v0.1.0-alpha.3 — LICENSE`
+- `github.com/MoeForge/moego v0.1.0-alpha.4 — LICENSE`
 
 ```text
 MIT License
@@ -7889,34 +7888,6 @@ SOFTWARE.
 
 ### License 82
 
-- `github.com/HugoSmits86/nativewebp v1.3.0 — LICENSE`
-
-```text
-MIT License
-
-Copyright (c) 2024 Hugo Smits
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 83
-
 - `github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e — LICENSE`
 
 ```text
@@ -7949,7 +7920,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 84
+### License 83
 
 - `harfbuzzjs 1.6.4 — LICENSE`
 
@@ -7975,7 +7946,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 85
+### License 84
 
 - `subset-font 2.9.0 — LICENSE`
 

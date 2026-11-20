@@ -718,15 +718,6 @@
     "area": "backend",
     "scope": "production",
     "ecosystem": "Go",
-    "name": "github.com/HugoSmits86/nativewebp",
-    "version": "",
-    "license": "MIT",
-    "text_refs": []
-  },
-  {
-    "area": "backend",
-    "scope": "production",
-    "ecosystem": "Go",
     "name": "github.com/MoeForge/moego",
     "version": "",
     "license": "MIT",
