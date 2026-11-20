@@ -1,6 +1,6 @@
 # NewAPI 插件
 
-Ren2Hub沿用 NewAPI `3a407cc9b064fe79a4ffac4146b2690c465dc929` 的 JS 任务/提供商/请求处理插件运行时、元数据、用量表达式、协议绑定及管理 API。插件能力不是本地独有。ABI 正文、类型和 schema 按该适配基线校验；来源差异见[同步账本](../upstream/SYNC_LEDGER.md)：
+Ren2Hub沿用 NewAPI `48f9df96ea7c68eae04a0f3687869f232f48929f` 的 JS 任务/提供商/请求处理插件运行时、元数据、用量表达式、协议绑定及管理 API。插件能力不是本地独有。ABI 正文、类型和 schema 按该适配基线校验；来源差异见[同步账本](../upstream/SYNC_LEDGER.md)：
 
 - [v1文档](v1.md)
 - [TypeScript类型](v1.d.ts)

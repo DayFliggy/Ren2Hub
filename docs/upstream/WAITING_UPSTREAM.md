@@ -23,7 +23,7 @@
 
 ## HTTP 流失败后的会话亲和写回
 
-冻结点 `3a407cc9b` 的 `middleware/distributor.go` 在处理请求后根据 HTTP 状态码写回亲和。客户端已收到 200 后，即使上游最终失败，`SwitchOnSuccess` 也可能把会话绑定到最后一次尝试的渠道，或者续期原绑定。此项单独跟踪，不计入上表的冻结诊断。
+[同步账本](SYNC_LEDGER.md)记录的冻结点 的 `middleware/distributor.go` 在处理请求后根据 HTTP 状态码写回亲和。客户端已收到 200 后，即使上游最终失败，`SwitchOnSuccess` 也可能把会话绑定到最后一次尝试的渠道，或者续期原绑定。此项单独跟踪，不计入上表的冻结诊断。
 
 复现使用真实路由 `POST /v1/messages`、启用亲和的 Claude 模型和本地模拟上游。请求设置 `stream: true` 和可命中规则的 `metadata.user_id`。处理结束后用同一会话键查看绑定：
 

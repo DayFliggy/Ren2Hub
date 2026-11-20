@@ -33291,7 +33291,7 @@
       "regression": "controller/plugin_protocol_test.go:TestDisconnectedTaskProtocolsLogLocalSubmissionRejection"
     },
     "controller/plugin_protocol_image.go": {
-      "local_sha256": "6dc9f47e9247f17272636fbae771ed5248c4254a7f4ce937f0df5eeacd3c319d",
+      "local_sha256": "6f72132e29a5061fcf4446bfedcd34fb0ae7fcb1a7118bb402d88b16157d5eba",
       "hunks": [
         {
           "header": "@@ -16,7 +16,6 @@",
@@ -33303,8 +33303,7 @@
           "sha256": "9e1ec515cc554e5b62a7a2d39ae7e9778004f050dcc0259fb3bf358ad9384676",
           "basis": "图像任务提交的 defer 走共用收尾函数，客户端断开后仍可按请求 ID 追踪实际的本地拒绝。"
         }
-      ],
-      "regression": "controller/plugin_protocol_test.go:TestDisconnectedTaskProtocolsLogLocalSubmissionRejection"
+      ]
     },
     "controller/request_plugin.go": {
       "local_sha256": "7da24d88abaff9fa0bae109047bed82e8c81b8606378397ecab2b0777553eee0",
@@ -33637,12 +33636,12 @@
       ]
     },
     "pkg/jsplugin/routing.go": {
-      "local_sha256": "7ed9121094bae30396ae7ee025f8cbdcbe10114f2bca03c2c6d93277c11ba1c4",
+      "local_sha256": "82ba332403d7cda1c52b98b30e3c834a960c942e07e79d064596b3a383f6eabb",
       "hunks": [
         {
-          "header": "@@ -450,6 +450,15 @@",
-          "sha256": "1aa2b1118aabbb7029edf1b52a34a7ed7ad68f24ffafa216398f294e1c7c7b4d",
-          "basis": "Vue 前端与通用插件路由共存。（对应原审查 pkg/jsplugin/routing.go#1）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "header": "@@ -453,6 +453,15 @@",
+          "sha256": "0512e62a62319aa3f309f3ad3350d0f57fc07e3f6b61da2a885777bf37891a8b",
+          "basis": "Vue 前端与通用插件路由共存。（对应原审查 pkg/jsplugin/routing.go#1）"
         }
       ]
     },
@@ -33819,7 +33818,7 @@
       ]
     },
     "relay/requestplugin/plan.go": {
-      "local_sha256": "adccf40cda2a4754ee9c2c534066e18714e00fe4926352032deb98ab3e5d8265",
+      "local_sha256": "c4ec5c89648558e388255c0ea1e34e85e0bb6638fa6cbad5d2c879f8f1875d96",
       "hunks": [
         {
           "header": "@@ -196,13 +196,13 @@",
@@ -33834,7 +33833,7 @@
         {
           "header": "@@ -270,15 +263,15 @@",
           "sha256": "07427577d92b20ef8b8e7cccba5bc98076aafa2f7ac958516725b2927934578d",
-          "basis": "无业务分组，保留请求/响应插件全部原生阶段。（对应原审查 relay/requestplugin/plan.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "无业务分组，保留请求/响应插件全部原生阶段。（对应原审查 relay/requestplugin/plan.go#3）"
         },
         {
           "header": "@@ -349,7 +342,7 @@",
@@ -33844,7 +33843,7 @@
         {
           "header": "@@ -469,12 +462,12 @@",
           "sha256": "cfae2888a32d762ab14e8ce1fa69796a2b22e37f586a393a61fa7f6100f23d45",
-          "basis": "无业务分组，保留请求/响应插件全部原生阶段。（对应原审查 relay/requestplugin/plan.go#5）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "无业务分组，保留请求/响应插件全部原生阶段。（对应原审查 relay/requestplugin/plan.go#5）"
         }
       ]
     },
@@ -34255,6 +34254,181 @@
           "header": "@@ -507,7 +425,7 @@",
           "sha256": "7a088523f631ff4f6a127c7e07344a043cfcb6aff10d2a025ad4aac0e04f8987",
           "basis": "更新响应使用脱敏路由摘要。"
+        }
+      ]
+    },
+    "controller/relay.go": {
+      "local_sha256": "12f818901d003642ef93e7f1fb88bb43799425467134a3f3b80a5352c75ef872",
+      "hunks": [
+        {
+          "header": "@@ -73,7 +73,6 @@",
+          "sha256": "33e7ef263bb9336c533082ea0195608dae42661c1d08ce5891d7069a088d8b14",
+          "basis": "移除业务分组的废弃读点。"
+        },
+        {
+          "header": "@@ -141,7 +140,7 @@",
+          "sha256": "65208aee5ebd040f02f60b32bfe9551024364facbb3215f0b7daf7bade327fc2",
+          "basis": "入口插件终止时保存最终路由策略。"
+        },
+        {
+          "header": "@@ -169,6 +168,8 @@",
+          "sha256": "8db58ef3597c821e4fe6d8e1098978cd1ab5f1c04b88d875364f8390de1e59d3",
+          "basis": "请求结束时记录本轮渠道结果并统一退款。"
+        },
+        {
+          "header": "@@ -183,16 +184,9 @@",
+          "sha256": "14d9e3467dca7eec68fcc597786a1c9c2ee1a161463903c8bc4db470618e562e",
+          "basis": "选定渠道再预扣以采用其倍率，重试不传业务分组。"
+        },
+        {
+          "header": "@@ -208,11 +202,11 @@",
+          "sha256": "eb372244806c2e3d95849c09bac85c7ce7039520c9910058e0dc702902aeb9db",
+          "basis": "候选耗尽保留上一次上游错误，使用已选渠道计价。"
+        },
+        {
+          "header": "@@ -244,6 +238,7 @@",
+          "sha256": "901a64d1dda582ba4922906b513590b9ce89d5ac7cff421b28bc9c21361dbdee",
+          "basis": "重试前完成上一轮渠道观测。"
+        },
+        {
+          "header": "@@ -255,7 +250,7 @@",
+          "sha256": "81d72eff0ba62b9883b286765c3de54b41991d0dc96efe3c01de2633422eba18",
+          "basis": "故障处理按渠道唯一凭据记录。"
+        },
+        {
+          "header": "@@ -286,38 +281,6 @@",
+          "sha256": "31d04097fc9e0da8cacbda19496e3058e1e25ce85b50943d9c9a8a12ba35f27d",
+          "basis": "Claude 计数使用独立的原生上游转发入口。"
+        },
+        {
+          "header": "@@ -326,37 +289,25 @@",
+          "sha256": "0edf20c6b0719b60703120ec2439c8f7e643709e51fa571db82366d8189d1723",
+          "basis": "首次尝试复用已选渠道，重试按 Token 路由重新准入并初始化渠道元数据。"
+        },
+        {
+          "header": "@@ -395,7 +346,7 @@",
+          "sha256": "9594d2bbc491e110fc8d5f208f59e85682818ffa6e336d34bffd34e3bc610653",
+          "basis": "MJ 图片种子复用当前请求的渠道和并发上下文。"
+        },
+        {
+          "header": "@@ -451,7 +402,7 @@",
+          "sha256": "1e00cf36a218f8a82bf101f0c27c5c8c9c8e65342f5dfa5f3a9899b7aa0bd07b",
+          "basis": "MJ 终止时记录最终路由策略。"
+        },
+        {
+          "header": "@@ -604,11 +555,13 @@",
+          "sha256": "44b8091b538b3ea24a1edf6d17e8bdf7badd89160b856310325f6088ecc4adfa",
+          "basis": "任务结束释放渠道并发槽，并保留最近一次已发送请求的失败。"
+        },
+        {
+          "header": "@@ -644,7 +597,7 @@",
+          "sha256": "60d047e9ee7184009812df7153813f1c8dc2bacf944c04e63b3fe97ec9a54635",
+          "basis": "任务入口插件拒绝时记录最终路由策略。"
+        },
+        {
+          "header": "@@ -658,13 +611,15 @@",
+          "sha256": "09fc000b7cc084f8c6d666c8f3e66714d8d6d6635c4a15fc9c57f9ccad2a4b6a",
+          "basis": "每次任务尝试清空流状态、业务拒绝和输出计数，重试参数不带分组。上游的 RetryIndex 与运行时请求头清理照原文。"
+        },
+        {
+          "header": "@@ -678,8 +633,18 @@",
+          "sha256": "6d093c5ce014d8c5b2ddaaa211a56431987f517262f795bf36021bf2ae3a04b9",
+          "basis": "续作复用原任务渠道并重新检查准入与容量，取消和固定渠道准入失败分别记录。"
+        },
+        {
+          "header": "@@ -691,9 +656,20 @@",
+          "sha256": "a4463c9be4765c125fb0ed657db56473271b786ff8ec65c99d98ef5ffdfba730",
+          "basis": "选择渠道后检查取消。候选耗尽时优先保留此前实际发送的上游错误。"
+        },
+        {
+          "header": "@@ -712,6 +688,15 @@",
+          "sha256": "0980b97ba266684f580098241f19cac1522a10e1d53a5fb8b5d6e4ab0d1773dc",
+          "basis": "按轮记录是否实际发送、本地业务拒绝与渠道结果。"
+        },
+        {
+          "header": "@@ -723,13 +708,15 @@",
+          "sha256": "5b6a90c4f669d58f213923233cfbec10fc5d9ad9dd0b105cf079d9bb9942fd3f",
+          "basis": "只保存已发请求的上游错误，渠道错误使用单把 Key。"
+        },
+        {
+          "header": "@@ -794,12 +781,11 @@",
+          "sha256": "ebf1829e1d0782f87bbd7c48d6884b2a7b85a7cb0359402b17a3e47047cd52b3",
+          "basis": "钱包任务去掉订阅标识，价格快照按渠道倍率保存。"
+        }
+      ]
+    },
+    "model/task.go": {
+      "local_sha256": "1a41cf97ec221782d4ae9dac7490d3d6e2c7b1d21c184890afcd287bdf31e3d9",
+      "hunks": [
+        {
+          "header": "@@ -55,7 +55,6 @@",
+          "sha256": "3803728f0664fd9854d3c71dfebb3ef7f6028dc0316053ebbc7dc70ad13bae19",
+          "basis": "移除任务表上的业务分组。"
+        },
+        {
+          "header": "@@ -117,8 +116,7 @@",
+          "sha256": "3c9d040956725b1031900eaa9b37bca82ec6517f42e8ad24ee076039c3f2cd07",
+          "basis": "任务资金来源保留钱包，去掉订阅标识。"
+        },
+        {
+          "header": "@@ -191,7 +189,7 @@",
+          "sha256": "8b083757603111c2cd9ed39d02ea81e45e83d41978d4b5bd1b7e78fe6cac5de2",
+          "basis": "任务计价快照保存渠道倍率。"
+        },
+        {
+          "header": "@@ -239,7 +237,7 @@",
+          "sha256": "a1232129ed007d574fc6081e824a9e821078895271cd61beb03b265f59f4a02e",
+          "basis": "私有任务数据的空值判断不检查已退役的订阅标识。"
+        },
+        {
+          "header": "@@ -301,7 +299,6 @@",
+          "sha256": "d036dff315159141c56c7c494b0b50ad2945365218ae339891874fbbe47e452e",
+          "basis": "任务创建不再写业务分组。"
+        }
+      ]
+    },
+    "relay/channel/task/jsplugin/adaptor.go": {
+      "local_sha256": "5bbdd95da0754f10eebe7b28e6495103652d719d5c6857a478e82aedd9865a05",
+      "hunks": [
+        {
+          "header": "@@ -848,14 +848,14 @@",
+          "sha256": "9a9e7a23175f75b81f0eb177d4f7880530c13c743d196237f3f93999a796255c",
+          "basis": "批量轮询凭据解析继承请求的取消与超时。"
+        },
+        {
+          "header": "@@ -872,18 +872,18 @@",
+          "sha256": "6f714578227e19842a3ad5326dc39e3d174aab4bda7e9b6ba9b64cb3a9289259",
+          "basis": "批量查询描述、HTTP 获取和单任务凭据解析传递同一轮询上下文。"
+        },
+        {
+          "header": "@@ -892,11 +892,11 @@",
+          "sha256": "060f0681924eba97258a390902b2c94a0d93ee03b665a16d0a019a0fedbab5b3",
+          "basis": "单任务查询描述与 HTTP 获取使用调用方的上下文。"
+        },
+        {
+          "header": "@@ -905,7 +905,7 @@",
+          "sha256": "c3f4cf31f82f615c2e6f0bc08fcbbb013b19234e26e015a7c182817b5c2cd399",
+          "basis": "获取任务描述的请求函数接收轮询上下文。"
+        },
+        {
+          "header": "@@ -933,7 +933,7 @@",
+          "sha256": "a475d6518d1c3fb129cfa36d88848e21e4e41f7f5dc667b9ca3ebab97f0a4f94",
+          "basis": "HTTP 请求绑定轮询上下文，取消时释放占用。"
+        },
+        {
+          "header": "@@ -1073,7 +1073,7 @@",
+          "sha256": "1e41261e5e082ec8b65fdded46cbcbb0da40352a9b00420325091965e2c483e9",
+          "basis": "批量结果解析插件沿用该 HTTP 响应的请求上下文。"
+        },
+        {
+          "header": "@@ -1145,7 +1145,7 @@",
+          "sha256": "5e5a1eee30d5ed55e1a78cae0f7bc253fbf33a73b0eb86ceaa6bff335863d02f",
+          "basis": "单任务结果解析插件沿用该 HTTP 响应的请求上下文。"
+        },
+        {
+          "header": "@@ -2303,3 +2303,10 @@",
+          "sha256": "46eee62a84dae19b4cef29c28561103067a4986fcf1aaf35814efd638dc9fc8b",
+          "basis": "通过响应取原请求上下文，兼容没有关联 HTTP 请求的响应。"
         }
       ]
     }

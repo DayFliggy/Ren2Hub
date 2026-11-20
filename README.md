@@ -1,6 +1,6 @@
 # Ren2Hub
 
-Ren2Hub / DayFliggy is a single-node AI gateway with a Vue console, based on [NewAPI](https://github.com/QuantumNous/new-api). NewAPI is the only upstream; the current core source baseline is `3a407cc9b064fe79a4ffac4146b2690c465dc929`.
+Ren2Hub / DayFliggy is a single-node AI gateway with a Vue console, based on [NewAPI](https://github.com/QuantumNous/new-api). NewAPI is the only upstream. The [sync ledger](docs/upstream/SYNC_LEDGER.md) records the current core source baseline.
 
 Wallet billing, protocols, task plugins and permissions follow NewAPI. Model default prices and built-in billing expressions are excluded. Generic provider plugins support login, credential refresh and account management. Business groups are removed. Each API token uses automatic or ordered channel routing within its selected scope, with channel price ratios and immediate user/channel concurrency limits. Extensions include support tickets, GMPay top-ups, a shared model catalog, usage reporting and referral rewards. The wallet is the only funding source. Site subscription plans, legacy Codex/type 57 account integration, io.net, Playground, React and Electron are outside this build.
 

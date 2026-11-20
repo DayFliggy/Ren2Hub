@@ -1,0 +1,302 @@
+{
+ "upstream": "QuantumNous/new-api",
+ "role": "唯一上游",
+ "upstream_base_sha": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
+ "upstream_target_sha": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+ "implementation_base_sha": "26841804d8019141aab5f65565714f8ee2c53c6e",
+ "candidate_sha": null,
+ "verification": "记录源码处置，定向测试结果见各提交说明。",
+ "counts": {
+  "absorbed_with_local_diff": 14,
+  "absorbed": 7
+ },
+ "files": [
+  {
+   "path": ".env.example",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "9dff6413c5b68c2fcbeba10497aaf1836b5ec23c87c66ecef203e304c452971b",
+   "local_sha256": "0990a770a9644e8cd118b1aa0a7436611668aa8a0b5db72660a4d2bed00fa121",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "补入图片重编码并发配置项，保留 Ren2Hub 的环境配置示例。"
+  },
+  {
+   "path": "controller/plugin_protocol_image.go",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e"
+   ],
+   "upstream_sha256": "5afb772d4318e1ca2919f1341a2098801a70bdba7a473b885dd764ea6f15d2d3",
+   "local_sha256": "6f72132e29a5061fcf4446bfedcd34fb0ae7fcb1a7118bb402d88b16157d5eba",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "图片协议应用所选渠道的参数覆盖，保留本地提交结果诊断。"
+  },
+  {
+   "path": "controller/plugin_protocol_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e"
+   ],
+   "upstream_sha256": "fa0d0c99ff3ce65e9a30fc4b6c0c11a76b1e6c61a161f90fe731c5d6820d492c",
+   "local_sha256": "29dfd4553ed0bf536ea6148097a2ff51990087e68c4ab45c127b21d159e3bb14",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "补入上游图片参数覆盖与协议载荷保序测试。"
+  },
+  {
+   "path": "controller/relay.go",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e"
+   ],
+   "upstream_sha256": "1452637bbb04917f8bebfcacddaac1ef43aded2e0bfd417b3691cdeea8edf441",
+   "local_sha256": "12f818901d003642ef93e7f1fb88bb43799425467134a3f3b80a5352c75ef872",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "任务重试设置 RetryIndex 并清空运行时请求头，保留本地逐轮性能重置和选渠合同。"
+  },
+  {
+   "path": "controller/video_proxy.go",
+   "upstream_change": "M",
+   "commits": [
+    "48f9df96ea7c68eae04a0f3687869f232f48929f"
+   ],
+   "upstream_sha256": "9a3217eb22994d8bd51d443f185f6a46d57fff5743416a098177a6cd8ec2b3c4",
+   "local_sha256": "9a3217eb22994d8bd51d443f185f6a46d57fff5743416a098177a6cd8ec2b3c4",
+   "disposition": "absorbed",
+   "basis": "带凭据的插件任务媒体仅在已验证请求与渠道同源时使用私网渠道传输。"
+  },
+  {
+   "path": "controller/video_proxy_channel_test.go",
+   "upstream_change": "A",
+   "commits": [
+    "48f9df96ea7c68eae04a0f3687869f232f48929f"
+   ],
+   "upstream_sha256": "18d4360c5fea6f9ef2c5ea751a7b1ca87772fe07fef3326d172b33c5583bd8dd",
+   "local_sha256": "18d4360c5fea6f9ef2c5ea751a7b1ca87772fe07fef3326d172b33c5583bd8dd",
+   "disposition": "absorbed",
+   "basis": "补入私有渠道媒体下载、跨源拒绝、代理、TLS 和源比较测试。"
+  },
+  {
+   "path": "docs/plugin-api/v1.d.ts",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e"
+   ],
+   "upstream_sha256": "d6ae406bf09deae01b156c8fe95780cc1b090769c05479676132507d27f2ae9b",
+   "local_sha256": "aa9edf1443377d1936a37e244c53e94b87adb0f99e0c5a4d6795482a0dc56d80",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "类型声明包含图片任务的渠道覆盖合同，保留现有 Ren2Hub 接口差异。"
+  },
+  {
+   "path": "docs/plugin-api/v1.md",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e",
+    "48f9df96ea7c68eae04a0f3687869f232f48929f"
+   ],
+   "upstream_sha256": "a0522e401fbf67ab592cbcf4b1ebda7ea60596370aa0f3dce43b2448f570c406",
+   "local_sha256": "e183e018bb36581131f687bd413fa7dfb92fa5dd943cc703e3a6bcccc88e6648",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "记录图片渠道覆盖和私有媒体下载合同。文首 SHA 是本地插件 API 兼容基线。"
+  },
+  {
+   "path": "go.mod",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "23f2b6275d1b30ef03a98994dbb826c430c2e7a23e4b9e97e721181e597318fc",
+   "local_sha256": "23f2b6275d1b30ef03a98994dbb826c430c2e7a23e4b9e97e721181e597318fc",
+   "disposition": "absorbed",
+   "basis": "升级根模块 moego 到 alpha.4 并移除 nativewebp。"
+  },
+  {
+   "path": "go.sum",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "1bced0ab8100b9de2289b5ba6062275dca31669398e063597a16248e616ce9df",
+   "local_sha256": "1bced0ab8100b9de2289b5ba6062275dca31669398e063597a16248e616ce9df",
+   "disposition": "absorbed",
+   "basis": "记录依赖升级与移除对应的校验和。"
+  },
+  {
+   "path": "model/task.go",
+   "upstream_change": "M",
+   "commits": [
+    "4407b8470f4a7e286247da2b59e674639d158dec"
+   ],
+   "upstream_sha256": "cb56759ed93e28fc1b7029aa6fcda71e462ed6915f92a0636adca4fcff3ed892",
+   "local_sha256": "1a41cf97ec221782d4ae9dac7490d3d6e2c7b1d21c184890afcd287bdf31e3d9",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "轮询与超时查询以终态判定，保留渠道倍率、钱包和无业务分组的任务模型。"
+  },
+  {
+   "path": "model/task_cas_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "4407b8470f4a7e286247da2b59e674639d158dec"
+   ],
+   "upstream_sha256": "0d53e633650a5b6ce95b3de5a0f67692d5bbde4e504d65b70e0dd6039eaa8dd5",
+   "local_sha256": "b20f34460eabcd3b04217a23dddf9da777fa1f20f5f71fd65daef37781469504",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "增加未终态任务查询的数据库矩阵用例，保留本地任务表夹具。"
+  },
+  {
+   "path": "pkg/jsplugin/routing.go",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e"
+   ],
+   "upstream_sha256": "a58a117c02aadf155b0a0d3ffaa405592212a1a2d33af454146f75b5da0ff8e2",
+   "local_sha256": "82ba332403d7cda1c52b98b30e3c834a960c942e07e79d064596b3a383f6eabb",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "同步图片协议参数覆盖的路由字段，保留 Vue 入口路径保护。"
+  },
+  {
+   "path": "relay/channel/task/jsplugin/adaptor.go",
+   "upstream_change": "M",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e",
+    "5cc159213b0df1243acebfdb18cecb6f7879ddc4"
+   ],
+   "upstream_sha256": "fb131cce337d91e9dcbfa664d1d012ea8f4d6b76acf3239374585701d9b40904",
+   "local_sha256": "5bbdd95da0754f10eebe7b28e6495103652d719d5c6857a478e82aedd9865a05",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "应用图片任务参数覆盖，支持从 JSON 构造纯文本 multipart，保留轮询取消的上下文传递。"
+  },
+  {
+   "path": "relay/channel/task/jsplugin/adaptor_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "5cc159213b0df1243acebfdb18cecb6f7879ddc4"
+   ],
+   "upstream_sha256": "6874d09150f2d982429cf32e39e8782cbfdd6e7503c1cf5522f1bd4454ab71c9",
+   "local_sha256": "f12f33fe28d9bdb30fb440bc28bf82aad5af7dee7f5e53132dfe45832d3d59de",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "新增纯文本 multipart 上游测试。仅相邻测试夹具的上下文不同，上游函数原样插入。"
+  },
+  {
+   "path": "relay/channel/task/jsplugin/image_param_override.go",
+   "upstream_change": "A",
+   "commits": [
+    "329e899ebeee564907ddd9298eb0e5182197ac9e"
+   ],
+   "upstream_sha256": "c64f7e9f268d1165e736076196c4edb119e23dffc641fc9984b3744726e07752",
+   "local_sha256": "c64f7e9f268d1165e736076196c4edb119e23dffc641fc9984b3744726e07752",
+   "disposition": "absorbed",
+   "basis": "新增图片协议渠道参数覆盖实现。"
+  },
+  {
+   "path": "relay/requestplugin/attachments_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "dd134bc895298962b188a5a3d0a18ecd1a90ec07f796ff8a5cd1b61b676f168b",
+   "local_sha256": "dd134bc895298962b188a5a3d0a18ecd1a90ec07f796ff8a5cd1b61b676f168b",
+   "disposition": "absorbed",
+   "basis": "切换 WebP 编码实现并验证附件行为。"
+  },
+  {
+   "path": "relay/requestplugin/media.go",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "cdecc97dd3e2cd35e5789f0088f8c2c4932e2dd681c7b5b007d51abb924c3a2e",
+   "local_sha256": "cdecc97dd3e2cd35e5789f0088f8c2c4932e2dd681c7b5b007d51abb924c3a2e",
+   "disposition": "absorbed",
+   "basis": "按进程并发上限执行图片重编码，使用 moego WebP。"
+  },
+  {
+   "path": "relay/requestplugin/plan.go",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "23b1d79352cb7aee5147a63e6ba0b8dcae78e1f6ed9b0f2fd1179822b6b86f5a",
+   "local_sha256": "c4ec5c89648558e388255c0ea1e34e85e0bb6638fa6cbad5d2c879f8f1875d96",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "并行执行后按输入顺序合并图像操作与错误，保留本地无分组的插件作用域。"
+  },
+  {
+   "path": "relay/requestplugin/requestplugin_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "b2d12187a07b884eec601589992aa4a93714f30c"
+   ],
+   "upstream_sha256": "6d95b42c032f68f75963fdd5b28d2ebbfcd88777534e427af98e2885db42d9fb",
+   "local_sha256": "522084c6e5539114d1ca63ec03619656343e1956cdc46a491be8bce9793b7a4e",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "引入并发池回归用例，保留本地 GORM 测试依赖。"
+  },
+  {
+   "path": "service/task_polling_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "4407b8470f4a7e286247da2b59e674639d158dec"
+   ],
+   "upstream_sha256": "e3f1217aa44b4698f15c3ad610486cf6910940860239c4f10a6002f8a75630c9",
+   "local_sha256": "812bbbaffdbb429065133bbf73ee40ea0ddd7ecb7749c9bf7cfb2f5bfadcb4b8",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "轮询和超时回归落在独立的 task_polling_full_progress_test.go，原文件有冻结哈希。",
+   "local_paths": [
+    "service/task_polling_test.go",
+    "service/task_polling_full_progress_test.go"
+   ]
+  }
+ ],
+ "local_adjustments": [
+  {
+   "classification": "pre-existing local fix",
+   "commit": "7c143bcf9eee3637152c0c3f3312c244de5e5c8e",
+   "paths": [
+    "scripts/license-inventory.json",
+    "THIRD-PARTY-LICENSES.md"
+   ],
+   "basis": "此前加入 harfbuzzjs 与 subset-font 时漏记许可。以锁定版本补录两项开发依赖及其许可文本，NOTICE 无差异。"
+  },
+  {
+   "upstream_commit": "b2d12187a07b884eec601589992aa4a93714f30c",
+   "paths": [
+    "scripts/license-inventory.json",
+    "THIRD-PARTY-LICENSES.md",
+    "NOTICE",
+    "relaykit/go.mod"
+   ],
+   "basis": "移除 nativewebp 后离线重新生成许可清单，moego 的解析版本为 alpha.4，NOTICE 无差异。relaykit 独立模块仍按上游要求 alpha.3。"
+  },
+  {
+   "upstream_commit": "329e899ebeee564907ddd9298eb0e5182197ac9e",
+   "paths": [
+    "controller/relay_task_retry_headers_test.go"
+   ],
+   "basis": "双渠道重试用例检查请求头、插件重试序号和三项本地性能状态。"
+  },
+  {
+   "upstream_commit": "4407b8470f4a7e286247da2b59e674639d158dec",
+   "paths": [
+    "scripts/testing/database.py",
+    "service/task_polling_full_progress_test.go"
+   ],
+   "basis": "登记三库矩阵。known_upstream_logger_race.json 锁定原 service/task_polling_test.go 的整文件哈希，因此将上游新增用例及满进度超时重复清理回归放入新文件。"
+  },
+  {
+   "upstream_commit": "5cc159213b0df1243acebfdb18cecb6f7879ddc4",
+   "paths": [
+    "relay/channel/task/jsplugin/adaptor_test.go"
+   ],
+   "basis": "测试补丁仅上下文冲突，上游测试原样插入。既有 TestTaskAdaptorBuildsMultipartFromOpaqueFileReference 的临时目录和下载上限初始化保留。"
+  },
+  {
+   "upstream_commit": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+   "paths": [
+    "router/video_proxy_route_test.go"
+   ],
+   "basis": "通过真实视频媒体路由验证任务所有者下载、其他用户拒绝、跨源请求拒绝及无凭据请求的私网限制。"
+  }
+ ]
+}
