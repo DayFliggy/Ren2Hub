@@ -296,7 +296,7 @@
    "paths": [
     "router/video_proxy_route_test.go"
    ],
-   "basis": "通过真实视频媒体路由验证任务所有者下载、其他用户拒绝、跨源请求拒绝及无凭据请求的私网限制。"
+   "basis": "通过真实视频媒体路由验证任务所有者下载、其他用户拒绝、跨源请求拒绝。最后清空任务的插件执行快照，真实路由使用结果 URL 构造无凭据请求，访问私网被拒且上游请求数不增加。插件任务显式指定 Credentialless 描述符的分支由 TestPrivateChannelMediaDoesNotTrustOtherURLs 覆盖。"
   }
  ]
 }
