@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,4 +161,40 @@ func TestRouteQuotaIgnoresLocalBillingRejections(t *testing.T) {
 			require.Zero(t, routeQualitySampleCount(11))
 		})
 	}
+}
+
+func TestRouteQuotaIgnoresCreditTextOnRemapped429(t *testing.T) {
+	checkCreditTextOnObserved429(t, http.StatusBadRequest)
+}
+
+func TestRouteQuotaIgnoresCreditTextOnUnmapped429(t *testing.T) {
+	checkCreditTextOnObserved429(t, http.StatusTooManyRequests)
+}
+
+func checkCreditTextOnObserved429(t *testing.T, relayStatus int) {
+	t.Helper()
+	c := routeOutcomeTestContext(t)
+	ch := &model.Channel{Id: 11}
+	info := &relaycommon.RelayInfo{OriginModelName: "quota-model", RelayMode: 1, StartTime: time.Now()}
+	apiErr := types.WithClaudeError(types.ClaudeError{
+		Type: "invalid_request_error", Message: "Your credit balance is too low to access the API.",
+	}, relayStatus)
+
+	for range routeBreakerOpenFailures {
+		RequestPolicy(c).BeginAttempt(ch)
+		MarkRouteAttemptSent(c, info)
+		ObserveRouteResponse(c, &http.Response{StatusCode: http.StatusTooManyRequests})
+		FinishRouteAttempt(c, info, apiErr)
+	}
+
+	attempts := 0
+	for _, event := range RequestPolicy(c).Events() {
+		if event.RouteAttempt != nil {
+			attempts++
+			assert.Empty(t, event.RouteAttempt.OutcomeReason, "HTTP 429 with only credit text is not a quota signal")
+		}
+	}
+	require.EqualValues(t, routeBreakerOpenFailures, attempts)
+	require.Equal(t, "headerless", routeObservations.cooldowns[ch.Id].source)
+	require.Zero(t, routeObservations.breakers[routeBreakerKey{ch.Id, info.OriginModelName}].openUntil)
 }

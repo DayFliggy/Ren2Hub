@@ -13386,7 +13386,7 @@
       "path": "service/route_quota_signal_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3eb2f726714fecd035279cb2e37e040c27ec264170eb017f04a24c5d59afdae9"
+      "local_sha256": "f932ea9a4e64ecb4a935cac9335c85da4246f9f7809be0c1724f368537918110"
     },
     {
       "path": "service/route_ranking.go",
