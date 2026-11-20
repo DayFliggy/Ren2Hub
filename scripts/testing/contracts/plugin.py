@@ -533,7 +533,7 @@ class Experiment:
         self.state["token_quota"] = 100 * self.state["quota_per_usd"]
         self.user.api("POST", "/api/token/", {"name": self.state["plugin"],
             "remain_quota": self.state["token_quota"], "unlimited_quota": False,
-            "expired_time": -1, "type": "auto", "model_limits_enabled": True, "model_limits": self.state["model"]})
+            "expired_time": -1, "model_limits_enabled": True, "model_limits": self.state["model"]})
         tokens = self.user.api("GET", "/api/token/search?keyword=" + self.state["plugin"] + "&page_size=100")["items"]
         tokens = [row for row in tokens if row["name"] == self.state["plugin"]]
         require(len(tokens) == 1, "temporary_token_not_unique")

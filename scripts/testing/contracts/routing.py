@@ -130,10 +130,10 @@ class Routing(Experiment):
         actual = self.root.api('GET', '/api/option/request_policy')['options']
         require(all(actual.get(key) == value for key, value in options.items()), 'request_policy_readback_mismatch')
 
-    def route(self, names=(), mode='manual', cap=None, disabled=()):
+    def route(self, names=(), mode='ordered', cap=None, disabled=()):
         path = f'/api/token/{self.token_id}/routing'
         current = self.user.api('GET', path)
-        saved = self.user.api('PUT', path, {'mode': mode, 'version': current['version'],
+        saved = self.user.api('PUT', path, {'mode': mode, 'selected_only': bool(names), 'version': current['version'],
             'entries': [{'channel_id': self.channel_map[name], 'enabled': name not in disabled} for name in names],
             'max_channel_ratio': cap})
         require(saved == self.user.api('GET', path) and saved['mode'] == mode
@@ -302,13 +302,13 @@ class Routing(Experiment):
         self.route(['b', 'a'], cap='1')
         self.check(['b'], body={'model': 'route-test@temperature:0.7', 'messages': [{'role': 'user', 'content': 'normalized'}]})
 
-    def manual(self):
+    def ordered(self):
         self.configure('a', priority=100)
         self.route(['b', 'a'])
         self.check(['b'])
         self.route(['b', 'a'], disabled=['b'])
         self.check(['a'])
-        self.route([])
+        self.route(['a'], disabled=['a'])
         self.check([], status=503, amount=0)
         self.route(['a'])
         self.configure('a', model_mapping=json.dumps({'route-test': 'mapped-test'}), channel_ratio='1.5')
@@ -531,9 +531,9 @@ class Routing(Experiment):
 
     def run(self):
         cases = [('automatic_eligibility_priority_ratio',self.automatic),('exact_normalized_model',self.exact_model),
-                 ('manual_order_disabled_empty_mapping_price',self.manual),('zero_weight_backup',self.zero_weight),
+                 ('ordered_disabled_mapping_price',self.ordered),('zero_weight_backup',self.zero_weight),
                  ('weight_distribution_audit',self.weight_distribution),('retry_order_error_and_refund',self.retry),
-                 ('automatic_health_manual_independence',self.health),('cross_key_concurrency_and_release',self.concurrency),
+                 ('automatic_health_ordered_independence',self.health),('cross_key_concurrency_and_release',self.concurrency),
                  ('native_protocols_streams_and_conversion',self.native_protocols),('responses_websocket',self.websocket),
                  ('prefer_strict_affinity',self.affinity),
                  ]

@@ -23,7 +23,7 @@ def wait_received(e, cursor, channel, outcome='held'):
         time.sleep(.02)
 
 
-def manual_unavailable(e):
+def ordered_unavailable(e):
     e.route(['a', 'b'])
     e.status('a', 2)
     e.check(['b'])
@@ -34,6 +34,15 @@ def manual_unavailable(e):
     e.route(['a', 'b'], cap='1')
     e.check(['b'])
     e.status('b', 2)
+    e.check([], status=503, amount=0)
+
+
+def automatic_selected_channels(e):
+    e.configure('a', priority=100)
+    e.configure('b', priority=10)
+    e.route(['c','b'], mode='auto')
+    e.check(['b'])
+    e.route(['c','b'], mode='auto', disabled=['b','c'])
     e.check([], status=503, amount=0)
 
 
@@ -53,8 +62,8 @@ def route_management(e):
         require('base_url' not in value and 'key' not in value, 'foreign_route_information_leak')
     token = e.user.api('GET', f'/api/token/{e.token_id}')
     edited = e.user.api('PUT', '/api/token/', {**token, 'name':'edited-'+e.suffix})
-    require(edited['type']=='manual' and e.user.api('GET', f'/api/token/{e.token_id}')['type']=='manual',
-            'edited_token_mode_not_manual')
+    require(edited['type']=='ordered' and e.user.api('GET', f'/api/token/{e.token_id}')['type']=='ordered',
+            'edited_token_mode_not_ordered')
 
 
 def nonretryable(e):
@@ -368,7 +377,7 @@ def error_privacy(e):
             'invalid_token_error_not_private')
 
 
-CASES = [('manual_unavailable_no_auto_fallback',manual_unavailable),
+CASES = [('automatic_selected_channels',automatic_selected_channels),('ordered_unavailable_no_auto_fallback',ordered_unavailable),
          ('route_version_ownership_edit_mode',route_management),('nonretryable_no_replay',nonretryable),
          ('retry_after_cooldown',retry_after),('automatic_breaker_admission',automatic_breaker_admission),
          ('prefer_escapes_cooling_channel',prefer_escapes_cooling_channel),('expensive_retry_insufficient_reserve',expensive_retry),

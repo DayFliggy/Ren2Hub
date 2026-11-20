@@ -51,13 +51,13 @@ DIAGNOSTIC_PROBES = (
 # Version 1: independent inventory of the approved HTTP matrix. Removing a
 # runner case must leave a missing requirement, not silently shrink coverage.
 REQUIRED_CASES = (
-    'automatic_eligibility_priority_ratio', 'exact_normalized_model',
-    'manual_order_disabled_empty_mapping_price', 'zero_weight_backup',
+    'automatic_selected_channels', 'automatic_eligibility_priority_ratio', 'exact_normalized_model',
+    'ordered_disabled_mapping_price', 'zero_weight_backup',
     'weight_distribution_audit', 'retry_order_error_and_refund',
-    'automatic_health_manual_independence', 'cross_key_concurrency_and_release',
+    'automatic_health_ordered_independence', 'cross_key_concurrency_and_release',
     'native_protocols_streams_and_conversion', 'responses_websocket',
     'prefer_strict_affinity', 'client_disconnect_settles_once_and_releases',
-    'real_redis_cache_repair_preserves_reservation', 'manual_unavailable_no_auto_fallback',
+    'real_redis_cache_repair_preserves_reservation', 'ordered_unavailable_no_auto_fallback',
     'route_version_ownership_edit_mode', 'nonretryable_no_replay', 'retry_after_cooldown',
     'automatic_breaker_admission', 'prefer_escapes_cooling_channel',
     'expensive_retry_insufficient_reserve', 'delivered_stream_not_replayed',
