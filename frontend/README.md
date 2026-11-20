@@ -28,7 +28,7 @@ bun run format:check
 bun run build
 ```
 
-浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。 本地浏览器场景覆盖登录和刷新、权限拒绝、Key 自动/手动路由保存、钱包读取、工单创建/详情与退役路径 404；不创建真实支付订单。
+浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。 本地浏览器场景覆盖登录和刷新、权限拒绝、Key 路由（新 Key 默认自动路由 + 全平台渠道、顺序路由空列表在前端拦截、全平台保存后刷新保持）、钱包读取、工单创建/详情与退役路径 404；不创建真实支付订单。
 
 `bun run test:visual -- tests/visual/greeting-hero.spec.ts tests/visual/models.spec.ts tests/visual/billing.spec.ts` 使用原生合同的模拟数据验证保留页面。`PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 保留临时截图到 `output/`，不会更新正式基线。设置 `REN2HUB_LOCAL_SESSION` 时，Playwright 只运行隔离后端套件；直接调用 `test:visual` 时运行已有视觉与交互测试。
 
