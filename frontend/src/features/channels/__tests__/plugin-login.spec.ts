@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { api } from '@/api/client'
 import { clearAuthBundle } from '@/api/authSession'
+import ChannelBalanceDetails from '../components/ChannelBalanceDetails.vue'
 import PluginCredentials from '../components/PluginCredentials.vue'
 import PluginLoginDialog from '../components/PluginLoginDialog.vue'
 import {
@@ -260,5 +261,32 @@ describe('plugin credentials', () => {
       expect.any(Object)
     )
     wrapper.unmount()
+  })
+})
+describe('channel balance details', () => {
+  it('shows the channel balance only, not per-key rows of an older query', () => {
+    const balance_detail = {
+      amount: 7,
+      currency: 'USD',
+      error: 'quota endpoint failed',
+      windows: [{ name: 'Daily', used: 3, limit: 10, unit: 'req' }],
+      keys: { '0': { amount: 2, error: 'stale key failure' } },
+    }
+    const wrapper = mount(ChannelBalanceDetails, {
+      props: {
+        channel: {
+          id: 1,
+          balance: 7,
+          other_info: JSON.stringify({ balance_detail }),
+        } as never,
+      },
+      global,
+    })
+    const text = wrapper.text()
+    expect(text).toContain('$7')
+    expect(text).toContain('quota endpoint failed')
+    expect(text).toContain('Daily 3 / 10 req')
+    expect(text).not.toContain('stale key failure')
+    expect(wrapper.findAll('details > div')).toHaveLength(0)
   })
 })

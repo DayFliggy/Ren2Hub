@@ -18,7 +18,6 @@ type Balance = {
     resetAt?: number
   }>
   error?: string
-  keys?: Record<string, Balance>
 }
 const parsed = computed(() => {
   try {
@@ -71,26 +70,6 @@ const detail = computed(() => parsed.value.detail)
         {{ window.limit }} {{ window.unit
         }}<span v-if="window.resetAt"> · {{ formatTime(window.resetAt) }}</span>
       </p>
-      <div
-        v-for="(key, index) in detail.keys"
-        :key="index"
-        class="mt-1 border-t border-[var(--border-subtle)] pt-1"
-      >
-        <span
-          >{{ t('pluginExtensions.credential') }} {{ Number(index) + 1 }} ·
-          {{ summary(key) }}</span
-        >
-        <p v-if="key.error" class="text-[var(--status-danger)]">
-          {{ key.error }}
-        </p>
-        <p v-for="(window, i) in key.windows" :key="i">
-          {{ localizedText(window.name, locale) }} {{ window.used }} /
-          {{ window.limit }} {{ window.unit
-          }}<span v-if="window.resetAt">
-            · {{ formatTime(window.resetAt) }}</span
-          >
-        </p>
-      </div>
     </details>
     <span v-else class="font-semibold tabular-nums">{{
       formatMoney(channel.balance)
