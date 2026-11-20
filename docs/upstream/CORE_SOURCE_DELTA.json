@@ -13072,7 +13072,7 @@
       "path": "service/route_affinity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0e3ea7421e5c999ea92592dd10ffa8db99b6c877b03def5b4945b46202dba7ca",
+      "local_sha256": "1eb4927a4d36573a2dd50b33b9ad1e686a0f6e5be25715e06082d5376c23f2e2",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13091,7 +13091,7 @@
       "path": "service/route_affinity_exit_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "28f32a9b941da94d21d57cb83d4d515cd98bfd1e6ea3505e2cdb9ff0a4c4028e"
+      "local_sha256": "82a61467813f31fe4243ab4ce30500853aff4bcc0e0524fec419b0d8caa2716d"
     },
     {
       "path": "service/route_affinity_strict_test.go",
@@ -13381,7 +13381,7 @@
       "path": "service/route_ranking.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "645d3125faf41f5c5bc9042687f7a5cff6c4f52312304511e3c762388dd97345",
+      "local_sha256": "b90d0284b3c5922a5ca45dd0a7e50ba05ab2303f88b4526817cdccbdafb0b8c4",
       "reasons": [
         "token-routing",
         "ops-metrics"

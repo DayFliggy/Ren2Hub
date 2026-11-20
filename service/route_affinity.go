@@ -76,13 +76,14 @@ const routeQualitySevereBand = 2
 
 // preferAffinityExit serves a request bound by prefer affinity from a better
 // channel while the bound one is severely downgraded: in quality band 2 on the
-// request's model, operation and stream type (cache bands do not count). The
-// candidates in a better band are tried in automatic ranking order through the
-// normal admission, so an open breaker, a 429 cooldown or a full channel skips
-// a candidate just as in automatic selection. It returns nil when the binding
-// is not downgraded or no better candidate is admitted; the caller then uses
-// the bound channel. Strict affinity never calls it. Exploration does not run
-// here, so a yielding request spends no exploration budget.
+// request's model, operation and stream type (cache bands do not trigger it).
+// The candidates in a better band are ranked as automatic selection ranks them
+// for this request, its cache bands included, and tried in that order through
+// the normal admission, so an open breaker, a 429 cooldown or a full channel
+// skips a candidate just as in automatic selection. It returns nil when the
+// binding is not downgraded or no better candidate is admitted; the caller
+// then uses the bound channel. Strict affinity never calls it. Exploration
+// does not run here, so a yielding request spends no exploration budget.
 func preferAffinityExit(c *gin.Context, rows []*model.Channel, bound *model.Channel, modelName string) (*model.Channel, error) {
 	operation, stream := routeOperation(c), common.GetContextKeyBool(c, constant.ContextKeyIsStream)
 	quality, now := routeQualities.snapshot(), time.Now()
@@ -100,7 +101,7 @@ func preferAffinityExit(c *gin.Context, rows []*model.Channel, bound *model.Chan
 			better = append(better, channel)
 		}
 	}
-	orderAutomaticRoutes(better, c.GetString(common.RequestIdKey), modelName, operation, stream)
+	rankRouteRows(routeCacheContext(c), better, c.GetString(common.RequestIdKey), modelName, operation, stream, now)
 	for _, channel := range better {
 		selected, err := acquireHealthyRoute(c, channel, modelName, false)
 		var pause *routePauseError

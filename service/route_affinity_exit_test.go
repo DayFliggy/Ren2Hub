@@ -189,3 +189,58 @@ func TestPreferAffinityWorkloadLeavesSlowBinding(t *testing.T) {
 		require.Equal(t, 2, snapshot.Band, "the evaluator, not the test, rated the binding")
 	})
 }
+
+// A yielding request ranks the better candidates as automatic selection does
+// for the same request, cache bands included: 11 reuses this session's cache
+// poorly, so the request leaves 22 for 33.
+func TestPreferAffinityExitRanksWithTheRequestCache(t *testing.T) {
+	db := setupAffinityChannels(t)
+	createRouteChannel(t, db, 33, "route-model")
+	isolateRouteQualities(t)
+	rateChannels(t, 20000)
+	previousCaches := routeCaches
+	routeCaches = newCacheStore()
+	t.Cleanup(func() { routeCaches = previousCaches })
+	c, _ := enableRouteAffinity(t, "prefer", 22)
+	request := cacheTestRequest(0)
+	c.Set("route_cache_request", request)
+	operation := routeOperation(c)
+	now := time.Now()
+	start := now.Truncate(cachePeriod).Add(-3 * cachePeriod)
+	for batch := range 2 {
+		at := start.Add(time.Duration(2*batch)*cachePeriod + time.Minute)
+		for session := range 20 {
+			for round := range 5 {
+				tm := at.Add(time.Duration(round) * time.Second)
+				for id, read := range map[int]int64{11: 20, 33: 80} {
+					routeCaches.record(cacheTestRequest(session+25*batch), "route-model", routeObservationKey{id, "route-model", operation, false}, tm, tm.Add(time.Millisecond), read, 100, true, "auto")
+				}
+			}
+		}
+		routeCaches.evaluate(start.Add(time.Duration(1+2*batch) * cachePeriod))
+		if batch == 0 {
+			routeCaches.evaluate(start.Add(2 * cachePeriod))
+		}
+	}
+	bands := routeCaches.bands(request, "route-model", operation, false, now)
+	require.Equal(t, 2, bands[11].Band)
+	require.True(t, bands[33].Known)
+
+	// Automatic selection of the same request, without exploration.
+	reference := routeTestContext(t)
+	reference.Set("route_cache_request", request)
+	reference.Set("use_channel", []string{"reference"})
+	rows := make([]*model.Channel, 0, 2)
+	for _, id := range []int{11, 33} {
+		channel, err := model.GetChannelById(id, true)
+		require.NoError(t, err)
+		rows = append(rows, channel)
+	}
+	orderRuntimeRoutes(reference, rows, "route-model", operation, false)
+	require.Equal(t, 33, rows[0].Id)
+
+	selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, selectErr)
+	require.Equal(t, 33, selected.Id)
+	require.Equal(t, "affinity_exit", c.GetString("route_admission_source"))
+}

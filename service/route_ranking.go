@@ -119,18 +119,17 @@ func rankAutomatic(rows []routeRank) {
 	}
 }
 func orderAutomaticRoutes(rows []*model.Channel, requestID, modelName string, operation int, stream bool) {
-	orderRouteRows(nil, rows, requestID, modelName, operation, stream)
+	rankRouteRows(routeCacheRequest{}, rows, requestID, modelName, operation, stream, time.Now())
 }
 func orderRuntimeRoutes(c *gin.Context, rows []*model.Channel, modelName string, operation int, stream bool) {
 	orderRouteRows(c, rows, c.GetString(common.RequestIdKey), modelName, operation, stream)
 }
-func orderRouteRows(c *gin.Context, rows []*model.Channel, requestID, modelName string, operation int, stream bool) {
-	now := time.Now()
+
+// rankRouteRows orders rows by automatic ranking for one request: quality,
+// health, the request's cache bands, load, ratio and the request's draw. It
+// does not explore.
+func rankRouteRows(ctx routeCacheRequest, rows []*model.Channel, requestID, modelName string, operation int, stream bool, now time.Time) []routeRank {
 	quality := routeQualities.snapshot()
-	var ctx routeCacheRequest
-	if c != nil {
-		ctx = routeCacheContext(c)
-	}
 	cache := routeCaches.bands(ctx, modelName, operation, stream, now)
 	ranked := make([]routeRank, 0, len(rows))
 	for _, ch := range rows {
@@ -154,9 +153,13 @@ func orderRouteRows(c *gin.Context, rows []*model.Channel, requestID, modelName 
 	for i, r := range ranked {
 		rows[i] = r.channel
 	}
-	if c == nil {
-		return
-	}
+	return ranked
+}
+
+func orderRouteRows(c *gin.Context, rows []*model.Channel, requestID, modelName string, operation int, stream bool) {
+	now := time.Now()
+	ctx := routeCacheContext(c)
+	ranked := rankRouteRows(ctx, rows, requestID, modelName, operation, stream, now)
 	c.Set("route_rank_candidates", ranked)
 	c.Set("route_explore_channel", 0)
 	_, pinned, _ := GetChannelConstraints(c).ResolvedPin()
