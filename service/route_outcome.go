@@ -18,6 +18,7 @@ import (
 // classification. Only routing health, quality and observations read them;
 // retries, the native performance metrics and the client response do not.
 const (
+	routeReasonUpstreamQuota    = "upstream_quota"
 	routeReasonContextOverflow  = "request_context_overflow"
 	routeReasonEmptyStream      = "empty_stream"
 	routeReasonNoVisibleOutput  = "no_visible_output"
@@ -32,6 +33,10 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 		return perfmetrics.OutcomeIgnored, ""
 	}
 	outcome := perfmetrics.ClassifyRelayOutcome(c.Request.Context(), info, apiErr)
+	if (!info.IsStream || a.firstOutput.Load() == 0) && c.Request.Context().Err() == nil &&
+		!errors.Is(apiErr, context.Canceled) && !info.PerformanceBusinessRejection && a.upstreamQuotaFailure(apiErr) {
+		return perfmetrics.OutcomeFailure, routeReasonUpstreamQuota
+	}
 	if outcome == perfmetrics.OutcomeFailure && a.requestContextOverflow(apiErr) {
 		return perfmetrics.OutcomeIgnored, routeReasonContextOverflow
 	}
@@ -49,6 +54,45 @@ func (a *routeAttempt) routeOutcome(c *gin.Context, info *relaycommon.RelayInfo,
 		return a.emptyStreamOutcome()
 	}
 	return outcome, ""
+}
+
+// Upstream quota exhaustion belongs to the channel credential. A local
+// wallet rejection can carry the same code and must not penalize the channel.
+func (a *routeAttempt) upstreamQuotaFailure(apiErr *types.NewAPIError) bool {
+	if apiErr == nil || RelayErrorSource(apiErr) != "upstream" {
+		return false
+	}
+	root := rootRelayError(apiErr)
+	switch root.GetErrorCode() {
+	case "insufficient_quota", types.ErrorCodeInsufficientUserQuota, types.ErrorCodePreConsumeTokenQuotaFailed:
+		return true
+	}
+	// Rate and billing limits can have identical prose. Check the observed
+	// HTTP status as well, since a channel may remap the relay status.
+	if root.StatusCode == http.StatusTooManyRequests || a.status.Load() == http.StatusTooManyRequests {
+		return false
+	}
+	// Anthropic uses a broad invalid_request_error type for credit failures.
+	// OpenAI-compatible intermediaries can forward it without a specific code.
+	var message string
+	switch e := root.RelayError.(type) {
+	case types.ClaudeError:
+		if e.Type != "invalid_request_error" && e.Type != "upstream_error" {
+			return false
+		}
+		message = e.Message
+	case types.OpenAIError:
+		if e.Code != nil || (e.Type != "invalid_request_error" && e.Type != "upstream_error") {
+			return false
+		}
+		message = e.Message
+	default:
+		return false
+	}
+	// Keep a placeholder so removing an echoed argument cannot promote a
+	// later phrase to the start of the provider's message.
+	message = quotedText.ReplaceAllString(strings.TrimSpace(message), "…")
+	return strings.HasPrefix(message, "Your credit balance is too low")
 }
 
 // emptyStreamOutcome judges a stream that ended natively successful after
