@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
@@ -114,21 +115,32 @@ func rejectsMultiKeyFields(requestData map[string]any) bool {
 var errChannelHoldsOneKey = common.NewMessage("A channel holds one key; add one channel per key instead")
 
 // validateSingleKey refuses a key list stored as a channel's one key. The
-// adaptors read the whole key as one credential; only a JSON object, which the
-// Vertex service account and task plugin credential parsers decode, may span
-// lines.
-func validateSingleKey(channelType int, otherSettings dto.ChannelOtherSettings, key string) error {
+// adaptors read the whole key as one credential; only a JSON object may span
+// lines, for the parsers that decode the whole key as one: a Vertex service
+// account, and the credentials of a task plugin declaring oauth2_jwt auth.
+func validateSingleKey(channelType int, otherSettings dto.ChannelOtherSettings, pluginKey, key string) error {
 	key = strings.TrimSpace(key)
 	if !strings.ContainsAny(key, "\r\n") {
 		return nil
 	}
-	jsonKey := channelType == constant.ChannelTypeTaskPlugin ||
-		channelType == constant.ChannelTypeVertexAi && otherSettings.VertexKeyType != dto.VertexKeyTypeAPIKey
 	var object map[string]any
-	if jsonKey && common.UnmarshalJsonStr(key, &object) == nil {
+	if jsonKeyChannel(channelType, otherSettings, pluginKey) && common.UnmarshalJsonStr(key, &object) == nil {
 		return nil
 	}
 	return errChannelHoldsOneKey
+}
+
+// jsonKeyChannel reports a channel whose adaptor decodes the whole key as a
+// JSON object, as declared by the channel settings or the bound plugin.
+func jsonKeyChannel(channelType int, otherSettings dto.ChannelOtherSettings, pluginKey string) bool {
+	switch channelType {
+	case constant.ChannelTypeVertexAi:
+		return otherSettings.VertexKeyType != dto.VertexKeyTypeAPIKey
+	case constant.ChannelTypeTaskPlugin:
+		plugin, ok := jsplugin.DefaultRegistry.Get(strings.TrimSpace(pluginKey))
+		return ok && plugin.Meta.Auth.Type == "oauth2_jwt"
+	}
+	return false
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {

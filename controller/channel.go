@@ -827,7 +827,7 @@ func AddChannel(c *gin.Context) {
 		}
 		localChannel := addChannelRequest.Channel
 		localChannel.Key = key
-		if err := validateSingleKey(localChannel.Type, localChannel.GetOtherSettings(), key); err != nil {
+		if err := validateSingleKey(localChannel.Type, localChannel.GetOtherSettings(), localChannel.GetSetting().TaskPluginKey, key); err != nil {
 			common.ApiError(c, err)
 			return
 		}
@@ -1209,7 +1209,7 @@ func UpdateChannel(c *gin.Context) {
 		if channel.OtherSettings != "" {
 			keptSettings = channel.GetOtherSettings()
 		}
-		if err := validateSingleKey(keptType, keptSettings, requestedKey); err != nil {
+		if err := validateSingleKey(keptType, keptSettings, keptPluginKey, requestedKey); err != nil {
 			common.ApiError(c, err)
 			return
 		}

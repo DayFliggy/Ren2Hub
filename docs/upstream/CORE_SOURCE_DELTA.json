@@ -1016,7 +1016,7 @@
       "path": "controller/channel.go",
       "status": "adapted",
       "upstream_sha256": "acd8081b1208f6bba858062a6b248a602c78aa5124e913a143ec69ab53126c6f",
-      "local_sha256": "b21ff1c3dcc413233f3e889c0f6a2a087e82c9a8bcd592b7a4410dd1f100be11",
+      "local_sha256": "3ff2a6b625625d9d740e4fcaa929337b3ff42368f2aa84786afa086984783804",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -1087,7 +1087,7 @@
       "path": "controller/channel_authz.go",
       "status": "adapted",
       "upstream_sha256": "b12bfb34de9dfd7c646c09e50a2dee79ffce74766236f777ef34b41dd8359672",
-      "local_sha256": "8b9a163f29e39775f69b16a81cf5c04c256d620ae39ba76fda57b32692a920ae",
+      "local_sha256": "381f1ddead3487ebec168f1eb00f78a9e9b44b9f990e6de9ba78efa88c58d0d9",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -1266,7 +1266,7 @@
       "path": "controller/channel_task_plugin_bind_test.go",
       "status": "adapted",
       "upstream_sha256": "f19846d3326d8ccb394df81f2bca6bb6bbd0007ecdf0af788cf83fa09ac6ce38",
-      "local_sha256": "2856fa1e551ec4d4c0eaa864255f9c5f46b40e5a9018698eabe69cb7aa692d77"
+      "local_sha256": "9ff6216dc37a777ec0dcd7e518c610546765b115894ff78d46db2fddbc82af34"
     },
     {
       "path": "controller/channel_task_plugin_validation_test.go",

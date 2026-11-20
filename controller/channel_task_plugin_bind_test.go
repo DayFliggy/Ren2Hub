@@ -229,3 +229,58 @@ export function parseTaskResult() { return {}; }
 	assert.Contains(t, copyChannel(2, common.RoleAdminUser).Body.String(), "task plugin channels require the task_plugin.bind permission")
 	assert.Contains(t, copyChannel(1, common.RoleRootUser).Body.String(), `"success":true`)
 }
+
+// A task plugin channel's key may span lines only as the JSON credentials of
+// a plugin declaring oauth2_jwt auth; an api_key plugin sends the whole key as
+// its auth header, so a multiline key there is a key list.
+func TestTaskPluginKeySpansLinesOnlyForJWTAuth(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	for _, auth := range []string{"api_key", "oauth2_jwt"} {
+		key := "lines-" + strings.ReplaceAll(auth, "_", "-")
+		source := fmt.Sprintf(`
+export const meta = {apiVersion: 1, key: %q, name: "Lines", version: "1.0.0", author: {name: "Test"}, models: ["doc"], auth: {type: %q}, fetchMode: "per_task"};
+export function buildSubmitRequest() { return {}; }
+export function parseSubmitResponse() { return {}; }
+export function buildQueryRequest() { return {}; }
+export function parseTaskResult() { return {}; }
+`, key, auth)
+		_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+		require.NoError(t, err)
+		t.Cleanup(func() { jsplugin.DefaultRegistry.Unregister(key) })
+	}
+	multiline, err := common.Marshal("{\n  \"type\": \"service_account\"\n}")
+	require.NoError(t, err)
+	setting := func(plugin string) string {
+		encoded, err := common.Marshal(fmt.Sprintf(`{"task_plugin_key":%q}`, plugin))
+		require.NoError(t, err)
+		return string(encoded)
+	}
+	for _, tc := range []struct {
+		plugin  string
+		success bool
+	}{{"lines-api-key", false}, {"lines-oauth2-jwt", true}} {
+		t.Run(tc.plugin+"/create", func(t *testing.T) {
+			body := fmt.Sprintf(`{"mode":"single","channel":{"type":61,"name":%q,"key":%s,"models":"doc","base_url":"https://example.com","setting":%s}}`, tc.plugin, multiline, setting(tc.plugin))
+			response := postAddChannel(t, 1, common.RoleRootUser, body)
+			var result map[string]any
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+			assert.Equal(t, tc.success, result["success"], response.Body.String())
+		})
+		t.Run(tc.plugin+"/update", func(t *testing.T) {
+			baseURL, stored := "https://example.com", fmt.Sprintf(`{"task_plugin_key":%q}`, tc.plugin)
+			channel := model.Channel{Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: tc.plugin + "-edit", Models: "doc", Key: "single", BaseURL: &baseURL, Setting: &stored}
+			require.NoError(t, channel.Insert())
+			response := putUpdateChannel(t, 1, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"key":%s}`, channel.Id, multiline))
+			var result map[string]any
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+			assert.Equal(t, tc.success, result["success"], response.Body.String())
+			reloaded, err := model.GetChannelById(channel.Id, true)
+			require.NoError(t, err)
+			if tc.success {
+				assert.Contains(t, reloaded.Key, "service_account")
+			} else {
+				assert.Equal(t, "single", reloaded.Key)
+			}
+		})
+	}
+}
