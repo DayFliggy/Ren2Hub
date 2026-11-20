@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +57,23 @@ func TestPreferAffinityLeavesSeverelyDowngradedChannel(t *testing.T) {
 		RecordChannelAffinity(c, selected.Id)
 		bound, _ = affinityBinding(t, key)
 		require.Equal(t, 11, bound, "SwitchOnSuccess rebinds to the channel that served")
+	})
+	t.Run("with switch_on_success off the success keeps the binding", func(t *testing.T) {
+		setupAffinityChannels(t)
+		isolateRouteQualities(t)
+		rateChannels(t, 20000)
+		c, key := enableRouteAffinity(t, "prefer", 22)
+		operation_setting.GetChannelAffinitySetting().SwitchOnSuccess = false
+		selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+		require.Nil(t, selectErr)
+		require.Equal(t, 11, selected.Id)
+
+		// As middleware.Distribute records a success.
+		c.Set("channel_id", selected.Id)
+		RecordChannelAffinity(c, selected.Id)
+		bound, found := affinityBinding(t, key)
+		require.True(t, found)
+		require.Equal(t, 22, bound, "the request left the binding without moving it")
 	})
 	t.Run("band 1 keeps the bound channel", func(t *testing.T) {
 		setupAffinityChannels(t)

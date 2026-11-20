@@ -720,6 +720,10 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 	if setting == nil || !setting.Enabled {
 		return
 	}
+	// Ren2Hub: a prefer request that left its binding keeps it (route_affinity.go).
+	if !setting.SwitchOnSuccess && affinityExitKeepsBinding(c) {
+		return
+	}
 	if setting.SwitchOnSuccess && c != nil {
 		if successChannelID := c.GetInt("channel_id"); successChannelID > 0 {
 			channelID = successChannelID

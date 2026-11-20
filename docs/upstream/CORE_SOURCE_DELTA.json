@@ -11833,13 +11833,14 @@
       "path": "service/channel_affinity.go",
       "status": "adapted",
       "upstream_sha256": "461f61015e8c70b9ae44ed34c130e1c454d10f6a4784b6d6b457b5d0d5f83585",
-      "local_sha256": "d429566679184ddb32f320cd00f9a34ea42377e1c89c66823d61efe9db288292",
+      "local_sha256": "db8775f316670416cdcc21b6e325f398ffb6221170230e3624290367486174b9",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "token-routing"
       ],
       "review": {
         "target": "3a407cc9b064fe79a4ffac4146b2690c465dc929",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_affinity.go#1, service/channel_affinity.go#10, service/channel_affinity.go#11, service/channel_affinity.go#12, service/channel_affinity.go#13, service/channel_affinity.go#14, service/channel_affinity.go#15, service/channel_affinity.go#16, service/channel_affinity.go#17, service/channel_affinity.go#2, service/channel_affinity.go#3, service/channel_affinity.go#4, service/channel_affinity.go#5, service/channel_affinity.go#6, service/channel_affinity.go#7, service/channel_affinity.go#8, service/channel_affinity.go#9",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_affinity.go#1, service/channel_affinity.go#10, service/channel_affinity.go#11, service/channel_affinity.go#12, service/channel_affinity.go#13, service/channel_affinity.go#14, service/channel_affinity.go#15, service/channel_affinity.go#16, service/channel_affinity.go#17, service/channel_affinity.go#2, service/channel_affinity.go#3, service/channel_affinity.go#4, service/channel_affinity.go#5, service/channel_affinity.go#6, service/channel_affinity.go#7, service/channel_affinity.go#8, service/channel_affinity.go#9。RecordChannelAffinity 另有一个接点：prefer 请求因绑定渠道严重降档临时退出（affinityExitKeepsBinding，见 route_affinity.go）且未开启 switch_on_success 时不写绑定，见 UNIFIED_ROUTING.md（token-routing）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -13072,7 +13073,7 @@
       "path": "service/route_affinity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "1eb4927a4d36573a2dd50b33b9ad1e686a0f6e5be25715e06082d5376c23f2e2",
+      "local_sha256": "e0d911fd65be35d4420fb8d22e233ab70e97d181cf8b4cc1e4df2f0913ad48f5",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13091,7 +13092,7 @@
       "path": "service/route_affinity_exit_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "82a61467813f31fe4243ab4ce30500853aff4bcc0e0524fec419b0d8caa2716d"
+      "local_sha256": "7254fdd450e63d53ac590cd5a61d14eb310784f8918b98b712fd2c53d99ff505"
     },
     {
       "path": "service/route_affinity_strict_test.go",

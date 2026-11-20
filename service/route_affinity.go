@@ -26,12 +26,14 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 	row, err := acquireBoundRouteChannel(c, preferred, modelName, gate)
 	if err == nil && row.Id != preferred {
 		// The binding is kept; SwitchOnSuccess moves it after a success.
+		c.Set(ginKeyAffinityExitFrom, preferred)
 		if !routePreselecting(c) {
 			setRouteDecision(c, row.Id, "affinity_exit")
 		}
 		return row, nil, true
 	}
 	if err == nil {
+		c.Set(ginKeyAffinityExitFrom, 0)
 		MarkChannelAffinityUsed(c, row.Id)
 		if !routePreselecting(c) {
 			source := "prefer"
@@ -69,6 +71,16 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		clearAffinityIfStillBound(c, preferred)
 	}
 	return nil, nil, false
+}
+
+// ginKeyAffinityExitFrom holds the binding the request's last affinity
+// selection left for another channel, 0 once a selection used it.
+const ginKeyAffinityExitFrom = "channel_affinity_exit_from"
+
+// affinityExitKeepsBinding reports a request that left its binding for one
+// request: without switch_on_success its success does not move the binding.
+func affinityExitKeepsBinding(c *gin.Context) bool {
+	return c != nil && c.GetInt(ginKeyAffinityExitFrom) > 0
 }
 
 // routeQualitySevereBand is the quality band at which a prefer binding yields.
