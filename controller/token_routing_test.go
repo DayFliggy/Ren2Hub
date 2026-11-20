@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -196,4 +197,40 @@ func TestTokenRoutingPreviewIsOwnedReadOnlyAndExplainsConstraints(t *testing.T) 
 	require.Len(t, view.Entries, 5)
 	require.NoError(t, db.Where("token_id = ?", 72).Delete(&model.TokenRouteEntry{}).Error)
 	require.Contains(t, request(71, "model=fixture&path=/v1/responses").Body.String(), `"entries":[]`)
+}
+
+func TestTokenRoutingPUTRestoresPlatformSelection(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}))
+	require.NoError(t, db.Create(&model.User{Id: 17, Username: "scope-reset"}).Error)
+	token := model.Token{Id: 27, UserId: 17, Key: "scope-reset"}
+	require.NoError(t, token.Insert())
+	for _, id := range []int{11, 22} {
+		channel := model.Channel{Id: id, Key: "scope-test", Type: constant.ChannelTypeOpenAI, Models: "scope-model", Status: common.ChannelStatusEnabled}
+		require.NoError(t, channel.Insert())
+	}
+	put := func(body string) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPut, "/api/token/27/routing", strings.NewReader(body))
+		c.Set("id", 17)
+		c.Params = gin.Params{{Key: "id", Value: "27"}}
+		PutTokenRouting(c)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+	put(`{"mode":"auto","selected_only":true,"version":0,"entries":[{"channel_id":11,"enabled":true}]}`)
+	put(`{"mode":"auto","selected_only":false,"version":1,"entries":[]}`)
+	saved, err := model.ReadTokenRouting(t.Context(), 27)
+	require.NoError(t, err)
+	require.False(t, saved.SelectedOnly)
+	require.EqualValues(t, 2, saved.Version)
+	require.Empty(t, saved.Entries)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	common.SetContextKey(c, constant.ContextKeyTokenId, 27)
+	defer service.ReleaseRouteChannel(c)
+	channel, failure := service.SelectChannelForRequest(c, "scope-model", nil)
+	require.Nil(t, failure)
+	require.Equal(t, 22, channel.Id)
 }

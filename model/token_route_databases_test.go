@@ -137,6 +137,34 @@ func TestTokenRoutingDatabases(t *testing.T) {
 			require.Zero(t, count)
 
 			runTokenRouteRaceCases(t, db, barrier)
+			t.Run("routing summaries", testTokenRoutingSummaries)
 		})
 	}
+}
+
+func testTokenRoutingSummaries(t *testing.T) {
+	ids := make([]int, 0, 4)
+	want := map[int]TokenRoutingSummary{}
+	for _, tc := range []struct {
+		mode     string
+		selected bool
+		enabled  []bool
+	}{
+		{"", false, nil}, {TokenRouteAuto, false, nil}, {TokenRouteAuto, true, []bool{true, false}}, {TokenRouteOrdered, true, []bool{true, true, true}},
+	} {
+		token := Token{UserId: 17, Key: fmt.Sprintf("summary-%d", len(ids))}
+		require.NoError(t, token.Insert())
+		ids = append(ids, token.Id)
+		if tc.mode == "" {
+			continue
+		}
+		require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: token.Id, Mode: tc.mode, SelectedOnly: tc.selected, Version: 1}).Error)
+		for i, enabled := range tc.enabled {
+			require.NoError(t, DB.Create(&TokenRouteEntry{TokenID: token.Id, ChannelID: i + 1, Position: i, Enabled: enabled}).Error)
+		}
+		want[token.Id] = TokenRoutingSummary{TokenID: token.Id, Mode: tc.mode, SelectedOnly: tc.selected, RouteChannelCount: len(tc.enabled)}
+	}
+	got, err := TokenRoutingModes(ids)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
 }

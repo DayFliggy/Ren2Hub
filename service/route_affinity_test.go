@@ -213,3 +213,17 @@ func TestStrictAffinityFullChannelKeepsBindingAndReturns429(t *testing.T) {
 	require.Equal(t, 1, ChannelInFlight(22), "only the pre-existing borrower holds a slot")
 	require.Zero(t, ChannelInFlight(11), "strict binding cannot switch to another channel")
 }
+
+func TestOrderedRouteIgnoresAndPreservesAffinityBinding(t *testing.T) {
+	setupAffinityChannels(t)
+	saveRouteTest(t, 11, 22)
+	c, key := enableRouteAffinity(t, "prefer", 22)
+	selected, failure := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, failure)
+	require.Equal(t, 11, selected.Id)
+	c.Set("channel_id", selected.Id)
+	RecordChannelAffinity(c, selected.Id)
+	bound, found := affinityBinding(t, key)
+	require.True(t, found)
+	require.Equal(t, 22, bound)
+}

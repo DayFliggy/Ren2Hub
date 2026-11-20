@@ -17706,7 +17706,7 @@
         "path": "model/route_candidates.go",
         "input_hunk_sha256": "e3122a35e9b9eb53d0051c4113a53747d88809305c83f2f567b546a106fe6cb6",
         "classification": "retain_contract",
-        "contract": "批准无组token自动/手动路由统一候选；精确名过滤完再归一名，模型目录/预览同源",
+        "contract": "批准无组token自动/顺序路由统一候选；精确名过滤完再归一名，模型目录/预览同源",
         "necessary_connections": [
           "ChannelRoutable",
           "RouteChannelRowsAccepting",
