@@ -52,10 +52,8 @@ for (const [theme, width] of [
       .filter({ visible: true })
       .first()
       .click()
-    const types = page.getByRole('dialog').getByRole('radio')
-    await expect(types).toHaveCount(2)
-    await expect(types.nth(0)).toBeDisabled()
-    await expect(types.nth(1)).toBeDisabled()
+    // Routing is configured on its own page, so the form has no type choice.
+    await expect(page.getByRole('dialog').getByRole('radio')).toHaveCount(0)
     await page.getByRole('button', { name: /Advanced settings/i }).click()
     await expect(toggle).toHaveAttribute('aria-checked', 'true')
     await toggle.click()
