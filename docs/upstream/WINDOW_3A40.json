@@ -222,7 +222,7 @@
     "ce8fc49e4"
    ],
    "upstream_sha256": "547dddbdf2435b470988c0b65c8be631950a0b8ac49cd37a65f4affc0a9c991e",
-   "local_sha256": "aaca2f379f001b410d39fb9d930098dda489fb5d79b0b0769be7cd0621c98d03",
+   "local_sha256": "8f9286e4ce1bcbe56625a56decd6b8b645502d2bd7f350c439d9c55b6aa605b9",
    "disposition": "adapted",
    "basis": "带入上游 TestBatchSetChannelTagDatabaseMatrix，去掉 Group、每渠道能力数按本地 2，登记三库矩阵。"
   },
