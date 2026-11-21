@@ -204,7 +204,7 @@ test.describe('coarse pointer control targets', () => {
           'routing icons'
         )
         const pageSize = page
-          .getByRole('combobox', { name: '每页条数', exact: true })
+          .getByRole('combobox', { name: /^每页条数 / })
           .locator('visible=true')
         await checkTargets(pageSize, 'page size filter')
         await pageSize.scrollIntoViewIfNeeded()

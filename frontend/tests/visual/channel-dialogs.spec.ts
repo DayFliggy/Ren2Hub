@@ -210,12 +210,10 @@ for (const [theme, viewport] of [
       name: '批量测试渠道响应',
     })
     await expect(groupDialog).toBeVisible()
-    await groupDialog
-      .getByRole('combobox', { name: '测试模型', exact: true })
-      .click()
+    await groupDialog.getByRole('combobox', { name: /^测试模型 / }).click()
     await page.getByRole('option', { name: 'model-01', exact: true }).click()
     await groupDialog
-      .getByRole('combobox', { name: '测试并发（1–32）', exact: true })
+      .getByRole('combobox', { name: /^测试并发（1–32） / })
       .click()
     await page.getByRole('option', { name: '2', exact: true }).click()
     const groupStart = groupDialog.locator('[data-channel-test-start]')

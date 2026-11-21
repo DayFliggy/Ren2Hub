@@ -19,7 +19,8 @@ const model = defineModel<string>({ default: '' })
 const props = withDefaults(
   defineProps<{
     options: SelectOption[]
-    /** Stable accessible name that does not change with the selected value. */
+    /** Accessible label; the trigger's name is this label followed by the
+        selected value, so screen readers announce both. */
     label: string
     placeholder?: string
     /** short label pinned before the value, e.g. "类型:" — gives toolbars a
@@ -54,6 +55,8 @@ const facetActive = computed(
   () => props.variant === 'facet' && model.value !== ''
 )
 const triggerId = useId()
+const labelId = useId()
+const valueId = useId()
 const listboxId = useId()
 const optionId = (i: number) => `${listboxId}-option-${i}`
 
@@ -74,6 +77,12 @@ const triggerLabel = computed(() => {
 })
 const selectedOption = computed(() =>
   allOptions.value.find((o) => o.value === model.value)
+)
+// A facet without a filter shows no value, so its name is the label alone.
+const labelledBy = computed(() =>
+  props.variant === 'facet' && !facetActive.value
+    ? labelId
+    : `${labelId} ${valueId}`
 )
 
 /** token-backed color for a tone dot */
@@ -212,6 +221,7 @@ const { style: panelStyle, scope: panelScope } = useFloatingPanel(
     data-control-container
     :class="size === 'md' ? 'h-11 sm:h-10' : 'h-11 sm:h-8'"
   >
+    <span :id="labelId" hidden>{{ label }}</span>
     <!-- trigger -->
     <button
       :id="triggerId"
@@ -231,7 +241,7 @@ const { style: panelStyle, scope: panelScope } = useFloatingPanel(
             : 'border-transparent bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)]',
       ]"
       role="combobox"
-      :aria-label="label"
+      :aria-labelledby="labelledBy"
       aria-haspopup="listbox"
       :aria-expanded="open"
       :aria-controls="listboxId"
@@ -272,7 +282,7 @@ const { style: panelStyle, scope: panelScope } = useFloatingPanel(
               :style="{ background: toneColor(selectedOption.tone) }"
               aria-hidden="true"
             />
-            <span class="truncate">{{ triggerLabel }}</span>
+            <span :id="valueId" class="truncate">{{ triggerLabel }}</span>
           </span>
         </template>
       </template>
@@ -286,7 +296,9 @@ const { style: panelStyle, scope: panelScope } = useFloatingPanel(
           :style="{ background: toneColor(selectedOption.tone) }"
           aria-hidden="true"
         />
-        <span class="min-w-0 flex-1 truncate">{{ triggerLabel }}</span>
+        <span :id="valueId" class="min-w-0 flex-1 truncate">{{
+          triggerLabel
+        }}</span>
         <svg
           class="shrink-0 text-[var(--text-tertiary)] transition-transform"
           :class="open ? 'rotate-180' : ''"

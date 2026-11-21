@@ -58,7 +58,11 @@ describe('LogsView business log filters', () => {
     })
     await flushPromises()
 
-    await wrapper.get('button[aria-label="类型"]').trigger('click')
+    await wrapper
+      .findAll('[data-control-container]')
+      .find((control) => control.find('span[hidden]').text() === '类型')!
+      .get('[role="combobox"]')
+      .trigger('click')
     const options = [...document.body.querySelectorAll('[role="option"]')].map(
       (item) => item.textContent?.trim()
     )

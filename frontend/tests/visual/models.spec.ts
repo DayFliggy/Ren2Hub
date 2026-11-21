@@ -157,9 +157,7 @@ test('market filters persist across views and translated long names remain usabl
   )
   await page.goto('/models')
   await waitForStablePage(page)
-  await page
-    .getByRole('combobox', { name: 'Channel filter', exact: true })
-    .click()
+  await page.getByRole('combobox', { name: /^Channel filter / }).click()
   await page.getByRole('option', { name: '原生专线', exact: true }).click()
   const search = page.getByPlaceholder('Search models, providers or channels…')
   await search.fill('provider/')
@@ -167,7 +165,7 @@ test('market filters persist across views and translated long names remain usabl
     await page.getByRole('radio', { name, exact: true }).click()
     await expect(search).toHaveValue('provider/')
     await expect(
-      page.getByRole('combobox', { name: 'Channel filter', exact: true })
+      page.getByRole('combobox', { name: /^Channel filter / })
     ).toContainText('原生专线')
     await assertNoHorizontalOverflow(page)
   }

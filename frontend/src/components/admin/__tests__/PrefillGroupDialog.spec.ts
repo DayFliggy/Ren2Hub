@@ -79,7 +79,9 @@ const formModal = (wrapper: VueWrapper) =>
 
 async function chooseEndpointType(wrapper: VueWrapper) {
   await wrapper
-    .get('[role="combobox"][aria-label="Group Type"]')
+    .findAll('[data-control-container]')
+    .find((control) => control.find('span[hidden]').text() === 'Group Type')!
+    .get('[role="combobox"]')
     .trigger('click')
   // The option list is teleported to <body>, outside the wrapper.
   const option = [

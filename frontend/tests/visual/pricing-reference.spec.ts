@@ -58,8 +58,8 @@ for (const [theme, width] of [
     )
     await page.goto('/pricing')
     const sort = page.getByRole('combobox', {
-      name: 'Reference price order',
-      exact: true,
+      // The name is the label followed by the selected order.
+      name: /^Reference price order /,
     })
     await expect(page.locator('.public-pricing-card h2')).toHaveText([
       'native',
@@ -132,8 +132,7 @@ for (const [theme, width] of [
       )
     ).toContainText('$0.020')
     const marketSort = page.getByRole('combobox', {
-      name: 'Model ordering',
-      exact: true,
+      name: /^Model ordering /,
     })
     await marketSort.click()
     await page

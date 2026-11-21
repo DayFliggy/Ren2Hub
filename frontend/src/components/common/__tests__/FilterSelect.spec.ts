@@ -15,6 +15,19 @@ const inBody = (selector: string) =>
     (element) => new DOMWrapper(element)
   )
 
+/** The accessible name a screen reader computes from aria-labelledby. */
+const accessibleName = (element: Element) =>
+  (element.getAttribute('aria-labelledby') ?? '')
+    .split(' ')
+    .map(
+      (id) =>
+        (element.getRootNode() as ParentNode)
+          .querySelector(`[id="${id}"]`)
+          ?.textContent?.trim() ?? ''
+    )
+    .filter(Boolean)
+    .join(' ')
+
 const options = [
   { value: 'all', label: 'All' },
   { value: 'ready', label: 'Ready' },
@@ -93,13 +106,14 @@ describe('hand-drawn filter controls', () => {
     })
 
     const trigger = wrapper.get('[role="combobox"]')
-    expect(trigger.attributes('aria-label')).toBe('Channel type')
+    expect(accessibleName(trigger.element)).toBe('Channel type')
     expect(trigger.text()).toBe('Type')
     expect(wrapper.find('[data-facet-value]').exists()).toBe(false)
 
     await wrapper.setProps({ modelValue: '14' })
     expect(trigger.attributes('data-facet-active')).toBe('true')
     expect(wrapper.get('[data-facet-value]').text()).toBe('Anthropic')
+    expect(accessibleName(trigger.element)).toBe('Channel type Anthropic')
     expect(trigger.text()).not.toContain('3')
 
     await trigger.trigger('click')
@@ -107,5 +121,17 @@ describe('hand-drawn filter controls', () => {
     expect(rows[1]!.text()).toBe('Anthropic3')
     await rows[0]!.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
+  })
+
+  it('names the field trigger by its label and the selected value', async () => {
+    const wrapper = mount(FilterSelect, {
+      props: { modelValue: 'all', options, label: 'Status' },
+      global: { plugins: [i18n] },
+    })
+    const trigger = wrapper.get('[role="combobox"]')
+    expect(trigger.attributes('aria-label')).toBeUndefined()
+    expect(accessibleName(trigger.element)).toBe('Status All')
+    await wrapper.setProps({ modelValue: 'ready' })
+    expect(accessibleName(trigger.element)).toBe('Status Ready')
   })
 })

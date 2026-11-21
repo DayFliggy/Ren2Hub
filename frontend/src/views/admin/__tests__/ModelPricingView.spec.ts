@@ -1025,7 +1025,10 @@ describe('pricing workspace draft lifecycle', () => {
   // apart from the condition tree's "全部满足".
   it('labels the unfiltered billing mode as every mode, not a condition group', async () => {
     const wrapper = await setup(false, true, '/models/pricing', 'zh-CN')
-    const trigger = wrapper.get('[role="combobox"][aria-label="模式"]')
+    const trigger = wrapper
+      .findAll('[data-control-container]')
+      .find((control) => control.find('span[hidden]').text() === '模式')!
+      .get('[role="combobox"]')
     expect(trigger.findAll('span').map((item) => item.text())).toContain('全部')
     expect(trigger.text()).not.toContain('全部满足')
     wrapper.unmount()

@@ -95,8 +95,15 @@ function controlBoxes(page: Page, selector: string) {
       .filter((element) => (element as HTMLElement).offsetParent !== null)
       .map((element) => {
         const box = element.getBoundingClientRect()
+        // aria-labelledby names a combobox by its label and selected value.
+        const labelledBy = element
+          .getAttribute('aria-labelledby')
+          ?.split(' ')
+          .map((id) => document.getElementById(id)?.textContent?.trim())
+          .join(' ')
         return {
           name:
+            labelledBy ??
             element.getAttribute('aria-label') ??
             (element as HTMLInputElement).placeholder ??
             element.textContent?.trim(),
@@ -136,7 +143,7 @@ for (const theme of [
 
     const header = await controlBoxes(page, '[data-channel-header-actions]')
     expect(header.map((control) => control.name)).toEqual([
-      '排序字段',
+      '排序字段 ID',
       '降序排列',
       '新建渠道',
     ])
