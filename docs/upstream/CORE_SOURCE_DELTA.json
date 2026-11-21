@@ -15136,14 +15136,9 @@
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
-    "stream-write-budget": {
-      "basis": "流式并发合同：写出期限有界，慢客户端不得永久持有渠道槽位。",
-      "authority": "SYNC_LEDGER.md#现行本地差异",
-      "kind": "approved_contract"
-    },
     "strict-preconsume": {
       "kind": "approved_contract",
-      "authority": "docs/billing/IMPLEMENTATION.md:14; docs/routing/UNIFIED_ROUTING.md:15",
+      "authority": "docs/billing/IMPLEMENTATION.md:14; docs/routing/UNIFIED_ROUTING.md:35",
       "basis": "路由发送前强制估算及余额覆盖；不恢复trust_quota_usd、信任免预扣或允许负余额的reserve分支。"
     },
     "ticket": {
@@ -15195,9 +15190,6 @@
     "adjudication_overrides": 72
   },
   "verification_evidence": {
-    "status": "源码处置记录不宣称测试、发布或候选通过；最终身份见外部final-delivery.json。",
-    "directory": "/home/work/ren2hub-native-b388-20261114",
-    "final_identity": "final-delivery.json",
-    "previous_directory": "/home/work/ren2hub-upstream-b388-20261114"
+    "status": "源码处置记录不宣称测试、发布或候选通过；原外部证据目录已删除，无法据此复核验收。"
   }
 }

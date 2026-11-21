@@ -30,7 +30,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 | 路由与并发     | 无业务分组；每 Token 可在所选渠道内自动或顺序选路，全平台使用自动选路、上游 429 短冷却及逐轮选渠诊断；渠道倍率和 Key 倍率上限；用户与渠道无等待并发；原任务续作固定原渠道；共享端点上普通渠道与插件渠道竞争；六个批量渠道写入口和路由保存按 ID 升序加锁，渠道与能力同事务，零值照写 | [统一路由](../routing/UNIFIED_ROUTING.md) 自动调度采用健康准入、动态质量和默认优先级，缓存复用按可比会话评价，价格只影响末级份额。 |
 | 钱包与计价     | 发送前强制估算预扣；模型基础价乘渠道倍率一次；无模型默认价格和内置表达式，工具单价、音频倍率表、Gemini 音频输入固定价沿用上游                                                                                                                                                       | [实现](../billing/IMPLEMENTATION.md)、[定价](../billing/PRICING.md)                                                                |
 | 充值与支付     | 充值加赠；备用支付链接；回调和人工补单最多入账一次；GMPay 核验；返利以本金为基数，管理员可按订单回收一次；已使用的兑换码不可修改                                                                                                                                                    | [充值加赠](../billing/TOPUP_BONUS.md)、[资金 API](../billing/API.md)、下文“充值加赠接点”                                           |
-| 鉴权缓存与流式 | 上游 #8200 的缓存签名加入本地 `MaxConcurrency`；流式只保留取消时 ClientGone 优先、写入预算和首输出观测                                                                                                                                                                              | `NATIVE_B388_REVIEW.json`                                                                                                          |
+| 鉴权缓存与流式 | 上游 #8200 的缓存签名加入本地 `MaxConcurrency`；流式只保留取消时 ClientGone 优先和首输出观测                                                                                                                                                                                        | `NATIVE_B388_REVIEW.json`                                                                                                          |
 | 插件           | 内置任务插件源码与上游一致；通用提供商插件开放；请求处理有全局、渠道、模型作用域和插件声明的作用范围（`plugin_scope`），没有业务分组；已退役的 API 前缀在插件分发前返回 404                                                                                                         | [插件入口](../plugin-api/README.md)                                                                                                |
 | 原生计数       | Claude 和 Gemini 的 token 计数走独立真实转发，不进入生成或估算回退                                                                                                                                                                                                                  | 合同 `native-count`                                                                                                                |
 | 观测与仪表盘   | 个人与全站 summary；请求限制摘要；所有登录用户可读的系统状态卡片；流量读数取宿主网卡或主监听器；渠道上游倍率只读展示                                                                                                                                                                | [仪表盘](../console/DASHBOARD.md)、[安装](../installation/DOCKER.md)、[渠道上游倍率](../channel/UPSTREAM_RATIO.md)                 |
@@ -98,14 +98,23 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（少计费、任务缺渠道不退款、任务 ID 碰撞、统计可见范围、日志脱敏、配置原子性、支付回调核验、两处数据竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：
 
 - `model/channel_cache.go` 的 `InitChannelCache` 忽略 `DB.Find` 的错误，启用内存缓存时一次失败的同步会把渠道表替换为空。
-- Jimeng 非 V3 请求静默使用 5 秒。
+- Jimeng 非 V3 请求静默使用 5 秒，提交与完成计费使用同一时长函数，计费与实际发送一致；这是参数被静默改写，不是计费偏差（`plugins/tasks/jimeng/plugin.js:224,376`，与冻结上游相同）。
+- P3：`common/page_info.go:47` 保留 `page_size=-1`，GORM 不生成 LIMIT；本人日志、Token、任务及管理员列表等使用该分页值的入口，可一次取回当前用户或管理员授权范围内的全部匹配数据，造成资源压力；不会因此绕过既有用户范围过滤。与冻结上游 `48f9df96e` 相同。
+- 非自用模式且用户启用 `AcceptUnsetRatioModel` 时，未设模型倍率、走 token 重算的按量任务按预扣定额结算，多扣或少扣取决于用量（`relay/helper/price.go:212,231`、`setting/ratio_setting/model_ratio.go:103`、`service/task_billing.go:381`、`service/task_polling.go:815`）。自用模式下会按默认倍率重算；是否跳过重算的条件与冻结上游相同，本地只以渠道倍率替代分组倍率。
 - Stripe 在 TOKENS 展示模式下的数量合同不一致，后端保持原生，Vue 停用该入口。
-- 上游 #8218 之后旧的 `auth:user:version:<id>` Redis 键成为无 TTL 残留，清理属于生产 Redis 写操作，没有授权。
 
-下面两组来自历次审计的记录，没有在现行源码上重新核对，处理前先复核：
+以下计费与任务问题已对照当前源码和冻结上游 `48f9df96e` 核实，相关行为相同，只登记、不修：
 
-- Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖，渠道缺失时批量判失败且不退款；Jimeng 的 openai_video 校验忽略 `metadata.req_key`；Google 和 Vertex 在 `/v1/videos` 丢失顶层 `resolution`；Doubao 的 `metadata.duration` 为空串时原样发给上游并按最大时长预扣；重试换到更高倍率的渠道后补扣不足返回 403；易支付对已验签但永久无效的回调返回 fail；`common/ssrf_protection.go` 把带 zone 的 IPv6 字面量当作域名；batch 上游返回未请求的任务 ID 时，`updateBatchTasks` 按平台级映射更新另一渠道的任务。
-- 在 `206e0fa5c` 基线登记的 Realtime 最终累计结算重复扣费、Waffo 把处理中状态当作失败终态、Uptime Kuma 缺失心跳按 0 统计、日志导出没有行数和字节上限；上游倍率探测在代理一侧不防 DNS 重绑定；签名充值回执的小数解析。
+- Realtime 每轮 `preConsumeUsage` 经 `service/quota.go:128` 直扣，用量同时累加；会话结束后又按累计用量结算，存在重复扣费（`relay/channel/openai/relay_realtime.go:195,216,295`、`relay/websocket.go:59`、`service/quota.go:217`）。
+- Waffo 将所有非 `PAY_SUCCESS` 状态（包括处理中状态）写成失败终态，后续成功通知会因订单不再 pending 而不能入账（`controller/topup_waffo.go:383`、`model/topup_settlement.go:177`）。网关是否实际发送处理中通知尚无运行验证。
+- Midjourney 轮询读不到渠道时，批量将任务标为失败而不退款（`controller/midjourney.go:91`）；原生行为边界见[披露](NATIVE_B388_DISCLOSURES.md)。
+- Doubao 将空串 `metadata.duration` 原样合入请求，估算时按最大时长预扣（`plugins/tasks/doubao/plugin.js:864,874,960`）。完成时有用量 tokens 可按其结算（同文件 `:1062`），不能把较高预扣一概视为最终多扣。
+- 易支付对已验签但永久无效的回调仍返回 `fail`，可能产生重复回调噪声（`controller/topup.go:477,489`）。返回 `fail` 的结构与上游相同，其中金额不符的回执核验是本地扩展。
+
+以下历次审计记录尚未在现行源码上重新核对，处理前先复核：
+
+- Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖；Jimeng 的 openai_video 校验忽略 `metadata.req_key`；Google 和 Vertex 在 `/v1/videos` 丢失顶层 `resolution`；`common/ssrf_protection.go` 把带 zone 的 IPv6 字面量当作域名；batch 上游返回未请求的任务 ID 时，`updateBatchTasks` 按平台级映射更新另一渠道的任务。
+- Uptime Kuma 缺失心跳按 0 统计；日志导出没有行数和字节上限；上游倍率探测在代理一侧不防 DNS 重绑定。
 
 ## 等待上游的项
 
@@ -122,14 +131,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 最近一次正式发布
 
-2026-11-20 12:55 UTC，从 `d352118b7` 普通升级，回退目标也是它。内容：自动路由按健康、质量与缓存复用证据调度及其诊断；路由吸收（上游 #8345、上下文溢出不计渠道健康、无内容的完成流计为失败、流式半开探测在首个内容结算、严格会话亲和服从熔断、熔断与冷却诊断）；一条渠道一把 Key（含提供商插件渠道）与 NewAPI `3a407cc9b` 同步；冷却期内的 429 不再计入熔断；prefer 亲和在绑定渠道严重降档时退出；令牌自动/顺序路由（`selected_only` 选择范围、删空后拒绝、创建只接受自动）；上游额度耗尽计入熔断与路由质量。表结构只增加 `token_route_profiles.selected_only` 列，public 表仍是 46 张。
-
-- 应用提交 `76397d074efde95b6ca2def0f998d702da2d60c3`，根提交 `fd87f83af7bc184e117b7524339ce663504ae43e`，镜像 `sha256:885627b1512a679e3d1a0f55406c1c349c3fb9872446e0819e1374bd0ecbd8c5`。
-- 本地门禁按改动定向：沿用各开发线在其终点的证据（单 Key 线的单测层与 restored 75 项；令牌路由后端线的 service、relay、middleware、router 整包，model 与 controller 分批，race 107 项，三库登记用例；前端线的 Vitest、静态检查与视觉 spec），并在发布提交上补跑 service 整包 446 项、controller 分批 614 项（3 项按环境跳过）、relay 整包 93 项、race service 69 项和构建。没有运行全量档位。
-- 范围候选 `--scope auto`（`upgrade`、`management`、`routing-workload`）从正式 `d352118b7` 镜像做升级演练，`candidate_success=true`、`deployment_eligible=true`。
-- routing 同一镜像单独运行，退出 2：必测 33 项通过，其余是发布豁免清单登记的上游缺陷 `nil_ChannelMeta_in_ResolveOriginTask` 及其阻断的 6 项；诊断 12 项和 30 项阻断、restored 75 项与冻结清单一致，普通 race 124 项通过。退出 2 不计为通过。
-
-现场核验、备份和回退边界见工作区的服务器档案（`docs/server/SERVER_PROFILE.md`）。
+当前没有正式发布。生产实例、数据、备份和镜像已于 2026-11-21 全部删除，没有回退目标；下一次部署按首次安装执行。运行状态与恢复边界以工作区 `docs/server/SERVER_PROFILE.md` 为准。
 
 ## 记录规则
 
