@@ -198,3 +198,71 @@ func checkCreditTextOnObserved429(t *testing.T, relayStatus int) {
 	require.Equal(t, "headerless", routeObservations.cooldowns[ch.Id].source)
 	require.Zero(t, routeObservations.breakers[routeBreakerKey{ch.Id, info.OriginModelName}].openUntil)
 }
+
+func TestRouteOutcomePaymentRequiredAndChineseQuota(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		status, observed   int
+		message, errorType string
+		code               any
+		local, quota       bool
+	}{
+		{name: "payment required", status: 402, errorType: "server_error", code: "payment_required", quota: true},
+		{name: "observed payment required", status: 400, observed: 402, errorType: "server_error", quota: true},
+		{name: "balance", status: 400, message: "账户余额不足，请充值", quota: true},
+		{name: "token exhausted", status: 400, message: "该令牌额度已用尽", quota: true},
+		{name: "user quota first clause", status: 400, message: "用户额度不足, 剩余额度: 0", quota: true},
+		{name: "moderation echo", status: 400, message: "输入内容审核未通过：用户说余额不足"},
+		{name: "single quote model echo", status: 400, message: "模型 '余额不足' 不存在"},
+		{name: "curly single quote echo", status: 400, message: "模型‘余额不足’不存在"},
+		{name: "corner quote model echo", status: 400, message: "模型「余额不足」不存在"},
+		{name: "double corner quote echo", status: 400, message: "模型『余额不足』不存在"},
+		{name: "rate limit mapped to payment required", status: 402, observed: 429, code: "rate_limit_exceeded"},
+		{name: "quota", status: 403, message: "额度不足", quota: true},
+		{name: "exhausted", status: 400, message: "额度已用尽", quota: true},
+		{name: "arrears", status: 400, message: "账户已欠费", quota: true},
+		{name: "points", status: 400, message: "积分不足", errorType: "upstream_error", quota: true},
+		{name: "rate limited", status: 429, message: "余额不足"},
+		{name: "remapped rate limited", status: 400, observed: 429, message: "余额不足"},
+		{name: "quoted echo", status: 400, message: `输入“余额不足”无效`},
+		{name: "backtick echo", status: 400, message: "输入`额度不足`无效"},
+		{name: "explicit other code", status: 400, message: "余额不足", code: "invalid_model"},
+		{name: "other type", status: 400, message: "余额不足", errorType: "authentication_error"},
+		{name: "local wallet", status: 402, message: "余额不足", local: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := routeOutcomeTestContext(t)
+			info := &relaycommon.RelayInfo{OriginModelName: "quota-model", RelayMode: 1, StartTime: time.Now()}
+			kind := tc.errorType
+			if kind == "" {
+				kind = "invalid_request_error"
+			}
+			apiErr := types.WithOpenAIError(types.OpenAIError{Message: tc.message, Type: kind, Code: tc.code}, tc.status)
+			if tc.local {
+				apiErr = types.NewError(errors.New(tc.message), types.ErrorCodeInsufficientUserQuota)
+			}
+			RequestPolicy(c).BeginAttempt(&model.Channel{Id: 11})
+			MarkRouteAttemptSent(c, info)
+			observed := tc.observed
+			if observed == 0 {
+				observed = tc.status
+			}
+			ObserveRouteResponse(c, &http.Response{StatusCode: observed, Header: http.Header{}})
+			FinishRouteAttempt(c, info, apiErr)
+			events := RequestPolicy(c).Events()
+			ev := events[len(events)-1].RouteAttempt
+			require.NotNil(t, ev)
+			if tc.quota {
+				require.Equal(t, "upstream_quota", ev.OutcomeReason)
+				require.Equal(t, "failure", ev.Outcome)
+				require.Equal(t, 1, routeObservations.breakers[routeBreakerKey{11, info.OriginModelName}].failures)
+			} else {
+				require.Empty(t, ev.OutcomeReason)
+				if tc.observed == 429 && tc.status == 402 {
+					require.Greater(t, routeObservations.cooldowns[11].until, time.Now().UnixMilli())
+					require.Zero(t, routeObservations.breakers[routeBreakerKey{11, info.OriginModelName}].failures)
+				}
+			}
+		})
+	}
+}

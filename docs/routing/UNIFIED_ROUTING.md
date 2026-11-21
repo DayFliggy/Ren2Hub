@@ -10,7 +10,7 @@
 
 首轮拒绝或重试结束时可能没有对应的数据库日志行。按请求 ID 搜索服务端 `route_scan`，可查当轮满载、无候选、存储错误，或在发送前被本地拒绝的选中结果。后一种记录含 `channel_id` 和 `request_status`，例如预扣被拒时为 403。Token 路由配置读取失败发生在候选查询之前，此时查询 `route_scope stage=token_route_scope result=error`。
 
-上游结构化错误码 `insufficient_quota`、`insufficient_user_quota`、`pre_consume_token_quota_failed` 在任意 HTTP 状态下都属于额度信号。非 429 响应还识别 Anthropic 的余额不足文案。错误类型须为通用的 `invalid_request_error` 或 `upstream_error`，OpenAI 兼容格式须没有独立错误码。去除首尾空白后，消息须以 `Your credit balance is too low` 开头。引号内的回显、明确的其他错误码以及普通限流均排除。429 只按结构化额度码识别。Gemini 每分钟限流的 `RESOURCE_EXHAUSTED` 即使带额度文案，也按普通 429 处理，生效冷却期间不计熔断。
+上游结构化错误码 `insufficient_quota`、`insufficient_user_quota`、`pre_consume_token_quota_failed` 在任意 HTTP 状态下都属于额度信号。观测到上游真实返回 HTTP 402 时同样直接识别；渠道状态码映射后的根错误 402 不作为额度信号。非 429 响应还识别余额不足文案：错误类型须为通用的 `invalid_request_error` 或 `upstream_error`，OpenAI 兼容格式须没有独立错误码；剔除引号内的回显并去除首尾空白后，消息以 `Your credit balance is too low` 开头，或中文消息的第一个分句包含“余额不足”“额度不足”“额度已用尽”“账户已欠费”“积分不足”。中文判断还剔除单引号、‘…’、「…」和『…』包住的回显，只检查第一个“：:，,。；;!！?？”之前的文本；英文分支保留原有撇号规则。明确的其他错误码和其他错误类型不按文案识别。根错误或观测状态任一为 429 时，文案不能触发额度分类，只有结构化额度码或观测到的真实上游 402 可以。Gemini 每分钟限流的 `RESOURCE_EXHAUSTED` 即使带额度文案，也按普通 429 处理，生效冷却期间不计熔断。
 
 额度信号计入模型熔断和动态质量，尝试证据记录 `outcome_reason=upstream_quota`。额度 429 同时设置渠道冷却。本地用户余额、令牌额度、钱包预扣拒绝，以及已取消、超时或标记为业务拒绝的请求均不触发额度分类。流式请求已经输出首个内容事件后，不再用额度信号改写最终分类，熔断按首输出结算成功。
 

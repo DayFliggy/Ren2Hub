@@ -63,6 +63,9 @@ func (a *routeAttempt) upstreamQuotaFailure(apiErr *types.NewAPIError) bool {
 		return false
 	}
 	root := rootRelayError(apiErr)
+	if a.status.Load() == http.StatusPaymentRequired {
+		return true
+	}
 	switch root.GetErrorCode() {
 	case "insufficient_quota", types.ErrorCodeInsufficientUserQuota, types.ErrorCodePreConsumeTokenQuotaFailed:
 		return true
@@ -92,8 +95,25 @@ func (a *routeAttempt) upstreamQuotaFailure(apiErr *types.NewAPIError) bool {
 	// Keep a placeholder so removing an echoed argument cannot promote a
 	// later phrase to the start of the provider's message.
 	message = quotedText.ReplaceAllString(strings.TrimSpace(message), "…")
-	return strings.HasPrefix(message, "Your credit balance is too low")
+	if strings.HasPrefix(message, "Your credit balance is too low") {
+		return true
+	}
+	// Chinese provider signals belong to the first clause, not echoed user input.
+	message = chineseQuotaQuotedText.ReplaceAllString(message, "…")
+	if end := strings.IndexAny(message, "：:，,。；;!！?？"); end >= 0 {
+		message = message[:end]
+	}
+	for _, phrase := range []string{"余额不足", "额度不足", "额度已用尽", "账户已欠费", "积分不足"} {
+		if strings.Contains(message, phrase) {
+			return true
+		}
+	}
+	return false
 }
+
+// Single quotes are removed only for Chinese matching; English apostrophes
+// retain the existing prefix semantics.
+var chineseQuotaQuotedText = regexp.MustCompile("'[^']*'|‘[^’]*’|「[^」]*」|『[^』]*』")
 
 // emptyStreamOutcome judges a stream that ended natively successful after
 // observed events without one content event. It fails the channel only when
