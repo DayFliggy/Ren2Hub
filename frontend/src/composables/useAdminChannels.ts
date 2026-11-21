@@ -58,6 +58,8 @@ export interface ChannelModelTestResult {
 }
 
 const CHANNEL_BATCH_SIZE = 5
+/** Returned by a row action whose request the server answered as a no-op. */
+const UNCHANGED = Symbol('unchanged')
 
 export function useAdminChannels() {
   const { t } = useI18n()
@@ -256,8 +258,12 @@ export function useAdminChannels() {
     if (!canMutate.value || !allowed(permission) || isRowBusy(id)) return false
     setBusy(id, action)
     try {
-      await request()
+      const outcome = await request()
       await load({ background: true })
+      if (outcome === UNCHANGED) {
+        toast.warning(t('channels.statusUnchanged'))
+        return false
+      }
       toast.success(t(successKey))
       return true
     } catch (error) {
@@ -339,6 +345,9 @@ export function useAdminChannels() {
         )
         if (hasPendingPublication(response))
           toast.warning(t('common.publicationPending'))
+        // data is false when the stored status was already the target or the
+        // write did not apply; the reloaded list shows the server's status.
+        if (response.data === false) return UNCHANGED
       },
       nextStatus === 1 ? 'channels.enabled' : 'channels.disabled'
     )

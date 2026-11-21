@@ -626,7 +626,7 @@ export default {
         'Historical health is unavailable. Display order does not indicate routing priority.',
       tabLabel: 'Auto Route',
       subtitle:
-        'All platform channels, grouped by lab. Each API key can limit itself to selected channels and route in order or automatically under Routing.',
+        'All platform channels, grouped by vendor. Each API key can limit itself to selected channels and route in order or automatically under Routing.',
       refresh: 'Refresh',
       updated: 'Updated {time}',
       groupBest: 'Leading operating score',
@@ -815,7 +815,7 @@ export default {
     runtimeRecheck:
       'Price, quota, and security qualification are checked again at request time.',
     eligible: 'Eligible',
-    unknownLab: 'Unknown Lab',
+    unknownLab: 'Unknown vendor',
     healthState: {
       closed: 'Healthy',
       open: 'Cooling down',
@@ -1587,7 +1587,7 @@ export default {
     clearSupplierTitle: 'Clear vendor channels',
     clearSupplierMessage:
       'Delete the {count} {supplier} channels shown on this page (IDs {ids})? This action cannot be undone.',
-    supplierCleared: 'Cleared {count} channels from {supplier} Lab',
+    supplierCleared: 'Cleared {count} channels from {supplier} vendor',
     fieldSettings: 'Field settings',
     resetFields: 'Restore defaults',
     supplierGroupCount: '{count} channels on this page',
@@ -1602,6 +1602,8 @@ export default {
     bulkDeleted: 'Deleted {count} selected channels',
     enabled: 'Channel enabled',
     disabled: 'Channel disabled',
+    statusUnchanged:
+      'Channel status did not change. The list now shows the current server status.',
     balanceUpdated: 'Upstream balance and ratio synced',
     balanceQueryCompleted: 'Upstream balance query completed',
     balanceRawTitle: 'Raw balance response: {name}',
@@ -2271,7 +2273,7 @@ export default {
       tokenRef: 'Token fingerprint',
       ticketId: 'Ticket ID',
       tradeNo: 'Order number',
-      groupSlug: 'Lab group',
+      groupSlug: 'Vendor group',
       eventId: 'Event ID',
       operationId: 'Operation ID',
       expectedVersion: 'Expected version',
@@ -2366,9 +2368,9 @@ export default {
       channelUpstreamApplyAll: 'Applied upstream configuration to all channels',
       channelUpstreamDetectAll:
         'Detected upstream configuration for all channels',
-      channelLabBalanceSync: 'Synced balances for Lab group {group_slug}',
-      channelLabModelTest: 'Tested models for Lab group {group_slug}',
-      channelLabDelete: 'Deleted Lab group {group_slug}',
+      channelLabBalanceSync: 'Synced balances for vendor group {group_slug}',
+      channelLabModelTest: 'Tested models for vendor group {group_slug}',
+      channelLabDelete: 'Deleted vendor group {group_slug}',
       ticketReply: 'Replied to ticket {ticket_id}',
       ticketStatusUpdate: 'Changed ticket {ticket_id} status',
       ticketAssign: 'Changed ticket {ticket_id} assignee',

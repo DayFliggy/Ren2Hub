@@ -122,6 +122,28 @@ describe('native channel management', () => {
     }
   )
 
+  it('warns instead of reporting success when the status did not change', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+    vi.spyOn(api, 'postEnvelope').mockResolvedValue({
+      success: true,
+      data: false,
+      publication_pending: false,
+    })
+    const state = await setup()
+    get.mockClear()
+    expect(await state.toggleStatus(channel)).toBe(false)
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(
+      'channels.statusUnchanged'
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(get).toHaveBeenCalledWith(
+      '/api/channel/',
+      expect.anything(),
+      expect.anything()
+    )
+  })
+
   it('retains the batch changed count and reports pending publication separately', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
     vi.spyOn(api, 'postEnvelope').mockResolvedValue({
