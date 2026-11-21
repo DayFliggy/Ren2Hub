@@ -149,6 +149,10 @@ func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner Res
 		if err != nil {
 			return nil
 		}
+		if apiErr := responsesWSFieldConflict(message); apiErr != nil {
+			s.sendError("", "", apiErr)
+			continue
+		}
 		envelope, streamID, err := parseResponsesWSEnvelope(message)
 		eventType := envelope.Type
 		if err != nil {

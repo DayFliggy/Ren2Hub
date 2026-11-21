@@ -33978,7 +33978,7 @@
       ]
     },
     "relay/responses_websocket.go": {
-      "local_sha256": "0522aa09c63ca8ecd3d4aca356a4e68c29736dfe5b383991ac2a4a7c1e2f21b1",
+      "local_sha256": "0cf9930b52f7e40aebb7a5bf3dff54689d25a0a2d909612505379649c1c113c2",
       "hunks": [
         {
           "header": "@@ -120,9 +120,7 @@",
@@ -33986,88 +33986,93 @@
           "basis": "删除 WS session lockedGroup，业务分组已退役；一条渠道一把 Key，去掉 lockedKeyIndex（single-key-channel）。（原审查 relay/responses_websocket.go#1）"
         },
         {
-          "header": "@@ -245,6 +243,7 @@",
-          "sha256": "46eab109688063fa83275263f13cc137c1663801c8303404bc803d42ced9cc97",
+          "header": "@@ -150,6 +148,10 @@",
+          "sha256": "ceb22f3a030d816fe4009455c96cbd27fcaa8b9de3b2b767e1a215c4b9c38dee",
+          "basis": "在解码客户端事件前拒绝重复字段；错误构造在扩展文件，避免冲突帧进入计费和转发（request-field-consistency）。"
+        },
+        {
+          "header": "@@ -245,6 +247,7 @@",
+          "sha256": "d78efbc42e5df53f28b7aad440a79df02b8a5900455a80fa7980ee46ca49d71e",
           "basis": "设置 IsStream 上下文，供流式观测/插件消费者使用（原审查 relay/responses_websocket.go#3）。"
         },
         {
-          "header": "@@ -259,9 +258,13 @@",
-          "sha256": "9262b0609453cd3f08c8415f7a452d29504a3e86d6ac893d78dd11ef35ddfcec",
+          "header": "@@ -259,9 +262,13 @@",
+          "sha256": "d1ac1a43a24595de713e63c4db48ff86f486a47c79880bdb7d239f99b712b6ce",
           "basis": "移除 group fallback，保留 FinishRouteAttempt 释放/记录同一次尝试。（原审查 relay/responses_websocket.go#4）"
         },
         {
-          "header": "@@ -272,6 +275,13 @@",
-          "sha256": "6350fc768a69ccb0a35f70cbd9d9d5e51810711038424c51b7bd35c355283f62",
+          "header": "@@ -272,6 +279,13 @@",
+          "sha256": "f51999e87bb98bab599b494a37e339bd9270e3237622be076dccc6dd70c292f5",
           "basis": "WS 会话使用用户并发 permit，立即拒绝超限。（原审查 relay/responses_websocket.go#5）"
         },
         {
-          "header": "@@ -286,7 +296,7 @@",
-          "sha256": "3c29622ec1f1422a4e374e1e91b19002dc279d264f9b0caa932c64f09010994f",
+          "header": "@@ -286,7 +300,7 @@",
+          "sha256": "09b21ae15ac6ce8c36d3927c0dd38b004d637e020f7ff0713e78174033c7b6cb",
           "basis": "请求插件入口与出站拒绝写终止错误日志前记录最终的策略决策（RecordTerminalRelayErrorLog），见 SYNC_LEDGER.md#自动选渠诊断接点。"
         },
         {
-          "header": "@@ -301,6 +311,9 @@",
-          "sha256": "837173136044e30a51090d707b9f7d22791b34ddc357768e893ce16d8b0aded6",
+          "header": "@@ -301,6 +315,9 @@",
+          "sha256": "721bba81cec6bd2c64e14cd55ffb4ecaed9de73de37fa737de3812a0cf180fd7",
           "basis": "本地路由读取错误保留500映射，用于真实 CheckLockedTokenRoute 产品策略读取失败，不混同上游错误。（原审查 relay/responses_websocket.go#6）"
         },
         {
-          "header": "@@ -317,16 +330,23 @@",
-          "sha256": "edf2dcc6ded6e057b6933d82274b8565f028c74c88411587d044d5553c886348",
+          "header": "@@ -317,16 +334,23 @@",
+          "sha256": "95fd1c478a01c8c6f26f9e480c1b8bb4bc57d95af21621e95dbd7cea7a31bacb",
           "basis": "MarkSent、无组 RetryParam、当下一候选本地准入拒绝时保留已有上游错误的优先级，以及本地选路失败关闭码。（原审查 relay/responses_websocket.go#7）"
         },
         {
-          "header": "@@ -340,13 +360,13 @@",
-          "sha256": "00e8891ffd6c5f0a8ce0d6386241fcff81ff60b20276c17914284ac3810f1d72",
+          "header": "@@ -340,13 +364,13 @@",
+          "sha256": "40c51364a5573c00eff2c53e7c89578c5615034600c77e5fff454e32c41450ca",
           "basis": "切换实际渠道后重建 ChannelMeta/计费准备，使倍率与真实选路一致。（原审查 relay/responses_websocket.go#8）"
         },
         {
-          "header": "@@ -360,9 +380,10 @@",
-          "sha256": "c6991e5a01d5f76da38d8109c9ba58f27b2fd648e8251c4e1190bd139e3d733e",
+          "header": "@@ -360,9 +384,10 @@",
+          "sha256": "622cb8148f769fab8002f820c843ef1ec3d569c9e2a799cb6f1eb58ec662cf87",
           "basis": "拨号失败完成本次 RouteAttempt 并释放/观测；NewChannelError 不再带多 Key 标记（single-key-channel）。（原审查 relay/responses_websocket.go#9）"
         },
         {
-          "header": "@@ -371,12 +392,13 @@",
-          "sha256": "bbf26c51a35fbf308b2b3b7f07a1a2a4b20c40122658d28b2b4aa2478a2b449a",
+          "header": "@@ -371,12 +396,13 @@",
+          "sha256": "cfa74bbc9cc7ec3e439f44cce6e86bdde620a22f3ce2cb665fcb5c694e6eb89a",
           "basis": "发送前 MarkSent 且删除 lockedGroup；锁定连接只记 Key 文本，不记多 Key 下标（single-key-channel）。（原审查 relay/responses_websocket.go#10）"
         },
         {
-          "header": "@@ -384,7 +406,7 @@",
-          "sha256": "d072c3feffc649388bc5c2acd3527eb5fecd8971023c22cc20f7fcd3f6cf977c",
+          "header": "@@ -384,7 +410,7 @@",
+          "sha256": "4a51fafd5dd7e98f0cc6067ebc564c97f1c8c59eb5462549ecf4f8ecd6690a20",
           "basis": "复制到连接上下文的键去掉多 Key 标记与下标（single-key-channel）。"
         },
         {
-          "header": "@@ -545,6 +567,8 @@",
-          "sha256": "c714eec745a1ba4c7ad8a9657f3565bd40e6556ac555b2bdef63b117ea4935ba",
+          "header": "@@ -545,6 +571,8 @@",
+          "sha256": "eb9e8b37ecda9842b9b2c984d1512b7dcb7912a4f23298ec2e97065a90811398",
           "basis": "WS 服务端事件保留统一输出观测（原审查 relay/responses_websocket.go#11）；原始帧同时交给 ObserveRouteUsage，按路由尝试记录用量字段存在性和空流的原始帧证据。"
         },
         {
-          "header": "@@ -650,19 +674,17 @@",
-          "sha256": "80aa21a5e91816ff33804b927895ed855cdf04c3027a3dcaaab177a115551c85",
+          "header": "@@ -650,19 +678,17 @@",
+          "sha256": "70d5bd058018107ab922e4b014bf0f54176a15dc9ce5789e9a4d8848b40ab077",
           "basis": "保留 CheckLockedTokenRoute 对当前 token 路由策略的复核；缓存读取错误不新增分类。锁定 Key 只与渠道 Key 文本比较（single-key-channel）。（原审查 relay/responses_websocket.go#12）"
         },
         {
-          "header": "@@ -692,18 +714,10 @@",
-          "sha256": "295489033b49a4c4f05dd89c1ee05e45237e6ed438fe18e3e141eb1f15e74651",
+          "header": "@@ -692,18 +718,10 @@",
+          "sha256": "0d0d09414d986e87d17af3751cfb6109bde78a4054caba8395afcb03a0d873a8",
           "basis": "移除 group 复核；保留 acquirePinnedRoute 对当前原渠道策略/并发即时准入。（原审查 relay/responses_websocket.go#13）"
         },
         {
-          "header": "@@ -714,7 +728,7 @@",
-          "sha256": "9bd2a650d390adfd0b055a30408fde47a9eb677336c076149de6c22720bc4380",
+          "header": "@@ -714,7 +732,7 @@",
+          "sha256": "78205eba206b8686626bdf030c8aff559bf49792b66f81591a1035787a508bce",
           "basis": "BeginUpstreamAttempt 重置尝试观测并移除 group。（原审查 relay/responses_websocket.go#14）"
         },
         {
-          "header": "@@ -760,7 +774,7 @@",
-          "sha256": "bce06730536e38157f47910afe77c5336fd32340757b50b5423a77ff6d3598bd",
+          "header": "@@ -760,7 +778,7 @@",
+          "sha256": "8fa95a21351db93609e2c49f1345e332083208841445a06469512aa19713af04",
           "basis": "请求插件入口与出站拒绝写终止错误日志前记录最终的策略决策（RecordTerminalRelayErrorLog），见 SYNC_LEDGER.md#自动选渠诊断接点。"
         },
         {
-          "header": "@@ -778,6 +792,7 @@",
-          "sha256": "f6c7fbe72839fe6596f16a80e8e44f9f157bb300631031b0c4333c2b73db889b",
+          "header": "@@ -778,6 +796,7 @@",
+          "sha256": "875237c300fe328a5171a038e6cd648aa8284c85adfd51f6ada6ca32c2be7aa1",
           "basis": "出站 response.create 事件构造完成后把最终事件交给 service.ObserveRouteGenerate：读取参数覆盖与出站插件之后实际发给上游的 generate，generate:false 且没有输出的原生成功在路由上记 ignored（no_generation），两条发送路径和每次重试都经过这里（逻辑在扩展文件 service/route_attempt.go 与 service/route_outcome.go）。"
         },
         {
-          "header": "@@ -1092,7 +1107,7 @@",
-          "sha256": "0f636d7769d034031b8739409786bbf9485baf51ba3641cfc4d42d74bc96109e",
+          "header": "@@ -1092,7 +1111,7 @@",
+          "sha256": "5e6d1aec5e74078039841cce184608c3169db85466696abfb0f6dd4bf952107a",
           "basis": "SelectChannel 调用使用无组本地路由签名。（原审查 relay/responses_websocket.go#16）"
         }
       ]

@@ -90,6 +90,14 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 					return
 				}
 
+				if rejected, err := rejectRealtimeFieldConflict(c, message, writeClient); rejected {
+					if err != nil {
+						errChan <- fmt.Errorf("error rejecting client event: %w", err)
+						return
+					}
+					continue
+				}
+
 				realtimeEvent := &dto.RealtimeEvent{}
 				err = common.Unmarshal(message, realtimeEvent)
 				if err != nil {

@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 849,
-    "adapted": 315,
-    "extension": 419,
+    "upstream_equal": 845,
+    "adapted": 319,
+    "extension": 429,
     "removed": 47
   },
   "files": [
@@ -4052,6 +4052,25 @@
       "local_sha256": "5528153e3e6844fe792924fdc3855de0d468503224fa3e24f28505e098aae899"
     },
     {
+      "path": "middleware/request_field_conflict.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c1f245974037517248f5a73852570b95411d9c752f532e4842791d0922def25f",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
+    },
+    {
+      "path": "middleware/request_field_conflict_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "773cd78c0067a64fb29db78a90695c7fda320abf7f883670de9a30bc1a009ac6"
+    },
+    {
       "path": "middleware/retired_groups.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -7090,6 +7109,31 @@
       }
     },
     {
+      "path": "pkg/requestfield/conflict.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "61aef5cb8102dffcbdf9d56c308b407e05eda13ecffa26cc7294527bd731f40e",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
+    },
+    {
+      "path": "pkg/requestfield/conflict_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "7cc3274d483879fea9425df60579c639d8f69988a0928e19edf883ba72778bcc"
+    },
+    {
+      "path": "pkg/requestfield/protocol_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "459756357c55aa6f6f28218b410c8063b72f5e3d4642c16131aa0e9a61fa0139"
+    },
+    {
       "path": "pkg/requestpatch/patch.go",
       "status": "upstream_equal",
       "upstream_sha256": "274dc25394c387eebe1e9ed07c74bb02e47030ee39172b1ee184eb97fa556787",
@@ -8356,13 +8400,14 @@
       "path": "relay/channel/openai/relay_realtime.go",
       "status": "adapted",
       "upstream_sha256": "cf5786a01f4d3058850887dd072b57f082e48efc35ff4607e4c6048eea3fe312",
-      "local_sha256": "8ea4420326066258f43e65150797fd1aff8d1fb3561a289319300a59f5def9f6",
+      "local_sha256": "9218227887bae4292507a40f9ea6db065119f12077cc46eb4ae61f727317cc34",
       "reasons": [
-        "token-routing"
+        "token-routing",
+        "request-field-consistency"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -8403,6 +8448,25 @@
         "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
         "current_hunk_review": true
       }
+    },
+    {
+      "path": "relay/channel/openai/request_field_conflict.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "770a7f8111c7021a97eca298ddd84d1d1c17988f8434b801e3a4231228ee6069",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
+    },
+    {
+      "path": "relay/channel/openai/request_field_conflict_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4f92a172b508185457982e4f55147c1a9eee503c0ecf990486d2d5e834213e1f"
     },
     {
       "path": "relay/channel/openai/responses_via_chat.go",
@@ -9776,6 +9840,25 @@
       "local_sha256": "91f5d11e7f8baf2937ebbee6e3179b53bdd6aa0bad16fb5f89322f5b878fb058"
     },
     {
+      "path": "relay/request_field_conflict.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c215d3d0730cd4bb0299a1f499e39a47332e86a901ba9edb7d830b4d9ceea280",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
+    },
+    {
+      "path": "relay/request_field_conflict_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "9598f7f6dbc216a8b4c6e34132e6c5589d8918e996d766992d80baffe0eceb95"
+    },
+    {
       "path": "relay/requestplugin/attachments.go",
       "status": "upstream_equal",
       "upstream_sha256": "3d587256375f5635b3b75430a142f5e16bcfdbef040060cdf206cb927ef4e55b",
@@ -10021,17 +10104,18 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "5eff80a23e4c69573bb6598fec1a14205a59202833abdce7b8033557395a5b07",
-      "local_sha256": "0522aa09c63ca8ecd3d4aca356a4e68c29736dfe5b383991ac2a4a7c1e2f21b1",
+      "local_sha256": "0cf9930b52f7e40aebb7a5bf3dff54689d25a0a2d909612505379649c1c113c2",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "single-key-channel",
-        "token-routing"
+        "token-routing",
+        "request-field-consistency"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 buildResponsesWSCreatePayload 把最终出站事件交给 service.ObserveRouteGenerate（实际不要求生成且没有输出的请求在路由上记 ignored），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/responses_websocket.go#1, relay/responses_websocket.go#10, relay/responses_websocket.go#11, relay/responses_websocket.go#12, relay/responses_websocket.go#13, relay/responses_websocket.go#14, relay/responses_websocket.go#16, relay/responses_websocket.go#3, relay/responses_websocket.go#4, relay/responses_websocket.go#5, relay/responses_websocket.go#6, relay/responses_websocket.go#7, relay/responses_websocket.go#8, relay/responses_websocket.go#9。每次 WebSocket create 在本地错误收尾时记录未发送的已选渠道。WebSocket create 的入口和出站请求插件在写终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。 在 (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 buildResponsesWSCreatePayload 把最终出站事件交给 service.ObserveRouteGenerate（实际不要求生成且没有输出的请求在路由上记 ignored），现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11351,9 +11435,16 @@
     },
     {
       "path": "router/plugin-router.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "75b125a9a2add3e82b4ad7a142f49c4f8d10d22f2cad8c06647a0183e8feabfd",
-      "local_sha256": "75b125a9a2add3e82b4ad7a142f49c4f8d10d22f2cad8c06647a0183e8feabfd"
+      "local_sha256": "add92535b494dec60068cb174bcb0ab0530c00135510307b0e440ca182369e26",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
     },
     {
       "path": "router/plugin_router_test.go",
@@ -11387,14 +11478,15 @@
       "path": "router/relay-router.go",
       "status": "adapted",
       "upstream_sha256": "424bc389e6fee10d2521cad6e904d771a7861114f096116300103d00dc1163d5",
-      "local_sha256": "f5317228487b0b648a1e808cee9061bab3e2621d7271bd4355f067f110eab624",
+      "local_sha256": "4447c3527cd2e6de26c8facbb8a640403c7e1ca032132acda886b0bb9b79afbb",
       "reasons": [
         "native-count",
-        "retired"
+        "retired",
+        "request-field-consistency"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/relay-router.go#1, router/relay-router.go#2, router/relay-router.go#3, router/relay-router.go#4, router/relay-router.go#5",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/relay-router.go#1, router/relay-router.go#2, router/relay-router.go#3, router/relay-router.go#4, router/relay-router.go#5 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11413,6 +11505,12 @@
       "local_sha256": "088a405394c73645587865bba87bc739dd2f65eef133f5c64ad78e3b3e6811cd"
     },
     {
+      "path": "router/request_field_conflict_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3d2bb8c9290f0aeab3c350d1627c79482a531374fe60d88ee2ccdd7d14e2aad5"
+    },
+    {
       "path": "router/retired_routes_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -11426,15 +11524,29 @@
     },
     {
       "path": "router/task-plugin-protocol-router.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "8472323db88783ff78eb338a6a4e489edc77bf138b492738999cc956c8bfcbf2",
-      "local_sha256": "8472323db88783ff78eb338a6a4e489edc77bf138b492738999cc956c8bfcbf2"
+      "local_sha256": "97f11bf45ec45f73a61c619a3ef8176a796b9ec82e5c70e6a520c8218fc00d82",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
     },
     {
       "path": "router/task-router.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "e7afd69b19ed49eda94df21267b51b53be2f723cb8c3829436a61fda827be343",
-      "local_sha256": "e7afd69b19ed49eda94df21267b51b53be2f723cb8c3829436a61fda827be343"
+      "local_sha256": "1b12b4e3766a65331a08a0af57ee4ec4009646864700d4f91cce11ce685f5bc9",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
     },
     {
       "path": "router/task_plugin_options_router_test.go",
@@ -11480,9 +11592,16 @@
     },
     {
       "path": "router/video-router.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "92c0c484f32767d9e0078bbd5e296dd5f75578e5aaced27e66688a30d01db92d",
-      "local_sha256": "92c0c484f32767d9e0078bbd5e296dd5f75578e5aaced27e66688a30d01db92d"
+      "local_sha256": "153ca3e43a5c04f738b4f2aaf07b8b0bbc1e158e1a66248a24080628b3b8e985",
+      "reasons": [
+        "request-field-consistency"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 请求字段一致性接点见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。"
+      }
     },
     {
       "path": "router/video_proxy_route_test.go",
@@ -15042,6 +15161,11 @@
     },
     "vue-frontend": {
       "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
+      "kind": "approved_contract"
+    },
+    "request-field-consistency": {
+      "basis": "请求入口及 WebSocket 帧拒绝重复字段，防止计价、选模与转发解读不一致。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }
