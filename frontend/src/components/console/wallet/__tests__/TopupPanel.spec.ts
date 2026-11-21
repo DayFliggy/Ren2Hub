@@ -700,4 +700,36 @@ describe('native wallet checkout', () => {
     expect(submit(wrapper).attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
+
+  it.each([
+    ['with other methods', [{ type: 'alipay', name: 'Alipay' }]],
+    ['as the only method', []],
+  ])(
+    'explains why Stripe is hidden in TOKENS display %s',
+    async (_case, others) => {
+      app.status.quota_display_type = 'TOKENS'
+      vi.spyOn(api, 'get').mockResolvedValue({
+        ...nativeTopupInfo,
+        enable_stripe_topup: true,
+        pay_methods: [{ type: 'stripe', name: 'Stripe' }, ...others],
+      })
+      const wrapper = mount(TopupPanel, {
+        props: { paymentMethod: '', balanceQuota: '500000' },
+        global: { plugins: [i18n] },
+      })
+      await flushPromises()
+      const note = wrapper.get('[data-stripe-tokens-unavailable]').text()
+      expect(note).toContain('Stripe top-up is disabled in this mode')
+      expect(wrapper.text().replace(note, '')).not.toContain('Stripe')
+      expect(wrapper.text()).not.toContain('Online payments are not enabled')
+      wrapper.unmount()
+    }
+  )
+
+  it('does not mention Stripe when it is not enabled in TOKENS display', async () => {
+    app.status.quota_display_type = 'TOKENS'
+    const wrapper = await render()
+    expect(wrapper.text()).not.toContain('Stripe')
+    wrapper.unmount()
+  })
 })

@@ -75,6 +75,14 @@ const paymentMethods = computed(() =>
       )
     : []
 )
+// The upstream Stripe amount is a native quantity that TOKENS display cannot
+// express, so Stripe is withheld there and the reason is shown instead.
+const stripeHiddenForTokens = computed(
+  () =>
+    tokens.value &&
+    !!info.value &&
+    enabledPayMethods(info.value).some((item) => item.type === 'stripe')
+)
 const selectableMethods = computed(() =>
   paymentMethods.value.map((item) => ({
     value: item.type,
@@ -481,12 +489,21 @@ onUnmounted(() => {
             >{{ t('common.retry') }}</ConsoleButton
           >
         </p>
-        <p
-          v-else-if="!paymentMethods.length"
-          class="mt-2 text-xs text-[var(--text-tertiary)]"
-        >
-          {{ paymentT('nativePayment.none') }}
-        </p>
+        <template v-else>
+          <p
+            v-if="stripeHiddenForTokens"
+            class="mt-2 text-xs text-[var(--text-tertiary)]"
+            data-stripe-tokens-unavailable
+          >
+            {{ paymentT('nativePayment.stripeTokensUnavailable') }}
+          </p>
+          <p
+            v-else-if="!paymentMethods.length"
+            class="mt-2 text-xs text-[var(--text-tertiary)]"
+          >
+            {{ paymentT('nativePayment.none') }}
+          </p>
+        </template>
         <div
           v-if="method === 'waffo' && info?.waffo_pay_methods?.length"
           class="mt-4"

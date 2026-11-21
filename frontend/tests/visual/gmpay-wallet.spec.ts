@@ -359,3 +359,29 @@ for (const [theme, mobile] of [
     expect(errors).toEqual([])
   })
 }
+
+// Stripe's upstream amount is a native quantity that TOKENS display cannot
+// express, so the wallet withholds Stripe there and says why. The native
+// fixture enables Stripe beside the other providers.
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  test(`wallet explains hidden Stripe in TOKENS display ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+    )
+    await configureStablePage(page, {
+      theme,
+      status: { quota_display_type: 'TOKENS' },
+    })
+    await page.goto('/wallet')
+    const note = page.locator('[data-stripe-tokens-unavailable]')
+    await expect(note).toContainText('不兼容 TOKENS 显示，已停用此充值方式')
+    await expect(page.getByRole('button', { name: 'Stripe' })).toHaveCount(0)
+    await expect(page.getByText('暂未启用在线支付')).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+  })
+}
