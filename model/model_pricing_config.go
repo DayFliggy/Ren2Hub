@@ -29,6 +29,7 @@ type ModelPricingChange struct {
 	ModelName       string        `json:"model_name"`
 	ExpectedVersion string        `json:"expected_version"`
 	Pricing         PricingValues `json:"pricing"`
+	Reset           bool          `json:"reset,omitempty"`
 }
 
 type ModelPricingEntry struct {
@@ -591,6 +592,9 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 	}
 	seen := make(map[string]bool)
 	for _, change := range changes {
+		if change.Reset {
+			return errors.New("no built-in prices to restore; submit the prices to save")
+		}
 		if seen[change.ModelName] {
 			return errors.New("duplicate model pricing change")
 		}

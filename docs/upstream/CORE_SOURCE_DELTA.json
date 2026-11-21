@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 845,
     "adapted": 319,
-    "extension": 429,
+    "extension": 431,
     "removed": 47
   },
   "files": [
@@ -5165,7 +5165,7 @@
       "path": "model/model_pricing_config.go",
       "status": "adapted",
       "upstream_sha256": "11603f7e5e31e67902ddb1377aa61a8d5af9df523d387fcbf8fbdcd19c52c7f5",
-      "local_sha256": "b194bfa09c374ac1ec7fa169c1d608dc79a47e8d8a9b2922b0b1efb6b8c68cc6",
+      "local_sha256": "c2ff7fbb193387b9db0bf8cfb90ab39229c4e68185888c54f74dc08842cad938",
       "reasons": [
         "catalog-stats",
         "no-builtin-prices"
@@ -5206,6 +5206,12 @@
           "model/model_pricing_conversion.go#2"
         ]
       }
+    },
+    {
+      "path": "model/model_pricing_reset_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "33d2aa982b3818cddeb3b0c940e2a420192fb00df961b2ca11f656bea9ad473b"
     },
     {
       "path": "model/native_pricing_race_test.go",
@@ -11396,6 +11402,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "32c4690f5f615d23a67c4318a45a9b019d7ac21c52fce6c55eca0ab60a649acf"
+    },
+    {
+      "path": "router/model_pricing_reset_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "b229ec1fffdaa1955815262b68dea6d67718c5c5c9d7ac1d035a04c6beeee3f2"
     },
     {
       "path": "router/native_count_error_test.go",
