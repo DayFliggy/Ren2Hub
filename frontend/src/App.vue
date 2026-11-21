@@ -14,6 +14,7 @@ import AppErrorBoundary from '@/components/common/AppErrorBoundary.vue'
 import NavigationErrorState from '@/components/common/NavigationErrorState.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import ToastHost from '@/components/common/ToastHost.vue'
+import VersionUpdateNotice from '@/components/common/VersionUpdateNotice.vue'
 import { useAccountLanguageAdoption } from '@/composables/useAccountLanguage'
 import { useTheme } from '@/composables/useTheme'
 
@@ -68,6 +69,7 @@ watch(
   </AppErrorBoundary>
   <NavigationProgress />
   <ToastHost />
+  <VersionUpdateNotice />
 </template>
 
 <style>

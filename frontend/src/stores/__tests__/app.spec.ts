@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 const publicApi = vi.hoisted(() => ({
@@ -25,6 +25,9 @@ beforeEach(() => {
     { monitors: [{ uptime: 0.999, status: 1 }] },
   ])
 })
+
+// The store listens on document; dispose it so later tests do not see it.
+afterEach(() => useAppStore().$dispose())
 
 describe('public application state', () => {
   it('uses the landing reference brand before status is available', () => {
@@ -97,6 +100,19 @@ describe('public application state', () => {
 
     expect(store.moduleAccess('pricing')).toEqual(closed)
     expect(store.statusReachable).toBe(true)
+  })
+
+  it('keeps the first status version as the page version and flags a newer server', async () => {
+    const store = useAppStore()
+    publicApi.status.mockResolvedValue({ version: 'v1.0.0' })
+    await store.initialize()
+    await store.refreshStatus()
+    expect(store.serverVersionChanged).toBe(false)
+
+    publicApi.status.mockResolvedValue({ version: 'v1.0.1' })
+    await store.refreshStatus()
+    expect(store.serverVersionChanged).toBe(true)
+    expect(store.versionLabel).toBe('v1.0.1')
   })
 
   it('distinguishes reachable status from degraded summaries', async () => {
@@ -365,5 +381,91 @@ describe('public application state', () => {
     expect(store.featureStatus('unknown', 'disabled')).toBe('disabled')
     expect(store.isFeatureEnabled('passkey')).toBe(false)
     expect(store.isFeatureEnabled('unknown')).toBe(false)
+  })
+})
+
+describe('status revalidation when the page becomes visible', () => {
+  const FIVE_MINUTES = 5 * 60 * 1000
+  let visibility: DocumentVisibilityState = 'visible'
+
+  function show(state: DocumentVisibilityState) {
+    visibility = state
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-21T00:00:00Z'))
+    visibility = 'visible'
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility,
+    })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function openedAt(version: string) {
+    const store = useAppStore()
+    publicApi.status.mockResolvedValue({ version })
+    await store.refreshStatus()
+    publicApi.status.mockClear()
+    return store
+  }
+
+  it('re-reads a stale status when the page becomes visible and flags a new version', async () => {
+    const store = await openedAt('v1')
+    publicApi.status.mockResolvedValue({ version: 'v2' })
+    vi.setSystemTime(Date.now() + FIVE_MINUTES + 1)
+    show('visible')
+    await vi.waitFor(() => expect(store.serverVersionChanged).toBe(true))
+    expect(publicApi.status).toHaveBeenCalledOnce()
+  })
+
+  it('does not re-read within five minutes of the last read', async () => {
+    await openedAt('v1')
+    vi.setSystemTime(Date.now() + FIVE_MINUTES - 1)
+    show('visible')
+    await Promise.resolve()
+    expect(publicApi.status).not.toHaveBeenCalled()
+  })
+
+  it('does not re-read when the page becomes hidden', async () => {
+    await openedAt('v1')
+    vi.setSystemTime(Date.now() + FIVE_MINUTES + 1)
+    show('hidden')
+    await Promise.resolve()
+    expect(publicApi.status).not.toHaveBeenCalled()
+  })
+
+  it('sends one request at a time and retries on the next visibility after a failure', async () => {
+    const store = await openedAt('v1')
+    let fail!: (error: Error) => void
+    publicApi.status.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        fail = reject
+      })
+    )
+    vi.setSystemTime(Date.now() + FIVE_MINUTES + 1)
+    show('visible')
+    show('visible')
+    expect(publicApi.status).toHaveBeenCalledOnce()
+    fail(new Error('offline'))
+    await vi.waitFor(() => expect(store.statusReachable).toBe(true))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.serverVersionChanged).toBe(false)
+
+    publicApi.status.mockResolvedValue({ version: 'v2' })
+    show('visible')
+    await vi.waitFor(() => expect(store.serverVersionChanged).toBe(true))
+    expect(publicApi.status).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops listening once the store is disposed', async () => {
+    const store = await openedAt('v1')
+    store.$dispose()
+    vi.setSystemTime(Date.now() + FIVE_MINUTES + 1)
+    show('visible')
+    await Promise.resolve()
+    expect(publicApi.status).not.toHaveBeenCalled()
   })
 })

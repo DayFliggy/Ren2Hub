@@ -87,6 +87,9 @@ function toPlainText(value: unknown): string {
   return (documentNode.body.textContent || '').replace(/\s+/g, ' ').trim()
 }
 
+/** A status read older than this is re-read when the page becomes visible. */
+const STATUS_STALE_AFTER_MS = 5 * 60 * 1000
+
 export const useAppStore = defineStore('app', () => {
   const auth = useAuthStore()
   const phase = ref<PublicLoadState>('idle')
@@ -104,6 +107,8 @@ export const useAppStore = defineStore('app', () => {
   let statusApplied = 0
   let startupStatus: Promise<void> | null = null
   let startupStatusKnown: Promise<void> | null = null
+  let statusReadAt = 0
+  let revalidating = false
   const pricingRequest = useLatestRequest()
   onScopeDispose(() => {
     modelCount.value = null
@@ -122,6 +127,16 @@ export const useAppStore = defineStore('app', () => {
   )
   const docsLink = computed(() => safeExternalUrl(status.value.docs_link) || '')
   const version = computed(() => status.value.version?.trim() || '')
+  // The version of the server that served this page: the first status read
+  // that reports one. A later different version means a release happened
+  // while the page stayed open, and its code may no longer match the server.
+  const pageVersion = ref('')
+  const serverVersionChanged = computed(
+    () =>
+      pageVersion.value !== '' &&
+      version.value !== '' &&
+      version.value !== pageVersion.value
+  )
   const startTime = computed(() => status.value.start_time ?? null)
   const moduleAccess = (module: string) =>
     headerNavAccess(status.value.HeaderNavModules, module)
@@ -237,10 +252,34 @@ export const useAppStore = defineStore('app', () => {
     if (request < statusApplied) return
     statusApplied = request
     status.value = next
+    statusReadAt = Date.now()
+    if (!pageVersion.value) pageVersion.value = version.value
     configureQuotaDisplay(next)
     statusReachable.value = true
     applyBranding()
   }
+
+  // A tab left open on a console page makes no status reads of its own, so a
+  // release would go unnoticed. When the page becomes visible again and the
+  // last read is stale, read once more. This is a best-effort check: a failed
+  // read changes nothing and the next visibility change retries it.
+  async function revalidateStaleStatus(): Promise<void> {
+    if (document.visibilityState !== 'visible' || revalidating) return
+    if (Date.now() - statusReadAt < STATUS_STALE_AFTER_MS) return
+    revalidating = true
+    try {
+      await refreshStatus()
+    } catch {
+      // Intentionally silent; see above.
+    } finally {
+      revalidating = false
+    }
+  }
+  const onVisibilityChange = () => void revalidateStaleStatus()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  onScopeDispose(() =>
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  )
 
   // The first navigation starts together with initialization, so that read is
   // already as fresh as the navigation; a cold public visit reuses it.
@@ -408,6 +447,7 @@ export const useAppStore = defineStore('app', () => {
     uptimeLabel,
     uptimePercent,
     versionLabel,
+    serverVersionChanged,
     startTime,
     featureStatus,
     isFeatureEnabled,

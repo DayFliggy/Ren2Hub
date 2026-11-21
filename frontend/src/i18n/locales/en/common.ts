@@ -23,6 +23,11 @@ export default {
     loadFailed: 'Failed to load',
     publicationPending:
       'Changes were saved. Runtime configuration publication is pending retry.',
+    versionUpdate: {
+      message:
+        'The site has been updated. Reload the page to use the new version.',
+      reload: 'Reload page',
+    },
     appError: {
       label: 'Application error',
       title: 'This page could not be rendered',

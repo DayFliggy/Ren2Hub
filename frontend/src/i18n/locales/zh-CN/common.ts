@@ -22,6 +22,10 @@ export default {
     retry: '重试',
     loadFailed: '加载失败',
     publicationPending: '变更已保存，运行时配置发布待重试。',
+    versionUpdate: {
+      message: '站点已更新到新版本，刷新页面后使用最新功能。',
+      reload: '刷新页面',
+    },
     appError: {
       label: '应用错误',
       title: '此页面暂时无法显示',

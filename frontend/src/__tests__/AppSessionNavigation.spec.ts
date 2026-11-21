@@ -80,6 +80,7 @@ async function setup(path = '/private?filter=active#details') {
         AppErrorBoundary: { template: '<slot />' },
         NavigationErrorState: true,
         ToastHost: true,
+        VersionUpdateNotice: true,
       },
     },
   })
