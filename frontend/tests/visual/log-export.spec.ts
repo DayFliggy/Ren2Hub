@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
-// Response of a real export rejected at the global concurrency limit.
-const busyFixture = new URL(
-  '../fixtures/native/log-export-busy.json',
+// Response of a real export rejected while the same user already runs one.
+const runningFixture = new URL(
+  '../fixtures/native/log-export-running.json',
   import.meta.url
 )
 
@@ -130,15 +130,17 @@ for (const [theme, mobile] of [
     await holdExportStreams(page, 3)
     let exportURL = ''
     let fail = false
-    let busyServer = false
+    let runningServer = false
     // The fixture file is pretty-printed; the server writes compact JSON.
-    const busy = JSON.stringify(JSON.parse(await readFile(busyFixture, 'utf8')))
+    const running = JSON.stringify(
+      JSON.parse(await readFile(runningFixture, 'utf8'))
+    )
     await page.route('**/api/log/self/export?*', (route) => {
       exportURL = route.request().url()
-      if (busyServer)
+      if (runningServer)
         return route.fulfill({
           contentType: 'application/json',
-          body: busy,
+          body: running,
         })
       return route.fulfill({
         contentType: 'application/x-ndjson',
@@ -285,18 +287,20 @@ for (const [theme, mobile] of [
     if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
       await page.screenshot({ path: testInfo.outputPath('export-error.png') })
     }
-    // A full server rejects the export at once; the dialog stays open.
-    busyServer = true
+    // Another export of the same user is rejected at once; the dialog stays open.
+    runningServer = true
     let downloaded = false
     page.on('download', () => (downloaded = true))
     await dialog.getByRole('button', { name: '确认', exact: true }).click()
     await expect(
-      page.getByText('导出任务繁忙，请稍后再试。', { exact: true })
+      page.getByText('已有日志导出正在运行，请等待完成后重试。', {
+        exact: true,
+      })
     ).toBeInViewport({ ratio: 1 })
     await expect(dialog).toBeVisible()
     expect(downloaded).toBe(false)
     if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
-      await page.screenshot({ path: testInfo.outputPath('export-busy.png') })
+      await page.screenshot({ path: testInfo.outputPath('export-running.png') })
     }
     // A running export shows its count and turns confirm into cancel.
     await page.evaluate(() => {

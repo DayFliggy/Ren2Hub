@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import { setLocale } from '@/i18n'
-// Response of a real export rejected at the global concurrency limit.
-import busy from '../../../tests/fixtures/native/log-export-busy.json'
+// Response of a real export rejected while the same user already runs one.
+import running from '../../../tests/fixtures/native/log-export-running.json'
 import {
   exportUserLogs,
   LOG_EXPORT_STALLED,
@@ -134,17 +134,16 @@ describe('usage log export stream', () => {
     expect(oversized.locked).toBe(false)
   })
 
-  it('reports a busy server with its code and a localized message', async () => {
+  it('reports a running export of the same user with a localized message', async () => {
     await setLocale('zh-CN')
-    await expect(parse(JSON.stringify(busy))).rejects.toMatchObject({
+    await expect(parse(JSON.stringify(running))).rejects.toMatchObject({
       business: true,
-      code: 'LOG_EXPORT_BUSY',
-      message: '导出任务繁忙，请稍后再试。',
+      message: '已有日志导出正在运行，请等待完成后重试。',
     })
     await setLocale('en')
-    await expect(parse(JSON.stringify(busy))).rejects.toMatchObject({
-      code: 'LOG_EXPORT_BUSY',
-      message: 'Log export is busy. Try again later.',
+    await expect(parse(JSON.stringify(running))).rejects.toMatchObject({
+      business: true,
+      message: 'Another log export is running. Try again after it finishes.',
     })
   })
 })
