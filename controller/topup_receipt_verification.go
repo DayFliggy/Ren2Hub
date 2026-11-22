@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v81"
 )
 
@@ -67,8 +68,8 @@ func pancakeVerifiedReceipt(event *service.WaffoPancakeWebhookEvent) (model.TopU
 	amount := data.Amount
 	if data.ListPrice != nil {
 		price := data.ListPrice
-		// Missing discount evidence is rejected, just like a nonzero discount.
-		if price.DiscountAmount == nil || !model.TopUpAmountsEqual(*price.DiscountAmount, "0") ||
+		if !pancakeListPriceHasNoDiscount(price) ||
+			(price.ListTotal != nil && !model.TopUpAmountsEqual(*price.ListTotal, price.Total)) ||
 			(data.ChargedAmount != nil && !model.TopUpAmountsEqual(*data.ChargedAmount, price.Total)) {
 			return model.TopUpReceipt{}, model.ErrTopUpReceiptMismatch
 		}
@@ -77,4 +78,21 @@ func pancakeVerifiedReceipt(event *service.WaffoPancakeWebhookEvent) (model.TopU
 		return model.TopUpReceipt{}, model.ErrTopUpReceiptMismatch
 	}
 	return model.TopUpReceipt{Currency: strings.ToUpper(data.Currency), Amount: amount}, nil
+}
+
+// Older payment records omit discountAmount. Their tax breakdown must still
+// prove that the total contains no discount; missing tax is not assumed zero.
+func pancakeListPriceHasNoDiscount(price *service.WaffoPancakeListPrice) bool {
+	if price.DiscountAmount != nil {
+		return model.TopUpAmountsEqual(*price.DiscountAmount, "0")
+	}
+	if price.TaxAmount == nil {
+		return false
+	}
+	subtotal, err := decimal.NewFromString(price.Subtotal)
+	if err != nil {
+		return false
+	}
+	tax, err := decimal.NewFromString(*price.TaxAmount)
+	return err == nil && model.TopUpAmountsEqual(subtotal.Add(tax).String(), price.Total)
 }

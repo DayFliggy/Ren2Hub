@@ -56,6 +56,8 @@ type WaffoPancakeListPrice struct {
 	Subtotal       string  `json:"subtotal"`
 	Total          string  `json:"total"`
 	DiscountAmount *string `json:"discountAmount"`
+	TaxAmount      *string `json:"taxAmount"`
+	ListTotal      *string `json:"listTotal"`
 }
 
 type waffoPancakeVerifiedData struct {

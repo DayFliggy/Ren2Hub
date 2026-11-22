@@ -181,6 +181,7 @@ func TestPaymentReceiptRoutesVerifyOfficialContracts(t *testing.T) {
 		case model.PaymentProviderWaffo:
 			result := func(e map[string]any) map[string]any { return receiptMap(e, "result") }
 			cases = append(cases,
+				receiptCase{"null_original_amount", func(e map[string]any) { result(e)["originalAmount"] = nil }, true},
 				receiptCase{"missing_order", func(e map[string]any) { delete(result(e), "merchantOrderId") }, false},
 				receiptCase{"missing_configured_merchant", func(e map[string]any) { setting.WaffoMerchantId = "" }, false},
 				receiptCase{"amount_mismatch", func(e map[string]any) { result(e)["orderAmount"] = "9.99" }, false}, receiptCase{"currency_mismatch", func(e map[string]any) { result(e)["orderCurrency"] = "EUR" }, false}, receiptCase{"wrong_merchant", func(e map[string]any) { receiptMap(e, "result", "merchantInfo")["merchantId"] = "foreign" }, false}, receiptCase{"empty_merchant", func(e map[string]any) { receiptMap(e, "result", "merchantInfo")["merchantId"] = "" }, false}, receiptCase{"discount", func(e map[string]any) { result(e)["originalAmount"] = "12" }, false})
@@ -188,12 +189,29 @@ func TestPaymentReceiptRoutesVerifyOfficialContracts(t *testing.T) {
 			data := func(e map[string]any) map[string]any { return receiptMap(e, "data") }
 			price := func(e map[string]any) map[string]any { return receiptMap(e, "data", "listPrice") }
 			cases = append(cases,
-				receiptCase{"missing_discount", func(e map[string]any) { delete(price(e), "discountAmount") }, false},
+				receiptCase{"missing_discount", func(e map[string]any) { delete(price(e), "discountAmount"); delete(price(e), "listTotal") }, true},
+				receiptCase{"missing_discount_tax", func(e map[string]any) {
+					delete(price(e), "discountAmount")
+					delete(price(e), "listTotal")
+					price(e)["taxAmount"] = "2.10"
+					price(e)["total"] = "12.1"
+					data(e)["chargedAmount"] = "12.10"
+				}, true},
+				receiptCase{"missing_discount_reduced_total", func(e map[string]any) {
+					delete(price(e), "discountAmount")
+					delete(price(e), "listTotal")
+					price(e)["total"] = "9"
+					data(e)["chargedAmount"] = "9"
+				}, false},
+				receiptCase{"missing_discount_missing_tax", func(e map[string]any) { delete(price(e), "discountAmount"); delete(price(e), "taxAmount") }, false},
+				receiptCase{"missing_discount_invalid_tax", func(e map[string]any) { delete(price(e), "discountAmount"); price(e)["taxAmount"] = "invalid" }, false},
+				receiptCase{"list_total_mismatch", func(e map[string]any) { price(e)["listTotal"] = "12" }, false},
 				receiptCase{"missing_store_config", func(e map[string]any) { setting.WaffoPancakeStoreID = "" }, false},
 				receiptCase{"missing_status", func(e map[string]any) { delete(data(e), "orderStatus") }, false},
 				receiptCase{"legacy_missing_tax", func(e map[string]any) { delete(data(e), "listPrice"); delete(data(e), "taxAmount") }, false},
 				receiptCase{"amount_mismatch", func(e map[string]any) { price(e)["subtotal"] = "9.99" }, false}, receiptCase{"currency_mismatch", func(e map[string]any) { data(e)["currency"] = "EUR" }, false}, receiptCase{"cross_store", func(e map[string]any) { e["storeId"] = "foreign" }, false}, receiptCase{"pending", func(e map[string]any) { data(e)["orderStatus"] = "pending" }, false}, receiptCase{"payment_failed", func(e map[string]any) { data(e)["paymentStatus"] = "failed" }, false}, receiptCase{"discount", func(e map[string]any) { price(e)["discountAmount"] = "1" }, false}, receiptCase{"charged_mismatch", func(e map[string]any) { data(e)["chargedAmount"] = "9.99" }, false}, receiptCase{"tax", func(e map[string]any) {
 					price(e)["total"] = "12"
+					price(e)["listTotal"] = "12"
 					price(e)["taxAmount"] = "2"
 					data(e)["chargedAmount"] = "12"
 					data(e)["amount"] = "12"
@@ -225,7 +243,23 @@ func TestPaymentReceiptRoutesVerifyOfficialContracts(t *testing.T) {
 					require.Equal(t, common.TopUpStatusPending, saved.Status)
 					var audits int64
 					require.NoError(t, db.Model(&model.AuditLog{}).Where("action = ?", "payment.callback_rejected").Count(&audits).Error)
-					require.Positive(t, audits)
+					if provider == model.PaymentProviderStripe && tc.name == "unpaid" {
+						require.Zero(t, audits, "completed unpaid is a normal intermediate notification")
+						event["type"] = "checkout.session.async_payment_succeeded"
+						receiptMap(event, "data", "object")["payment_status"] = "paid"
+						for range 2 {
+							require.Equal(t, http.StatusOK, deliverPaymentReceipt(t, engine, provider, event, private).Code)
+						}
+						require.NoError(t, db.First(&user).Error)
+						require.Equal(t, 100, user.Quota)
+						saved = model.GetTopUpByTradeNo("receipt-order")
+						require.Equal(t, common.TopUpStatusSuccess, saved.Status)
+						require.Equal(t, 100, saved.CreditedQuota)
+						require.NoError(t, db.Model(&model.AuditLog{}).Where("action = ?", "payment.callback_rejected").Count(&audits).Error)
+						require.Zero(t, audits)
+					} else {
+						require.Positive(t, audits)
+					}
 				}
 			})
 		}

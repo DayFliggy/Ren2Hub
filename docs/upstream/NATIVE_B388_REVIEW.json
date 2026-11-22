@@ -34833,72 +34833,72 @@
       ]
     },
     "controller/topup_stripe.go": {
-      "local_sha256": "0a9502a0dd34acdf57cc20799dfd4ce2ae46c20977038e2b581068e998ae3192",
+      "local_sha256": "650a3a0202ea50db328dd85f47440357a43f0c158a09dfd4b786fc908692d75b",
       "hunks": [
         {
           "header": "@@ -13,6 +13,7 @@",
           "sha256": "7f94d59477a8de558026a346e2dcf67635efdaeabb6b240192d8e74902849cf9",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
           "header": "@@ -38,6 +39,7 @@",
           "sha256": "1718a6868afea0063690257b76c84e9dcb606fa37fe41e0539f4382c11bac559",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
           "header": "@@ -53,15 +55,10 @@",
           "sha256": "65f13769093af8e89012891df8a5d00b03e133ab4779af1677cf24fc60a56269",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
           "header": "@@ -99,17 +96,17 @@",
           "sha256": "c2c7108ee6276740dc84391699280db9419e7894cfddc2eb8ad001d1733bedff",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
           "header": "@@ -117,26 +114,28 @@",
           "sha256": "e1720a360df63f58a232d7e0ca2b69267750c9390f1c1cb94a124ee26d2322c2",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
           "header": "@@ -189,6 +188,11 @@",
           "sha256": "1ee2d0476914b4a36623c620b7235a8119545a3637b426a14e7decaebc1a3d3a",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -217,7 +221,7 @@",
-          "sha256": "f5e87d5012acab81f9aefea44a7ad21557ba1ed4f45ba40a29d2d67339dc48ae",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -216,8 +220,12 @@",
+          "sha256": "7da4c3c60a6978c259b09f51062e81f8f1a39e0e387e6bba0bdba86d834fe689",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -227,6 +231,11 @@",
-          "sha256": "720503612df06660b594580da984a1a858db9e476f38654d35af401a625fa36a",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -227,6 +235,11 @@",
+          "sha256": "5905945a9d972600c067623fa7c089cc934d8f9307bdff007bb01de6617cefc6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -275,28 +284,21 @@",
-          "sha256": "aae91119d3a3af6da10aa2d9376c3dfde8b1a4c27171dba5739d545929899769",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -275,28 +288,21 @@",
+          "sha256": "b8b59e82128fa8babb050b54699fca8fb59682830564520170ca52cf6231ff05",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -319,17 +321,8 @@",
-          "sha256": "615c701ffb5a642c33b4bba0cc5ff60bf7dd68fa1baa4cd9e6980212a71408a9",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -319,17 +325,8 @@",
+          "sha256": "d9aaa658cf6fe447f4bbb82059aa93d08760a3a718da3941c1481044bc579338",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -355,9 +348,9 @@",
-          "sha256": "013c2dec22205955f3d16172a387fe14721d9b693fd22acbfcd5ff424de70c04",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -355,9 +352,9 @@",
+          "sha256": "33858e416655cd091c37b0820386b2a2a370eb4e4b83b31a9a121a6460ea3b38",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -396,49 +389,22 @@",
-          "sha256": "d5a125d919b406bb55f57f66b81ae5cfce8a9f26cd0ba0ecc4d786eba80b070f",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -396,49 +393,22 @@",
+          "sha256": "4cbb29be55ba862b1706f9f1dd13241d29c5a366c7d2c4aaddf61d6c7b2743d6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -449,3 +415,20 @@",
-          "sha256": "f3d3e13b316432599681671630198c7524e29bdd1fafeb75f6ff928510170122",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -449,3 +419,20 @@",
+          "sha256": "cede661ee8c77eb2b6a91afcdca69b0cd5912d43b46b70a8f52135f2259730fb",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         }
       ]
     },
@@ -35053,32 +35053,32 @@
       ]
     },
     "service/waffo_pancake.go": {
-      "local_sha256": "0141715680dc730b57e02ee9c703cf6581f80cf83edc353a2b0ffbd5b6ec20dd",
+      "local_sha256": "84b438599fedc16b692f72c38853b27d4859eaae858513b091ad3f77b9633a05",
       "hunks": [
         {
-          "header": "@@ -52,7 +52,23 @@",
-          "sha256": "3d80a90ca27a8f030c89b5316ac07cff6fb9c13f610f62c97c6963d1193f177d",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -52,7 +52,25 @@",
+          "sha256": "8927513c9e4ce5ff283906e75676398d61b84eedae697c15ce6eabd6de324264",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -165,12 +181,9 @@",
-          "sha256": "aa96bb05082f266ba4dbd6f05f71a5e40166373d37764fc0ffd2d313ff69e00b",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -165,12 +183,9 @@",
+          "sha256": "132d48583e59a9ffed81d1390bf0e99d842d407a89f211ae8dfcb25397e15f62",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -188,6 +201,8 @@",
-          "sha256": "ce26d05ff4c6d4bf6064352cc5816cf9f4d19ec896602e21c11b1e88ce31762c",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -188,6 +203,8 @@",
+          "sha256": "4bad7ae638ee298e4f73b94620c600afd5274a081a9e71d239396948e5d7fd9b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -227,33 +242,6 @@",
-          "sha256": "17587b0d21a090704b3a757d69c63695f8d6771849343fed4d9bdc48079d18f6",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -227,33 +244,6 @@",
+          "sha256": "ca1308d68e5c615d00ec24ffa989ce2863843f426676dda668e8d108dab53663",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         },
         {
-          "header": "@@ -275,51 +263,6 @@",
-          "sha256": "afca95f3bb3f6ea32d111bc5d6d78602dff1c0d53e5b712ac7faffe47d001bfa",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+          "header": "@@ -275,51 +265,6 @@",
+          "sha256": "8624e78f294d011a74d76a904ef4270eb26dcdd047e8c0c828763a4475400743",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。 FUND-5 复审：Pancake旧报文缺折扣字段时校验税前金额加税等于总额，Waffo null折扣字段视缺失；Stripe延迟付款中间态仅记录等待日志。"
         }
       ]
     },

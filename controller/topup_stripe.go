@@ -220,6 +220,10 @@ func sessionCompleted(ctx context.Context, event stripe.Event, callerIp string) 
 	}
 
 	paymentStatus := event.GetObjectValue("payment_status")
+	if paymentStatus == "unpaid" {
+		logger.LogInfo(ctx, common.LogText("Stripe Checkout payment not completed, waiting for async result trade_no=%s payment_status=%s client_ip=%s", referenceId, paymentStatus, callerIp))
+		return
+	}
 	if paymentStatus != "paid" {
 		rejectPaymentReceipt(ctx, model.PaymentProviderStripe, referenceId, callerIp, "payment_not_paid")
 		return

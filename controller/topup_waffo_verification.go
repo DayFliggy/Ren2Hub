@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,7 @@ import (
 // Notifications share the inquiry schema, but merchantInfo is optional. An
 // inquiry with our credentials supplies the missing merchant ownership proof.
 func verifyWaffoPaymentIdentity(ctx context.Context, sdk *waffo.Waffo, result *core.PaymentNotificationResult, originalAmount json.RawMessage) error {
-	if len(originalAmount) > 0 || setting.WaffoMerchantId == "" || result.MerchantOrderID == "" {
+	if (len(originalAmount) > 0 && !bytes.Equal(bytes.TrimSpace(originalAmount), []byte("null"))) || setting.WaffoMerchantId == "" || result.MerchantOrderID == "" {
 		return model.ErrTopUpReceiptMismatch
 	}
 	if result.MerchantInfo != nil {
