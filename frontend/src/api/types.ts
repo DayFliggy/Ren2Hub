@@ -28,6 +28,8 @@ export class ApiError extends Error {
   readonly business: boolean
   /** Structured business-error details; callers must validate before use. */
   readonly data?: unknown
+  /** The whole business response, for endpoints that report details beside data. */
+  readonly envelope?: unknown
 
   constructor(
     message: string,
@@ -37,6 +39,7 @@ export class ApiError extends Error {
       business?: boolean
       cause?: unknown
       data?: unknown
+      envelope?: unknown
     }
   ) {
     super(message)
@@ -45,6 +48,7 @@ export class ApiError extends Error {
     this.code = options?.code
     this.business = options?.business ?? false
     this.data = options?.data
+    this.envelope = options?.envelope
     if (options?.cause !== undefined) this.cause = options.cause
   }
 }

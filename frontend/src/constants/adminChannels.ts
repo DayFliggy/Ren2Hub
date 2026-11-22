@@ -235,6 +235,12 @@ export function supportsBalanceQuery(
  * the edit form sends none of them, so UpdateChannel keeps the stored values
  * and skips the type-specific validation they would trigger.
  */
+/**
+ * Value an update sends to clear a field the reader cannot see; omitting the
+ * field keeps the stored value.
+ */
+export const HIDDEN_FIELD_CLEAR_VALUE = ''
+
 export const CHANNEL_SENSITIVE_UPDATE_FIELDS: readonly string[] = [
   'type',
   'key',

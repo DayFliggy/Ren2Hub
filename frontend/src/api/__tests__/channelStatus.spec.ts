@@ -9,6 +9,8 @@ import { setApiUnauthorizedHandler } from '../client'
 import { httpTransport } from '../httpTransport'
 import { ApiError } from '../types'
 import channelList from '../../../tests/fixtures/native/channel-list.get.json'
+// Produced by the backend handlers (controller frontend contract tests).
+import channelSecurity from '../../../tests/fixtures/native/channel-security.json'
 
 const channel = {
   id: 1,
@@ -180,5 +182,29 @@ describe('native channel list fixture', () => {
       expect(item).not.toHaveProperty('lab_group_slug')
       expect(item).not.toHaveProperty('lab_group_name')
     }
+  })
+  it('drops redacted placeholders and reports which fields are hidden', () => {
+    const parsed = parseChannelStatusDetails(
+      channelSecurity.redacted_channel.body.data
+    )
+    expect(parsed.redacted_fields).toEqual([
+      'header_override',
+      'setting',
+      'settings',
+    ])
+    for (const field of ['header_override', 'setting', 'settings'])
+      expect(parsed).not.toHaveProperty(field)
+    expect(parseChannelStatusDetails(channel).redacted_fields).toEqual([])
+  })
+
+  it('rejects placeholders that the redaction list does not explain', () => {
+    const hidden = JSON.stringify({ __ren2hub_redacted__: true })
+    for (const value of [
+      { ...channel, header_override: hidden },
+      { ...channel, redacted_fields: ['setting'], setting: '{}' },
+      { ...channel, redacted_fields: ['key'] },
+      { ...channel, redacted_fields: 'setting' },
+    ])
+      expect(() => parseChannelStatusDetails(value)).toThrow(ApiError)
   })
 })

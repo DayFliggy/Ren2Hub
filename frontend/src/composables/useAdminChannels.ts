@@ -12,7 +12,8 @@ import {
   parseStringArray,
   requiredStrictNumber,
 } from '@/api/contracts'
-import { ApiError } from '@/api/types'
+import { errorMessage } from '@/api/clientError'
+import { ApiError, type ApiEnvelope } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -60,6 +61,43 @@ export interface ChannelModelTestResult {
 const CHANNEL_BATCH_SIZE = 5
 /** Returned by a row action whose request the server answered as a no-op. */
 const UNCHANGED = Symbol('unchanged')
+/** Stable channel error codes shown in the console language. */
+const CHANNEL_ERROR_KEYS: Readonly<Record<string, string>> = {
+  CHANNEL_NOT_FOUND: 'channels.errors.notFound',
+  CHANNEL_STATUS_UPDATE_FAILED: 'channels.errors.statusUpdateFailed',
+  CHANNEL_REDACTED_FIELD_INVALID: 'channels.errors.redactedFieldInvalid',
+}
+
+type BatchStatusFailure = {
+  changed: number
+  envelope: Record<string, unknown>
+  failures: { id: number; code: string }[]
+}
+
+/** A batch that applied only some ids answers success:false with failures. */
+function batchStatusFailure(error: unknown): BatchStatusFailure | null {
+  if (!(error instanceof ApiError) || !error.business) return null
+  const envelope = error.envelope
+  if (!isRecord(envelope) || !Array.isArray(envelope.failures)) return null
+  const failures = envelope.failures.map((item) =>
+    isRecord(item) &&
+    Number.isSafeInteger(item.id) &&
+    typeof item.code === 'string'
+      ? { id: item.id as number, code: item.code }
+      : null
+  )
+  if (
+    failures.length === 0 ||
+    failures.includes(null) ||
+    !Number.isSafeInteger(envelope.data)
+  )
+    return null
+  return {
+    changed: envelope.data as number,
+    envelope,
+    failures: failures as BatchStatusFailure['failures'],
+  }
+}
 
 export function useAdminChannels() {
   const { t } = useI18n()
@@ -67,6 +105,13 @@ export function useAdminChannels() {
   const auth = useAuthStore()
   const allowed = (action: string) => auth.hasPermission('channel', action)
   const canRead = computed(() => allowed('read'))
+  const channelErrorMessage = (error: unknown): string => {
+    const key =
+      error instanceof ApiError && error.code
+        ? CHANNEL_ERROR_KEYS[error.code]
+        : undefined
+    return key ? t(key) : errorMessage(error, t)
+  }
 
   const rows = ref<AdminChannel[]>([])
   const total = ref(0)
@@ -281,7 +326,7 @@ export function useAdminChannels() {
       toast.success(t(successKey))
       return true
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : String(error))
+      toast.error(channelErrorMessage(error))
       return false
     } finally {
       setBusy(id, null)
@@ -478,7 +523,7 @@ export function useAdminChannels() {
       return true
     } catch (error) {
       if (controller.signal.aborted) return false
-      toast.error(error instanceof ApiError ? error.message : String(error))
+      toast.error(channelErrorMessage(error))
       return false
     } finally {
       if (crudController === controller) crudController = null
@@ -576,7 +621,8 @@ export function useAdminChannels() {
 
   async function runBulkAction(
     action: ChannelBulkAction,
-    request: (signal: AbortSignal) => Promise<void>
+    // Resolving false reports a partial outcome the request already showed.
+    request: (signal: AbortSignal) => Promise<boolean | void>
   ): Promise<boolean> {
     if (
       !canMutate.value ||
@@ -588,11 +634,10 @@ export function useAdminChannels() {
     bulkController = controller
     bulkAction.value = action
     try {
-      await request(controller.signal)
-      return true
+      return (await request(controller.signal)) !== false
     } catch (error) {
       if (controller.signal.aborted) return false
-      toast.error(error instanceof ApiError ? error.message : String(error))
+      toast.error(channelErrorMessage(error))
       return false
     } finally {
       if (bulkController === controller) bulkController = null
@@ -625,14 +670,23 @@ export function useAdminChannels() {
     const status = action === 'disable' ? 2 : 1
 
     return runBulkAction(action, async (signal) => {
-      const response = await api.postEnvelope<number>(
-        '/api/channel/status/batch',
-        {
-          ids: targets.map((channel) => channel.id),
-          status,
-        },
-        { signal }
-      )
+      let response: ApiEnvelope<number>
+      try {
+        response = await api.postEnvelope<number>(
+          '/api/channel/status/batch',
+          {
+            ids: targets.map((channel) => channel.id),
+            status,
+          },
+          { signal }
+        )
+      } catch (error) {
+        const partial = batchStatusFailure(error)
+        if (!partial) throw error
+        reportPartialStatus(partial, targets)
+        await load({ background: true })
+        return false
+      }
       toast.success(
         t(
           action === 'enable'
@@ -647,6 +701,31 @@ export function useAdminChannels() {
         toast.warning(t('common.publicationPending'))
       await load({ background: true })
     })
+  }
+
+  function reportPartialStatus(
+    partial: BatchStatusFailure,
+    targets: AdminChannel[]
+  ): void {
+    const names = new Map(targets.map((channel) => [channel.id, channel.name]))
+    const list = partial.failures
+      .map(({ id, code }) =>
+        t('channels.bulkStatusFailureItem', {
+          id,
+          name: names.get(id) ?? '',
+          reason: CHANNEL_ERROR_KEYS[code] ? t(CHANNEL_ERROR_KEYS[code]) : code,
+        })
+      )
+      .join(t('channels.bulkStatusFailureSeparator'))
+    toast.warning(
+      t('channels.bulkStatusPartial', {
+        count: partial.changed,
+        failed: partial.failures.length,
+        list,
+      })
+    )
+    if (hasPendingPublication(partial.envelope as ApiEnvelope<unknown>))
+      toast.warning(t('common.publicationPending'))
   }
 
   function deleteSelectedChannels(channels: AdminChannel[]): Promise<boolean> {

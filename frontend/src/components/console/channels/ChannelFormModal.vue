@@ -31,6 +31,7 @@ import { appendModelNames } from '@/utils/modelEndpoints'
 import { isValidChannelRatio } from '@/utils/channelRatio'
 import { parseModelMapping } from '@/utils/modelMapping'
 import { useAuthStore } from '@/stores/auth'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
@@ -57,6 +58,7 @@ import {
   isCreatableChannelType,
   isKnownChannelType,
   isRetiredChannelType,
+  HIDDEN_FIELD_CLEAR_VALUE,
   withoutSensitiveChannelFields,
 } from '@/constants/adminChannels'
 import type {
@@ -118,6 +120,21 @@ const validOverrides = computed(() => {
   }
 })
 const advancedConfig = ref('')
+// Hidden fields arrive without a value. Their stand-in controls are not shown,
+// and a save omits them so the backend keeps the stored values.
+const redactedFields = computed(
+  () => new Set(props.editing?.redacted_fields ?? [])
+)
+const headerHidden = computed(() => redactedFields.value.has('header_override'))
+const settingHidden = computed(() => redactedFields.value.has('setting'))
+const settingsHidden = computed(() => redactedFields.value.has('settings'))
+const confirmingHeaderClear = ref(false)
+const headerCleared = ref(false)
+function clearHiddenHeader() {
+  confirmingHeaderClear.value = false
+  headerCleared.value = true
+  headerOverride.value = ''
+}
 const hasTaskPluginBind = computed(() =>
   auth.hasPermission('task_plugin', 'bind')
 )
@@ -138,7 +155,8 @@ const supportsResponsesWebSocket = computed(
 // The binding lives in the sensitive setting field, so it needs both
 // permissions, in upstream's order.
 const canBindPlugin = computed(
-  () => canSensitiveWrite.value && hasTaskPluginBind.value
+  () =>
+    canSensitiveWrite.value && hasTaskPluginBind.value && !settingHidden.value
 )
 const validAdvancedConfig = computed(() => {
   if (!isAdvancedChannel.value) return true
@@ -444,7 +462,9 @@ async function fetchUpstream() {
       props.editing !== null
         ? {
             channelId: props.editing.id,
-            ...(isAdvancedChannel.value && canSensitiveWrite.value
+            ...(isAdvancedChannel.value &&
+            canSensitiveWrite.value &&
+            !settingsHidden.value
               ? { advancedCustom: advancedConfig.value, baseUrl: form.baseUrl }
               : {}),
           }
@@ -501,7 +521,10 @@ const unknownType = computed(() => !isKnownChannelType(form.type))
 const typeLocked = computed(
   () =>
     props.editing !== null &&
-    (!canSensitiveWrite.value || !isCreatableChannelType(props.editing.type))
+    (!canSensitiveWrite.value ||
+      !isCreatableChannelType(props.editing.type) ||
+      settingHidden.value ||
+      settingsHidden.value)
 )
 const valid = computed(
   () =>
@@ -555,6 +578,8 @@ watch(
       typeof ch?.param_override === 'string' ? ch.param_override : ''
     headerOverride.value =
       typeof ch?.header_override === 'string' ? ch.header_override : ''
+    headerCleared.value = false
+    confirmingHeaderClear.value = false
     form.baseUrl = ch?.base_url ?? ''
     form.models = ch?.models ?? ''
     form.priority = ch?.priority ?? 0
@@ -707,17 +732,25 @@ async function submit() {
     // the stored channel, so every type 61 update that carries the sensitive
     // group resends the full setting, changed or not.
     if (
-      JSON.stringify(nextSetting) !== JSON.stringify(originalSetting.value) ||
-      (canSensitiveWrite.value && form.type === 61)
+      !settingHidden.value &&
+      (JSON.stringify(nextSetting) !== JSON.stringify(originalSetting.value) ||
+        (canSensitiveWrite.value && form.type === 61))
     )
       base.setting = JSON.stringify(nextSetting)
     if (canSensitiveWrite.value) {
       if (paramOverride.value !== (props.editing?.param_override ?? ''))
         base.param_override = paramOverride.value.trim()
-      if (headerOverride.value !== (props.editing?.header_override ?? ''))
+      // A hidden override is replaced as a whole or left out entirely.
+      if (headerHidden.value) {
+        if (headerCleared.value) base.header_override = HIDDEN_FIELD_CLEAR_VALUE
+        else if (headerOverride.value.trim())
+          base.header_override = headerOverride.value.trim()
+      } else if (
+        headerOverride.value !== (props.editing?.header_override ?? '')
+      )
         base.header_override = headerOverride.value.trim()
     }
-    if (canSensitiveWrite.value) {
+    if (canSensitiveWrite.value && !settingsHidden.value) {
       const otherSettings = { ...originalOtherSettings.value }
       if (form.type === 33) {
         if (awsApiType.value !== (otherSettings.aws_api_type || 'invoke_model'))
@@ -997,7 +1030,7 @@ async function submit() {
             v-model:vertex-project-id="vertexProjectId"
             v-model:vertex-region="vertexRegion"
             :channel-type="form.type"
-            :disabled="!canSensitiveWrite"
+            :disabled="!canSensitiveWrite || settingsHidden"
           />
           <!-- API address -->
           <FormField
@@ -1506,8 +1539,14 @@ async function submit() {
           v-show="advancedOpen"
           class="channel-form-section-body sibling-space-y-4"
         >
+          <p v-if="settingHidden" class="text-sm text-[var(--text-secondary)]">
+            {{ t('channels.redactedSettingHidden') }}
+          </p>
+          <p v-if="settingsHidden" class="text-sm text-[var(--text-secondary)]">
+            {{ t('channels.redactedSettingsHidden') }}
+          </p>
           <FormField
-            v-for="field in visibleFieldSettings"
+            v-for="field in settingsHidden ? [] : visibleFieldSettings"
             :key="field.key"
             :label="t(`channels.fieldSettingsLabels.${field.key}`)"
             :hint="t(`channels.fieldSettingsHints.${field.key}`)"
@@ -1520,6 +1559,7 @@ async function submit() {
             />
           </FormField>
           <FormField
+            v-if="!settingHidden"
             :label="t('channels.passThroughBody')"
             :hint="t('channels.passThroughBodyHint')"
             ><ConsoleToggle
@@ -1528,6 +1568,7 @@ async function submit() {
               :disabled="saving || !canSensitiveWrite"
           /></FormField>
           <FormField
+            v-if="!settingHidden"
             :label="t('channels.tlsInsecureSkipVerify')"
             :hint="t('channels.tlsInsecureSkipVerifyHint')"
             ><ConsoleToggle
@@ -1536,7 +1577,7 @@ async function submit() {
               :disabled="saving || !canSensitiveWrite"
           /></FormField>
           <ChannelRequestPlugins
-            v-if="hasTaskPluginBind"
+            v-if="hasTaskPluginBind && !settingHidden"
             v-model="requestPlugins"
             :disabled="saving || !canSensitiveWrite"
           />
@@ -1558,11 +1599,38 @@ async function submit() {
           >
             <textarea
               v-model="headerOverride"
-              :disabled="saving || !canSensitiveWrite"
+              :disabled="saving || !canSensitiveWrite || headerCleared"
               :aria-label="t('channels.headerOverrides')"
               class="channel-form-textarea font-mono"
               rows="4"
             />
+            <div
+              v-if="headerHidden"
+              class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[var(--text-secondary)]"
+            >
+              <span>{{
+                headerCleared
+                  ? t('channels.hiddenHeaderWillClear')
+                  : t('channels.redactedHidden')
+              }}</span>
+              <ConsoleButton
+                v-if="canSensitiveWrite"
+                size="sm"
+                variant="secondary"
+                :disabled="saving"
+                @click="
+                  headerCleared
+                    ? (headerCleared = false)
+                    : (confirmingHeaderClear = true)
+                "
+              >
+                {{
+                  headerCleared
+                    ? t('channels.hiddenHeaderKeep')
+                    : t('channels.clearHiddenHeader')
+                }}
+              </ConsoleButton>
+            </div>
           </FormField>
           <p
             v-if="!validOverrides"
@@ -1572,7 +1640,7 @@ async function submit() {
             {{ t('channels.invalidOverrides') }}
           </p>
           <FormField
-            v-if="supportsResponsesWebSocket"
+            v-if="supportsResponsesWebSocket && !settingHidden"
             :label="t('channels.responsesWebSocket')"
             :hint="t('channels.responsesWebSocketHint')"
           >
@@ -1583,7 +1651,7 @@ async function submit() {
             />
           </FormField>
           <FormField
-            v-if="isAdvancedChannel"
+            v-if="isAdvancedChannel && !settingsHidden"
             group
             :label="t('channels.advancedRoutes')"
             :hint="
@@ -1687,6 +1755,14 @@ async function submit() {
       </div>
     </template>
   </ConsoleModal>
+  <ConfirmDialog
+    :open="open && confirmingHeaderClear"
+    :title="t('channels.clearHiddenHeader')"
+    :message="t('channels.clearHiddenHeaderMessage')"
+    :confirm-text="t('channels.clearHiddenHeaderConfirm')"
+    @confirm="clearHiddenHeader"
+    @cancel="confirmingHeaderClear = false"
+  />
   <FetchedModelsDialog
     :open="open && modelPickerOpen"
     :models="fetchedModels"

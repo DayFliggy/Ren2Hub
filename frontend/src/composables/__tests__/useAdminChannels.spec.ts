@@ -1,10 +1,12 @@
+import type { AxiosInstance } from 'axios'
 import { defineComponent, nextTick, reactive } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
-import { httpTransport } from '@/api/httpTransport'
+import { createHttpTransport, httpTransport } from '@/api/httpTransport'
 import { useAdminChannels } from '@/composables/useAdminChannels'
+import channelSecurity from '../../../tests/fixtures/native/channel-security.json'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
@@ -60,6 +62,31 @@ const input: AdminChannelCreateInput = {
   model_mapping: '',
   priority: 0,
   weight: 1,
+}
+
+// Produced by the backend handlers (controller frontend contract tests).
+const contract = channelSecurity as unknown as Record<
+  string,
+  { status: number; body: Record<string, unknown> }
+>
+
+/** Answers the next write as the real transport would for a fixture. */
+async function replyWith(name: string) {
+  const { status, body } = contract[name]!
+  if (status === 200) {
+    vi.spyOn(httpTransport, 'request').mockResolvedValueOnce(body as never)
+    return
+  }
+  const failing = createHttpTransport({
+    request: vi.fn().mockRejectedValue(
+      Object.assign(new Error('Request failed'), {
+        isAxiosError: true,
+        response: { status, data: body },
+      })
+    ),
+  } as unknown as AxiosInstance)
+  const error = await failing.request('PUT', '/fixture').catch((e) => e)
+  vi.spyOn(httpTransport, 'request').mockRejectedValueOnce(error)
 }
 let wrapper: VueWrapper
 async function setup() {
@@ -161,6 +188,75 @@ describe('native channel management', () => {
     expect(state.rows.value.map((row) => row.id)).toEqual([channel.id])
   })
 
+  it.each([
+    ['status_changed', 'success', 'channels.disabled'],
+    ['status_publication_pending', 'warning', 'common.publicationPending'],
+    ['status_unchanged', 'warning', 'channels.statusUnchanged'],
+    ['status_missing', 'error', 'channels.errors.notFound'],
+    ['status_storage_failure', 'error', 'channels.errors.statusUpdateFailed'],
+  ] as const)(
+    'reports the single status response %s',
+    async (name, kind, key) => {
+      vi.spyOn(api, 'get').mockResolvedValue(page)
+      await replyWith(name)
+      const state = await setup()
+      await state.toggleStatus(channel)
+      expect(toast[kind]).toHaveBeenCalledWith(key)
+      if (kind === 'error') {
+        expect(toast.warning).not.toHaveBeenCalled()
+        expect(toast.success).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it.each([
+    ['status_batch_partial', 1, true],
+    ['status_batch_failure', 0, false],
+  ] as const)(
+    'names the failed channels of %s and refreshes the list',
+    async (name, changed, pending) => {
+      const second = { ...channel, id: 99999, name: 'Missing fixture' }
+      const get = vi
+        .spyOn(api, 'get')
+        .mockResolvedValue({ ...page, items: [channel, second], total: 2 })
+      await replyWith(name)
+      const state = await setup()
+      get.mockClear()
+      expect(
+        await state.updateChannelsStatus('disable', [channel, second])
+      ).toBe(false)
+      expect(toast.warning).toHaveBeenCalledWith('channels.bulkStatusPartial')
+      expect(toast.warning).toHaveBeenCalledTimes(pending ? 2 : 1)
+      expect(toast.success).not.toHaveBeenCalled()
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(get).toHaveBeenCalledWith(
+        '/api/channel/',
+        expect.anything(),
+        expect.anything()
+      )
+      expect(contract[name]!.body.data).toBe(changed)
+    }
+  )
+
+  it('explains a rejected redacted field instead of the raw server text', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(page)
+    await replyWith('redacted_field_invalid')
+    const state = await setup()
+    expect(
+      await state.updateChannelDetails(channel, {
+        name: 'renamed',
+        models: channel.models,
+        model_mapping: '',
+        priority: 0,
+        weight: 1,
+        max_concurrency: 0,
+      })
+    ).toBe(false)
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      'channels.errors.redactedFieldInvalid'
+    )
+  })
+
   it('retains the batch changed count and reports pending publication separately', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
     vi.spyOn(api, 'postEnvelope').mockResolvedValue({
@@ -244,7 +340,7 @@ describe('native channel management', () => {
     get.mockClear()
     expect(await state.createChannel(input, { batchKeys: true })).toBe(false)
     expect(toast.success).not.toHaveBeenCalled()
-    expect(toast.error).toHaveBeenCalledWith('Error: batch rolled back')
+    expect(toast.error).toHaveBeenCalledWith('batch rolled back')
     expect(get).not.toHaveBeenCalled()
   })
   it('filters by model through native search, which the plain list ignores', async () => {

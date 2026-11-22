@@ -6,7 +6,57 @@ import {
   requiredStrictNumber,
   requiredString,
 } from './contracts'
-import type { AdminChannel, AdminChannelPage } from '@/types/console'
+import type {
+  AdminChannel,
+  AdminChannelPage,
+  ChannelRedactedField,
+} from '@/types/console'
+
+const REDACTABLE_FIELDS: readonly ChannelRedactedField[] = [
+  'header_override',
+  'setting',
+  'settings',
+]
+
+function isRedactedPlaceholder(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return (
+      isRecord(parsed) &&
+      Object.keys(parsed).length === 1 &&
+      parsed.__ren2hub_redacted__ === true
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Reads redacted_fields and drops each hidden field's placeholder, so no form
+ * or parser downstream can mistake it for a stored value.
+ */
+function withoutRedactedValues(
+  value: Record<string, unknown>,
+  endpoint: string
+): { fields: ChannelRedactedField[]; rest: Record<string, unknown> } {
+  const listed = value.redacted_fields ?? []
+  if (
+    !Array.isArray(listed) ||
+    !listed.every((field) =>
+      REDACTABLE_FIELDS.includes(field as ChannelRedactedField)
+    )
+  )
+    invalidResponse(endpoint)
+  const fields = listed as ChannelRedactedField[]
+  const rest = { ...value }
+  for (const field of REDACTABLE_FIELDS) {
+    if (fields.includes(field) !== isRedactedPlaceholder(value[field]))
+      invalidResponse(endpoint)
+    if (fields.includes(field)) delete rest[field]
+  }
+  return { fields, rest }
+}
 
 export function parseChannelStatusDetails(value: unknown): AdminChannel {
   const endpoint = '/api/channel/'
@@ -38,8 +88,10 @@ export function parseChannelStatusDetails(value: unknown): AdminChannel {
   }
   const quality = value.routing_quality
   if (quality !== undefined && !isRecord(quality)) invalidResponse(endpoint)
+  const redacted = withoutRedactedValues(value, endpoint)
   return {
-    ...value,
+    ...redacted.rest,
+    redacted_fields: redacted.fields,
     routing_quality:
       quality === undefined
         ? undefined

@@ -1546,6 +1546,26 @@ export default {
     disabled: '渠道已禁用',
     statusUnchanged: '渠道状态未改变，列表已显示服务器上的当前状态',
     statusUnchangedRefreshFailed: '渠道状态未改变，列表刷新失败，请稍后重试',
+    bulkStatusPartial:
+      '已更新 {count} 个渠道；{failed} 个失败，保持原状态：{list}',
+    bulkStatusFailureItem: '#{id} {name}（{reason}）',
+    bulkStatusFailureSeparator: '；',
+    errors: {
+      notFound: '渠道已不存在，请刷新列表。',
+      statusUpdateFailed: '渠道状态保存失败，请稍后重试。',
+      redactedFieldInvalid:
+        '已隐藏字段的提交值无效。请重新打开渠道，不修改隐藏字段，或将其整体替换。',
+    },
+    clearHiddenHeader: '清空请求头覆盖',
+    clearHiddenHeaderMessage: '保存渠道后，已隐藏的请求头覆盖将被删除。',
+    clearHiddenHeaderConfirm: '清空',
+    hiddenHeaderWillClear: '保存后将清空请求头覆盖。',
+    hiddenHeaderKeep: '保留原值',
+    redactedHidden: '已隐藏，未修改则保留原值；输入新内容将整体替换。',
+    redactedSettingHidden:
+      '代理、插件与透传等设置含已隐藏的凭据，保持原值不变；仅 Root 管理员可查看或修改。',
+    redactedSettingsHidden:
+      '高级路由设置含已隐藏的凭据，保持原值不变；仅 Root 管理员可查看或修改。',
     balanceUpdated: '上游额度与倍率已同步',
     balanceQueryCompleted: '上游余额查询完成',
     balanceRawTitle: '余额查询原始响应：{name}',

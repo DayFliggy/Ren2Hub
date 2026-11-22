@@ -1606,6 +1606,29 @@ export default {
       'Channel status did not change. The list now shows the current server status.',
     statusUnchangedRefreshFailed:
       'Channel status did not change. The list could not be refreshed; try again later.',
+    bulkStatusPartial:
+      'Updated {count} channels; {failed} failed and kept their status: {list}',
+    bulkStatusFailureItem: '#{id} {name} ({reason})',
+    bulkStatusFailureSeparator: '; ',
+    errors: {
+      notFound: 'The channel no longer exists. Refresh the list.',
+      statusUpdateFailed:
+        'The channel status could not be saved. Try again later.',
+      redactedFieldInvalid:
+        'A hidden field was sent with an invalid value. Reopen the channel, then leave hidden fields untouched or replace them entirely.',
+    },
+    clearHiddenHeader: 'Clear header overrides',
+    clearHiddenHeaderMessage:
+      'The hidden header overrides will be removed when you save the channel.',
+    clearHiddenHeaderConfirm: 'Clear',
+    hiddenHeaderWillClear: 'Header overrides will be cleared when you save.',
+    hiddenHeaderKeep: 'Keep stored value',
+    redactedHidden:
+      'Hidden. The stored value is kept unless you enter a replacement.',
+    redactedSettingHidden:
+      'The proxy, plugin and pass-through settings contain hidden credentials and are kept unchanged. Only a root administrator can view or edit them.',
+    redactedSettingsHidden:
+      'The advanced route settings contain hidden credentials and are kept unchanged. Only a root administrator can view or edit them.',
     balanceUpdated: 'Upstream balance and ratio synced',
     balanceQueryCompleted: 'Upstream balance query completed',
     balanceRawTitle: 'Raw balance response: {name}',

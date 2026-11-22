@@ -35,6 +35,9 @@ export type AdminChannelSortBy =
 
 export type AdminChannelSortOrder = 'asc' | 'desc'
 
+/** Channel fields the backend hides from readers without root channel:write. */
+export type ChannelRedactedField = 'header_override' | 'setting' | 'settings'
+
 export interface AdminChannel extends Record<string, unknown> {
   channel_ratio: string
   max_concurrency: number
@@ -57,6 +60,8 @@ export interface AdminChannel extends Record<string, unknown> {
   models: string
   model_mapping: string
   other_info?: string
+  /** Hidden fields arrive without a value; an unchanged save omits them. */
+  redacted_fields?: readonly ChannelRedactedField[]
 }
 
 export interface AdminChannelCreateInput {

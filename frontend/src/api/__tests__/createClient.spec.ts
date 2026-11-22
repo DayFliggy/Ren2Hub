@@ -51,6 +51,23 @@ describe('API client request scope', () => {
     }
   )
 
+  it('keeps the whole business envelope for details reported beside data', async () => {
+    const response = {
+      success: false,
+      message: 'Partial failure',
+      data: 1,
+      failed_ids: [102],
+    }
+    const client = createApiClient({
+      request: vi.fn().mockResolvedValue(response),
+    } as ApiTransport)
+    await expect(client.postEnvelope('/batch', {})).rejects.toMatchObject({
+      business: true,
+      data: 1,
+      envelope: response,
+    })
+  })
+
   it('preserves stable business error codes', async () => {
     const client = createApiClient({
       request: vi.fn().mockResolvedValue({
