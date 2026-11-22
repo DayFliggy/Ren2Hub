@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"errors"
+	"context"
 	"io"
 	"net/http"
 	"time"
@@ -31,13 +31,20 @@ type logExportWriter struct {
 	response    *http.ResponseController
 	count       int
 	idleTimeout time.Duration
+	ctx         context.Context
+	failed      bool
 }
 
 func newLogExportWriter(c *gin.Context) *logExportWriter {
-	return &logExportWriter{writer: c.Writer, response: http.NewResponseController(c.Writer), idleTimeout: logExportWriteIdleTimeout}
+	return &logExportWriter{writer: c.Writer, response: http.NewResponseController(c.Writer), idleTimeout: logExportWriteIdleTimeout, ctx: c.Request.Context()}
 }
 
-func (w *logExportWriter) write(log *model.Log) error {
+func (w *logExportWriter) write(log *model.Log) (err error) {
+	defer func() {
+		if err != nil {
+			w.failed = true
+		}
+	}()
 	if err := w.refreshDeadline(); err != nil {
 		return err
 	}
@@ -63,10 +70,12 @@ func (w *logExportWriter) write(log *model.Log) error {
 func (w *logExportWriter) close() {
 	// net/http does not reset this for the next keep-alive request when the
 	// server's WriteTimeout is zero. Flush the final batch/result before reset.
-	if err := w.flush(); err != nil {
-		common.SysError(common.LogText("failed to flush log export: %s", err.Error()))
+	if w.ctx.Err() == nil && !w.failed {
+		if err := w.flush(); err != nil && w.ctx.Err() == nil {
+			common.SysError(common.LogText("failed to flush log export: %s", err.Error()))
+		}
 	}
-	if err := w.response.SetWriteDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	if err := w.response.SetWriteDeadline(time.Time{}); err != nil && w.ctx.Err() == nil {
 		common.SysError(common.LogText("failed to reset log export deadline: %s", err.Error()))
 	}
 }
@@ -74,13 +83,9 @@ func (w *logExportWriter) close() {
 // Refresh on each write so progress across a batch has no duration cap.
 func (w *logExportWriter) refreshDeadline() error {
 	if w.response == nil {
-		return nil
+		return http.ErrNotSupported
 	}
-	err := w.response.SetWriteDeadline(time.Now().Add(w.idleTimeout))
-	if errors.Is(err, http.ErrNotSupported) {
-		return nil
-	}
-	return err
+	return w.response.SetWriteDeadline(time.Now().Add(w.idleTimeout))
 }
 
 func (w *logExportWriter) flush() error {
@@ -88,4 +93,15 @@ func (w *logExportWriter) flush() error {
 		return err
 	}
 	return w.response.Flush()
+}
+
+// Verify the complete middleware writer chain before choosing streaming headers.
+func prepareLogExportWriter(c *gin.Context) (*logExportWriter, bool) {
+	writer := newLogExportWriter(c)
+	if err := writer.refreshDeadline(); err != nil {
+		common.SysError(common.LogText("failed to initialize log export deadline: %s", err.Error()))
+		common.ApiErrorT(c, "Failed to export logs")
+		return nil, false
+	}
+	return writer, true
 }

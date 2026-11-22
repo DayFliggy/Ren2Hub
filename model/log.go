@@ -658,9 +658,7 @@ func streamLogs(tx *gorm.DB, order string, fn func(*Log) error) error {
 	// ClickHouse has no unique key: id defaults to zero and request_id can
 	// repeat. Keep its streaming query to avoid losing tied rows; MergeTree
 	// readers do not hold row locks or block inserts.
-	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
-		order = clickHouseLogOrder("logs.")
-	}
+	order = clickHouseLogOrder("logs.")
 	rows, err := tx.Model(&Log{}).Order(order).Rows()
 	if err != nil {
 		return err

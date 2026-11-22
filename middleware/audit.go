@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"net/http"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -20,6 +21,11 @@ type auditResponseWriter struct {
 	gin.ResponseWriter
 	body    *bytes.Buffer
 	maxSize int
+}
+
+// Unwrap keeps streaming controls reachable through the bounded audit copy.
+func (w *auditResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 func (w *auditResponseWriter) Write(b []byte) (int, error) {

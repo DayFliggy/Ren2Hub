@@ -65,6 +65,6 @@ AUTH-7：`/api/log/export` 和 `/api/log/self/export` 输出 NDJSON，不限制�
 
 SQLite、MySQL、PostgreSQL 每批最多 500 行，每条查询超时 30 秒；完整读取并释放数据库连接后才写客户端。管理员按 `created_at desc, id desc`，本人按真实 `id desc` 读取，再转成连续显示序号。导出开始记录最大 ID，排除此后生成的 ID；批间不跨事务，删除的行会跳过，不提供跨批一致性快照。ClickHouse 的 MergeTree 表没有唯一全序键（id 默认 0，created_at/request_id 可重复），因此保留原有单查询流式读取，避免键集遗漏并列行；其读查询不持有行锁或阻塞插入，但持续占用查询连接，仍受并发与写截止保护。
 
-每行写入及每次刷新前续期 60 秒写截止；客户端持续接收时不按导出总时长中断，停收导致写入阻塞 60 秒时终止。整批结束刷新输出，最终刷新后将截止恢复零值，避免影响同一 keep-alive 连接的下一请求。成功末行包含 `success:true,data:{count:N}`，失败使用现有失败对象；取消不写末行，断开或写超时释放用户锁及全局名额。服务端仅保留一批日志及一行编码，导出内存为 O(batch size + channel count)，不随导出总量增长；单行大小仍由已有日志数据决定。
+每行写入及每次刷新前续期 60 秒写截止；客户端持续接收时不按导出总时长中断，停收导致写入阻塞 60 秒时终止。真实 API 路由对两个导出路径禁用 gzip，PAT 审计包装器透传底层 writer；在发送流响应头前设置写截止，不支持时返回明确失败。整批结束刷新输出，成功或查询失败时做最终刷新；客户端取消或写出失败时跳过最终刷新，随后将截止恢复零值，避免影响同一 keep-alive 连接的下一请求。成功末行包含 `success:true,data:{count:N}`，失败使用现有失败对象；取消不写末行，断开或写超时释放用户锁及全局名额。服务端仅保留一批日志及一行编码，导出内存为 O(batch size + channel count)，不随导出总量增长；单行大小仍由已有日志数据决定。
 
 生产合同夹具为 `frontend/tests/fixtures/native/log-export-busy.json`，由 `TestLogExportBusy -update` 生成。

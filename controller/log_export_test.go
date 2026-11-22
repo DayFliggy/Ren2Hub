@@ -32,7 +32,7 @@ import (
 // lines of the response.
 func callLogHandler(t *testing.T, handler gin.HandlerFunc, userId int, role int, query string, username ...string) []map[string]any {
 	t.Helper()
-	recorder := httptest.NewRecorder()
+	recorder := &exportDeadlineWriter{ResponseRecorder: httptest.NewRecorder()}
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/log?"+query, nil)
 	ctx.Set("id", userId)

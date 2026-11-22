@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 830,
     "adapted": 334,
-    "extension": 502,
+    "extension": 503,
     "removed": 47
   },
   "files": [
@@ -1584,14 +1584,14 @@
       "path": "controller/log.go",
       "status": "adapted",
       "upstream_sha256": "045aca343d8014a7be9175c3cd0dcf839316e1d8020c3748e3a6d7495ed1c991",
-      "local_sha256": "ba718f0f51e50d693df2991cf472cab9c71ec3e29a93eb1280e74c41f36018d7",
+      "local_sha256": "64732970bc55da9ddd711b920df28c5f16215f4fb92b2dad7280fdfed298b2f2",
       "reasons": [
         "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
+        "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
@@ -1600,13 +1600,13 @@
       "path": "controller/log_export_failure_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "536797978ff625afcec131ac475ca6a174e122f7df3bd4665192ac8f9572ee1a"
+      "local_sha256": "9122c30d43c93f74b53ccb40fe08ede7dd29151590d553521b75b2441c5c496a"
     },
     {
       "path": "controller/log_export_protection.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "13b390459e203170daa40b0dcff341cece3b088b4b1da5a30ecdfc13232cd86c",
+      "local_sha256": "64efb2755a9e47225ca6715347b1aa3dee2091bf5f5a786f0b1a3d9dc9ae4846",
       "reasons": [
         "audit-local-safety"
       ],
@@ -1626,7 +1626,7 @@
       "path": "controller/log_export_test.go",
       "status": "adapted",
       "upstream_sha256": "bffa0cb2bd3f08ed4593bf469235205e465df01435686dd2d3090acbc147feef",
-      "local_sha256": "01190c83eeed15bb9e4fab2486748aebbf4e6ce8543b52514ce0cd35d85a42dc"
+      "local_sha256": "425b998b664cae92217b2bc2ee967174c98f15900e23aba65b216bf6749957d6"
     },
     {
       "path": "controller/log_identity_bounds_test.go",
@@ -3797,20 +3797,22 @@
       "path": "middleware/audit.go",
       "status": "adapted",
       "upstream_sha256": "1165af97b7abd4e13c0c8eddbc8e516f483de1c365383da73063cf0e1fab89f2",
-      "local_sha256": "05ca15893202f4f662c30caf50bdf2e6c91756123e7f88ed3a032582e7a043cf",
+      "local_sha256": "53f9916ed53757f772a9372979ef1e1cce0bca815455e1d81b5cd3227715bb5b",
       "reasons": [
         "no-builtin-prices",
-        "retired"
+        "retired",
+        "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：middleware/audit.go#1, middleware/audit.go#2",
+        "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
           "middleware/audit.go#1",
           "middleware/audit.go#2"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -5125,14 +5127,14 @@
       "path": "model/log.go",
       "status": "adapted",
       "upstream_sha256": "405448720fdbfc44ea01d16d67ad5ae465f16ea6b1a1c8e302b6485b7e207bb9",
-      "local_sha256": "54478be93f8407305770e4c6d3b578cd03ed93365c4ab7cb49181c2c82edeeed",
+      "local_sha256": "f0bf5779011e5d697ea696576e723231dff3da4eeab78b0db4673382778ee176",
       "reasons": [
         "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
+        "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
@@ -11517,7 +11519,7 @@
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "a6ec29bf1844cb7d2100467937be3872ff1cc0437f354aeaaed017da3e6a96d7",
-      "local_sha256": "922f3376f449a384ab9223ae33c7b658370f9d3f25fe79270a14f3d56acc7977",
+      "local_sha256": "71351ed90e59868612dfc33126093bc91939a53e986b673215d24add8238edbd",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -11530,11 +11532,12 @@
         "ticket",
         "token-routing",
         "topup-bonus",
-        "upstream-ratio"
+        "upstream-ratio",
+        "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/api-router.go#1, router/api-router.go#10, router/api-router.go#11, router/api-router.go#2, router/api-router.go#3, router/api-router.go#4, router/api-router.go#5, router/api-router.go#6, router/api-router.go#7, router/api-router.go#8, router/api-router.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11549,7 +11552,8 @@
           "router/api-router.go#7",
           "router/api-router.go#8",
           "router/api-router.go#9"
-        ]
+        ],
+        "current_hunk_review": true
       }
     },
     {
@@ -11673,6 +11677,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "0356b3962f48099aaafbbe165a03101f9892e0e5851d8d047c0ef97bf9ae5463"
+    },
+    {
+      "path": "router/log_export_stream_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "16d12888c68a989adb62806ece0454c2f148e9fa8cebc37f4d3f050b97ae09da"
     },
     {
       "path": "router/main.go",

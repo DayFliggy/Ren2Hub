@@ -131,13 +131,17 @@ func exportLogs(c *gin.Context, all bool) {
 	}
 	defer releaseSlot()
 
+	writer, ok := prepareLogExportWriter(c)
+	if !ok {
+		return
+	}
+	defer writer.close()
+
 	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
-	writer := newLogExportWriter(c)
-	defer writer.close()
 	writeLog := writer.write
 	ctx := c.Request.Context()
 	if all {
