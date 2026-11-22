@@ -65,4 +65,42 @@ describe('RedeemPanel', () => {
     expect(wrapper.emitted('done')).toHaveLength(1)
     wrapper.unmount()
   })
+  it('keeps a confirmed redemption and retries only the balance refresh', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const fetchSelf = vi
+      .spyOn(useAuthStore(), 'fetchSelf')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(true)
+    const post = vi.spyOn(api, 'postEnvelope').mockResolvedValue({
+      success: true,
+      message: '',
+      data: 5000000,
+      bonus_quota: 0,
+    } as never)
+    const wrapper = mount(RedeemPanel, {
+      attachTo: document.body,
+      global: { plugins: [pinia, i18n] },
+    })
+
+    await wrapper.get('input').setValue('CODE-1')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(useToast().toasts.map((toast) => toast.type)).toEqual(['success'])
+    expect((wrapper.get('input').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.emitted('done')).toHaveLength(1)
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.text()).toContain(
+      'Redeemed, but the balance could not be refreshed.'
+    )
+
+    await alert.get('button').trigger('click')
+    await flushPromises()
+
+    expect(fetchSelf).toHaveBeenCalledTimes(2)
+    expect(post).toHaveBeenCalledOnce()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

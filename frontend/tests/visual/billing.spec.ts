@@ -65,3 +65,52 @@ for (const [theme, mobile] of [
     expect(failures).toEqual([])
   })
 }
+
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  test(`wallet keeps a redemption when the balance refresh fails ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+    )
+    await configureStablePage(page, {
+      theme,
+      expectedApiErrors: { '/api/user/self': [503] },
+    })
+    let redeemed = false
+    await page.route('**/api/user/topup', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      redeemed = true
+      await route.fulfill({
+        json: { success: true, message: '', data: 5000000, bonus_quota: 0 },
+      })
+    })
+    await page.route('**/api/user/self', (route) =>
+      redeemed
+        ? route.fulfill({
+            status: 503,
+            json: { success: false, message: 'unavailable' },
+          })
+        : route.fallback()
+    )
+    await page.goto('/wallet')
+    const redeem = page
+      .getByRole('heading', { name: '兑换码充值', exact: true })
+      .locator('xpath=ancestor::section[1]')
+    await redeem.getByRole('textbox').fill('CODE-1')
+    await redeem.getByRole('button', { name: /立即兑换/ }).click()
+
+    const alert = redeem.getByRole('alert')
+    await expect(alert).toContainText('兑换成功，余额刷新失败。')
+    await expect(redeem.getByRole('textbox')).toHaveValue('')
+    await expect(alert.getByRole('button', { name: '刷新余额' })).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath('wallet-redeem-refresh-failed.png'),
+      fullPage: true,
+    })
+  })
+}

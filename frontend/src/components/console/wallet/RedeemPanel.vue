@@ -27,6 +27,8 @@ const auth = useAuthStore()
 
 const code = ref('')
 const submittingRedeem = ref(false)
+const balanceRefreshFailed = ref(false)
+const refreshingBalance = ref(false)
 let focusTimer: number | null = null
 
 async function redeem(): Promise<void> {
@@ -39,7 +41,6 @@ async function redeem(): Promise<void> {
       key: trimmed,
     })
     const redeemed = parseRedemption(response)
-    await auth.fetchSelf()
     toast.success(
       BigInt(redeemed.bonus_quota) > 0n
         ? t('wallet.redeemedWithBonus', {
@@ -52,8 +53,23 @@ async function redeem(): Promise<void> {
     emit('done')
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
+    return
   } finally {
     submittingRedeem.value = false
+  }
+  await refreshBalance()
+}
+
+/** The code is already spent, so a failure here only retries the balance read. */
+async function refreshBalance(): Promise<void> {
+  refreshingBalance.value = true
+  try {
+    await auth.fetchSelf()
+    balanceRefreshFailed.value = false
+  } catch {
+    balanceRefreshFailed.value = true
+  } finally {
+    refreshingBalance.value = false
   }
 }
 
@@ -107,5 +123,20 @@ onBeforeUnmount(() => {
         → {{ t('wallet.redeemNow') }}
       </ConsoleButton>
     </form>
+    <div
+      v-if="balanceRefreshFailed"
+      role="alert"
+      class="mt-3 flex flex-wrap items-center gap-3 text-sm text-[var(--status-danger-text)]"
+    >
+      <span>{{ t('wallet.redeemedBalanceRefreshFailed') }}</span>
+      <ConsoleButton
+        size="sm"
+        variant="secondary"
+        :loading="refreshingBalance"
+        @click="refreshBalance"
+      >
+        {{ t('wallet.refreshBalance') }}
+      </ConsoleButton>
+    </div>
   </ConsoleCard>
 </template>

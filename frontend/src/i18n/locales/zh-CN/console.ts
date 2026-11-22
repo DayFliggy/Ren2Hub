@@ -2358,6 +2358,8 @@ export default {
     redeemNow: '立即兑换',
     redeemed: '兑换成功：到账 {quota}',
     redeemedWithBonus: '兑换成功：到账 {quota}，含加赠 {bonus}',
+    redeemedBalanceRefreshFailed: '兑换成功，余额刷新失败。',
+    refreshBalance: '刷新余额',
     records: '充值记录',
     callbackNote: '服务端核验支付成功后，额度将自动到账。',
     creditBonus: '含加赠 +{amount}',

@@ -183,3 +183,24 @@ describe('wallet payment capabilities layout', () => {
     wrapper.unmount()
   })
 })
+describe('wallet redemption', () => {
+  it('refreshes records after a redemption and leaves the balance read to the panel', async () => {
+    const wrapper = await render()
+    const panel = wrapper.findComponent({ name: 'TopupPanel' })
+    panel.vm.$emit('capabilities', {
+      ...nativeTopupInfo,
+      enable_redemption: true,
+    })
+    panel.vm.$emit('capabilities-state', 'ready')
+    await flushPromises()
+    const records = wrapper.findComponent({ name: 'TopupRecords' })
+    const before = records.props('refreshKey') as number
+
+    wrapper.findComponent({ name: 'RedeemPanel' }).vm.$emit('done')
+    await flushPromises()
+
+    expect(records.props('refreshKey')).toBe(before + 1)
+    expect(state.auth.fetchSelf).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})

@@ -211,7 +211,7 @@ onBeforeUnmount(() => statusController?.abort())
         v-if="redemptionEnabled"
         :auto-focus="activePanel === 'redeem'"
         :refresh-key="refreshKey"
-        @done="handlePaymentDone"
+        @done="refreshKey += 1"
       />
       <TopupRecords :refresh-key="refreshKey" />
     </div>

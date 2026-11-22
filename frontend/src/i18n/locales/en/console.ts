@@ -2442,6 +2442,9 @@ export default {
     redeemNow: 'Redeem',
     redeemed: 'Redeemed: {quota} credited',
     redeemedWithBonus: 'Redeemed: {quota} credited, including a {bonus} bonus',
+    redeemedBalanceRefreshFailed:
+      'Redeemed, but the balance could not be refreshed.',
+    refreshBalance: 'Refresh balance',
     records: 'Top-up records',
     callbackNote:
       'Credit arrival is confirmed by the server after verifying payment.',
