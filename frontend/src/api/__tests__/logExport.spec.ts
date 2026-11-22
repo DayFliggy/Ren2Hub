@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
+import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+// Final record of a real capped export (controller frontend contract tests).
+import limitTerminal from '../../../tests/fixtures/native/log-export-limit.json'
 import {
   exportUserLogs,
+  logExportLimit,
+  logExportLimitParams,
   MAX_LOG_EXPORT_BYTES,
   parseLogExport,
   parseLogExportStream,
@@ -113,6 +118,80 @@ describe('usage log export', () => {
         () => undefined
       )
     ).rejects.toThrow()
+  })
+
+  it('keeps the rows before a server export limit and reports the limit', async () => {
+    // Shape of the backend's final record when an export reaches its cap.
+    const limit = {
+      success: false,
+      code: 'LOG_EXPORT_LIMIT_EXCEEDED',
+      message_key: 'Log export limit exceeded',
+      data: {
+        count: 1,
+        bytes: 320,
+        truncated: true,
+        max_rows: 10000,
+        max_bytes: 33554432,
+      },
+    }
+    const limited = `${JSON.stringify(row)}\n${JSON.stringify(limit)}`
+    const expected = { count: 1, maxRows: 10000, maxBytes: 33554432 }
+    const collected: unknown[] = []
+    const streamed = await parseLogExportStream(
+      ndjsonStream(limited),
+      new AbortController().signal,
+      (log) => collected.push(log)
+    ).catch((error: unknown) => error)
+    expect(collected).toHaveLength(1)
+    expect(logExportLimit(streamed)).toEqual(expected)
+    let parsed: unknown
+    try {
+      parseLogExport(limited)
+    } catch (error) {
+      parsed = error
+    }
+    expect(logExportLimit(parsed)).toEqual(expected)
+
+    const miscounted = `${JSON.stringify(row)}\n${JSON.stringify({
+      ...limit,
+      data: { ...limit.data, count: 2 },
+    })}`
+    await expect(
+      parseLogExportStream(
+        ndjsonStream(miscounted),
+        new AbortController().signal,
+        () => undefined
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_LOG_EXPORT' })
+    expect(logExportLimit(new Error('other'))).toBeNull()
+  })
+
+  it('reads the backend limit record after the capped rows', async () => {
+    const rows = Array.from({ length: limitTerminal.data.count }, (_, id) =>
+      JSON.stringify({ ...row, id: id + 1 })
+    )
+    const collected: unknown[] = []
+    const error = await parseLogExportStream(
+      ndjsonStream(`${rows.join('\n')}\n${JSON.stringify(limitTerminal)}`),
+      new AbortController().signal,
+      (log) => collected.push(log)
+    ).catch((cause: unknown) => cause)
+    expect(collected).toHaveLength(10000)
+    const limit = logExportLimit(error)!
+    expect(limit).toEqual({ count: 10000, maxRows: 10000, maxBytes: 33554432 })
+    await loadMessageDomain('console')
+    await setLocale('zh-CN')
+    expect(
+      i18n.global.t('logs.exportLimited', logExportLimitParams(limit))
+    ).toBe(
+      '已达到导出上限（10000 条或 32 MiB），已导出前 10000 条。请缩小时间范围后再导出其余记录。'
+    )
+    await setLocale('en')
+    expect(
+      i18n.global.t('logs.exportLimited', logExportLimitParams(limit))
+    ).toBe(
+      'The export limit (10000 rows or 32 MiB) was reached; the first 10000 records were exported. Narrow the time range to export the rest.'
+    )
   })
 
   it('rejects a response above the client memory bound before parsing it', async () => {

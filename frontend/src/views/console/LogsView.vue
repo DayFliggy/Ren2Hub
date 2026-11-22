@@ -12,7 +12,13 @@ import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
-import { exportUserLogs, MAX_LOG_EXPORT_BYTES } from '@/api/logExport'
+import {
+  exportUserLogs,
+  logExportLimit,
+  logExportLimitParams,
+  MAX_LOG_EXPORT_BYTES,
+  type LogExportLimit,
+} from '@/api/logExport'
 import { useAppStore } from '@/stores/app'
 import { parseLogPage } from '@/api/liveContracts'
 import { ApiError } from '@/api/types'
@@ -385,7 +391,8 @@ async function doExport() {
     }
     if (json) append('[')
     else append(spreadsheet!.prefix)
-    const count = await exportUserLogs(filters, controller.signal, (log) => {
+    // A capped export still delivers its first rows; the file keeps them.
+    const outcome = await exportUserLogs(filters, controller.signal, (log) => {
       if (json) {
         if (written > 0) append(',')
         append(JSON.stringify(log))
@@ -393,7 +400,14 @@ async function doExport() {
         append(spreadsheet!.appendRow(getLogExportValues(log, getLocale())))
       }
       written++
-    })
+    }).then(
+      (count) => ({ count, limit: null as LogExportLimit | null }),
+      (error: unknown) => {
+        const limit = logExportLimit(error)
+        if (!limit || limit.count !== written) throw error
+        return { count: limit.count, limit }
+      }
+    )
     if (json) append(']')
     else append(spreadsheet!.suffix)
     download(
@@ -402,7 +416,10 @@ async function doExport() {
       json ? 'json' : spreadsheet!.ext
     )
     exportOpen.value = false
-    toast.success(t('logs.exported', { count }))
+    const { count, limit } = outcome
+    if (limit)
+      toast.warning(t('logs.exportLimited', logExportLimitParams(limit)))
+    else toast.success(t('logs.exported', { count }))
   } catch (error) {
     // An unmount mid-export is a cancellation, not a failure to report.
     if (controller.signal.aborted) return

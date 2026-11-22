@@ -2050,6 +2050,8 @@ export default {
     emptyHint: '请重新输入筛选条件',
     loadFailed: '日志加载失败',
     exportTooLarge: '导出内容过大，请缩小筛选范围后重试。',
+    exportLimited:
+      '已达到导出上限（{rows} 条或 {size} MiB），已导出前 {count} 条。请缩小时间范围后再导出其余记录。',
     exported: '已导出 {count} 条记录',
     exportTruncated:
       '结果超过 {limit} 条上限，已导出前 {count} 条，请缩小筛选范围',

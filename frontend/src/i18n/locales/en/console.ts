@@ -2130,6 +2130,8 @@ export default {
     loadFailed: 'Logs could not be loaded',
     exportTooLarge:
       'This export is too large for the browser. Narrow the filters.',
+    exportLimited:
+      'The export limit ({rows} rows or {size} MiB) was reached; the first {count} records were exported. Narrow the time range to export the rest.',
     exported: 'Exported {count} records',
     exportTruncated:
       'Over the {limit} row limit — exported the first {count}. Narrow the filters.',

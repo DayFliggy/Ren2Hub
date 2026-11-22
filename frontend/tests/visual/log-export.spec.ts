@@ -72,6 +72,7 @@ for (const [theme, mobile] of [
     await configureStablePage(page, { theme })
     let exportURL = ''
     let fail = false
+    let limited = false
     await page.route('**/api/log/self/export?*', (route) => {
       exportURL = route.request().url()
       return route.fulfill({
@@ -80,9 +81,22 @@ for (const [theme, mobile] of [
           JSON.stringify(row) +
           '\n' +
           JSON.stringify(
-            fail
-              ? { success: false, message: 'Export unavailable' }
-              : { success: true, data: { count: 1 } }
+            limited
+              ? {
+                  success: false,
+                  code: 'LOG_EXPORT_LIMIT_EXCEEDED',
+                  message_key: 'Log export limit exceeded',
+                  data: {
+                    count: 1,
+                    bytes: 320,
+                    truncated: true,
+                    max_rows: 10000,
+                    max_bytes: 33554432,
+                  },
+                }
+              : fail
+                ? { success: false, message: 'Export unavailable' }
+                : { success: true, data: { count: 1 } }
           ),
       })
     })
@@ -207,7 +221,19 @@ for (const [theme, mobile] of [
     if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
       await page.screenshot({ path: testInfo.outputPath('export-error.png') })
     }
-    await page.keyboard.press('Escape')
+    // A capped export keeps the rows the server sent and says so.
+    limited = true
+    const capped = page.waitForEvent('download')
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    const cappedPath = await (await capped).path()
+    expect(await readFile(cappedPath!, 'utf8')).toContain("'=untrusted")
+    await expect(
+      page.getByText(
+        '已达到导出上限（10000 条或 32 MiB），已导出前 1 条。请缩小时间范围后再导出其余记录。',
+        { exact: true }
+      )
+    ).toBeVisible()
     await expect(dialog).not.toBeVisible()
+    await assertNoHorizontalOverflow(page)
   })
 }

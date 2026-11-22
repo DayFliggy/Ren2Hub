@@ -29,25 +29,79 @@ function tooLargeExport(): ApiError {
   })
 }
 
-/** Validate records only after the successful final record has arrived. */
-function parseExportRecords(records: unknown[]): LogItem[] {
-  const terminal = records.pop()
-  if (!terminal || typeof terminal !== 'object' || !('success' in terminal))
-    throw failedExport()
+const LIMIT_CODE = 'LOG_EXPORT_LIMIT_EXCEEDED'
+
+/** The server stopped at its row or byte cap after sending `count` rows. */
+export type LogExportLimit = {
+  count: number
+  maxRows: number
+  maxBytes: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isCount(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
+}
+
+/**
+ * Checks the final record against the rows received. A capped export throws
+ * a LOG_EXPORT_LIMIT_EXCEEDED error whose rows are the first `count` records.
+ */
+function checkTerminal(terminal: unknown, count: number): void {
+  if (!isRecord(terminal) || !('success' in terminal)) throw failedExport()
+  if (terminal.success !== true && terminal.code === LIMIT_CODE) {
+    const data = terminal.data
+    if (
+      !isRecord(data) ||
+      data.truncated !== true ||
+      data.count !== count ||
+      !isCount(data.max_rows) ||
+      !isCount(data.max_bytes)
+    )
+      throw failedExport()
+    const limit: LogExportLimit = {
+      count,
+      maxRows: data.max_rows,
+      maxBytes: data.max_bytes,
+    }
+    throw new ApiError(
+      serverResponseMessage(getLocale(), terminal) ||
+        'Log export limit exceeded',
+      { business: true, code: LIMIT_CODE, data: limit }
+    )
+  }
   if (terminal.success !== true) {
     throw new ApiError(
       serverResponseMessage(getLocale(), terminal) || 'Failed to export logs',
       { business: true }
     )
   }
-  if (
-    !('data' in terminal) ||
-    !terminal.data ||
-    typeof terminal.data !== 'object' ||
-    !('count' in terminal.data) ||
-    terminal.data.count !== records.length
-  )
+  if (!isRecord(terminal.data) || terminal.data.count !== count)
     throw failedExport()
+}
+
+/** Parameters of the logs.exportLimited message. */
+export function logExportLimitParams(limit: LogExportLimit) {
+  return {
+    count: limit.count,
+    rows: limit.maxRows,
+    size: Math.floor(limit.maxBytes / (1024 * 1024)),
+  }
+}
+
+export function logExportLimit(error: unknown): LogExportLimit | null {
+  return error instanceof ApiError && error.code === LIMIT_CODE
+    ? (error.data as LogExportLimit)
+    : null
+}
+
+/** Validate records only after the successful final record has arrived. */
+function parseExportRecords(records: unknown[]): LogItem[] {
+  const terminal = records.pop()
+  checkTerminal(terminal, records.length)
   return parseLogPage({
     page: 1,
     page_size: Math.max(1, records.length),
@@ -127,22 +181,7 @@ export async function parseLogExportStream(
     }
     buffer += decoder.decode()
     consumeLine(buffer)
-    if (!terminal || typeof terminal !== 'object' || !('success' in terminal))
-      throw failedExport()
-    if (terminal.success !== true) {
-      throw new ApiError(
-        serverResponseMessage(getLocale(), terminal) || 'Failed to export logs',
-        { business: true }
-      )
-    }
-    if (
-      !('data' in terminal) ||
-      !terminal.data ||
-      typeof terminal.data !== 'object' ||
-      !('count' in terminal.data) ||
-      terminal.data.count !== count
-    )
-      throw failedExport()
+    checkTerminal(terminal, count)
     return count
   } catch (error) {
     await reader.cancel(error)
