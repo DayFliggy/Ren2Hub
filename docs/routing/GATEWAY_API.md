@@ -58,3 +58,13 @@
 提交用户被删除后，工单仍出现在管理员列表、summary 计数和关键字搜索中，详情、回复与状态修改照常可用。列表和详情的每个工单都带 `user_deleted:boolean`；软删除的用户保留用户名和显示名，硬删除只保留 `user.id`（取自工单的 `user_id`），用户名、显示名为空串，详情不返回 `email`。回复不会给已删除用户发送通知。
 
 GMPay 个人下单和订单详情同样session-only；Root设置也用浏览器会话。支付完整字段见[GMPay](../billing/GMPAY.md)。其他管理、价格、日志、任务接口沿用原生路由；历史API描述不保证本地仍提供某端点。
+
+## 日志导出
+
+AUTH-7：`/api/log/export` 和 `/api/log/self/export` 输出 NDJSON，不限制总行数或总字节数。导出不受最长查询跨度设置限制：起点为 0 时包含全部历史，允许任意时间跨度，且不设总时长上限。日志列表、统计、仪表盘和用量查询的范围限制不变；每用户一个导出以及原有字段可见性仍适用。单节点进程最多同时执行两个导出；名额已满立即返回 HTTP 200，`success:false`、`code:"LOG_EXPORT_BUSY"`、`message_key:"Log export is busy. Try again later."`，不排队。
+
+SQLite、MySQL、PostgreSQL 每批最多 500 行，每条查询超时 30 秒；完整读取并释放数据库连接后才写客户端。管理员按 `created_at desc, id desc`，本人按真实 `id desc` 读取，再转成连续显示序号。导出开始记录最大 ID，排除此后生成的 ID；批间不跨事务，删除的行会跳过，不提供跨批一致性快照。ClickHouse 的 MergeTree 表没有唯一全序键（id 默认 0，created_at/request_id 可重复），因此保留原有单查询流式读取，避免键集遗漏并列行；其读查询不持有行锁或阻塞插入，但持续占用查询连接，仍受并发与写截止保护。
+
+每行写入及每次刷新前续期 60 秒写截止；客户端持续接收时不按导出总时长中断，停收导致写入阻塞 60 秒时终止。整批结束刷新输出，最终刷新后将截止恢复零值，避免影响同一 keep-alive 连接的下一请求。成功末行包含 `success:true,data:{count:N}`，失败使用现有失败对象；取消不写末行，断开或写超时释放用户锁及全局名额。服务端仅保留一批日志及一行编码，导出内存为 O(batch size + channel count)，不随导出总量增长；单行大小仍由已有日志数据决定。
+
+生产合同夹具为 `frontend/tests/fixtures/native/log-export-busy.json`，由 `TestLogExportBusy -update` 生成。

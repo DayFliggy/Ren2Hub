@@ -72,6 +72,7 @@ func TestLogExportFailureReleasesLock(t *testing.T) {
 			})
 			request := httptest.NewRequest(http.MethodGet, "/api/log/self/export", nil).WithContext(ctx)
 			engine.ServeHTTP(writer, request)
+			require.Empty(t, logExportSlots, "failure or cancellation releases global slot")
 			require.Positive(t, writer.writes, "the failure injection must execute")
 
 			lines := strings.Split(strings.TrimSpace(writer.Body.String()), "\n")
@@ -105,14 +106,14 @@ type exportShortWriter struct{}
 
 func (exportShortWriter) Write(p []byte) (int, error) { return len(p) - 1, nil }
 
-func TestLogExportBudgetRejectsShortWrite(t *testing.T) {
-	budget := logExportBudget{}
+func TestLogExportRejectsShortWrite(t *testing.T) {
 	var output bytes.Buffer
+	budget := logExportWriter{writer: &output}
 	log := &model.Log{RequestId: "complete"}
-	require.NoError(t, budget.write(&output, log))
+	require.NoError(t, budget.write(log))
 	require.Equal(t, 1, budget.count)
-	require.Equal(t, output.Len(), budget.bytes)
+	budget.writer = exportShortWriter{}
 	before := budget
-	require.ErrorIs(t, budget.write(exportShortWriter{}, &model.Log{RequestId: "partial"}), io.ErrShortWrite)
+	require.ErrorIs(t, budget.write(&model.Log{RequestId: "partial"}), io.ErrShortWrite)
 	require.Equal(t, before, budget, "a partial row must not count as a successful export")
 }

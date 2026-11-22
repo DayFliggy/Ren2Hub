@@ -187,11 +187,8 @@ func TestLogExportRules(t *testing.T) {
 	tooLong := fmt.Sprintf("start_timestamp=%d&end_timestamp=%d", now-366*24*3600, now)
 
 	t.Run("time range", func(t *testing.T) {
-		rejected := callLogHandler(t, ExportAllLogs, 3, common.RoleAdminUser, tooLong)
-		require.Len(t, rejected, 1)
-		assert.Equal(t, false, rejected[0]["success"])
-		assert.Equal(t, "The time range cannot exceed {{days}} days", rejected[0]["message_key"])
-		assert.Equal(t, map[string]any{"days": float64(365)}, rejected[0]["message_params"])
+		exported := callLogHandler(t, ExportAllLogs, 3, common.RoleAdminUser, tooLong)
+		assert.Equal(t, true, exported[len(exported)-1]["success"])
 
 		assert.Equal(t, false, callLogHandler(t, GetUserLogs, 1, common.RoleCommonUser, tooLong)[0]["success"])
 		assert.Equal(t, false, callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, tooLong)[0]["success"])

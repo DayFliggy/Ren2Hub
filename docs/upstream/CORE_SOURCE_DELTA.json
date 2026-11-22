@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 830,
     "adapted": 334,
-    "extension": 500,
+    "extension": 502,
     "removed": 47
   },
   "files": [
@@ -1584,49 +1584,55 @@
       "path": "controller/log.go",
       "status": "adapted",
       "upstream_sha256": "045aca343d8014a7be9175c3cd0dcf839316e1d8020c3748e3a6d7495ed1c991",
-      "local_sha256": "fa217779c85079148805f8075966322e2dbc90b7dde03264ff9f40b70d995f87",
+      "local_sha256": "ba718f0f51e50d693df2991cf472cab9c71ec3e29a93eb1280e74c41f36018d7",
       "reasons": [
         "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
-      }
-    },
-    {
-      "path": "controller/log_export_budget.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "4222b2eb712e953cd2efdaacb18f605d80c2d5c9769ac210e242577e437b31ae",
-      "reasons": [
-        "audit-local-safety"
-      ],
-      "review": {
-        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
-        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
       "path": "controller/log_export_failure_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6af1b81834271bce464b8227047699d127651dcd42b1c01e283686256fb14e93"
+      "local_sha256": "536797978ff625afcec131ac475ca6a174e122f7df3bd4665192ac8f9572ee1a"
+    },
+    {
+      "path": "controller/log_export_protection.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "13b390459e203170daa40b0dcff341cece3b088b4b1da5a30ecdfc13232cd86c",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/log_export_protection_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "61584514b8b9a2343e26f4794e4255cb86c1cf9043d6f4dbf58854a54c41a082"
     },
     {
       "path": "controller/log_export_test.go",
       "status": "adapted",
       "upstream_sha256": "bffa0cb2bd3f08ed4593bf469235205e465df01435686dd2d3090acbc147feef",
-      "local_sha256": "56bac44724a9dcae1a54f4f579a8d4c3a5ac6a54a2a8aa2e5f2a7039b2b17b18"
+      "local_sha256": "01190c83eeed15bb9e4fab2486748aebbf4e6ce8543b52514ce0cd35d85a42dc"
     },
     {
       "path": "controller/log_identity_bounds_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0e4e19edf6772f7f5e25ec850da7a40e0b70641977b57b48fa39b37f45c80f95"
+      "local_sha256": "3740975bc4cfa123df9087af5a89ea5f4f6d2f273d9f7aa8b7c336edad2e2e36"
     },
     {
       "path": "controller/login_verification.go",
@@ -5119,16 +5125,30 @@
       "path": "model/log.go",
       "status": "adapted",
       "upstream_sha256": "405448720fdbfc44ea01d16d67ad5ae465f16ea6b1a1c8e302b6485b7e207bb9",
-      "local_sha256": "6d18cf41c3cde44c78ebea804d21ee138f60cf050fd9af9e1b3a72cb9a565e21",
+      "local_sha256": "54478be93f8407305770e4c6d3b578cd03ed93365c4ab7cb49181c2c82edeeed",
       "reasons": [
         "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
+      }
+    },
+    {
+      "path": "model/log_export_batches.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d5a8c1fbb7cd010c670883a4bcf07586f399f6bc1eb9a4ad2c07ec4bd986e3fd",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
@@ -5159,7 +5179,7 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },

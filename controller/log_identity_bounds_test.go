@@ -45,13 +45,13 @@ func TestSelfLogStatIdentityDatabaseMatrix(t *testing.T) {
 	}
 }
 
-func TestLogExportReportsLimitsAndReleasesLock(t *testing.T) {
+func TestLogExportUnlimitedAndReleasesLock(t *testing.T) {
 	for _, mode := range []string{"rows", "bytes"} {
 		t.Run(mode, func(t *testing.T) {
 			db, _ := newAuditTestDatabase(t, "sqlite", "")
 			useLogExportDatabases(t, db, db, common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 			require.NoError(t, db.AutoMigrate(&model.Log{}, &model.Channel{}))
-			count, content := 10001, "small"
+			count, content := 12000, "small"
 			if mode == "bytes" {
 				count, content = 2, strings.Repeat("x", 17*1024*1024)
 			}
@@ -62,17 +62,9 @@ func TestLogExportReportsLimitsAndReleasesLock(t *testing.T) {
 			require.NoError(t, db.CreateInBatches(logs, 100).Error)
 			lines := callLogHandler(t, ExportUserLogs, 1, common.RoleAdminUser, "")
 			last := lines[len(lines)-1]
-			require.Equal(t, false, last["success"])
-			require.Equal(t, "LOG_EXPORT_LIMIT_EXCEEDED", last["code"])
-			data := last["data"].(map[string]any)
-			require.Equal(t, true, data["truncated"])
-			require.EqualValues(t, len(lines)-1, data["count"])
-			if mode == "rows" {
-				require.Len(t, lines, 10001)
-				frontendFixture(t, "log-export-limit.json", last)
-			} else {
-				require.Len(t, lines, 2)
-			}
+			require.Equal(t, true, last["success"])
+			require.EqualValues(t, count, last["data"].(map[string]any)["count"])
+			require.Len(t, lines, count+1)
 			// A bounded export must release the same per-user lock for a retry.
 			retry := callLogHandler(t, ExportUserLogs, 1, common.RoleAdminUser, "request_id=0")
 			require.Equal(t, true, retry[len(retry)-1]["success"])

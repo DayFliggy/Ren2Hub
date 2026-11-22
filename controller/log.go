@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -110,16 +109,9 @@ func ExportUserLogs(c *gin.Context) {
 
 // exportLogs writes one JSON log per line, newest first, and ends with an API
 // response object: success with the log count, or the failure. Each user runs
-// one export at a time, and every export stays within the longest log time
-// range.
+// one export at a time; exports have no total duration or time-range limit.
 func exportLogs(c *gin.Context, all bool) {
 	filter := logFilterFromQuery(c, all)
-	startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	filter.StartTimestamp = startTimestamp
 
 	userId := c.GetInt("id")
 	release, ok, err := service.AcquireLogExportLock(userId)
@@ -133,16 +125,20 @@ func exportLogs(c *gin.Context, all bool) {
 		return
 	}
 	defer release()
+	releaseSlot, ok := acquireLogExportSlot(c)
+	if !ok {
+		return
+	}
+	defer releaseSlot()
 
 	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
-	budget := logExportBudget{}
-	writeLog := func(log *model.Log) error {
-		return budget.write(c.Writer, log)
-	}
+	writer := newLogExportWriter(c)
+	defer writer.close()
+	writeLog := writer.write
 	ctx := c.Request.Context()
 	if all {
 		err = model.StreamAllLogs(ctx, filter, c.GetInt("role"), writeLog)
@@ -154,18 +150,11 @@ func exportLogs(c *gin.Context, all bool) {
 	}
 	// The status is already sent, so the result object becomes the last line.
 	if err != nil {
-		if errors.Is(err, errLogExportLimit) {
-			common.ApiErrorStatus(c, http.StatusOK, common.NewMessage("Log export limit exceeded"), gin.H{
-				"code": "LOG_EXPORT_LIMIT_EXCEEDED",
-				"data": gin.H{"count": budget.count, "bytes": budget.bytes, "truncated": true, "max_rows": logExportMaxRows, "max_bytes": logExportMaxBytes},
-			})
-			return
-		}
 		common.SysError(common.LogText("failed to export logs: %s", err.Error()))
 		common.ApiErrorT(c, "Failed to export logs")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"count": budget.count})
+	common.ApiSuccess(c, gin.H{"count": writer.count})
 }
 
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。

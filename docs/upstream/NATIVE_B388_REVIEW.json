@@ -35388,42 +35388,42 @@
       ]
     },
     "controller/log.go": {
-      "local_sha256": "fa217779c85079148805f8075966322e2dbc90b7dde03264ff9f40b70d995f87",
+      "local_sha256": "ba718f0f51e50d693df2991cf472cab9c71ec3e29a93eb1280e74c41f36018d7",
       "hunks": [
         {
-          "header": "@@ -1,6 +1,7 @@",
-          "sha256": "2012bb7ae5c6a9d2e0e2f0904ffea3544193a2a5410a49615c0bd15494763b8c",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -25,7 +25,6 @@",
+          "sha256": "75a6b6872f5c654060d74d122629a14f853da9e8c9d27d8d7dfda6af0ee36fb5",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -25,7 +26,6 @@",
-          "sha256": "e9ef6d262d49614f5ce8d03cea09aa4544b010c5971c17f6f75ba9140c4bd75d",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -110,16 +109,9 @@",
+          "sha256": "76177c621b1f7d9062184caffae12d758a87c2f32a3b0e5f83501ccde36bf1fa",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -139,17 +139,9 @@",
-          "sha256": "cbb39363edf4791e3218c750e7822a80a829e29b2cbab3cff663f3dd1d4babc8",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -133,24 +125,20 @@",
+          "sha256": "8a588600d56200155f9e123534906636407e5f168edd5e8e5d1a70a310dc3e23",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -162,11 +154,18 @@",
-          "sha256": "72e71906c39aa3a021f352e06e4772a00ad5a80d1efd4803b5696cce5597468e",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -166,7 +154,7 @@",
+          "sha256": "0f78c77d88a32a96df7f925bdb1e84d7dda5da80c42df1595b7b7329efc496a5",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -208,8 +207,7 @@",
-          "sha256": "0d4ccb67f741740c601e22a26a238bf4ac8870495f1357891f3d86003849a7ce",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -208,8 +196,7 @@",
+          "sha256": "43a166ca6817b820e4976eea7e7a415b7eb8f49387bbec169462c37a603e3d71",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -228,7 +226,6 @@",
-          "sha256": "42a0cd880a2917ed6a7532fd561e230af48988ceccc396a5c84be3a3965022e8",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -228,7 +215,6 @@",
+          "sha256": "5807f566f6b2e05c91eecd5f0dd6a043956d886fb689720b12672a8a6f7cd0bc",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -242,8 +239,7 @@",
-          "sha256": "aa8aeb3cfc399e9199154d09c18c2f59474e2134b8d5a4562b0a2f79f621f7fd",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -242,8 +228,7 @@",
+          "sha256": "05297e7401620aa078a628600435bb6c97b4c882670f65bd8367fbcfd80fafdf",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         }
       ]
     },
@@ -35588,72 +35588,77 @@
       ]
     },
     "model/log.go": {
-      "local_sha256": "6d18cf41c3cde44c78ebea804d21ee138f60cf050fd9af9e1b3a72cb9a565e21",
+      "local_sha256": "54478be93f8407305770e4c6d3b578cd03ed93365c4ab7cb49181c2c82edeeed",
       "hunks": [
         {
           "header": "@@ -72,7 +72,6 @@",
           "sha256": "2b772beaa740d17e67f88682220b32f4ba4a2e794080db7d0a63938e94712429",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -277,7 +276,7 @@",
           "sha256": "47d8c9f951d6a784f455ced9d15f1a2d773cf6fbf1a738fab51da5c535404c75",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -305,7 +304,6 @@",
           "sha256": "c83d8301470bc51227a1dd65f2015711b6f9a0dac94f92721a41b0fe787bb247",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -333,7 +331,6 @@",
           "sha256": "59667e8bdba962845e1c0d1d17ca312b3e27d9cb7a120d17cf101d7af63af5c8",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -374,7 +371,6 @@",
           "sha256": "1af79eb07ffdddc30b544962eb4c093556ac48e593096be5857fd529013347f5",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -406,7 +402,6 @@",
           "sha256": "49fa4878dee1e65d3f0f155204a217e55d953daab3ff564da990ad885692cc6f",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -422,7 +417,6 @@",
           "sha256": "c89e5add67b2ba0a86ca6deb5c2df704cf3859d5d56ffc65e27f1d8a5fc84273",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -451,7 +445,6 @@",
           "sha256": "0b1f67fda90dc76e2d15101d3f3f0f7b2df64de2b1c80143ea78ea4e77c58d79",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -469,7 +462,6 @@",
           "sha256": "5cac17ff708af84b6bea4585441ede0fe0bdae22b5fecfe102fecf336773a365",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -487,7 +479,6 @@",
           "sha256": "e59707343bb13b8a4d1f7f413930ae3791a08add8919974d6a376f8d2b40d61d",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
           "header": "@@ -520,9 +511,6 @@",
           "sha256": "aef225251d02a65d8d4f35e7fa0f3e321cae099fa43fbf1deadaf03e54142b94",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -690,11 +678,15 @@",
-          "sha256": "88cf61e996c2a398efe9160256c947259e2a40e5be4efe133e35053c143eaffa",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -664,6 +652,12 @@",
+          "sha256": "31479c1edfee20cb1058d3bce85cd561ebe98dec82d9a0b3d7df100594e11c49",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         },
         {
-          "header": "@@ -721,10 +713,6 @@",
-          "sha256": "f068ea7375eb695b7ad1a8804b1b06768c0feb226457296c1222a87ed2214ee8",
-          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+          "header": "@@ -690,11 +684,15 @@",
+          "sha256": "6c0d4882ed8577e60acb4807f2e6d8f712295b6b06b7e855ce1ddbdce90ad31f",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
+        },
+        {
+          "header": "@@ -721,10 +719,6 @@",
+          "sha256": "90b8456634fa9b84e68253f38ccc3b11ccea1531f975cd985ecc165dbc9a7150",
+          "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。"
         }
       ]
     },
