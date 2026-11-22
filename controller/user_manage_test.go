@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -527,54 +526,67 @@ func TestManageUserQuotaConcurrentSnapshots(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	user := model.User{Username: "concurrent-quota", Quota: 1000}
 	require.NoError(t, db.Create(&user).Error)
-	var ready sync.WaitGroup
-	ready.Add(2)
+	entered := make(chan struct{}, 2)
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
 	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:concurrent_quota_start", func(tx *gorm.DB) {
-		// Synchronize the first participant lookup of each operation, before
-		// row locking; later wallet reads must not re-enter this barrier.
+		// Same-user adjustments serialize before entering the transaction.
+		// Hold the first participant lookup; later wallet reads do not wait.
 		if tx.Statement.Table == "users" && strings.Join(tx.Statement.Selects, ",") == "id,inviter_id" {
-			ready.Done()
+			entered <- struct{}{}
 			<-release
 		}
 	}))
+	t.Cleanup(func() { require.NoError(t, db.Callback().Query().Remove("test:concurrent_quota_start")) })
 	type result struct {
 		adjustment *model.UserQuotaAdjustment
 		err        error
 		value      int
 	}
 	results := make(chan result, 2)
-	for _, value := range []int{10, 20} {
-		go func(value int) {
-			adjustment, err := model.AdjustUserQuota(user.Id, common.RoleRootUser, "add", value)
-			results <- result{adjustment, err, value}
-		}(value)
+	adjust := func(value int) {
+		adjustment, err := model.AdjustUserQuota(user.Id, common.RoleRootUser, "add", value)
+		results <- result{adjustment, err, value}
 	}
-	ready.Wait()
-	close(release)
-	var committed []model.UserQuotaAdjustment
+	go adjust(10)
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first adjustment did not reach the participant lookup")
+	}
+	secondStarted := make(chan struct{})
+	go func() {
+		close(secondStarted)
+		adjust(20)
+	}()
+	<-secondStarted
+	select {
+	case <-entered:
+		t.Error("second adjustment entered the transaction before the first released its shard lock")
+	case <-time.After(100 * time.Millisecond):
+	}
+	unblock()
+	committed := make(map[int]*model.UserQuotaAdjustment, 2)
 	for range 2 {
-		result := <-results
-		if result.err != nil {
-			require.True(t, common.UsingMainDatabase(common.DatabaseTypeSQLite), "row-locking databases must serialize both adjustments: %v", result.err)
-			assert.Contains(t, strings.ToLower(result.err.Error()), "locked")
-			assert.Nil(t, result.adjustment)
-			continue
+		select {
+		case result := <-results:
+			require.NoError(t, result.err)
+			require.NotNil(t, result.adjustment)
+			assert.Equal(t, result.value, result.adjustment.After-result.adjustment.Before)
+			committed[result.value] = result.adjustment
+		case <-time.After(5 * time.Second):
+			t.Fatal("serialized adjustment did not complete")
 		}
-		require.NotNil(t, result.adjustment)
-		assert.Equal(t, result.value, result.adjustment.After-result.adjustment.Before)
-		committed = append(committed, *result.adjustment)
 	}
-	require.NoError(t, db.Callback().Query().Remove("test:concurrent_quota_start"))
-	require.NotEmpty(t, committed)
-	sort.Slice(committed, func(i, j int) bool { return committed[i].Before < committed[j].Before })
-	balance := 1000
-	for _, adjustment := range committed {
-		assert.Equal(t, balance, adjustment.Before)
-		balance = adjustment.After
-	}
+	require.Len(t, committed, 2)
+	assert.Equal(t, 1000, committed[10].Before)
+	assert.Equal(t, 1010, committed[10].After)
+	assert.Equal(t, committed[10].After, committed[20].Before)
+	assert.Equal(t, 1030, committed[20].After)
 	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, balance, user.Quota)
+	assert.Equal(t, 1030, user.Quota)
 }
 
 func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {

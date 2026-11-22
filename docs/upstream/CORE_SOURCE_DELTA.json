@@ -3377,7 +3377,7 @@
       "path": "controller/user_manage_test.go",
       "status": "adapted",
       "upstream_sha256": "9ec3f058238615355d9df93d9f9f2a4e0cf657d268b9fa6328235811dafd13f6",
-      "local_sha256": "e99ae3fc0c47f70f21637d8590efd28401bf6bc31817cba52b3341e977dc10d7"
+      "local_sha256": "689a78b0d11c0dcdae31b1753d6c2c0fdace981384112d2d264ff34aaa6bb3ce"
     },
     {
       "path": "controller/user_publication.go",
