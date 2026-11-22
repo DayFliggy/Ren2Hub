@@ -29,11 +29,20 @@ func matchTopUpReceipt(order *TopUp, receipt *TopUpReceipt) error {
 	if err != nil || !due.IsPositive() || order.Currency == "" {
 		return ErrTopUpReceiptMismatch
 	}
-	paid, err := decimal.NewFromString(receipt.Amount)
-	if err != nil || !paid.Equal(due) || receipt.Currency != order.Currency {
+	if !TopUpAmountsEqual(receipt.Amount, order.PayAmount) || receipt.Currency != order.Currency {
 		return ErrTopUpReceiptMismatch
 	}
 	return nil
+}
+
+// TopUpAmountsEqual compares payment amounts without binary floating-point rounding.
+func TopUpAmountsEqual(left, right string) bool {
+	a, err := decimal.NewFromString(left)
+	if err != nil {
+		return false
+	}
+	b, err := decimal.NewFromString(right)
+	return err == nil && a.Equal(b)
 }
 
 // topUpSettlement 描述一次入账尝试。渠道只提供自己的差异：mutate 在订单行锁内、

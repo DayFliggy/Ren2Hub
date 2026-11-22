@@ -189,6 +189,7 @@ func StripeWebhook(c *gin.Context) {
 
 	callerIp := c.ClientIP()
 	if event.GetObjectValue("mode") == "subscription" {
+		rejectPaymentReceipt(ctx, model.PaymentProviderStripe, event.GetObjectValue("client_reference_id"), callerIp, "unsupported_checkout_mode")
 		c.Status(http.StatusOK)
 		return
 	}
@@ -220,7 +221,7 @@ func sessionCompleted(ctx context.Context, event stripe.Event, callerIp string) 
 
 	paymentStatus := event.GetObjectValue("payment_status")
 	if paymentStatus != "paid" {
-		logger.LogInfo(ctx, common.LogText("Stripe Checkout payment not completed, waiting for async result trade_no=%s payment_status=%s client_ip=%s", referenceId, paymentStatus, callerIp))
+		rejectPaymentReceipt(ctx, model.PaymentProviderStripe, referenceId, callerIp, "payment_not_paid")
 		return
 	}
 
@@ -230,6 +231,11 @@ func sessionCompleted(ctx context.Context, event stripe.Event, callerIp string) 
 // sessionAsyncPaymentSucceeded handles delayed payment methods (bank transfer, SEPA, etc.)
 // that confirm payment after the checkout session completes.
 func sessionAsyncPaymentSucceeded(ctx context.Context, event stripe.Event, callerIp string) {
+	if event.GetObjectValue("payment_status") != "paid" {
+		rejectPaymentReceipt(ctx, model.PaymentProviderStripe, event.GetObjectValue("client_reference_id"), callerIp, "payment_not_paid")
+		return
+	}
+
 	customerId := event.GetObjectValue("customer")
 	referenceId := event.GetObjectValue("client_reference_id")
 	logger.LogInfo(ctx, common.LogText("Stripe async payment succeeded trade_no=%s client_ip=%s", referenceId, callerIp))
@@ -278,14 +284,21 @@ func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp
 // fulfillOrder is the shared logic for crediting quota after payment is confirmed.
 func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, customerId string, callerIp string) {
 	if len(referenceId) == 0 {
+		rejectPaymentReceipt(ctx, model.PaymentProviderStripe, referenceId, callerIp, "missing_order")
 		logger.LogWarn(ctx, common.LogText("Stripe order completion missing order number client_ip=%s", callerIp))
 		return
 	}
 
 	LockOrder(referenceId)
 	defer UnlockOrder(referenceId)
-	err := model.Recharge(referenceId, customerId, callerIp)
+	receipt, err := stripeVerifiedReceipt(event)
+	if err == nil {
+		err = model.RechargeVerified(referenceId, customerId, callerIp, receipt)
+	}
 	if err != nil {
+		if permanentPaymentReceiptError(err) {
+			rejectPaymentReceipt(ctx, model.PaymentProviderStripe, referenceId, callerIp, "receipt_mismatch")
+		}
 		logger.LogError(ctx, common.LogText("Stripe top-up processing failed trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
 		return
 	}

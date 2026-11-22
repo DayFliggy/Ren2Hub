@@ -377,6 +377,13 @@ func WaffoPancakeWebhook(c *gin.Context) {
 		return
 	}
 
+	receipt, err := pancakeVerifiedReceipt(event)
+	if err != nil {
+		rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderWaffoPancake, rawTradeNo, c.ClientIP(), "receipt_mismatch")
+		c.String(http.StatusOK, "OK")
+		return
+	}
+
 	tradeNo, err := service.ResolveWaffoPancakeTradeNo(event)
 	if err != nil {
 		// LogError (not LogWarn): covers order-not-found and buyer-identity
@@ -393,8 +400,13 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	LockOrder(tradeNo)
 	defer UnlockOrder(tradeNo)
 
-	if err := model.RechargeWaffoPancake(tradeNo); err != nil {
+	if err := model.RechargeWaffoPancakeVerified(tradeNo, receipt); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake top-up processing failed trade_no=%s event_id=%s order_id=%s client_ip=%s error=%q", tradeNo, event.ID, event.Data.OrderID, c.ClientIP(), err.Error()))
+		if permanentPaymentReceiptError(err) {
+			rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderWaffoPancake, tradeNo, c.ClientIP(), "receipt_mismatch")
+			c.String(http.StatusOK, "OK")
+			return
+		}
 		c.String(http.StatusInternalServerError, "retry")
 		return
 	}

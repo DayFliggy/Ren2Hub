@@ -242,24 +242,6 @@ func TestRestoredNativeProviderTypedErrors(t *testing.T) {
 	}
 }
 
-func TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged(t *testing.T) {
-	for _, scenario := range []struct{ name, fields string }{{"currency", `"amount_subtotal":100,"currency":"eur"`}, {"amount", `"amount_subtotal":99,"currency":"usd"`}, {"missing", `"amount_subtotal":0,"currency":""`}} {
-		t.Run(scenario.name, func(t *testing.T) {
-			db := restoredFundsDB(t)
-			deliver := restoredStripeWebhook(t)
-			u := model.User{Username: "receipt-" + scenario.name, AffCode: "receipt-" + scenario.name}
-			require.NoError(t, db.Create(&u).Error)
-			order := model.TopUp{UserId: u.Id, TradeNo: "receipt-" + scenario.name, PaymentProvider: model.PaymentProviderStripe, PaymentMethod: model.PaymentMethodStripe, Status: common.TopUpStatusPending, Amount: 1, Money: 1}
-			restoredOrder(t, &order)
-			assert.Equal(t, http.StatusOK, deliver(restoredStripeEvent(`"mode":"payment","client_reference_id":"`+order.TradeNo+`",`+scenario.fields)))
-			require.NoError(t, db.First(&u, u.Id).Error)
-			assert.Zero(t, u.Quota, "signature alone cannot authorize an amount or currency different from the created order")
-			assert.Equal(t, common.TopUpStatusPending, model.GetTopUpByTradeNo(order.TradeNo).Status)
-			assert.EqualValues(t, 1, restoredRejections(t, db), "every rejected callback is audited")
-		})
-	}
-}
-
 func TestRestoredNativeEpayRejectedReceiptHasAudit(t *testing.T) {
 	db := restoredFundsDB(t)
 	u := model.User{Username: "epay-audit", AffCode: "epay-audit"}

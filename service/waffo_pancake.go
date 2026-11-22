@@ -52,7 +52,23 @@ type WaffoPancakeWebhookEvent struct {
 	Data      WaffoPancakeWebhookData
 }
 
+type WaffoPancakeListPrice struct {
+	Subtotal       string  `json:"subtotal"`
+	Total          string  `json:"total"`
+	DiscountAmount *string `json:"discountAmount"`
+}
+
+type waffoPancakeVerifiedData struct {
+	pancake.WebhookEventData
+	ListPrice     *WaffoPancakeListPrice `json:"listPrice"`
+	ChargedAmount *string                `json:"chargedAmount"`
+}
+
 type WaffoPancakeWebhookData struct {
+	OrderStatus   *string
+	PaymentStatus *string
+	ListPrice     *WaffoPancakeListPrice
+	ChargedAmount *string
 	// OrderID = Pancake ORD_* (logs); OrderMerchantExternalID = our trade_no (lookup).
 	OrderID                       string
 	OrderMerchantExternalID       string
@@ -165,12 +181,9 @@ func WaffoPancakeBuyerIdentityFromUserID(userID int) string {
 // VerifyConfiguredWaffoPancakeWebhook verifies the signature header. The SDK
 // picks the matching test / prod public key from the payload's `mode` field.
 func VerifyConfiguredWaffoPancakeWebhook(payload string, signatureHeader string) (*WaffoPancakeWebhookEvent, error) {
-	evt, err := pancake.VerifyWebhookTyped[pancake.WebhookEventData](payload, signatureHeader, nil)
+	evt, err := pancake.VerifyWebhookTyped[waffoPancakeVerifiedData](payload, signatureHeader, nil)
 	if err != nil {
 		return nil, err
-	}
-	if storeID := strings.TrimSpace(setting.WaffoPancakeStoreID); storeID == "" || evt.StoreID != storeID {
-		return nil, fmt.Errorf("Waffo Pancake webhook store mismatch")
 	}
 	identity := ""
 	if evt.Data.MerchantProvidedBuyerIdentity != nil {
@@ -188,6 +201,8 @@ func VerifyConfiguredWaffoPancakeWebhook(payload string, signatureHeader string)
 		StoreID:   evt.StoreID,
 		Mode:      string(evt.Mode),
 		Data: WaffoPancakeWebhookData{
+			OrderStatus: evt.Data.OrderStatus, PaymentStatus: evt.Data.PaymentStatus,
+			ListPrice: evt.Data.ListPrice, ChargedAmount: evt.Data.ChargedAmount,
 			OrderID:                       evt.Data.OrderID,
 			OrderMerchantExternalID:       externalID,
 			BuyerEmail:                    evt.Data.BuyerEmail,

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -305,6 +306,7 @@ type webhookPayloadWithSubInfo struct {
 	Result    struct {
 		core.PaymentNotificationResult
 		SubscriptionInfo *webhookSubscriptionInfo `json:"subscriptionInfo,omitempty"`
+		OriginalAmount   json.RawMessage          `json:"originalAmount"`
 	} `json:"result"`
 }
 
@@ -371,7 +373,7 @@ func WaffoWebhook(c *gin.Context) {
 			return
 		}
 		logger.LogInfo(c.Request.Context(), common.LogText("Waffo webhook verified and parsed event_type=%s merchant_order_id=%s order_status=%s client_ip=%s", event.EventType, payload.Result.MerchantOrderID, payload.Result.OrderStatus, c.ClientIP()))
-		handleWaffoPayment(c, wh, &payload.Result.PaymentNotificationResult)
+		handleVerifiedWaffoPayment(c, sdk, &payload)
 	default:
 		logger.LogInfo(c.Request.Context(), common.LogText("Waffo webhook ignored event event_type=%s client_ip=%s", event.EventType, c.ClientIP()))
 		sendWaffoWebhookResponse(c, wh, true, "")
@@ -399,9 +401,15 @@ func handleWaffoPayment(c *gin.Context, wh *core.WebhookHandler, result *core.Pa
 	LockOrder(merchantOrderId)
 	defer UnlockOrder(merchantOrderId)
 
-	if err := model.RechargeWaffo(merchantOrderId, c.ClientIP()); err != nil {
+	if err := model.RechargeWaffoVerified(merchantOrderId, c.ClientIP(), model.TopUpReceipt{Currency: strings.ToUpper(result.OrderCurrency), Amount: result.OrderAmount}); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo top-up processing failed trade_no=%s client_ip=%s error=%q", merchantOrderId, c.ClientIP(), err.Error()))
-		sendWaffoWebhookResponse(c, wh, false, err.Error())
+		if permanentPaymentReceiptError(err) {
+			rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderWaffo, merchantOrderId, c.ClientIP(), "receipt_mismatch")
+			sendWaffoWebhookResponse(c, wh, true, "")
+			return
+		}
+		c.Status(http.StatusInternalServerError)
+		sendWaffoWebhookResponse(c, wh, false, "top-up unavailable")
 		return
 	}
 
@@ -418,5 +426,5 @@ func sendWaffoWebhookResponse(c *gin.Context, wh *core.WebhookHandler, success b
 		body, sig = wh.BuildFailedResponse(msg)
 	}
 	c.Header("X-SIGNATURE", sig)
-	c.Data(http.StatusOK, "application/json", []byte(body))
+	c.Data(c.Writer.Status(), "application/json", []byte(body))
 }

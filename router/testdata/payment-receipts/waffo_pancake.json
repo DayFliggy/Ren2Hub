@@ -1,0 +1,26 @@
+{
+  "id": "PAY_fixture",
+  "eventId": "PAY_fixture",
+  "eventType": "order.completed",
+  "storeId": "store-fixture",
+  "mode": "test",
+  "data": {
+    "orderId": "ORD_fixture",
+    "orderMerchantExternalId": "receipt-order",
+    "orderStatus": "completed",
+    "paymentStatus": "succeeded",
+    "currency": "USD",
+    "amount": "10.00",
+    "taxAmount": "0",
+    "chargedAmount": "10.00",
+    "listPrice": {
+      "subtotal": "10.00",
+      "total": "10.00",
+      "discountAmount": "0",
+      "listTotal": "10.00",
+      "taxAmount": "0"
+    },
+    "buyerEmail": "buyer@example.invalid",
+    "merchantProvidedBuyerIdentity": "new-api-user-1"
+  }
+}

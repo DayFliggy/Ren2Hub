@@ -58,8 +58,8 @@ func TestStripeWebhookCreditsFrozenQuotaAcrossSettlementCurrencies(t *testing.T)
 	adaptive := model.TopUp{UserId: user.Id, TradeNo: "stripe-adaptive-order", PaymentProvider: model.PaymentProviderStripe, PaymentMethod: model.PaymentMethodStripe, Status: common.TopUpStatusPending, ExpectedQuota: 300, Amount: 5, Money: 5, Currency: "USD", PayAmount: "5"}
 	require.NoError(t, adaptive.Insert())
 
-	// 原生回调不核对收据金额或币种；大额和 Adaptive Pricing 的返回字段
-	// 均不能改变订单已冻结的到账额度及记录币种。
+	// 收据按冻结的源币小计核对；大额和 Adaptive Pricing 的结算币种
+	// 不能改变订单已冻结的到账额度及记录币种。
 	assert.Equal(t, http.StatusOK, deliver(stripeCheckoutEvent(`"mode":"payment","client_reference_id":"stripe-large-order","customer":null,"amount_subtotal":1000000,"currency":"usd"`)))
 	assert.Equal(t, http.StatusOK, deliver(stripeCheckoutEvent(`"mode":"payment","client_reference_id":"stripe-adaptive-order","amount_subtotal":460,"currency":"eur","currency_conversion":{"amount_subtotal":500,"amount_total":500,"fx_rate":"0.92","source_currency":"usd"}`)))
 	assert.Zero(t, countCallbackRejections(t, db))

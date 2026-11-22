@@ -1,0 +1,17 @@
+{
+  "id": "evt_fixture",
+  "type": "checkout.session.completed",
+  "data": {
+    "object": {
+      "object": "checkout.session",
+      "mode": "payment",
+      "status": "complete",
+      "payment_status": "paid",
+      "client_reference_id": "receipt-order",
+      "amount_subtotal": 1000,
+      "amount_total": 1210,
+      "currency": "usd",
+      "total_details": { "amount_tax": 210, "amount_discount": 0 }
+    }
+  }
+}

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 842,
     "adapted": 322,
-    "extension": 443,
+    "extension": 455,
     "removed": 47
   },
   "files": [
@@ -1784,19 +1784,19 @@
       "path": "controller/native_restored_funds_callbacks_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3275046168e992c1c9b6e3266c62df7639bf66738d5dfe619f7d134d2e772409"
+      "local_sha256": "e0c143e439e4f8b96cc7f2abb7cb097088edff7483f2ece07908511169944df7"
     },
     {
       "path": "controller/native_restored_funds_coverage_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cfdb35943551c63f331f75f840ce3eb3a074d228049700f422e6b0514c081fa4"
+      "local_sha256": "5720a1ee70536869a139befab3961b3c080d4163766e9bf8b301ff98c80b00ee"
     },
     {
       "path": "controller/native_restored_funds_helpers_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f3421697b41c18d3468ae8c70a0b78ba8eae11da6aa48090d288ec8579a31c90"
+      "local_sha256": "1b5be3f88d13e22f28f0f554938ca4591426036c6a72ae3784bfc38f984a1e26"
     },
     {
       "path": "controller/native_restored_funds_logging_test.go",
@@ -3088,31 +3088,34 @@
       "local_sha256": "1568de5bca562bbd51948f74ef7b3e075233b9b8eb85338fe309e5513c0dd72b"
     },
     {
+      "path": "controller/topup_callback_regressions_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "0b7f639eebee279852ca0ea829403ac3a4d8cf644992957a93fd8198eb12a572"
+    },
+    {
       "path": "controller/topup_callback_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "81696259043c1c797db29a58c33bfde3dbf78dcdab0b778cc850a9a5b592dbd9"
+      "local_sha256": "07cecc4ea1128f04dee9e6d1858f8cb11820e0a0ad83112d7a0059c021934866"
     },
     {
       "path": "controller/topup_creem.go",
       "status": "adapted",
       "upstream_sha256": "b717fbed0c2d57927ec209681c9b13e9c06342a02cd1034bed4650f6def0e89a",
-      "local_sha256": "5207995a69fc291442369ce9387c2087aacfe9b1f08861d4f152e3b08d2d1a2f",
+      "local_sha256": "d398b16d6bc816afd73412a8518948772db0f134e8ef0d3a4fd3e6098fae5abe",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "payment-single-credit",
         "retired",
         "topup-bonus"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/topup_creem.go#2",
-          "controller/topup_creem.go#6"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_creem.go#2, controller/topup_creem.go#6；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -3148,12 +3151,33 @@
       "local_sha256": "ff9b535a2b2d99914a19eead4c280292097cc5f4436d9cdf9e5f6c0a0a2542de"
     },
     {
+      "path": "controller/topup_receipt_verification.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "16071cb95cc1dcd76aedabf3a1ff624d99f50aedfc9a3f52da69f3aae148c75f",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/topup_receipt_verification_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f62e1cfefd1c8200b1d1cd05abafcc2d97b167a59e40907a73d79b92a24eff11"
+    },
+    {
       "path": "controller/topup_stripe.go",
       "status": "adapted",
       "upstream_sha256": "b544c2b3dab224ea4d06baf197ecca9de53ac0cfa93d30c5bb3b30d2b90d1333",
-      "local_sha256": "2b16de5abb22fc55c95554fdcc84310c3900f0e6a68b5844d13945c7e2109b4d",
+      "local_sha256": "0a9502a0dd34acdf57cc20799dfd4ce2ae46c20977038e2b581068e998ae3192",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "group-removal",
         "payment-single-credit",
         "retired",
@@ -3161,30 +3185,19 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/topup_stripe.go#10",
-          "controller/topup_stripe.go#11",
-          "controller/topup_stripe.go#2",
-          "controller/topup_stripe.go#3",
-          "controller/topup_stripe.go#4",
-          "controller/topup_stripe.go#5",
-          "controller/topup_stripe.go#6",
-          "controller/topup_stripe.go#7",
-          "controller/topup_stripe.go#8",
-          "controller/topup_stripe.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_stripe.go#10, controller/topup_stripe.go#11, controller/topup_stripe.go#2, controller/topup_stripe.go#3, controller/topup_stripe.go#4, controller/topup_stripe.go#5, controller/topup_stripe.go#6, controller/topup_stripe.go#7, controller/topup_stripe.go#8, controller/topup_stripe.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
       "path": "controller/topup_waffo.go",
       "status": "adapted",
       "upstream_sha256": "8a20566d4c8db5e61d36c5e2b21e3c43952c2480fd0a569bdb31047f1a2e6bb4",
-      "local_sha256": "c797a58be35eb172eef80ecf643d3e5c3d3e20df27fc4a1b7dc122099bd59fdb",
+      "local_sha256": "e07b406df3467ad817185217ba1c336d826eb5b3b08b3cacb205fde27520aa7e",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "group-removal",
         "payment-single-credit",
         "retired",
@@ -3192,27 +3205,19 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/topup_waffo.go#1",
-          "controller/topup_waffo.go#11",
-          "controller/topup_waffo.go#2",
-          "controller/topup_waffo.go#3",
-          "controller/topup_waffo.go#4",
-          "controller/topup_waffo.go#5",
-          "controller/topup_waffo.go#7"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo.go#1, controller/topup_waffo.go#11, controller/topup_waffo.go#2, controller/topup_waffo.go#3, controller/topup_waffo.go#4, controller/topup_waffo.go#5, controller/topup_waffo.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
       "path": "controller/topup_waffo_pancake.go",
       "status": "adapted",
       "upstream_sha256": "d9ba173d4f68acae5288300aace18200e52a38474b8b5d0b629ec7f71a9d1833",
-      "local_sha256": "abbbb917d379226cd89f0d2ef7aa79d5b1cb1b993682a13cf3eae55315f09be5",
+      "local_sha256": "6fd1dba31c40cd15861321c758055c68a8eecda77bafb26404dc0086e245e3ad",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "group-removal",
         "payment-single-credit",
         "retired",
@@ -3220,19 +3225,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/topup_waffo_pancake.go#13",
-          "controller/topup_waffo_pancake.go#2",
-          "controller/topup_waffo_pancake.go#3",
-          "controller/topup_waffo_pancake.go#4",
-          "controller/topup_waffo_pancake.go#5",
-          "controller/topup_waffo_pancake.go#6",
-          "controller/topup_waffo_pancake.go#7",
-          "controller/topup_waffo_pancake.go#8"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/topup_waffo_pancake.go#13, controller/topup_waffo_pancake.go#2, controller/topup_waffo_pancake.go#3, controller/topup_waffo_pancake.go#4, controller/topup_waffo_pancake.go#5, controller/topup_waffo_pancake.go#6, controller/topup_waffo_pancake.go#7, controller/topup_waffo_pancake.go#8；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -3240,6 +3235,26 @@
       "status": "adapted",
       "upstream_sha256": "4a64c6c1c95feceadbd577198119a2a85f6a45ab95745c27f4f9a8d0f02741bd",
       "local_sha256": "f939cc81dd0264cecc9adb5cea920188c6d15da19f98c54122d5d8d860f0efba"
+    },
+    {
+      "path": "controller/topup_waffo_verification.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "27701851549d421f51440ccfca5984b67ae5046e7f097e16255b7cee1ab87829",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/topup_waffo_verification_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "811e768d887dfff8436c5c49f01df76c2aa15a92d9336bbe5bbd3ad19e012e32"
     },
     {
       "path": "controller/twofa.go",
@@ -5918,27 +5933,19 @@
       "path": "model/topup.go",
       "status": "adapted",
       "upstream_sha256": "6bdecb2b21b897f49187aa3f3e8f70ab10f960b451bc12b587332cde95b8bf52",
-      "local_sha256": "d871ba7b9d07bca2a0516f3abea187217b5e9392a8b4850f63c5b5b8f068c805",
+      "local_sha256": "bd74d22e84179d7463d430e4885ee4ac55e7bf87d199cec25886372049a12c8f",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "gmpay",
         "payment-single-credit",
         "topup-bonus"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/topup.go#1",
-          "model/topup.go#2",
-          "model/topup.go#3",
-          "model/topup.go#4",
-          "model/topup.go#5",
-          "model/topup.go#6",
-          "model/topup.go#7"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup.go#1, model/topup.go#2, model/topup.go#3, model/topup.go#4, model/topup.go#5, model/topup.go#6, model/topup.go#7；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -6082,21 +6089,18 @@
       "path": "model/topup_settlement.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7ec06582e073cb02a4095d34e87d818aa2e9e69431b6b87a30bceae4d8e885e9",
+      "local_sha256": "8f55ac36a0cd65b377424278053c85d66b715cb1d9f6ce3aecdcd523898acc73",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "gmpay",
         "payment-single-credit",
         "topup-bonus"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/topup_settlement.go#1"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/topup_settlement.go#1；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
@@ -6104,6 +6108,26 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "2f31a8347f91122c3c203e1cbfd0cf5876700185d11811128b0f3edfaddbce18"
+    },
+    {
+      "path": "model/topup_verified_receipt.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c3a40c4ddb19430d1d3a20822003b4e0f13c6918b64431238e666aa40a33ed39",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "model/topup_verified_receipt_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "255d9e62a592af77937c80bbd03877d072226d0ec43ff00d89f44b441e41425b"
     },
     {
       "path": "model/twofa.go",
@@ -11509,6 +11533,12 @@
       "local_sha256": "46651f455fa8c4ec75ce53945223db42dbbf6ce5ce047dda9bab398aad39fd16"
     },
     {
+      "path": "router/payment_receipt_verification_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "358db8199fe826bb3299a3b0a7c9836f1859c838ce30f6669c8e9cfe640263f6"
+    },
+    {
       "path": "router/performance_observation_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -11646,6 +11676,30 @@
       "status": "upstream_equal",
       "upstream_sha256": "4446286e49b6dddc1834b18e1d10ee150947739f453471f9272695bf50ea00e9",
       "local_sha256": "4446286e49b6dddc1834b18e1d10ee150947739f453471f9272695bf50ea00e9"
+    },
+    {
+      "path": "router/testdata/payment-receipts/creem.json",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "28f4bd7b4cfeb70213e5c70542537faba2d8d5413c1cffc7348f2d67ee6306e0"
+    },
+    {
+      "path": "router/testdata/payment-receipts/stripe.json",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8faee03c7f2534c8af366b7d569b42e79577a2252c60decf589937845a4dc0f2"
+    },
+    {
+      "path": "router/testdata/payment-receipts/waffo.json",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1ce78a0ed46e2036545ba84f9439d2e938a01c1663f62e12317410a5c3367c30"
+    },
+    {
+      "path": "router/testdata/payment-receipts/waffo_pancake.json",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "63fa2219e01fb10a94f6d4d65aa4f17fb1fc9a62a43940ae324751d8c0dcc47f"
     },
     {
       "path": "router/tickets_rate_limit_test.go",
@@ -14338,19 +14392,16 @@
       "path": "service/waffo_pancake.go",
       "status": "adapted",
       "upstream_sha256": "874bb97413134ffdca0705c390a30d0758f67055a1a2073db7a9d7245619e52e",
-      "local_sha256": "4f8f15ddf790b9cb506daf2509da39f50a56387e5342041343bca4030772ea36",
+      "local_sha256": "0141715680dc730b57e02ee9c703cf6581f80cf83edc353a2b0ffbd5b6ec20dd",
       "reasons": [
+        "audit-local-safety",
         "retired"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/waffo_pancake.go#1",
-          "service/waffo_pancake.go#2"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -15283,7 +15334,7 @@
       "kind": "approved_contract"
     },
     "audit-local-safety": {
-      "basis": "用户批准的B1预扣余额一致性、Realtime生命周期、渠道任务隔离与缓存用量修复。",
+      "basis": "用户批准的资金回执核验、余额一致性、Realtime 生命周期、缓存用量与任务隔离。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }

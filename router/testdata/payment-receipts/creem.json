@@ -1,0 +1,24 @@
+{
+  "id": "evt_fixture",
+  "eventType": "checkout.completed",
+  "object": {
+    "id": "ch_fixture",
+    "object": "checkout",
+    "request_id": "receipt-order",
+    "status": "completed",
+    "units": 1,
+    "order": {
+      "id": "ord_fixture",
+      "object": "order",
+      "type": "onetime",
+      "status": "paid",
+      "amount": 1000,
+      "sub_total": 1000,
+      "tax_amount": 210,
+      "amount_due": 1210,
+      "amount_paid": 1210,
+      "currency": "USD"
+    },
+    "customer": { "email": "buyer@example.invalid", "name": "Buyer" }
+  }
+}

@@ -97,6 +97,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 B1 已批准的本地安全边界（`audit-local-safety`）：
 
+- Stripe、Creem、Waffo、Pancake 的已验签回调核验成功终态、冻结金额币种及商户身份；与 Epay/GMPay 共用精确十进制结算。永久不符不入账并返回 2xx、记录拒绝审计；Stripe 临时入账失败 ACK、Waffo 非成功状态、Pancake 临时查单失败 ACK 仍保留，具体字段和官方依据见[资金 API](../billing/API.md)。
 - 批量预扣在 Redis 故障回退前持同余额锁落库待处理增量，落库失败保留增量并拒绝新预扣；缓存恢复后重新同步余额，避免旧数据库或旧 Redis 余额二次消费。
 - Realtime 使用现有请求体与流扫描限制，双向写有期限；事件状态同锁处理，关闭双方连接并等待读协程退出后结算。逐轮与会话的重复扣费仍按 BILL-1 只登记。
 - Compact 与 OpenAI 用量识别保留 `cache_creation_input_tokens`，仅缓存创建也计费；日志聚合包含 12 小时拆分，避免总量与拆分重复累计。
@@ -116,7 +117,7 @@ B1 已批准的本地安全边界（`audit-local-safety`）：
 - BILL-1（P2，上游同款多计费，按用户决定只登记）：Realtime 每轮 `preConsumeUsage` 经 `service/quota.go:128` 直扣，用量同时累加；会话结束后又按累计用量结算，存在重复扣费（`relay/channel/openai/relay_realtime.go:195,216,295`、`relay/websocket.go:59`、`service/quota.go:217`）。
 - FUND-3（P2，上游同款多计费，按用户决定只登记）：Waffo 将所有非 `PAY_SUCCESS` 状态（包括处理中状态）写成失败终态，后续成功通知会因订单不再 pending 而不能入账（`controller/topup_waffo.go:383`、`model/topup_settlement.go:177`）。网关是否实际发送处理中通知尚无运行验证。
 - BILL-4（P2，上游同款多计费，按用户决定只登记）：Midjourney 轮询读不到渠道时，批量将任务标为失败而不退款（`controller/midjourney.go:91`）；原生行为边界见[披露](NATIVE_B388_DISCLOSURES.md)。
-- 易支付对已验签但永久无效的回调仍返回 `fail`，可能产生重复回调噪声（`controller/topup.go:477,489`）。返回 `fail` 的结构与上游相同，其中金额不符的回执核验是本地扩展。
+- FUND-6（P3）：易支付对已验签但永久无效的回调仍返回 `fail`，GMPay 的永久核验或结算拒绝仍返回 200 `fail`，可能产生重复回调噪声。Creem、Waffo 成功通知、Pancake 已解析订单的永久结算拒绝现返回 2xx 并审计；Stripe 保留原有永久确认并补核验与审计。未验签请求不属于可信永久拒绝；各渠道当前分类见[资金 API](../billing/API.md)。
 
 以下历次审计记录尚未在现行源码上重新核对，处理前先复核：
 

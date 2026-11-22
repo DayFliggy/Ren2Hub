@@ -277,11 +277,7 @@
       "file": "service/task_missing_channel_database_test.go",
       "test": "TestTaskPollingRefundDatabaseMatrix",
       "action": "moved_to_known_upstream_restored",
-      "requires": [
-        "SQLite",
-        "TEST_MYSQL_DSN",
-        "TEST_POSTGRES_DSN"
-      ],
+      "requires": ["SQLite", "TEST_MYSQL_DSN", "TEST_POSTGRES_DSN"],
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_database_test.go.txt"
     },
     {
@@ -423,24 +419,40 @@
       "source": "controller/topup_callback_test.go",
       "test": "TestStripeWebhookAcknowledgesPermanentRejections",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
+      "disposition": "FUND-5 对应正确断言已转普通回归，保留官方有效报文与全部原断言。",
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true,
+      "normal_tests": [
         "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections"
       ],
-      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
-      "original_assertions_preserved_in_archive": true
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
       "source": "controller/topup_callback_test.go",
       "test": "TestCreemWebhookRetriesOnlyTransientFailures",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
+      "disposition": "FUND-5 对应正确断言已转普通回归，保留官方有效报文与全部原断言。",
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true,
+      "normal_tests": [
         "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures"
       ],
-      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
-      "original_assertions_preserved_in_archive": true
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": ["TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures"],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
@@ -459,24 +471,42 @@
       "source": "controller/topup_callback_test.go",
       "test": "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
+      "disposition": "FUND-5 对应正确断言已转普通回归，保留官方有效报文与全部原断言。",
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true,
+      "normal_tests": [
         "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
       ],
-      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
-      "original_assertions_preserved_in_archive": true
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
       "source": "controller/topup_callback_test.go",
       "test": "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/controller/topup_callback_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
+      "disposition": "FUND-5 对应正确断言已转普通回归，保留官方有效报文与全部原断言。",
+      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
+      "original_assertions_preserved_in_archive": true,
+      "normal_tests": [
         "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
       ],
-      "archive_sha256": "15c0198e0d597223daa6e81d8541df856ab6fd78f050cc2985f72dca1257be58",
-      "original_assertions_preserved_in_archive": true
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
@@ -530,9 +560,7 @@
         "TestRestoredNativeCommittedCacheFailureHasRecoveryFeedback",
         "TestRestoredNativeCommittedSecurityStepsContinue"
       ],
-      "normal_tests": [
-        "TestCommittedUpdateKeepsNativeSecurityErrorOrder"
-      ],
+      "normal_tests": ["TestCommittedUpdateKeepsNativeSecurityErrorOrder"],
       "archive_sha256": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811",
       "original_assertions_preserved_in_archive": true,
       "supplemental_freeze": "preflight/funds/coverage-frozen.json",
@@ -550,9 +578,7 @@
       "test": "TestListTopUpsCapsCount",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_query_test.go.fixture",
       "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
-        "TestRestoredNativeTopUpCountIsCapped"
-      ],
+      "diagnostic_tests": ["TestRestoredNativeTopUpCountIsCapped"],
       "archive_sha256": "bf362d7d9bc42381a5c08b55cfdd2283669d8177b831beb1019ed34de644e0b4",
       "original_assertions_preserved_in_archive": true
     },
@@ -565,9 +591,7 @@
       "diagnostic_tests": [
         "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure"
       ],
-      "normal_tests": [
-        "TestNativeTopUpFacadeDatabaseMatrix"
-      ],
+      "normal_tests": ["TestNativeTopUpFacadeDatabaseMatrix"],
       "archive_sha256": "e97f4e4ada9bc22549d7d8b5932d3ae0f39308ed635f1e020ce3e5d5e915742c",
       "original_assertions_preserved_in_archive": true
     },
@@ -576,17 +600,15 @@
       "source": "model/topup_settlement_test.go",
       "test": "TestSettleTopUpReturnsTypedErrorsForEveryChannel",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
-      "disposition": "上游接口不存在统一receipt/retryable API；原文归档，真实HTTP同义诊断核验原生ACK/错误类别变化。渠道隔离、资金原子和金额合同继续由正常钱包/三库测试验证。",
-      "diagnostic_tests": [
+      "disposition": "FUND-5 已核验金额、币种与永久拒绝分类；对应五项正确断言转普通回归。其余列出的原生差异继续独立诊断。",
+      "diagnostic_tests": ["TestRestoredNativeProviderTypedErrors"],
+      "normal_tests": [
+        "TestNativeTopUpFacadeDatabaseMatrix",
+        "TestGmpaySettlementKeepsTypedBoundaryErrors",
         "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
         "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
         "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
-        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
-        "TestRestoredNativeProviderTypedErrors"
-      ],
-      "normal_tests": [
-        "TestNativeTopUpFacadeDatabaseMatrix",
-        "TestGmpaySettlementKeepsTypedBoundaryErrors"
+        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
       ],
       "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
       "original_assertions_preserved_in_archive": true,
@@ -596,21 +618,31 @@
         "all five native providers: missing, empty, foreign, expired, exact query-outage identity and no credit",
         "GMPay typed boundary errors retained normal",
         "receipt-bearing local signatures only adapted in fixtures; no compatibility API added to production"
-      ]
+      ],
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+          "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+          "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+          "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
       "source": "model/topup_settlement_test.go",
       "test": "TestSettleTopUpRejectsMismatchedReceipt",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
-        "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
-        "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged",
-        "TestRestoredNativeEpayRejectedReceiptHasAudit"
-      ],
+      "disposition": "FUND-5 已核验金额、币种与永久拒绝分类；对应五项正确断言转普通回归。其余列出的原生差异继续独立诊断。",
+      "diagnostic_tests": ["TestRestoredNativeEpayRejectedReceiptHasAudit"],
       "normal_tests": [
-        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit"
+        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit",
+        "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+        "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged"
       ],
       "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
       "original_assertions_preserved_in_archive": true,
@@ -621,41 +653,59 @@
         "Stripe wrong currency/amount/missing receipt independently use original signed HTTP caller and zero-wallet/pending assertions",
         "callback audit count and Epay actor/operation params are preserved in separate audit diagnosis",
         "same-value decimal spelling and frozen quota/metadata remain normal wallet tests"
-      ]
+      ],
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+          "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
       "source": "model/topup_settlement_test.go",
       "test": "TestUpstreamSyncReceiptMismatchNeverCreditsWallet",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-      "diagnostic_tests": [
+      "disposition": "FUND-5 对应正确断言已转普通回归，保留官方有效报文与全部原断言。",
+      "normal_tests": [
+        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit",
         "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
         "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged"
-      ],
-      "normal_tests": [
-        "TestFrozenEpayReceiptRejectsMismatchBeforeAndAfterCredit"
       ],
       "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
       "original_assertions_preserved_in_archive": true,
       "supplemental_freeze": "preflight/funds/coverage-frozen.json",
-      "supplement_before_production_edits": false
+      "supplement_before_production_edits": false,
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+          "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
       "source": "model/topup_settlement_test.go",
       "test": "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry",
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
-      "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
+      "disposition": "FUND-5 已核验金额、币种与永久拒绝分类；对应五项正确断言转普通回归。其余列出的原生差异继续独立诊断。",
       "diagnostic_tests": [
         "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure",
-        "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
-        "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
-        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
         "TestRestoredNativeProviderTypedErrors"
       ],
       "normal_tests": [
-        "TestNativeTopUpFacadeDatabaseMatrix"
+        "TestNativeTopUpFacadeDatabaseMatrix",
+        "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+        "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+        "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
       ],
       "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
       "original_assertions_preserved_in_archive": true,
@@ -665,7 +715,18 @@
         "deleted retry classification helper original archived",
         "five provider underlying missing/outage identity explicitly diagnosed",
         "real callers ACK/retry outcomes diagnosed by Stripe/Creem/Waffo/Pancake HTTP handlers; Epay never used deleted retry helper"
-      ]
+      ],
+      "local_contract_regression": {
+        "issue": "FUND-5",
+        "file": "controller/topup_callback_regressions_test.go",
+        "tests": [
+          "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+          "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+          "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
+        ],
+        "assertions_changed": false,
+        "fixture_basis": "Creem 官方 checkout.completed 补 object.status、units 与 order.amount；Waffo 补回执金额币种与冻结价；Pancake 补 orderStatus、paymentStatus、taxAmount 与冻结价；只补输入，不改正确断言。"
+      }
     },
     {
       "scope": "funds",
@@ -673,15 +734,11 @@
       "test": "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders",
       "replacement": "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade",
       "disposition": "金额/配置变化/重复零增量断言保留；原生公共入口适配及重复错误语义独立验收",
-      "normal_tests": [
-        "TestFrozenTopUpCreditsOnceUsingNativeProviderFacade"
-      ],
+      "normal_tests": ["TestFrozenTopUpCreditsOnceUsingNativeProviderFacade"],
       "original_assertions_preserved_in_archive": true,
       "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_settlement_test.go.fixture",
       "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
-      "diagnostic_tests": [
-        "TestRestoredNativeProviderReplayAcknowledged"
-      ],
+      "diagnostic_tests": ["TestRestoredNativeProviderReplayAcknowledged"],
       "supplemental_freeze": "preflight/funds/replay-frozen.json",
       "supplement_before_production_edits": false
     },
@@ -696,9 +753,7 @@
       "frozen_before_production_edits": false,
       "archive_sha256": "ea2ca6b6107d3f200ebf7b2598262cd05fffe4290bdd68bddbe926ed27aa5f9b",
       "original_assertions_preserved_in_archive": true,
-      "diagnostic_tests": [
-        "TestRestoredNativeWeChatStorageErrorStaysPrivate"
-      ]
+      "diagnostic_tests": ["TestRestoredNativeWeChatStorageErrorStaysPrivate"]
     },
     {
       "scope": "funds",
@@ -709,9 +764,7 @@
       "archive_sha256": "93da5fa2c7bdff5d8c7ded424a4de54bb4b0f2fdeb2f2e8ebe996e34e3a9d475",
       "disposition": "原金额100003、返利20000、单条记录及人工重放断言保留；Stripe/Creem仅恢复公共入口重复错误语义。",
       "original_assertions_preserved_in_archive": true,
-      "diagnostic_tests": [
-        "TestRestoredNativeProviderReplayAcknowledged"
-      ],
+      "diagnostic_tests": ["TestRestoredNativeProviderReplayAcknowledged"],
       "supplemental_freeze": "preflight/funds/replay-frozen.json",
       "supplement_before_production_edits": false,
       "normal_tests": [
@@ -761,9 +814,7 @@
         "TestRestoredNativeControlPricingFailure",
         "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
       ],
-      "retained": [
-        "TestPricingInvalidationRebuildsOnNextRead"
-      ],
+      "retained": ["TestPricingInvalidationRebuildsOnNextRead"],
       "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
     },
     {
@@ -803,9 +854,7 @@
       ],
       "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
       "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
-      "diagnostics": [
-        "TestRestoredNativeControlCurrencyValidation"
-      ]
+      "diagnostics": ["TestRestoredNativeControlCurrencyValidation"]
     },
     {
       "scope": "control",
@@ -824,14 +873,10 @@
     {
       "scope": "control",
       "source": "model/install_guard_test.go",
-      "tests": [
-        "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
-      ],
+      "tests": ["TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"],
       "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__install_guard_test.go.txt",
       "original_sha256": "bedd1415a2aeb7946e5d4424d417c123a4e28f5404eb07cc4ec6a92f6e6bdd7f",
-      "diagnostics": [
-        "TestRestoredNativeControlRootReadFailure"
-      ],
+      "diagnostics": ["TestRestoredNativeControlRootReadFailure"],
       "retained": [
         "TestRootCreationAffiliateTransactionPropagatesDatabaseFailure"
       ]
@@ -839,14 +884,10 @@
     {
       "scope": "control",
       "source": "controller/usedata_flow_test.go",
-      "tests": [
-        "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
-      ],
+      "tests": ["TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"],
       "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__usedata_flow_test.go.txt",
       "original_sha256": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2",
-      "diagnostics": [
-        "TestRestoredNativeControlAdminQuota"
-      ]
+      "diagnostics": ["TestRestoredNativeControlAdminQuota"]
     },
     {
       "scope": "control",
@@ -886,9 +927,7 @@
       ],
       "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/concurrency_test.go.txt",
       "original_sha256": "0f98539e6bee71ff275506ad2e3c4faae372d2c5f1f32d3fa103bd145ba5acfa",
-      "diagnostics": [
-        "TestRestoredNativeControlChannelPostCommitReadFailure"
-      ],
+      "diagnostics": ["TestRestoredNativeControlChannelPostCommitReadFailure"],
       "retained": [
         "TestChannelUpdatePublishesConcurrencyBeforePostCommitReadFailure"
       ],
@@ -900,14 +939,10 @@
     {
       "scope": "control",
       "source": "model/audit_option_compat_test.go",
-      "tests": [
-        "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
-      ],
+      "tests": ["TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"],
       "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/audit_option_compat_test.go.txt",
       "original_sha256": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df",
-      "diagnostics": [
-        "TestRestoredNativeControlConsoleNormalizationMatrix"
-      ],
+      "diagnostics": ["TestRestoredNativeControlConsoleNormalizationMatrix"],
       "retained": [
         "TestLegacyConsoleOptionsPreserveInvalidJSONAndRejectRetiredFields"
       ],
@@ -1195,14 +1230,8 @@
       "types"
     ],
     "removed_or_renamed": [
-      [
-        "common",
-        "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets"
-      ],
-      [
-        "controller",
-        "TestAdminLogVisibilityWithSeparateLogDatabase"
-      ],
+      ["common", "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets"],
+      ["controller", "TestAdminLogVisibilityWithSeparateLogDatabase"],
       [
         "controller",
         "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
@@ -1211,34 +1240,13 @@
         "controller",
         "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures"
       ],
-      [
-        "controller",
-        "TestCreemWebhookRetriesOnlyTransientFailures"
-      ],
-      [
-        "controller",
-        "TestEpayNotifyLogsExcludeCredentials"
-      ],
-      [
-        "controller",
-        "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames"
-      ],
-      [
-        "controller",
-        "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey"
-      ],
-      [
-        "controller",
-        "TestStripeWebhookAcknowledgesPermanentRejections"
-      ],
-      [
-        "controller",
-        "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts"
-      ],
-      [
-        "controller",
-        "TestStripeWebhookRetriesFailedAtomicCredit"
-      ],
+      ["controller", "TestCreemWebhookRetriesOnlyTransientFailures"],
+      ["controller", "TestEpayNotifyLogsExcludeCredentials"],
+      ["controller", "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames"],
+      ["controller", "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey"],
+      ["controller", "TestStripeWebhookAcknowledgesPermanentRejections"],
+      ["controller", "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts"],
+      ["controller", "TestStripeWebhookRetriesFailedAtomicCredit"],
       [
         "controller",
         "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects"
@@ -1247,114 +1255,45 @@
         "controller",
         "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
       ],
-      [
-        "controller",
-        "TestUpstreamSyncStripeRetriesTransientWalletFailure"
-      ],
-      [
-        "controller",
-        "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
-      ],
+      ["controller", "TestUpstreamSyncStripeRetriesTransientWalletFailure"],
+      ["controller", "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"],
       [
         "controller",
         "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch"
       ],
-      [
-        "middleware",
-        "TestApplyOriginTaskIntentReadsOriginChannelThroughCache"
-      ],
-      [
-        "middleware",
-        "TestRequestLoggerRedactsSensitiveQueryParameters"
-      ],
+      ["middleware", "TestApplyOriginTaskIntentReadsOriginChannelThroughCache"],
+      ["middleware", "TestRequestLoggerRedactsSensitiveQueryParameters"],
       [
         "model",
         "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction"
       ],
-      [
-        "model",
-        "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
-      ],
-      [
-        "model",
-        "TestListTopUpsCapsCount"
-      ],
-      [
-        "model",
-        "TestOptionDatabaseFailuresKeepMemory"
-      ],
-      [
-        "model",
-        "TestPricingRefreshFailureNeverPublishesPartialState"
-      ],
-      [
-        "model",
-        "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh"
-      ],
-      [
-        "model",
-        "TestSettleTopUpRejectsMismatchedReceipt"
-      ],
-      [
-        "model",
-        "TestSettleTopUpReturnsTypedErrorsForEveryChannel"
-      ],
-      [
-        "model",
-        "TestUpdateOptionRejectsNonPositiveCurrencyOptions"
-      ],
-      [
-        "model",
-        "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
-      ],
+      ["model", "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"],
+      ["model", "TestListTopUpsCapsCount"],
+      ["model", "TestOptionDatabaseFailuresKeepMemory"],
+      ["model", "TestPricingRefreshFailureNeverPublishesPartialState"],
+      ["model", "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh"],
+      ["model", "TestSettleTopUpRejectsMismatchedReceipt"],
+      ["model", "TestSettleTopUpReturnsTypedErrorsForEveryChannel"],
+      ["model", "TestUpdateOptionRejectsNonPositiveCurrencyOptions"],
+      ["model", "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"],
       [
         "model",
         "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
       ],
-      [
-        "model",
-        "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders"
-      ],
-      [
-        "model",
-        "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry"
-      ],
-      [
-        "model",
-        "TestUpstreamSyncReceiptMismatchNeverCreditsWallet"
-      ],
-      [
-        "model",
-        "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
-      ],
-      [
-        "plugins",
-        "TestDoubaoDurationSelectionMatchesSubmissionAndReservation"
-      ],
+      ["model", "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders"],
+      ["model", "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry"],
+      ["model", "TestUpstreamSyncReceiptMismatchNeverCreditsWallet"],
+      ["model", "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"],
+      ["plugins", "TestDoubaoDurationSelectionMatchesSubmissionAndReservation"],
       [
         "plugins",
         "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding"
       ],
-      [
-        "plugins",
-        "TestDoubaoResponsesDurationFallbackValidation"
-      ],
-      [
-        "plugins",
-        "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations"
-      ],
-      [
-        "plugins",
-        "TestSeedream55KeepsOlderImageAndVideoBoundaries"
-      ],
-      [
-        "plugins",
-        "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling"
-      ],
-      [
-        "plugins",
-        "TestSoraSubmitSecondsMatchNumericUsage"
-      ],
+      ["plugins", "TestDoubaoResponsesDurationFallbackValidation"],
+      ["plugins", "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations"],
+      ["plugins", "TestSeedream55KeepsOlderImageAndVideoBoundaries"],
+      ["plugins", "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling"],
+      ["plugins", "TestSoraSubmitSecondsMatchNumericUsage"],
       [
         "plugins",
         "TestSoraVideoProtocolPreservesDurationConflictForValidation"
@@ -1363,46 +1302,22 @@
         "plugins",
         "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated"
       ],
-      [
-        "plugins",
-        "TestVeoSubmitValidatesFinalBillingParameters"
-      ],
-      [
-        "relay",
-        "TestApplyChannelPinReadsOriginChannelThroughCache"
-      ],
-      [
-        "relay",
-        "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire"
-      ],
+      ["plugins", "TestVeoSubmitValidatesFinalBillingParameters"],
+      ["relay", "TestApplyChannelPinReadsOriginChannelThroughCache"],
+      ["relay", "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire"],
       [
         "relay/channel/openai",
         "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens"
       ],
-      [
-        "relay/common",
-        "TestParamOverrideRegexCacheIsBounded"
-      ],
-      [
-        "relay/common",
-        "TestParamOverrideRegexCacheReleasesOldEntries"
-      ],
-      [
-        "relay/common",
-        "TestParamOverrideRegexCacheSkipsOversizedPatterns"
-      ],
-      [
-        "relay/common",
-        "TestRelayInfoToStringMasksURLCredentials"
-      ],
+      ["relay/common", "TestParamOverrideRegexCacheIsBounded"],
+      ["relay/common", "TestParamOverrideRegexCacheReleasesOldEntries"],
+      ["relay/common", "TestParamOverrideRegexCacheSkipsOversizedPatterns"],
+      ["relay/common", "TestRelayInfoToStringMasksURLCredentials"],
       [
         "relay/common",
         "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials"
       ],
-      [
-        "relay/helper",
-        "TestStreamScannerHandler_ReadFailureWithCompletion"
-      ],
+      ["relay/helper", "TestStreamScannerHandler_ReadFailureWithCompletion"],
       [
         "relaykit/dto",
         "TestOpenAICacheCreationInputTokensAloneIsBillableUsage"
@@ -1415,38 +1330,17 @@
         "router",
         "TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes"
       ],
-      [
-        "router",
-        "TestLegacyVideoGenerationRateLimitRejectsSecondRequest"
-      ],
-      [
-        "router",
-        "TestNativeRemixRouteOriginLookupFailureIsPrivate500"
-      ],
-      [
-        "router",
-        "TestVideoCreateRateLimitPrecedesSharedChannelSelection"
-      ],
-      [
-        "service",
-        "TestCompactRequestsSkipChannelsWithoutCompactSupport"
-      ],
+      ["router", "TestLegacyVideoGenerationRateLimitRejectsSecondRequest"],
+      ["router", "TestNativeRemixRouteOriginLookupFailureIsPrivate500"],
+      ["router", "TestVideoCreateRateLimitPrecedesSharedChannelSelection"],
+      ["service", "TestCompactRequestsSkipChannelsWithoutCompactSupport"],
       [
         "service",
         "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
       ],
-      [
-        "service",
-        "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID"
-      ],
-      [
-        "service",
-        "TestTaskPollingRefundDatabaseMatrix"
-      ],
-      [
-        "service",
-        "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails"
-      ],
+      ["service", "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID"],
+      ["service", "TestTaskPollingRefundDatabaseMatrix"],
+      ["service", "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails"],
       [
         "service",
         "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule"
@@ -1455,10 +1349,7 @@
         "service",
         "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel"
       ],
-      [
-        "service",
-        "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing"
-      ],
+      ["service", "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing"],
       [
         "setting/operation_setting",
         "TestValidateCurrencyOptionIgnoresOtherKeys"
@@ -1469,14 +1360,8 @@
       ]
     ],
     "mapped": [
-      [
-        "common",
-        "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets"
-      ],
-      [
-        "controller",
-        "TestAdminLogVisibilityWithSeparateLogDatabase"
-      ],
+      ["common", "TestParseTaskMultipartFormSeparatesTextAndFileMemoryBudgets"],
+      ["controller", "TestAdminLogVisibilityWithSeparateLogDatabase"],
       [
         "controller",
         "TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints"
@@ -1485,34 +1370,13 @@
         "controller",
         "TestCommittedUserUpdateCompletesEveryActionAndReportsFailures"
       ],
-      [
-        "controller",
-        "TestCreemWebhookRetriesOnlyTransientFailures"
-      ],
-      [
-        "controller",
-        "TestEpayNotifyLogsExcludeCredentials"
-      ],
-      [
-        "controller",
-        "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames"
-      ],
-      [
-        "controller",
-        "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey"
-      ],
-      [
-        "controller",
-        "TestStripeWebhookAcknowledgesPermanentRejections"
-      ],
-      [
-        "controller",
-        "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts"
-      ],
-      [
-        "controller",
-        "TestStripeWebhookRetriesFailedAtomicCredit"
-      ],
+      ["controller", "TestCreemWebhookRetriesOnlyTransientFailures"],
+      ["controller", "TestEpayNotifyLogsExcludeCredentials"],
+      ["controller", "TestLogsSelfStatScopesByIDAcrossWildcardsAndRenames"],
+      ["controller", "TestRelayFirstAttemptRejectsChannelWithoutEnabledKey"],
+      ["controller", "TestStripeWebhookAcknowledgesPermanentRejections"],
+      ["controller", "TestStripeWebhookMatchesSourceCurrencyAndLargeAmounts"],
+      ["controller", "TestStripeWebhookRetriesFailedAtomicCredit"],
       [
         "controller",
         "TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects"
@@ -1521,114 +1385,45 @@
         "controller",
         "TestUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure"
       ],
-      [
-        "controller",
-        "TestUpstreamSyncStripeRetriesTransientWalletFailure"
-      ],
-      [
-        "controller",
-        "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"
-      ],
+      ["controller", "TestUpstreamSyncStripeRetriesTransientWalletFailure"],
+      ["controller", "TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures"],
       [
         "controller",
         "TestUserDirectoryVisibilityAppliesBeforePaginationAndSearch"
       ],
-      [
-        "middleware",
-        "TestApplyOriginTaskIntentReadsOriginChannelThroughCache"
-      ],
-      [
-        "middleware",
-        "TestRequestLoggerRedactsSensitiveQueryParameters"
-      ],
+      ["middleware", "TestApplyOriginTaskIntentReadsOriginChannelThroughCache"],
+      ["middleware", "TestRequestLoggerRedactsSensitiveQueryParameters"],
       [
         "model",
         "TestAffiliateEveryProviderAndManualShareSuccessfulTransaction"
       ],
-      [
-        "model",
-        "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"
-      ],
-      [
-        "model",
-        "TestListTopUpsCapsCount"
-      ],
-      [
-        "model",
-        "TestOptionDatabaseFailuresKeepMemory"
-      ],
-      [
-        "model",
-        "TestPricingRefreshFailureNeverPublishesPartialState"
-      ],
-      [
-        "model",
-        "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh"
-      ],
-      [
-        "model",
-        "TestSettleTopUpRejectsMismatchedReceipt"
-      ],
-      [
-        "model",
-        "TestSettleTopUpReturnsTypedErrorsForEveryChannel"
-      ],
-      [
-        "model",
-        "TestUpdateOptionRejectsNonPositiveCurrencyOptions"
-      ],
-      [
-        "model",
-        "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"
-      ],
+      ["model", "TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON"],
+      ["model", "TestListTopUpsCapsCount"],
+      ["model", "TestOptionDatabaseFailuresKeepMemory"],
+      ["model", "TestPricingRefreshFailureNeverPublishesPartialState"],
+      ["model", "TestPricingSnapshotStaysConsistentUnderConcurrentRefresh"],
+      ["model", "TestSettleTopUpRejectsMismatchedReceipt"],
+      ["model", "TestSettleTopUpReturnsTypedErrorsForEveryChannel"],
+      ["model", "TestUpdateOptionRejectsNonPositiveCurrencyOptions"],
+      ["model", "TestUpdateOptionRollsBackCreatedRowWhenSaveFails"],
       [
         "model",
         "TestUpdateOptionsBulkRejectsWholeBatchWithInvalidCurrencyOption"
       ],
-      [
-        "model",
-        "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders"
-      ],
-      [
-        "model",
-        "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry"
-      ],
-      [
-        "model",
-        "TestUpstreamSyncReceiptMismatchNeverCreditsWallet"
-      ],
-      [
-        "model",
-        "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"
-      ],
-      [
-        "plugins",
-        "TestDoubaoDurationSelectionMatchesSubmissionAndReservation"
-      ],
+      ["model", "TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders"],
+      ["model", "TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry"],
+      ["model", "TestUpstreamSyncReceiptMismatchNeverCreditsWallet"],
+      ["model", "TestUpstreamSyncRootInitializationPropagatesDatabaseFailure"],
+      ["plugins", "TestDoubaoDurationSelectionMatchesSubmissionAndReservation"],
       [
         "plugins",
         "TestDoubaoHostNonScalarDurationUsesMaximumAfterRealDecoding"
       ],
-      [
-        "plugins",
-        "TestDoubaoResponsesDurationFallbackValidation"
-      ],
-      [
-        "plugins",
-        "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations"
-      ],
-      [
-        "plugins",
-        "TestSeedream55KeepsOlderImageAndVideoBoundaries"
-      ],
-      [
-        "plugins",
-        "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling"
-      ],
-      [
-        "plugins",
-        "TestSoraSubmitSecondsMatchNumericUsage"
-      ],
+      ["plugins", "TestDoubaoResponsesDurationFallbackValidation"],
+      ["plugins", "TestHailuoModelTiersRejectNonpositiveAndNonfiniteDurations"],
+      ["plugins", "TestSeedream55KeepsOlderImageAndVideoBoundaries"],
+      ["plugins", "TestSoraRejectsInvalidSecondsBeforeSubmissionAndBilling"],
+      ["plugins", "TestSoraSubmitSecondsMatchNumericUsage"],
       [
         "plugins",
         "TestSoraVideoProtocolPreservesDurationConflictForValidation"
@@ -1637,46 +1432,22 @@
         "plugins",
         "TestTaskPluginsRejectBillingInputsThatWouldBeRewrittenOrUnderstated"
       ],
-      [
-        "plugins",
-        "TestVeoSubmitValidatesFinalBillingParameters"
-      ],
-      [
-        "relay",
-        "TestApplyChannelPinReadsOriginChannelThroughCache"
-      ],
-      [
-        "relay",
-        "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire"
-      ],
+      ["plugins", "TestVeoSubmitValidatesFinalBillingParameters"],
+      ["relay", "TestApplyChannelPinReadsOriginChannelThroughCache"],
+      ["relay", "TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire"],
       [
         "relay/channel/openai",
         "TestOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens"
       ],
-      [
-        "relay/common",
-        "TestParamOverrideRegexCacheIsBounded"
-      ],
-      [
-        "relay/common",
-        "TestParamOverrideRegexCacheReleasesOldEntries"
-      ],
-      [
-        "relay/common",
-        "TestParamOverrideRegexCacheSkipsOversizedPatterns"
-      ],
-      [
-        "relay/common",
-        "TestRelayInfoToStringMasksURLCredentials"
-      ],
+      ["relay/common", "TestParamOverrideRegexCacheIsBounded"],
+      ["relay/common", "TestParamOverrideRegexCacheReleasesOldEntries"],
+      ["relay/common", "TestParamOverrideRegexCacheSkipsOversizedPatterns"],
+      ["relay/common", "TestRelayInfoToStringMasksURLCredentials"],
       [
         "relay/common",
         "TestSanitizeURLForLogDoesNotRestoreMalformedCredentials"
       ],
-      [
-        "relay/helper",
-        "TestStreamScannerHandler_ReadFailureWithCompletion"
-      ],
+      ["relay/helper", "TestStreamScannerHandler_ReadFailureWithCompletion"],
       [
         "relaykit/dto",
         "TestOpenAICacheCreationInputTokensAloneIsBillableUsage"
@@ -1689,38 +1460,17 @@
         "router",
         "TestLegacyVideoGenerationRateLimitCoversOrdinaryAndPluginRoutes"
       ],
-      [
-        "router",
-        "TestLegacyVideoGenerationRateLimitRejectsSecondRequest"
-      ],
-      [
-        "router",
-        "TestNativeRemixRouteOriginLookupFailureIsPrivate500"
-      ],
-      [
-        "router",
-        "TestVideoCreateRateLimitPrecedesSharedChannelSelection"
-      ],
-      [
-        "service",
-        "TestCompactRequestsSkipChannelsWithoutCompactSupport"
-      ],
+      ["router", "TestLegacyVideoGenerationRateLimitRejectsSecondRequest"],
+      ["router", "TestNativeRemixRouteOriginLookupFailureIsPrivate500"],
+      ["router", "TestVideoCreateRateLimitPrecedesSharedChannelSelection"],
+      ["service", "TestCompactRequestsSkipChannelsWithoutCompactSupport"],
       [
         "service",
         "TestLoadOriginTaskChannelSeparatesDeletionCacheMissAndStorageFailure"
       ],
-      [
-        "service",
-        "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID"
-      ],
-      [
-        "service",
-        "TestTaskPollingRefundDatabaseMatrix"
-      ],
-      [
-        "service",
-        "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails"
-      ],
+      ["service", "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID"],
+      ["service", "TestTaskPollingRefundDatabaseMatrix"],
+      ["service", "TestUpdateBatchTasksKeepsTasksWhenChannelReadFails"],
       [
         "service",
         "TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule"
@@ -1729,10 +1479,7 @@
         "service",
         "TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel"
       ],
-      [
-        "service",
-        "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing"
-      ],
+      ["service", "TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing"],
       [
         "setting/operation_setting",
         "TestValidateCurrencyOptionIgnoresOtherKeys"
@@ -1796,9 +1543,7 @@
             ],
             "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__usedata_flow_test.go.txt",
             "original_sha256": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2",
-            "diagnostics": [
-              "TestRestoredNativeControlAdminQuota"
-            ]
+            "diagnostics": ["TestRestoredNativeControlAdminQuota"]
           }
         ]
       },
@@ -1959,9 +1704,7 @@
             "diagnostic_tests": [
               "TestRestoredNativeUpstreamSyncStripeRetriesTransientWalletFailure"
             ],
-            "normal_tests": [
-              "TestNativeTopUpFacadeDatabaseMatrix"
-            ],
+            "normal_tests": ["TestNativeTopUpFacadeDatabaseMatrix"],
             "archive_sha256": "e97f4e4ada9bc22549d7d8b5932d3ae0f39308ed635f1e020ce3e5d5e915742c",
             "original_assertions_preserved_in_archive": true
           }
@@ -2162,9 +1905,7 @@
             "test": "TestListTopUpsCapsCount",
             "archive": "scripts/testing/fixtures/known_upstream_restored/archive/funds/model/topup_query_test.go.fixture",
             "disposition": "拆分原生差异诊断；仍适用的资金/权限合同保留为常规测试",
-            "diagnostic_tests": [
-              "TestRestoredNativeTopUpCountIsCapped"
-            ],
+            "diagnostic_tests": ["TestRestoredNativeTopUpCountIsCapped"],
             "archive_sha256": "bf362d7d9bc42381a5c08b55cfdd2283669d8177b831beb1019ed34de644e0b4",
             "original_assertions_preserved_in_archive": true
           }
@@ -2210,9 +1951,7 @@
               "TestRestoredNativeControlPricingFailure",
               "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
             ],
-            "retained": [
-              "TestPricingInvalidationRebuildsOnNextRead"
-            ],
+            "retained": ["TestPricingInvalidationRebuildsOnNextRead"],
             "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
           }
         ]
@@ -2236,9 +1975,7 @@
               "TestRestoredNativeControlPricingFailure",
               "known_upstream_race: TestRestoredNativeControlPricingConcurrentRefresh"
             ],
-            "retained": [
-              "TestPricingInvalidationRebuildsOnNextRead"
-            ],
+            "retained": ["TestPricingInvalidationRebuildsOnNextRead"],
             "reason": "撤销的原子快照并发断言原文保留，独立race阶段复现b388竞争，不计为race通过。"
           }
         ]
@@ -2323,9 +2060,7 @@
             ],
             "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
             "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
-            "diagnostics": [
-              "TestRestoredNativeControlCurrencyValidation"
-            ]
+            "diagnostics": ["TestRestoredNativeControlCurrencyValidation"]
           }
         ]
       },
@@ -2364,9 +2099,7 @@
             ],
             "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__currency_option_test.go.txt",
             "original_sha256": "52153dc6c728fa64f20cac43bb18980358f9b9bd83b69a7416d3ac97b0af6338",
-            "diagnostics": [
-              "TestRestoredNativeControlCurrencyValidation"
-            ]
+            "diagnostics": ["TestRestoredNativeControlCurrencyValidation"]
           }
         ]
       },
@@ -2413,9 +2146,7 @@
               "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
               "TestRestoredNativeProviderTypedErrors"
             ],
-            "normal_tests": [
-              "TestNativeTopUpFacadeDatabaseMatrix"
-            ],
+            "normal_tests": ["TestNativeTopUpFacadeDatabaseMatrix"],
             "archive_sha256": "8bee8450bf77956349e63aa9e9561e8b55a15b6c3671b9728378b461bcbb38e6",
             "original_assertions_preserved_in_archive": true,
             "supplemental_freeze": "preflight/funds/coverage-frozen.json",
@@ -2466,9 +2197,7 @@
             ],
             "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/model__install_guard_test.go.txt",
             "original_sha256": "bedd1415a2aeb7946e5d4424d417c123a4e28f5404eb07cc4ec6a92f6e6bdd7f",
-            "diagnostics": [
-              "TestRestoredNativeControlRootReadFailure"
-            ],
+            "diagnostics": ["TestRestoredNativeControlRootReadFailure"],
             "retained": [
               "TestRootCreationAffiliateTransactionPropagatesDatabaseFailure"
             ]
@@ -2924,11 +2653,7 @@
             "file": "service/task_missing_channel_database_test.go",
             "test": "TestTaskPollingRefundDatabaseMatrix",
             "action": "moved_to_known_upstream_restored",
-            "requires": [
-              "SQLite",
-              "TEST_MYSQL_DSN",
-              "TEST_POSTGRES_DSN"
-            ],
+            "requires": ["SQLite", "TEST_MYSQL_DSN", "TEST_POSTGRES_DSN"],
             "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_database_test.go.txt"
           }
         ]
@@ -3041,22 +2766,14 @@
     {
       "scope": "control",
       "tests": 10,
-      "engines": [
-        "sqlite",
-        "mysql",
-        "postgres"
-      ],
+      "engines": ["sqlite", "mysql", "postgres"],
       "evidence": "scripts/testing/fixtures/known_upstream_restored/control/database-preflight.json",
       "ordinary_pass": false
     },
     {
       "scope": "task_polling",
       "test": "TestTaskPollingRefundDatabaseMatrix",
-      "engines": [
-        "sqlite",
-        "mysql",
-        "postgres"
-      ],
+      "engines": ["sqlite", "mysql", "postgres"],
       "status": "独立三库原生差异已按完整金额、节点和消息重验；固定测试调度，非普通通过",
       "evidence": "preflight/data/missing-matrix-exact/report.json",
       "verification": "implementation/root/task-database-diagnostic-exact.json",
@@ -3065,11 +2782,7 @@
     {
       "scope": "channel_update",
       "test": "TestRestoredNativeControlChannelPostCommitReadFailure",
-      "engines": [
-        "sqlite",
-        "mysql",
-        "postgres"
-      ],
+      "engines": ["sqlite", "mysql", "postgres"],
       "evidence": "preflight/control/channel-update-databases/assessment.json",
       "ordinary_pass": false
     },
@@ -3080,11 +2793,7 @@
         "TestRestoredRound3AbilityModelNormalization",
         "TestRestoredRound3PublicAbilityZeroWeight"
       ],
-      "engines": [
-        "sqlite",
-        "mysql",
-        "postgres"
-      ],
+      "engines": ["sqlite", "mysql", "postgres"],
       "preflight": "audit-round3-control/preflight/database-before-current/report.json",
       "frozen": "audit-round3-control/database-frozen-before-current.json",
       "runtime_scope": "2382和b388各9个顶层执行/39个节点；原生按冻结差异验收，不算普通通过。当前树另行验证。",
@@ -3144,5 +2853,42 @@
     "native_allowlist_changed": false,
     "production_supplier_trigger_verified": false,
     "integrated_validation": "最终冻结源正常/race及四个既有回归另行执行；外部提案对照不代替集成验证。"
-  }
+  },
+  "approved_local_regressions": [
+    {
+      "issue": "FUND-5",
+      "test": "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",
+      "file": "controller/topup_callback_regressions_test.go",
+      "assertions_changed": false,
+      "basis": "用户批准 FUND-5 按官方合同修复后，核验拒绝不入账、永久拒绝 ACK 与审计、临时故障重试的原正确断言已通过，转普通回归。"
+    },
+    {
+      "issue": "FUND-5",
+      "test": "TestRestoredNativeStripeReceiptCasesKeepWalletUnchanged",
+      "file": "controller/topup_callback_regressions_test.go",
+      "assertions_changed": false,
+      "basis": "用户批准 FUND-5 按官方合同修复后，核验拒绝不入账、永久拒绝 ACK 与审计、临时故障重试的原正确断言已通过，转普通回归。"
+    },
+    {
+      "issue": "FUND-5",
+      "test": "TestRestoredNativeCreemWebhookRetriesOnlyTransientFailures",
+      "file": "controller/topup_callback_regressions_test.go",
+      "assertions_changed": false,
+      "basis": "用户批准 FUND-5 按官方合同修复后，核验拒绝不入账、永久拒绝 ACK 与审计、临时故障重试的原正确断言已通过，转普通回归。"
+    },
+    {
+      "issue": "FUND-5",
+      "test": "TestRestoredNativeUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures",
+      "file": "controller/topup_callback_regressions_test.go",
+      "assertions_changed": false,
+      "basis": "用户批准 FUND-5 按官方合同修复后，核验拒绝不入账、永久拒绝 ACK 与审计、临时故障重试的原正确断言已通过，转普通回归。"
+    },
+    {
+      "issue": "FUND-5",
+      "test": "TestRestoredNativeUpstreamSyncPancakeAcknowledgesPermanentVerifiedFailure",
+      "file": "controller/topup_callback_regressions_test.go",
+      "assertions_changed": false,
+      "basis": "用户批准 FUND-5 按官方合同修复后，核验拒绝不入账、永久拒绝 ACK 与审计、临时故障重试的原正确断言已通过，转普通回归。"
+    }
+  ]
 }

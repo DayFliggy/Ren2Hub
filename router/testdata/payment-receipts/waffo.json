@@ -1,0 +1,14 @@
+{
+  "eventType": "PAYMENT_NOTIFICATION",
+  "result": {
+    "paymentRequestId": "receipt-payment",
+    "merchantOrderId": "receipt-order",
+    "acquiringOrderId": "acq_fixture",
+    "orderStatus": "PAY_SUCCESS",
+    "orderAmount": "10.00",
+    "orderCurrency": "USD",
+    "finalDealAmount": "81.23",
+    "userCurrency": "HKD",
+    "merchantInfo": { "merchantId": "merchant-fixture" }
+  }
+}

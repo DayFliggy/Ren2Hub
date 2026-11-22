@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -223,7 +224,7 @@ type CreemWebhookEvent struct {
 			UpdatedAt         string  `json:"updated_at"`
 			Mode              string  `json:"mode"`
 		} `json:"product"`
-		Units    int `json:"units"`
+		Units    *int `json:"units"`
 		Customer struct {
 			Id        string `json:"id"`
 			Object    string `json:"object"`
@@ -299,7 +300,8 @@ func CreemWebhook(c *gin.Context) {
 // 处理支付完成事件
 func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	// 验证订单状态
-	if event.Object.Order.Status != "paid" {
+	if event.Object.Status != "completed" || event.Object.Order.Status != "paid" || (event.Object.Units != nil && *event.Object.Units != 1) {
+		rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderCreem, event.Object.RequestId, c.ClientIP(), "checkout_not_completed")
 		logger.LogInfo(c.Request.Context(), common.LogText("Creem order not paid, ignored request_id=%s order_id=%s order_status=%s", event.Object.RequestId, event.Object.Order.Id, event.Object.Order.Status))
 		c.Status(http.StatusOK)
 		return
@@ -309,7 +311,8 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	referenceId := event.Object.RequestId
 	if referenceId == "" {
 		logger.LogWarn(c.Request.Context(), common.LogText("Creem webhook missing request_id event_id=%s order_id=%s", event.Id, event.Object.Order.Id))
-		c.AbortWithStatus(http.StatusBadRequest)
+		rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderCreem, referenceId, c.ClientIP(), "missing_order")
+		c.Status(http.StatusOK)
 		return
 	}
 
@@ -318,26 +321,13 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 
 	// 验证订单类型，目前只处理一次性付款（充值）
 	if event.Object.Order.Type != "onetime" {
+		rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderCreem, referenceId, c.ClientIP(), "unsupported_order_type")
 		logger.LogInfo(c.Request.Context(), common.LogText("Creem order type not supported, ignored request_id=%s creem_order_id=%s order_type=%s", referenceId, event.Object.Order.Id, event.Object.Order.Type))
 		c.Status(http.StatusOK)
 		return
 	}
 
 	logger.LogInfo(c.Request.Context(), common.LogText("Creem payment completed callback trade_no=%s creem_order_id=%s amount_paid=%d currency=%s product_name=%q customer_email=%q customer_name=%q", referenceId, event.Object.Order.Id, event.Object.Order.AmountPaid, event.Object.Order.Currency, event.Object.Product.Name, event.Object.Customer.Email, event.Object.Customer.Name))
-
-	// 查询本地订单确认存在
-	topUp := model.GetTopUpByTradeNo(referenceId)
-	if topUp == nil {
-		logger.LogWarn(c.Request.Context(), common.LogText("Creem top-up order not found trade_no=%s creem_order_id=%s", referenceId, event.Object.Order.Id))
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-
-	if topUp.Status != common.TopUpStatusPending {
-		logger.LogInfo(c.Request.Context(), common.LogText("Creem top-up order not pending, ignored trade_no=%s status=%s creem_order_id=%s", referenceId, topUp.Status, event.Object.Order.Id))
-		c.Status(http.StatusOK) // 已处理过的订单，返回成功避免重复处理
-		return
-	}
 
 	// 处理充值，传入客户邮箱和姓名信息
 	customerEmail := event.Object.Customer.Email
@@ -351,14 +341,19 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 		logger.LogWarn(c.Request.Context(), common.LogText("Creem callback customer name is empty trade_no=%s creem_order_id=%s", referenceId, event.Object.Order.Id))
 	}
 
-	err := model.RechargeCreem(referenceId, customerEmail, customerName, c.ClientIP())
+	err := model.RechargeCreemVerified(referenceId, customerEmail, customerName, c.ClientIP(), model.TopUpReceipt{Currency: strings.ToUpper(event.Object.Order.Currency), Amount: decimal.NewFromInt(int64(event.Object.Order.Amount)).Shift(-2).String()})
 	if err != nil {
+		if permanentPaymentReceiptError(err) {
+			rejectPaymentReceipt(c.Request.Context(), model.PaymentProviderCreem, referenceId, c.ClientIP(), "receipt_mismatch")
+			c.Status(http.StatusOK)
+			return
+		}
 		logger.LogError(c.Request.Context(), common.LogText("Creem top-up processing failed trade_no=%s creem_order_id=%s client_ip=%s error=%q", referenceId, event.Object.Order.Id, c.ClientIP(), err.Error()))
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), common.LogText("Creem top-up succeeded trade_no=%s creem_order_id=%s quota=%d money=%.2f client_ip=%s", referenceId, event.Object.Order.Id, topUp.Amount, topUp.Money, c.ClientIP()))
+	logger.LogInfo(c.Request.Context(), common.LogText("Creem top-up succeeded trade_no=%s creem_order_id=%s client_ip=%s", referenceId, event.Object.Order.Id, c.ClientIP()))
 	c.Status(http.StatusOK)
 }
 
