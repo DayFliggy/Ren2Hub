@@ -11,7 +11,15 @@ import {
   Shapes,
   X,
 } from 'lucide-vue-next'
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  watch,
+  type Ref,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { localizedText } from '@/utils/localizedText'
 
@@ -40,6 +48,7 @@ import TextInput from '@/components/common/TextInput.vue'
 import AdvancedChannelEditor from './AdvancedChannelEditor.vue'
 import ProviderChannelSettings from './ProviderChannelSettings.vue'
 import FetchedModelsDialog from './FetchedModelsDialog.vue'
+import HiddenOverrideNotice from './HiddenOverrideNotice.vue'
 import {
   advancedChannelPreset,
   parseAdvancedChannelConfig,
@@ -125,15 +134,44 @@ const advancedConfig = ref('')
 const redactedFields = computed(
   () => new Set(props.editing?.redacted_fields ?? [])
 )
-const headerHidden = computed(() => redactedFields.value.has('header_override'))
 const settingHidden = computed(() => redactedFields.value.has('setting'))
 const settingsHidden = computed(() => redactedFields.value.has('settings'))
-const confirmingHeaderClear = ref(false)
-const headerCleared = ref(false)
-function clearHiddenHeader() {
-  confirmingHeaderClear.value = false
-  headerCleared.value = true
-  headerOverride.value = ''
+type OverrideField = 'header_override' | 'param_override'
+const overrideText: Record<OverrideField, Ref<string>> = {
+  header_override: headerOverride,
+  param_override: paramOverride,
+}
+const clearedOverrides = reactive<Record<OverrideField, boolean>>({
+  header_override: false,
+  param_override: false,
+})
+const confirmingClear = ref<OverrideField | null>(null)
+const clearingName = computed(() =>
+  confirmingClear.value
+    ? t(`channels.overrideNames.${confirmingClear.value}`)
+    : ''
+)
+function clearHiddenOverride() {
+  const field = confirmingClear.value
+  if (!field) return
+  confirmingClear.value = null
+  clearedOverrides[field] = true
+  overrideText[field].value = ''
+}
+/**
+ * A hidden override is cleared explicitly, replaced by typed text or left out;
+ * a visible one is sent only when it differs from the stored text.
+ */
+function overridePayload(field: OverrideField): string | undefined {
+  const text = overrideText[field].value
+  if (redactedFields.value.has(field)) {
+    if (clearedOverrides[field]) return HIDDEN_FIELD_CLEAR_VALUE
+    return text.trim() || undefined
+  }
+  const stored = props.editing?.[field]
+  return text !== (typeof stored === 'string' ? stored : '')
+    ? text.trim()
+    : undefined
 }
 const hasTaskPluginBind = computed(() =>
   auth.hasPermission('task_plugin', 'bind')
@@ -578,8 +616,9 @@ watch(
       typeof ch?.param_override === 'string' ? ch.param_override : ''
     headerOverride.value =
       typeof ch?.header_override === 'string' ? ch.header_override : ''
-    headerCleared.value = false
-    confirmingHeaderClear.value = false
+    clearedOverrides.header_override = false
+    clearedOverrides.param_override = false
+    confirmingClear.value = null
     form.baseUrl = ch?.base_url ?? ''
     form.models = ch?.models ?? ''
     form.priority = ch?.priority ?? 0
@@ -738,17 +777,10 @@ async function submit() {
     )
       base.setting = JSON.stringify(nextSetting)
     if (canSensitiveWrite.value) {
-      if (paramOverride.value !== (props.editing?.param_override ?? ''))
-        base.param_override = paramOverride.value.trim()
-      // A hidden override is replaced as a whole or left out entirely.
-      if (headerHidden.value) {
-        if (headerCleared.value) base.header_override = HIDDEN_FIELD_CLEAR_VALUE
-        else if (headerOverride.value.trim())
-          base.header_override = headerOverride.value.trim()
-      } else if (
-        headerOverride.value !== (props.editing?.header_override ?? '')
-      )
-        base.header_override = headerOverride.value.trim()
+      const param = overridePayload('param_override')
+      if (param !== undefined) base.param_override = param
+      const header = overridePayload('header_override')
+      if (header !== undefined) base.header_override = header
     }
     if (canSensitiveWrite.value && !settingsHidden.value) {
       const otherSettings = { ...originalOtherSettings.value }
@@ -1587,10 +1619,21 @@ async function submit() {
           >
             <textarea
               v-model="paramOverride"
-              :disabled="saving || !canSensitiveWrite"
+              :disabled="
+                saving || !canSensitiveWrite || clearedOverrides.param_override
+              "
               :aria-label="t('channels.parameterOverrides')"
               class="channel-form-textarea font-mono"
               rows="4"
+            />
+            <HiddenOverrideNotice
+              v-if="redactedFields.has('param_override')"
+              :name="t('channels.overrideNames.param_override')"
+              :cleared="clearedOverrides.param_override"
+              :can-write="canSensitiveWrite"
+              :disabled="saving"
+              @clear="confirmingClear = 'param_override'"
+              @keep="clearedOverrides.param_override = false"
             />
           </FormField>
           <FormField
@@ -1599,38 +1642,22 @@ async function submit() {
           >
             <textarea
               v-model="headerOverride"
-              :disabled="saving || !canSensitiveWrite || headerCleared"
+              :disabled="
+                saving || !canSensitiveWrite || clearedOverrides.header_override
+              "
               :aria-label="t('channels.headerOverrides')"
               class="channel-form-textarea font-mono"
               rows="4"
             />
-            <div
-              v-if="headerHidden"
-              class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[var(--text-secondary)]"
-            >
-              <span>{{
-                headerCleared
-                  ? t('channels.hiddenHeaderWillClear')
-                  : t('channels.redactedHidden')
-              }}</span>
-              <ConsoleButton
-                v-if="canSensitiveWrite"
-                size="sm"
-                variant="secondary"
-                :disabled="saving"
-                @click="
-                  headerCleared
-                    ? (headerCleared = false)
-                    : (confirmingHeaderClear = true)
-                "
-              >
-                {{
-                  headerCleared
-                    ? t('channels.hiddenHeaderKeep')
-                    : t('channels.clearHiddenHeader')
-                }}
-              </ConsoleButton>
-            </div>
+            <HiddenOverrideNotice
+              v-if="redactedFields.has('header_override')"
+              :name="t('channels.overrideNames.header_override')"
+              :cleared="clearedOverrides.header_override"
+              :can-write="canSensitiveWrite"
+              :disabled="saving"
+              @clear="confirmingClear = 'header_override'"
+              @keep="clearedOverrides.header_override = false"
+            />
           </FormField>
           <p
             v-if="!validOverrides"
@@ -1756,12 +1783,12 @@ async function submit() {
     </template>
   </ConsoleModal>
   <ConfirmDialog
-    :open="open && confirmingHeaderClear"
-    :title="t('channels.clearHiddenHeader')"
-    :message="t('channels.clearHiddenHeaderMessage')"
-    :confirm-text="t('channels.clearHiddenHeaderConfirm')"
-    @confirm="clearHiddenHeader"
-    @cancel="confirmingHeaderClear = false"
+    :open="open && confirmingClear !== null"
+    :title="t('channels.clearHiddenOverride', { field: clearingName })"
+    :message="t('channels.clearHiddenOverrideMessage', { field: clearingName })"
+    :confirm-text="t('channels.clearHiddenOverrideConfirm')"
+    @confirm="clearHiddenOverride"
+    @cancel="confirmingClear = null"
   />
   <FetchedModelsDialog
     :open="open && modelPickerOpen"

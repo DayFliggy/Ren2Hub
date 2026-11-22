@@ -30,6 +30,28 @@ const channel: AdminChannel = parseChannelStatusDetails(
   channelSecurity.redacted_channel.body.data
 )
 
+// Local stand-in until the backend fixture lists param_override as well.
+const paramHidden: AdminChannel = {
+  ...channel,
+  param_override: undefined,
+  redacted_fields: [...(channel.redacted_fields ?? []), 'param_override'],
+}
+
+const overrides = [
+  {
+    field: 'header_override',
+    label: 'Header overrides JSON',
+    name: 'header overrides',
+    replacement: '{"X-Upstream":"new"}',
+  },
+  {
+    field: 'param_override',
+    label: 'Parameter overrides JSON',
+    name: 'parameter overrides',
+    replacement: '{"temperature":0.2}',
+  },
+] as const
+
 afterEach(() => {
   document.body.innerHTML = ''
 })
@@ -42,10 +64,10 @@ function newSave(): Save {
     .mockResolvedValue(true)
 }
 
-function mountForm(save: Save) {
+function mountForm(save: Save, editing: AdminChannel = channel) {
   return mount(ChannelFormModal, {
     attachTo: document.body,
-    props: { open: true, editing: channel, save, fetchModels: vi.fn() },
+    props: { open: true, editing, save, fetchModels: vi.fn() },
     global: {
       plugins: [
         createI18n({
@@ -110,56 +132,71 @@ describe('redacted channel fields', () => {
     wrapper.unmount()
   })
 
-  it('replaces a hidden header override as a whole', async () => {
-    const save = newSave()
-    const wrapper = mountForm(save)
-    await flushPromises()
-    await openAdvanced()
+  it.each(overrides)(
+    'replaces a hidden $field as a whole',
+    async ({ field, label, replacement }) => {
+      const save = newSave()
+      const wrapper = mountForm(save, paramHidden)
+      await flushPromises()
+      await openAdvanced()
 
-    const header = document.body.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Header overrides JSON"]'
-    )!
-    header.value = '{"X-Upstream":"new"}'
-    header.dispatchEvent(new Event('input'))
-    await flushPromises()
-    await saveForm()
+      const input = document.body.querySelector<HTMLTextAreaElement>(
+        `textarea[aria-label="${label}"]`
+      )!
+      expect(input.value).toBe('')
+      input.value = replacement
+      input.dispatchEvent(new Event('input'))
+      await flushPromises()
+      await saveForm()
 
-    expect(save.mock.calls[0]![0].header_override).toBe('{"X-Upstream":"new"}')
-    wrapper.unmount()
-  })
+      const payload = save.mock.calls[0]![0]
+      expect(payload[field]).toBe(replacement)
+      for (const other of overrides)
+        if (other.field !== field)
+          expect(payload).not.toHaveProperty(other.field)
+      wrapper.unmount()
+    }
+  )
 
-  it('clears a hidden header override only after confirmation', async () => {
-    const save = newSave()
-    const wrapper = mountForm(save)
-    await flushPromises()
-    await openAdvanced()
-    // The confirmation renders after the form, so the last match is its button.
-    const button = (label: string) =>
-      [...document.body.querySelectorAll('button')]
-        .filter((item) => item.textContent?.trim() === label)
-        .at(-1)!
+  it.each(overrides)(
+    'clears a hidden $field only after confirmation',
+    async ({ field, name }) => {
+      const save = newSave()
+      const wrapper = mountForm(save, paramHidden)
+      await flushPromises()
+      await openAdvanced()
+      // The confirmation renders after the form, so the last match is its button.
+      const button = (label: string) =>
+        [...document.body.querySelectorAll('button')]
+          .filter((item) => item.textContent?.trim() === label)
+          .at(-1)!
 
-    button('Clear header overrides').click()
-    await flushPromises()
-    expect(document.body.textContent).toContain(
-      'The hidden header overrides will be removed when you save the channel.'
-    )
-    button('common.cancel').click()
-    await flushPromises()
-    await saveForm()
-    expect(save.mock.calls[0]![0]).not.toHaveProperty('header_override')
+      button(`Clear ${name}`).click()
+      await flushPromises()
+      expect(document.body.textContent).toContain(
+        `The hidden ${name} will be removed when you save the channel.`
+      )
+      button('common.cancel').click()
+      await flushPromises()
+      await saveForm()
+      expect(save.mock.calls[0]![0]).not.toHaveProperty(field)
 
-    button('Clear header overrides').click()
-    await flushPromises()
-    button('Clear').click()
-    await flushPromises()
-    expect(document.body.textContent).toContain(
-      'Header overrides will be cleared when you save.'
-    )
-    await saveForm()
-    expect(save.mock.calls[1]![0].header_override).toBe(
-      HIDDEN_FIELD_CLEAR_VALUE
-    )
-    wrapper.unmount()
-  })
+      button(`Clear ${name}`).click()
+      await flushPromises()
+      button('Clear').click()
+      await flushPromises()
+      expect(document.body.textContent).toContain(
+        `The ${name} will be cleared when you save.`
+      )
+      await saveForm()
+      expect(save.mock.calls[1]![0][field]).toBe(HIDDEN_FIELD_CLEAR_VALUE)
+
+      // Keeping the stored value undoes the pending clear.
+      button('Keep stored value').click()
+      await flushPromises()
+      await saveForm()
+      expect(save.mock.calls[2]![0]).not.toHaveProperty(field)
+      wrapper.unmount()
+    }
+  )
 })

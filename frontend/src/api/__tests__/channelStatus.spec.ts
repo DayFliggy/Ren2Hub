@@ -197,6 +197,20 @@ describe('native channel list fixture', () => {
     expect(parseChannelStatusDetails(channel).redacted_fields).toEqual([])
   })
 
+  it('hides a redacted param_override like the other override fields', () => {
+    const hidden = JSON.stringify({ __ren2hub_redacted__: true })
+    const parsed = parseChannelStatusDetails({
+      ...channel,
+      param_override: hidden,
+      redacted_fields: ['param_override'],
+    })
+    expect(parsed.redacted_fields).toEqual(['param_override'])
+    expect(parsed).not.toHaveProperty('param_override')
+    expect(() =>
+      parseChannelStatusDetails({ ...channel, param_override: hidden })
+    ).toThrow(ApiError)
+  })
+
   it('rejects placeholders that the redaction list does not explain', () => {
     const hidden = JSON.stringify({ __ren2hub_redacted__: true })
     for (const value of [

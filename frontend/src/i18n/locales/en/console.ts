@@ -1617,12 +1617,16 @@ export default {
       redactedFieldInvalid:
         'A hidden field was sent with an invalid value. Reopen the channel, then leave hidden fields untouched or replace them entirely.',
     },
-    clearHiddenHeader: 'Clear header overrides',
-    clearHiddenHeaderMessage:
-      'The hidden header overrides will be removed when you save the channel.',
-    clearHiddenHeaderConfirm: 'Clear',
-    hiddenHeaderWillClear: 'Header overrides will be cleared when you save.',
-    hiddenHeaderKeep: 'Keep stored value',
+    overrideNames: {
+      header_override: 'header overrides',
+      param_override: 'parameter overrides',
+    },
+    clearHiddenOverride: 'Clear {field}',
+    clearHiddenOverrideMessage:
+      'The hidden {field} will be removed when you save the channel.',
+    clearHiddenOverrideConfirm: 'Clear',
+    hiddenOverrideWillClear: 'The {field} will be cleared when you save.',
+    hiddenOverrideKeep: 'Keep stored value',
     redactedHidden:
       'Hidden. The stored value is kept unless you enter a replacement.',
     redactedSettingHidden:

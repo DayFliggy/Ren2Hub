@@ -14,6 +14,7 @@ import type {
 
 const REDACTABLE_FIELDS: readonly ChannelRedactedField[] = [
   'header_override',
+  'param_override',
   'setting',
   'settings',
 ]

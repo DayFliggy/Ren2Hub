@@ -36,7 +36,8 @@ export type AdminChannelSortBy =
 export type AdminChannelSortOrder = 'asc' | 'desc'
 
 /** Channel fields the backend hides from readers without root channel:write. */
-export type ChannelRedactedField = 'header_override' | 'setting' | 'settings'
+export type ChannelRedactedField =
+  'header_override' | 'param_override' | 'setting' | 'settings'
 
 export interface AdminChannel extends Record<string, unknown> {
   channel_ratio: string

@@ -1556,11 +1556,15 @@ export default {
       redactedFieldInvalid:
         '已隐藏字段的提交值无效。请重新打开渠道，不修改隐藏字段，或将其整体替换。',
     },
-    clearHiddenHeader: '清空请求头覆盖',
-    clearHiddenHeaderMessage: '保存渠道后，已隐藏的请求头覆盖将被删除。',
-    clearHiddenHeaderConfirm: '清空',
-    hiddenHeaderWillClear: '保存后将清空请求头覆盖。',
-    hiddenHeaderKeep: '保留原值',
+    overrideNames: {
+      header_override: '请求头覆盖',
+      param_override: '参数覆盖',
+    },
+    clearHiddenOverride: '清空{field}',
+    clearHiddenOverrideMessage: '保存渠道后，已隐藏的{field}将被删除。',
+    clearHiddenOverrideConfirm: '清空',
+    hiddenOverrideWillClear: '保存后将清空{field}。',
+    hiddenOverrideKeep: '保留原值',
     redactedHidden: '已隐藏，未修改则保留原值；输入新内容将整体替换。',
     redactedSettingHidden:
       '代理、插件与透传等设置含已隐藏的凭据，保持原值不变；仅 Root 管理员可查看或修改。',
