@@ -66,6 +66,8 @@ const CHANNEL_ERROR_KEYS: Readonly<Record<string, string>> = {
   CHANNEL_NOT_FOUND: 'channels.errors.notFound',
   CHANNEL_STATUS_UPDATE_FAILED: 'channels.errors.statusUpdateFailed',
   CHANNEL_REDACTED_FIELD_INVALID: 'channels.errors.redactedFieldInvalid',
+  // The update was stored; only reading the saved channel back failed.
+  CHANNEL_UPDATE_READ_FAILED: 'channels.errors.updateReadFailed',
 }
 
 type BatchStatusFailure = {
@@ -562,11 +564,29 @@ export function useAdminChannels() {
     )
       return Promise.resolve(false)
     return runCrudAction('edit', channel.id, async (signal) => {
-      await api.put<unknown>(
-        '/api/channel/',
-        { id: channel.id, ...input },
-        { signal }
-      )
+      try {
+        await api.put<unknown>(
+          '/api/channel/',
+          { id: channel.id, ...input },
+          { signal }
+        )
+      } catch (error) {
+        if (
+          !(error instanceof ApiError) ||
+          error.code !== 'CHANNEL_UPDATE_READ_FAILED'
+        )
+          throw error
+        // Saved: reload the list instead of the server's read-back.
+        const refreshed = await load({ background: true })
+        toast.warning(
+          t(
+            refreshed
+              ? CHANNEL_ERROR_KEYS.CHANNEL_UPDATE_READ_FAILED!
+              : 'channels.errors.updateReadFailedRefreshFailed'
+          )
+        )
+        return
+      }
       toast.success(t('channels.updated'))
       await load({ background: true })
     })

@@ -1553,6 +1553,9 @@ export default {
     errors: {
       notFound: '渠道已不存在，请刷新列表。',
       statusUpdateFailed: '渠道状态保存失败，请稍后重试。',
+      updateReadFailed: '已保存，但读取保存结果失败，列表已重新加载。',
+      updateReadFailedRefreshFailed:
+        '已保存，但读取保存结果失败，列表也未能刷新，请稍后刷新。',
       redactedFieldInvalid:
         '已隐藏字段的提交值无效。请重新打开渠道，不修改隐藏字段，或将其整体替换。',
     },

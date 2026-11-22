@@ -238,25 +238,39 @@ describe('native channel management', () => {
     }
   )
 
-  it('reports a save whose re-read failed with the server message', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue(page)
-    await replyWith('update_read_failure')
-    const state = await setup()
-    expect(
-      await state.updateChannelDetails(channel, {
-        name: 'renamed',
-        models: channel.models,
-        model_mapping: '',
-        priority: 0,
-        weight: 1,
-        max_concurrency: 0,
-      })
-    ).toBe(false)
-    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
-      'Channel was updated, but reading the saved channel failed'
-    )
-    expect(toast.success).not.toHaveBeenCalled()
-  })
+  it.each([
+    [true, 'channels.errors.updateReadFailed'],
+    [false, 'channels.errors.updateReadFailedRefreshFailed'],
+  ])(
+    'treats a save whose re-read failed as saved (reload ok: %s)',
+    async (reloads, key) => {
+      const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+      await replyWith('update_read_failure')
+      const state = await setup()
+      get.mockClear()
+      if (!reloads) get.mockRejectedValue(new Error('list unavailable'))
+      expect(
+        await state.updateChannelDetails(channel, {
+          name: 'renamed',
+          models: channel.models,
+          model_mapping: '',
+          priority: 0,
+          weight: 1,
+          max_concurrency: 0,
+        })
+      ).toBe(true)
+      expect(get).toHaveBeenCalledWith(
+        '/api/channel/',
+        expect.anything(),
+        expect.anything()
+      )
+      expect(toast.warning).toHaveBeenCalledExactlyOnceWith(key)
+      expect(toast.success).not.toHaveBeenCalled()
+      // A failed reload keeps its own error; the server text is never shown.
+      if (reloads) expect(toast.error).not.toHaveBeenCalled()
+      else expect(toast.error).toHaveBeenCalledOnce()
+    }
+  )
 
   it('explains a rejected redacted field instead of the raw server text', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)

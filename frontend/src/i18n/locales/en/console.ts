@@ -1614,6 +1614,10 @@ export default {
       notFound: 'The channel no longer exists. Refresh the list.',
       statusUpdateFailed:
         'The channel status could not be saved. Try again later.',
+      updateReadFailed:
+        'Saved, but reading the saved channel failed. The list has been reloaded.',
+      updateReadFailedRefreshFailed:
+        'Saved, but reading the saved channel failed and the list could not be refreshed. Refresh later.',
       redactedFieldInvalid:
         'A hidden field was sent with an invalid value. Reopen the channel, then leave hidden fields untouched or replace them entirely.',
     },
