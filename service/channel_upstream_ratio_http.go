@@ -130,7 +130,7 @@ func upstreamRatioFingerprint(channel *model.Channel) string {
 
 // newUpstreamRatioHTTPClient 每次探测新建，不复用中转用的共享 client：拒绝重定向。
 // 所有拨号（直连目标，或代理地址）都经过 SSRF 受保护拨号器，按解析后的 IP 检查。
-// 走代理时目标由代理远端解析，拨号器只看到代理，目标 URL 在选用代理前按同一规则校验。
+// 走代理时固定本地校验过的目标 IP，TLS 与 Host 保留原主机身份。
 func newUpstreamRatioHTTPClient(proxy string) (*http.Client, error) {
 	dialer := &protectedFetchDialer{
 		resolver:      net.DefaultResolver,
@@ -145,24 +145,16 @@ func newUpstreamRatioHTTPClient(proxy string) (*http.Client, error) {
 		}
 		return dialer.DialContext(ctx, network, addr)
 	}}
+	var roundTripper http.RoundTripper = transport
 	if proxy != "" {
 		proxyURL, _, err := common.ParseProxyURLRuntime(proxy)
 		if err != nil {
 			return nil, err
 		}
-		// 与共享受保护客户端一样，代理请求先按 SSRF 规则校验目标 URL；直连由拨号器按解析后的 IP 检查。
-		transport.Proxy = func(req *http.Request) (*url.URL, error) {
-			if strings.Contains(req.URL.Hostname(), "%") {
-				return nil, errUpstreamRatioZonedHost
-			}
-			if err := ValidateSSRFProtectedFetchURL(req.URL.String()); err != nil {
-				return nil, err
-			}
-			return proxyURL, nil
-		}
+		roundTripper = &pinnedProxyRoundTripper{base: transport, proxy: proxyURL, resolver: net.DefaultResolver, getProtection: currentFetchProtection}
 	}
 	return &http.Client{
-		Transport:     transport,
+		Transport:     roundTripper,
 		Timeout:       upstreamRatioRequestTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}, nil

@@ -93,6 +93,8 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 同步上游时，上游对多 Key 代码的改动（`channel_info`、`GetNextEnabledKey`、`handlerMultiKeyUpdate`、`multi_key/manage`、`key_index`、`MultiKeyMode` 及 Key 级状态）按“不吸收”在窗口文件里逐项写明；同一文件里与多 Key 无关的改动照常吸收，并保持本节的接点。
 
+上游倍率探测的代理请求由 `service/protected_fetch_pinned_proxy.go` 固定本地解析结果，防护开启时逐个校验所有 IP，任一不允许即拒绝；HTTP 保留原 Host，HTTPS CONNECT 使用 IP、证书按原主机名校验，HTTPS 代理自身证书单独校验。每次请求独立 transport，通用原生受保护抓取暂未使用此扩展。
+
 ## 与上游相同、未在本地修复的已知问题
 
 原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（少计费、任务缺渠道不退款、任务 ID 碰撞、统计可见范围、日志脱敏、配置原子性、支付回调核验、两处数据竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：
@@ -114,7 +116,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 以下历次审计记录尚未在现行源码上重新核对，处理前先复核：
 
 - Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖；Jimeng 的 openai_video 校验忽略 `metadata.req_key`；Google 和 Vertex 在 `/v1/videos` 丢失顶层 `resolution`；`common/ssrf_protection.go` 把带 zone 的 IPv6 字面量当作域名；batch 上游返回未请求的任务 ID 时，`updateBatchTasks` 按平台级映射更新另一渠道的任务。
-- Uptime Kuma 缺失心跳按 0 统计；日志导出没有行数和字节上限；上游倍率探测在代理一侧不防 DNS 重绑定。
+- Uptime Kuma 缺失心跳按 0 统计；日志导出没有行数和字节上限。
 
 ## 等待上游的项
 

@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 845,
     "adapted": 319,
-    "extension": 431,
+    "extension": 433,
     "removed": 47
   },
   "files": [
@@ -12125,7 +12125,7 @@
       "path": "service/channel_upstream_ratio_http.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4be271f4e92a32fd83f82fe6ac752f6291ae3d278cd6620050eaa40b55ed972c",
+      "local_sha256": "84927bc12e86a6c3da1b37d5ce2b6694fb0a5c86c5b5e295622ba597816a3ec4",
       "reasons": [
         "upstream-ratio"
       ],
@@ -12156,6 +12156,12 @@
           "service/channel_upstream_ratio_newapi.go#1"
         ]
       }
+    },
+    {
+      "path": "service/channel_upstream_ratio_proxy_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a6332f8648ba5a0f7069749db660dfad9a021a1022a48d458a9bef972827f9fc"
     },
     {
       "path": "service/channel_upstream_ratio_record.go",
@@ -12197,7 +12203,7 @@
       "path": "service/channel_upstream_ratio_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cd4e11bb18496304d0ba1ae947e5d634928ab41e6944b70ad2d27d852148efeb"
+      "local_sha256": "ca21a2a337e6d0c1b809a7992ce001cc4ce51bb65d8cce0f67065c1249dacb6a"
     },
     {
       "path": "service/codex_channel_models.go",
@@ -12997,6 +13003,20 @@
       "status": "upstream_equal",
       "upstream_sha256": "9488bca1a10b0de0df9cb42b023d82ca212d074ddabc953800a7fb27f32a6101",
       "local_sha256": "9488bca1a10b0de0df9cb42b023d82ca212d074ddabc953800a7fb27f32a6101"
+    },
+    {
+      "path": "service/protected_fetch_pinned_proxy.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "04af6fa6ad83791b8bc4737fb12a939d94e6dd05ebaa7df0a64ccd7478da5f6f",
+      "reasons": [
+        "upstream-ratio"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "上游倍率探测代理请求固定本地校验的解析 IP，保留 HTTP Host 与 TLS 主机身份；见 SYNC_LEDGER.md 现行本地差异。",
+        "method": "本地扩展安全边界审阅和本地代理、DNS、TLS 桩回归"
+      }
     },
     {
       "path": "service/provider_plugin.go",

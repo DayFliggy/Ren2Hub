@@ -362,7 +362,7 @@ func TestUpstreamRatioProxyTargetIsProtected(t *testing.T) {
 			}()
 			return clientConn, nil
 		}}
-	client.Transport.(*http.Transport).DialContext = dialer.DialContext
+	ratioProxyBase(client).DialContext = dialer.DialContext
 
 	_, err = upstreamRatioGet(context.Background(), client, "http://169.254.169.254/v1/sub2api/billing", "sk-test", 1024)
 	require.Error(t, err)

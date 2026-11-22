@@ -111,3 +111,8 @@
 
 - 逻辑：`--go 'pkg/requestfield:^TestMultipartContentTypeAmbiguity$'`，含糊的 multipart 媒体类型、缺失或畸形 boundary 被拒，合法大小写声明继续扫描。
 - 入口与副作用：`--go 'router:^TestRelayMultipartContentTypeRejectedBeforeAdmission$'`，经真实 `/v1/images/edits` 注册和 Token 鉴权，重复请求均返回 400，余额与并发槽不变；普通 JSON 和其他中继入口由 `TestRelayRoutesRejectConflictingFields` 保护。
+
+## 上游倍率探测的代理连接
+
+- 逻辑与协议：`--go 'service:^(TestUpstreamRatioProxyPinsResolvedTarget|TestUpstreamRatioProxyRejectsMixedPrivateResolution|TestUpstreamRatioHTTPSProxyVerifiesProxyIdentity)$'`，本地 DNS、代理和 TLS 桩验证 IP 固定、混合私网结果拒绝、目标及代理的证书身份、HTTP Host 与转义路径。
+- 拒绝与取消：`TestUpstreamRatioProxyTargetIsProtected`、`TestUpstreamRatioProxyDialIsProtected`、`TestUpstreamRatioZonedIPv6HostIsRefused`、`TestUpstreamRatioZonedTargetIsRefusedBehindProxy`、`TestUpstreamRatioDirectProbeResolvesWithinItsContext`。通用受保护抓取的已登记缺陷不由倍率探测测试代表。
