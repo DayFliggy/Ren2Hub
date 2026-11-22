@@ -98,6 +98,11 @@ func updateUserCache(user User) error {
 
 // GetUserCache gets complete user cache from hash
 func GetUserCache(userId int) (*UserBase, error) {
+	if !quotaCacheDirty(BatchUpdateTypeUserQuota, userId) {
+		if cached, err := cacheGetUserBase(userId); err == nil && !quotaCacheDirty(BatchUpdateTypeUserQuota, userId) {
+			return cached, nil
+		}
+	}
 	unlock := lockQuotaReservation(BatchUpdateTypeUserQuota, userId)
 	defer unlock()
 	return getUserCacheQuotaLocked(userId)
@@ -106,9 +111,10 @@ func GetUserCache(userId int) (*UserBase, error) {
 // Caller owns the reservation lock, including callers hydrating before auth.
 func getUserCacheQuotaLocked(userId int) (*UserBase, error) {
 	// Try getting from Redis first
-	userCache, err := cacheGetUserBase(userId)
-	if err == nil {
-		return userCache, nil
+	if !quotaCacheDirty(BatchUpdateTypeUserQuota, userId) {
+		if userCache, err := cacheGetUserBase(userId); err == nil {
+			return userCache, nil
+		}
 	}
 
 	// Redis misses and read failures both fall back to the shared database. A
@@ -125,6 +131,12 @@ func getUserCacheQuotaLocked(userId int) (*UserBase, error) {
 		floor, floorErr := getUserAuthVersionFloor(userId)
 		if floorErr == nil && floor > user.AuthVersion {
 			return nil, ErrUserAuthCachePending
+		}
+		if quotaCacheDirty(BatchUpdateTypeUserQuota, userId) {
+			if err := invalidateQuotaCache(BatchUpdateTypeUserQuota, userId, ""); err != nil {
+				common.SysLog(common.LogText("failed to invalidate stale user quota cache: %s", err.Error()))
+				return user.ToBaseUser(), nil
+			}
 		}
 		if err := populateUserCache(*user); err != nil {
 			if errors.Is(err, ErrUserAuthCachePending) {

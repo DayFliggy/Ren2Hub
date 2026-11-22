@@ -263,7 +263,7 @@ func getTokenByKeyWithQuotaLock(key string, fromDB, quotaLocked bool) (token *To
 	if !fromDB && common.RedisEnabled {
 		// Try Redis first
 		token, err := cacheGetTokenByKey(key)
-		if err == nil {
+		if err == nil && !quotaCacheDirty(BatchUpdateTypeTokenQuota, token.Id) {
 			return token, nil
 		}
 		// Don't return error - fall through to DB
@@ -276,6 +276,11 @@ func getTokenByKeyWithQuotaLock(key string, fromDB, quotaLocked bool) (token *To
 		unlock := lockQuotaReservation(BatchUpdateTypeTokenQuota, token.Id)
 		defer unlock()
 	}
+	if !fromDB && !quotaCacheDirty(BatchUpdateTypeTokenQuota, token.Id) {
+		if cached, cacheErr := cacheGetTokenByKey(key); cacheErr == nil {
+			return cached, nil
+		}
+	}
 	if err = flushPendingQuota(BatchUpdateTypeTokenQuota, token.Id); err != nil {
 		return nil, err
 	}
@@ -284,6 +289,12 @@ func getTokenByKeyWithQuotaLock(key string, fromDB, quotaLocked bool) (token *To
 		return nil, err
 	}
 	if common.RedisEnabled {
+		if quotaCacheDirty(BatchUpdateTypeTokenQuota, token.Id) {
+			if cacheErr := invalidateQuotaCache(BatchUpdateTypeTokenQuota, token.Id, key); cacheErr != nil {
+				common.SysLog(common.LogText("failed to invalidate stale token quota cache: %s", cacheErr.Error()))
+				return token, nil
+			}
+		}
 		// 用数据库快照初始化或修复元数据，Lua 保留正在使用的额度计数。
 		// 初始化失败不影响本次读取。
 		if _, cacheErr := cacheInitToken(*token); cacheErr != nil {
@@ -382,6 +393,9 @@ func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota cannot be negative")
 	}
+	if common.BatchUpdateEnabled {
+		return queueQuotaDelta(BatchUpdateTypeTokenQuota, tokenId, key, quota)
+	}
 	if common.RedisEnabled {
 		gopool.Go(func() {
 			// 守卫式增量：哈希不存在时跳过，由下次读取从数据库水合，
@@ -390,10 +404,6 @@ func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
 				common.SysLog(common.LogText("failed to increase token quota: %s", err.Error()))
 			}
 		})
-	}
-	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeTokenQuota, tokenId, quota)
-		return nil
 	}
 	return increaseTokenQuota(tokenId, quota)
 }
@@ -413,16 +423,15 @@ func DecreaseTokenQuota(id int, key string, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota cannot be negative")
 	}
+	if common.BatchUpdateEnabled {
+		return queueQuotaDelta(BatchUpdateTypeTokenQuota, id, key, -quota)
+	}
 	if common.RedisEnabled {
 		gopool.Go(func() {
 			if _, err := cacheApplyTokenQuotaDelta(id, key, int64(-quota)); err != nil {
 				common.SysLog(common.LogText("failed to decrease token quota: %s", err.Error()))
 			}
 		})
-	}
-	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeTokenQuota, id, -quota)
-		return nil
 	}
 	return decreaseTokenQuota(id, quota)
 }

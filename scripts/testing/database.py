@@ -39,7 +39,7 @@ MATRIX_TESTS = {
         "TestMigrationSchemaStability", "TestRedemptionSortingDatabases",
         "TestRequestPolicyDatabaseMatrix", "TestAdminTicketsKeepDeletedOwnersDatabases",
         "TestTopUpQueryDatabases", "TestTopUpBonusDatabaseMatrix", "TestChannelUpstreamRatioDatabases",
-        "TestNativeTopUpFacadeDatabaseMatrix", "TestQuotaReserveRedisLossDatabaseMatrix", "TestVerifiedTopUpReceiptDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
+        "TestNativeTopUpFacadeDatabaseMatrix", "TestQuotaReserveRedisLossDatabaseMatrix", "TestQuotaBatchHydrationAtomicityDatabaseMatrix", "TestQuotaBatchDeletedBalancesDatabaseMatrix", "TestVerifiedTopUpReceiptDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
         "TestBatchSetChannelTagDatabaseMatrix",
     ),
     "controller": (

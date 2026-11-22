@@ -217,8 +217,6 @@ func TryReserveUserQuota(id int, quota int) (bool, error) {
 // TryReserveTokenQuota atomically checks and deducts a token quota. Unlimited
 // tokens skip the balance check but still update remain/used accounting.
 func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, error) {
-	unlock := lockQuotaReservation(BatchUpdateTypeTokenQuota, id)
-	defer unlock()
 	if quota < 0 {
 		return false, errors.New("quota cannot be negative")
 	}
@@ -228,6 +226,8 @@ func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, 
 	if unlimited {
 		return true, DecreaseTokenQuota(id, key, quota)
 	}
+	unlock := lockQuotaReservation(BatchUpdateTypeTokenQuota, id)
+	defer unlock()
 	if !common.RedisEnabled {
 		return reserveTokenQuotaDB(id, quota)
 	}

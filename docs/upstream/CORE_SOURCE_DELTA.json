@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 831,
     "adapted": 333,
-    "extension": 489,
+    "extension": 490,
     "removed": 47
   },
   "files": [
@@ -5553,17 +5553,23 @@
       "local_sha256": "cbd05b6f6c25e50f974c8a85b4bf6bcf33c71825232397d52c6df124f1030802"
     },
     {
+      "path": "model/quota_batch_atomicity_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6a6e9fb531254f7323cf582783d6bc288068241a4c84ec3263cacc37d81d5e93"
+    },
+    {
       "path": "model/quota_reserve.go",
       "status": "adapted",
       "upstream_sha256": "c32fad73379ed6191a765eaff995632f6543ae5267e57c03062da5b7fa980ade",
-      "local_sha256": "9958e8451c110772de7d8d22ffe591b7f05e5851baed4e0f9de32ff4c9cadd1e",
+      "local_sha256": "e9d2ddab7fa204c75d683f195d5c02fce01d53816cbd5fb129303ca359f80783",
       "reasons": [
         "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
-        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
         "current_hunk_review": true
       }
     },
@@ -5571,14 +5577,14 @@
       "path": "model/quota_reserve_batch.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2b844f96460ae03ddd862a425d2ab4e71794ed067b4e846c6b171f09548a395e",
+      "local_sha256": "b7ce733698291cc617380fc66b33c6c30c58121e96fe69028149885d4d8feda7",
       "reasons": [
         "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
-        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。"
+        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
     },
     {
@@ -5909,7 +5915,7 @@
       "path": "model/token.go",
       "status": "adapted",
       "upstream_sha256": "db42a2d9d3c5a5a6a6a2d019435922629c476498eb3d4cc25a75252ee68c0158",
-      "local_sha256": "ca4b3b4d910165bd5ae3e1d292f8038985c2808dfc6c4154b77b2ffa81e33895",
+      "local_sha256": "aae1bce5d9a05537c35f51c45ef738b7f27e09cb90218d9d7e1aba9534bb0f4d",
       "reasons": [
         "audit-local-safety",
         "auth-cache-integrity",
@@ -5918,8 +5924,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
-        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
         "current_hunk_review": true
       }
     },
@@ -6278,9 +6284,10 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "9f8a66e7e9f90941f190b145f4bd27102be3135c6a6c6bf509e59bca85a12dbc",
+      "local_sha256": "3091ef0c632a3e18a9fd3ca9d4e4582e81e29c8dad5752e71cfc3cdd427cc5d3",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "auth-cache-integrity",
         "concurrency",
         "group-removal",
@@ -6289,33 +6296,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/user.go#1",
-          "model/user.go#11",
-          "model/user.go#12",
-          "model/user.go#13",
-          "model/user.go#14",
-          "model/user.go#15",
-          "model/user.go#16",
-          "model/user.go#17",
-          "model/user.go#18",
-          "model/user.go#19",
-          "model/user.go#2",
-          "model/user.go#20",
-          "model/user.go#21",
-          "model/user.go#22",
-          "model/user.go#23",
-          "model/user.go#24",
-          "model/user.go#25",
-          "model/user.go#26",
-          "model/user.go#3",
-          "model/user.go#4",
-          "model/user.go#5",
-          "model/user.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -6356,7 +6339,7 @@
       "path": "model/user_cache.go",
       "status": "adapted",
       "upstream_sha256": "51beac86c2139bcb0e2ca64a64ffebf35dd5e2051baf62724e3010a74abc5228",
-      "local_sha256": "03a35f7c546523f33ee5b091b775db09cfb2ebf9a7462704706b3f9dd80657cc",
+      "local_sha256": "72c9338b1da4acc1016ae14296f39ff9f948bbdcff4e240cadf5e04acad3a432",
       "reasons": [
         "audit-local-safety",
         "auth-cache-integrity",
@@ -6365,8 +6348,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
-        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
         "current_hunk_review": true
       }
     },

@@ -18,34 +18,40 @@ func lockQuotaReservation(kind, id int) func() {
 	return lock.Unlock
 }
 
-// The caller holds the reservation lock for this balance. Keep the batch entry until its write
-// succeeds, including when the periodic updater encounters a database failure.
+// The caller holds the reservation lock for this balance. Database work must
+// not hold the shared batch lock; a failed detached delta is merged back.
 func flushPendingQuota(kind, id int) error {
 	batchUpdateLocks[kind].Lock()
-	defer batchUpdateLocks[kind].Unlock()
-	delta, exists := batchUpdateStores[kind][id]
-	if !exists || delta == 0 {
-		delete(batchUpdateStores[kind], id)
+	delta := batchUpdateStores[kind][id]
+	delete(batchUpdateStores[kind], id)
+	batchUpdateLocks[kind].Unlock()
+	if delta == 0 {
 		return nil
 	}
-	var result *gorm.DB
-	if kind == BatchUpdateTypeUserQuota {
-		result = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", delta))
-	} else {
-		result = DB.Model(&Token{}).Where("id = ?", id).Updates(map[string]any{
-			"remain_quota":  gorm.Expr("remain_quota + ?", delta),
-			"used_quota":    gorm.Expr("used_quota - ?", delta),
-			"accessed_time": common.GetTimestamp(),
-		})
+	result := writeQuotaBatch(DB, kind, id, delta)
+	if result.Error == nil && result.RowsAffected == 0 {
+		// Soft deletion does not cancel charges or refunds already accepted.
+		result = writeQuotaBatch(DB.Unscoped(), kind, id, delta)
 	}
 	if result.Error != nil {
+		addNewRecord(kind, id, delta)
 		return result.Error
 	}
-	if result.RowsAffected != 1 {
-		return gorm.ErrRecordNotFound
+	if result.RowsAffected == 0 {
+		common.SysError(common.LogText("discarding quota batch for deleted record: type=%d id=%d delta=%d", kind, id, delta))
 	}
-	delete(batchUpdateStores[kind], id)
 	return nil
+}
+
+func writeQuotaBatch(db *gorm.DB, kind, id, delta int) *gorm.DB {
+	if kind == BatchUpdateTypeUserQuota {
+		return db.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", delta))
+	}
+	return db.Model(&Token{}).Where("id = ?", id).Updates(map[string]any{
+		"remain_quota":  gorm.Expr("remain_quota + ?", delta),
+		"used_quota":    gorm.Expr("used_quota - ?", delta),
+		"accessed_time": common.GetTimestamp(),
+	})
 }
 
 func flushQuotaBatches() {
@@ -73,6 +79,10 @@ func prepareQuotaCache(kind, id int, key string) error {
 	if err := flushPendingQuota(kind, id); err != nil {
 		return err
 	}
+	return invalidateQuotaCache(kind, id, key)
+}
+
+func invalidateQuotaCache(kind, id int, key string) error {
 	var err error
 	if kind == BatchUpdateTypeUserQuota {
 		err = invalidateUserCache(id)
@@ -83,4 +93,31 @@ func prepareQuotaCache(kind, id int, key string) error {
 		quotaCacheNeedsReload[kind].Delete(id)
 	}
 	return err
+}
+
+func quotaCacheDirty(kind, id int) bool {
+	_, dirty := quotaCacheNeedsReload[kind].Load(id)
+	return dirty
+}
+
+// Cache mutation and queue publication share the same boundary as hydration
+// and reservation. A missing cache is safe: the queued delta is flushed before
+// hydration. An uncertain Redis result must invalidate before any future debit.
+func queueQuotaDelta(kind, id int, key string, delta int) error {
+	unlock := lockQuotaReservation(kind, id)
+	defer unlock()
+	if common.RedisEnabled {
+		var err error
+		if kind == BatchUpdateTypeUserQuota {
+			_, err = cacheApplyUserQuotaDelta(id, int64(delta))
+		} else {
+			_, err = cacheApplyTokenQuotaDelta(id, key, int64(delta))
+		}
+		if err != nil {
+			quotaCacheNeedsReload[kind].Store(id, true)
+			common.SysLog(common.LogText("failed to update batch quota cache: type=%d id=%d error=%v", kind, id, err))
+		}
+	}
+	addNewRecord(kind, id, delta)
+	return nil
 }

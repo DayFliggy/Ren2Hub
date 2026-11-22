@@ -140,3 +140,7 @@
 - 真实入口：`--go 'router:^(TestChannelReadRedactsCredentialFieldsByEffectivePermission|TestChannelWritesPreserveRedactionsAndIntersectPATScopes|TestChannelStatusRoutesReportStorageFailureAndRecover)$'`，覆盖 Root/管理员/受限 PAT 的读与敏感写交集、占位保留/伪造拒绝、状态写库失败/不存在/未变/部分失败与提交后发布待定。生产侧固定夹具 `frontend/tests/fixtures/native/channel-security.json`。
 - 三库与时序：`--db TestChannelCredentialPreservationDatabaseMatrix TestChannelStatusFailureDatabaseMatrix TestChannelCacheReloadSerializesStatusPublication TestChannelStatusCacheSnapshotsAreImmutable TestRestoredRound3ChannelStatusFailureRestoresCache`。拒绝写入不改变状态或能力；读失败保留缓存，重载与状态提交同步，旧缓存指针不随状态发布改变；回调在锁外，可再重载。两个时序测试另用新镜像手工 race，固定 race 组不含本次扩展。
 - 受保护出站：`--go 'common:^TestSSRFProtectionRejectsZonedIPv6BeforeDomainRules$' 'service:^(TestProtectedFetchProxyPinsTargetAndVerifiesOriginalTLSName|TestProtectedFetchProxyRejectsAllResolvedIPsAndRedirects|TestProtectedFetchHTTPSProxyPinsAbsoluteURIAndChecksProxyTLS|TestProtectedFetchSOCKSProxyReceivesIPLiteral)$'`。本地 DNS/代理/TLS 桩校验目标 IP 固定、所有解析地址/每跳重定向与原主机证书，代理本身可为管理员配置的本地地址。
+
+## 审计回归边界
+
+- 批量资金：`model:^(TestQuotaBatchHydrationAtomicityDatabaseMatrix|TestQuotaCacheHitsDoNotWaitForReservationShard|TestQuotaBatchFlushReleasesGlobalLockAndMergesFailure|TestQuotaBatchDeletedBalancesDatabaseMatrix|TestTokenQuotaHydrationRechecksCacheAfterLock|TestUnlimitedTokenBatchReservationDoesNotRelock|TestQuotaAuthenticationReloadsDirtyCacheAfterRedisRecovery)$`。用户与 Token 退款/扣减同步发布，水合不能重复计算；命中不阻塞、锁后二查、写库失败合并、软删除记账、硬删除终止及 Redis 恢复的认证缓存。两项矩阵跑三库；共享状态用新镜像手工 race 验证。
