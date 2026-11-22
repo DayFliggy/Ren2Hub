@@ -7118,7 +7118,7 @@
       "path": "pkg/requestfield/conflict.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "61aef5cb8102dffcbdf9d56c308b407e05eda13ecffa26cc7294527bd731f40e",
+      "local_sha256": "075fffa2054e1829dc179836b8fb6cc723d71216046576975c95271d2ab9fa1f",
       "reasons": [
         "request-field-consistency"
       ],
@@ -7131,7 +7131,7 @@
       "path": "pkg/requestfield/conflict_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7cc3274d483879fea9425df60579c639d8f69988a0928e19edf883ba72778bcc"
+      "local_sha256": "4a134d5c301f6a2ef8c5c4c50dde005da424952dfff11ea5941733076e5713b1"
     },
     {
       "path": "pkg/requestfield/protocol_test.go",
@@ -11520,7 +11520,7 @@
       "path": "router/request_field_conflict_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3d2bb8c9290f0aeab3c350d1627c79482a531374fe60d88ee2ccdd7d14e2aad5"
+      "local_sha256": "cac32e1ee5b74ff721dbce78f8e6e896e34dbf3da60585b743554d90aaa90044"
     },
     {
       "path": "router/retired_routes_test.go",

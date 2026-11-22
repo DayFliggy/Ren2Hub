@@ -378,3 +378,27 @@ func TestConflictingFieldMultipartPreambleAndMalformedParts(t *testing.T) {
 	_, conflict = ConflictingField(contentType, body)
 	require.False(t, conflict, "filename* must not be treated as an extended field name")
 }
+
+func TestMultipartContentTypeAmbiguity(t *testing.T) {
+	contentType, body := multipartBody(t, [2]string{"model", "m"})
+	for _, invalid := range []string{
+		strings.Replace(contentType, "multipart/form-data", "multipart/form-datax", 1),
+		strings.Replace(contentType, "multipart/form-data", `application/octet-stream; note="multipart/form-data"`, 1),
+		"multipart/form-data",
+		`multipart/form-data; boundary="`,
+	} {
+		t.Run(invalid, func(t *testing.T) {
+			field, conflict := ConflictingField(invalid, body)
+			require.True(t, conflict)
+			require.Contains(t, field, "Content-Type")
+		})
+	}
+	for _, valid := range []string{contentType, strings.Replace(contentType, "multipart/form-data", "Multipart/Form-Data", 1)} {
+		_, conflict := ConflictingField(valid, body)
+		require.False(t, conflict)
+	}
+	contentType, body = multipartBody(t, [2]string{"model", "m"}, [2]string{"model", "m"})
+	field, conflict := ConflictingField(strings.Replace(contentType, "multipart/form-data", "Multipart/Form-Data", 1), body)
+	require.True(t, conflict)
+	require.Equal(t, "model", field)
+}

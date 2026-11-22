@@ -109,3 +109,45 @@ func assertDuplicateFieldResponse(t *testing.T, res *httptest.ResponseRecorder) 
 	require.Equal(t, "new_api_error", response.Error.Type)
 	require.True(t, strings.HasSuffix(response.Error.Message, " (request id: "+requestID+")"), response.Error.Message)
 }
+
+func TestRelayMultipartContentTypeRejectedBeforeAdmission(t *testing.T) {
+	_, user, token, ch := nativeCountFixture(t, constant.ChannelTypeOpenAI, "http://127.0.0.1:1")
+	engine := gin.New()
+	engine.Use(middleware.RequestId())
+	SetRelayRouter(engine)
+	SetTaskPluginProtocolRouter(engine)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "m"))
+	require.NoError(t, writer.WriteField("size", "small"))
+	require.NoError(t, writer.WriteField("size", "large"))
+	require.NoError(t, writer.Close())
+	contentType := writer.FormDataContentType()
+	for _, ct := range []string{
+		strings.Replace(contentType, "multipart/form-data", "multipart/form-datax", 1),
+		strings.Replace(contentType, "multipart/form-data", `application/octet-stream; note="multipart/form-data"`, 1),
+		strings.Replace(contentType, "multipart/form-data", "Multipart/Form-Data", 1),
+		"multipart/form-data",
+		contentType,
+	} {
+		t.Run(ct, func(t *testing.T) {
+			for i := 0; i < 2; i++ {
+				req := httptest.NewRequest("POST", "/v1/images/edits", bytes.NewReader(body.Bytes()))
+				req.Header.Set("Content-Type", ct)
+				req.Header.Set("Authorization", "Bearer "+token.Key)
+				res := httptest.NewRecorder()
+				engine.ServeHTTP(res, req)
+				assertDuplicateFieldResponse(t, res)
+				var after model.User
+				require.NoError(t, model.DB.First(&after, user.Id).Error)
+				require.Equal(t, user.Quota, after.Quota)
+				require.Zero(t, service.ChannelInFlight(ch.Id))
+				for _, slot := range service.RoutingSnapshot().Users {
+					if slot.ID == user.Id {
+						require.Zero(t, slot.InFlight)
+					}
+				}
+			}
+		})
+	}
+}

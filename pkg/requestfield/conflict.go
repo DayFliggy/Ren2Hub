@@ -3,6 +3,7 @@ package requestfield
 
 import (
 	"bytes"
+	"errors"
 	"hash/maphash"
 	"io"
 	"mime"
@@ -75,10 +76,14 @@ func ConflictingField(contentType string, body []byte) (string, bool) {
 			return field, true
 		}
 	}
-	if !isMultipartContentType(contentType) {
+	boundary, err := multipartBoundary(contentType)
+	if err != nil {
+		return "Content-Type: " + err.Error(), true
+	}
+	if boundary == "" {
 		return "", false
 	}
-	field, conflict, parts := multipartConflictingField(contentType, body)
+	field, conflict, parts := multipartConflictingField(boundary, body)
 	if conflict {
 		return field, true
 	}
@@ -430,15 +435,7 @@ func isRepeatableMultipartField(name string) bool {
 // （各解析器可能取不同的名字）；session 字段的 JSON 值内部按 JSON 规则检查。
 //
 // parts 返回成功解析出的 part 数，供调用方判断请求体是否同时含 multipart 内容。
-func multipartConflictingField(contentType string, body []byte) (field string, conflict bool, parts int) {
-	_, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
-	if err != nil {
-		return "", false, 0
-	}
-	boundary := strings.TrimSpace(params["boundary"])
-	if boundary == "" {
-		return "", false, 0
-	}
+func multipartConflictingField(boundary string, body []byte) (field string, conflict bool, parts int) {
 	reader := multipart.NewReader(bytes.NewReader(body), boundary)
 	seen := make(map[string]struct{})
 	for {
@@ -478,7 +475,18 @@ func multipartConflictingField(contentType string, body []byte) (field string, c
 	}
 }
 
-func isMultipartContentType(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
-	return err == nil && strings.EqualFold(mediaType, "multipart/form-data")
+// multipartBoundary 与原生包含判断对齐；声明有歧义时拒绝，不让下游选择另一种解析。
+func multipartBoundary(contentType string) (string, error) {
+	if !strings.Contains(strings.ToLower(contentType), "multipart/form-data") {
+		return "", nil
+	}
+	mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err != nil || !strings.EqualFold(mediaType, "multipart/form-data") {
+		return "", errors.New("invalid multipart media type")
+	}
+	boundary := params["boundary"]
+	if strings.TrimSpace(boundary) == "" {
+		return "", errors.New("missing multipart boundary")
+	}
+	return boundary, nil
 }

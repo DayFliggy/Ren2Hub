@@ -106,3 +106,8 @@
 - 并发：`--go 'controller:^(TestTicketAttachmentReservationsBoundConcurrentUploads|TestTicketAttachmentBudgetQueryDoesNotBlockOtherReservations)$'`（未知长度的并发上传受个人预算和可用空间下限的进程内预留约束；预算查询等待时，其他用户和管理员回复的预留与释放不被阻塞）；不在 race 固定选择里。
 - 负向与重复：`--go 'controller:^(TestTicketAttachmentDailyBudgetPerUser|TestTicketAttachmentsRespectTheFreeSpaceFloor|TestTicketAttachmentReservationsAreReleasedOnEveryOutcome|TestTicketAttachmentBudgetQueryFailuresRejectAndRelease|TestTicketFormAbortsAtFirstLimitViolation|TestCreateTicketCompensatesFilesWhenDatabaseCommitFails|TestAddTicketMessageCompensatesFilesWhenDatabaseCommitFails|TestTicketFormCommitFailureRemovesPromotedAndTemporaryFiles|TestAdminTicketStatusAuditsOnlyRealTransitions)$' 'model:^(TestUpdateTicketStatusWritesOnlyRealTransitions|TestAddTicketMessageMovesReplyableStatusToOpen)$'`。
 - 缺口：附件预算按进程内预留计，多实例部署不共享；可用空间检查只在 Linux 上生效；成功建单或回复的工单用例直接用 `-race` 运行会报竞争，两侧是 `service/ticket_notify.go` 的异步通知读取 `model.DB` 和测试夹具替换数据库句柄，与预留代码无关。
+
+## 请求字段一致性
+
+- 逻辑：`--go 'pkg/requestfield:^TestMultipartContentTypeAmbiguity$'`，含糊的 multipart 媒体类型、缺失或畸形 boundary 被拒，合法大小写声明继续扫描。
+- 入口与副作用：`--go 'router:^TestRelayMultipartContentTypeRejectedBeforeAdmission$'`，经真实 `/v1/images/edits` 注册和 Token 鉴权，重复请求均返回 400，余额与并发槽不变；普通 JSON 和其他中继入口由 `TestRelayRoutesRejectConflictingFields` 保护。
