@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { api } from '@/api/client'
 import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
 import { completeOAuth, oauthProviders } from '@/api/oauth'
+import { errorMessage } from '@/api/clientError'
 import { assertPasskey, type AssertionOptions } from '@/utils/passkey'
 import type { TwoFactorChallenge } from '@/types/auth'
 import { useI18n } from 'vue-i18n'
@@ -200,7 +201,7 @@ async function signInPasskey() {
       )
     )
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error))
+    toast.error(errorMessage(error, t))
   } finally {
     loading.value = false
   }
@@ -230,7 +231,7 @@ async function signInOAuth(provider: string) {
       )
     )
       affiliateError.value = error.message
-    toast.error(error instanceof Error ? error.message : String(error))
+    toast.error(errorMessage(error, t))
   } finally {
     loading.value = false
   }

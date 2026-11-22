@@ -14,6 +14,7 @@ import {
   type TopupInfo,
   type TopupQuote,
 } from '@/api/topup'
+import { errorMessage } from '@/api/clientError'
 import { topupBonusApi } from '@/api/topupBonus'
 import type { TopupBonusQuote } from '@/types/topupBonus'
 import { ApiError } from '@/api/types'
@@ -276,9 +277,7 @@ async function topup(): Promise<void> {
         ? failure.creation_status !== 'failed'
         : !(error instanceof ApiError && error.business)
     }
-    if (!disposed)
-      paymentError.value =
-        error instanceof Error ? error.message : String(error)
+    if (!disposed) paymentError.value = errorMessage(error, t)
   } finally {
     submittingTopup.value = false
   }

@@ -1,3 +1,5 @@
+import { ClientError } from '@/api/clientError'
+
 export function decodeBase64URL(value: string): ArrayBuffer {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
   return Uint8Array.from(
@@ -39,8 +41,7 @@ export async function assertPasskey(
       })),
     },
   })) as PublicKeyCredential | null
-  if (!credential)
-    throw new DOMException('Passkey verification cancelled', 'NotAllowedError')
+  if (!credential) throw new ClientError('passkeyCancelled', 'NotAllowedError')
   const response = credential.response as AuthenticatorAssertionResponse
   return {
     id: credential.id,

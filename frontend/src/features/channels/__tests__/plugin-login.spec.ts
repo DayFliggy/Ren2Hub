@@ -98,6 +98,21 @@ describe('plugin login contracts', () => {
       { signal }
     )
   })
+  it('reports an invalid plugin login step through i18n', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({
+      flow: 'flow',
+      step: { type: 'redirect', url: 'javascript:alert(1)' },
+    })
+    const wrapper = mount(PluginLoginDialog, {
+      props: { channelId: 4 },
+      global,
+    })
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'common.clientErrors.pluginLoginInvalidResponse'
+    )
+    wrapper.unmount()
+  })
   it('cancels a pending device flow and ignores a late server response', async () => {
     vi.useFakeTimers()
     let resolve!: (value: unknown) => void

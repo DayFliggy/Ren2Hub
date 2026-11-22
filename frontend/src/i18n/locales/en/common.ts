@@ -36,6 +36,26 @@ export default {
       retry: 'Retry view',
       home: 'Return home',
     },
+    clientErrors: {
+      oauthPopupBlocked:
+        'The browser blocked the sign-in pop-up. Allow pop-ups and try again.',
+      oauthProviderUnavailable:
+        'This sign-in method is not configured. Choose another method or contact the administrator.',
+      oauthInvalidAuthorizationUrl:
+        'The sign-in provider returned an invalid authorization address.',
+      oauthCancelled: 'Third-party sign-in was cancelled.',
+      passkeyCancelled: 'Passkey verification was cancelled.',
+      pluginLoginInvalidResponse:
+        'The plugin returned an invalid login step. Start the login again.',
+      pluginLoginInvalidFlow:
+        'The plugin did not start a login session. Start the login again.',
+      pluginLoginInvalidChannel:
+        'The login callback did not identify a valid channel.',
+      checkoutInvalidUrl:
+        'The payment service returned an invalid checkout address. No payment page was opened.',
+      checkoutInvalidForm:
+        'The payment service returned an invalid checkout form. No payment page was opened.',
+    },
     navigationError: {
       title: 'This page could not be displayed',
       message:

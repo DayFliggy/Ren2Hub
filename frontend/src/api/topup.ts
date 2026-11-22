@@ -7,6 +7,7 @@ import {
 } from './contracts'
 import { api } from './client'
 import { httpTransport } from './httpTransport'
+import { ClientError } from './clientError'
 import { ApiError } from './types'
 import { getLocale } from '@/i18n'
 import { serverResponseMessage } from '@/i18n/serverMessages'
@@ -460,7 +461,7 @@ export function checkoutTarget(
     )
       throw new Error()
   } catch {
-    throw new ApiError('Invalid checkout URL', { status: 502 })
+    throw new ClientError('checkoutInvalidUrl')
   }
   const url = target.href
   let form: Record<string, string> | null = null
@@ -468,7 +469,7 @@ export function checkoutTarget(
     form = {}
     for (const [key, value] of Object.entries(response.data)) {
       if (typeof value !== 'string')
-        throw new ApiError('Invalid checkout form', { status: 502 })
+        throw new ClientError('checkoutInvalidForm')
       form[key] = value
     }
   }

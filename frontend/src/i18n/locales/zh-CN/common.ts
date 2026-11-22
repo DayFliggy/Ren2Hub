@@ -33,6 +33,19 @@ export default {
       retry: '重试页面',
       home: '返回首页',
     },
+    clientErrors: {
+      oauthPopupBlocked: '浏览器阻止了登录弹窗，请允许弹窗后重试。',
+      oauthProviderUnavailable:
+        '该登录方式未配置，请换用其他方式或联系管理员。',
+      oauthInvalidAuthorizationUrl: '登录服务返回的授权地址无效。',
+      oauthCancelled: '已取消第三方登录验证。',
+      passkeyCancelled: '已取消 Passkey 验证。',
+      pluginLoginInvalidResponse: '插件返回的登录步骤无效，请重新登录。',
+      pluginLoginInvalidFlow: '插件未建立登录会话，请重新登录。',
+      pluginLoginInvalidChannel: '登录回调未指明有效的渠道。',
+      checkoutInvalidUrl: '支付服务返回的收银台地址无效，未打开支付页面。',
+      checkoutInvalidForm: '支付服务返回的收银台表单无效，未打开支付页面。',
+    },
     navigationError: {
       title: '此页面暂时无法显示',
       message: '页面加载失败，可能是网络或服务暂时异常。请重试，或返回首页。',

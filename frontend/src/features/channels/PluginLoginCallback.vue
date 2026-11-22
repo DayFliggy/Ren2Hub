@@ -6,6 +6,7 @@ import {
   PLUGIN_LOGIN_BROADCAST_CHANNEL,
   submitPluginLoginCallback,
 } from './lib/plugin-login'
+import { errorMessage } from '@/api/clientError'
 import {
   isPluginLoginCallbackSessionCurrent,
   takePluginLoginCallback,
@@ -43,7 +44,7 @@ async function finish() {
     if (current()) broadcast({ ...result, state: params.state })
   } catch (cause) {
     if (!current()) return
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    error.value = errorMessage(cause, t)
     if (params.state) broadcast({ state: params.state, error: error.value })
   } finally {
     if (!request.signal.aborted) {

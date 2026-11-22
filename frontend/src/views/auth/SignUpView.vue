@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
 import { completeOAuth, oauthProviders } from '@/api/oauth'
+import { errorMessage } from '@/api/clientError'
 import AffiliateAttributionField from '@/components/auth/AffiliateAttributionField.vue'
 import LegalConsent from '@/components/auth/LegalConsent.vue'
 import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
@@ -225,7 +226,7 @@ async function signUpWithOAuth(provider: string) {
       )
     )
       errors.affiliate = error.message
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    toast.error(errorMessage(error, t))
   } finally {
     loading.value = false
   }

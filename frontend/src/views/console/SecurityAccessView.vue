@@ -29,6 +29,7 @@ import {
 } from '@/api/accountSecurity'
 import { applyAuthRotation, parseAuthRotation } from '@/api/authSession'
 import { completeOAuth, oidcDisplayName } from '@/api/oauth'
+import { errorMessage } from '@/api/clientError'
 import { publicApi, type PublicStatus } from '@/api/public'
 import { ApiError } from '@/api/types'
 import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
@@ -286,10 +287,6 @@ function credentialJSON(
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /**
  * Each source settles on its own so one failed request cannot reset the
  * others to a misleading "disabled". A newer load supersedes an older one.
@@ -307,7 +304,7 @@ async function loadSecurity(): Promise<void> {
   const failure = [passkey, twoFA, status, oauth].find(
     (result) => result.status === 'rejected'
   )
-  loadError.value = failure ? errorMessage(failure.reason) : ''
+  loadError.value = failure ? errorMessage(failure.reason, t) : ''
 
   if (passkey.status === 'fulfilled') {
     passkeyEnabled.value = passkey.value.enabled
@@ -469,7 +466,7 @@ async function openOAuthPopup(provider: string): Promise<void> {
     await loadSecurity()
   } catch (error) {
     if (!popupTransferred) popup.close()
-    toast.error(error instanceof Error ? error.message : String(error))
+    toast.error(errorMessage(error, t))
   }
 }
 

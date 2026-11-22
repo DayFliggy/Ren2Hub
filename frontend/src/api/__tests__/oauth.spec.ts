@@ -89,4 +89,35 @@ describe('OAuth referral and callback contract', () => {
       expect(popup.close).toHaveBeenCalledOnce()
     }
   )
+  it('reports a blocked pop-up with a stable client error code', async () => {
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const post = vi.spyOn(api, 'post')
+    await expect(
+      completeOAuth({ github_oauth: true }, 'github', 'login')
+    ).rejects.toMatchObject({ code: 'oauthPopupBlocked' })
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('reports a cancelled verification as a translatable AbortError', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({ flow_token: 'flow-token' })
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+    } as unknown as Window
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      completeOAuth(
+        { github_oauth: true, github_client_id: 'client' },
+        'github',
+        'login',
+        undefined,
+        undefined,
+        controller.signal,
+        popup
+      )
+    ).rejects.toMatchObject({ name: 'AbortError', code: 'oauthCancelled' })
+    expect(popup.close).toHaveBeenCalledOnce()
+  })
 })

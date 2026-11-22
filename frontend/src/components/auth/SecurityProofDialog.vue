@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/api/client'
 import { publicApi, type PublicStatus } from '@/api/public'
 import { completeOAuth } from '@/api/oauth'
+import { errorMessage } from '@/api/clientError'
 import {
   securityApi,
   type SecurityOperation,
@@ -116,8 +117,7 @@ async function verify() {
     open.value = false
     value.value = ''
   } catch (cause) {
-    if (version === requestVersion)
-      error.value = cause instanceof Error ? cause.message : String(cause)
+    if (version === requestVersion) error.value = errorMessage(cause, t)
   } finally {
     if (version === requestVersion) busy.value = false
   }

@@ -18,6 +18,8 @@ vi.mock('vue-router', async () => {
 vi.mock('@/utils/passkey', () => ({ assertPasskey }))
 
 import { api } from '@/api/client'
+import { ClientError } from '@/api/clientError'
+import { useToast } from '@/composables/useToast'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -201,6 +203,51 @@ describe('SignInView passkey second factor', () => {
     expect(assertPasskey).toHaveBeenCalledWith(options)
     expect(acceptLogin).toHaveBeenCalledWith(bundle)
     expect(replace).toHaveBeenCalledWith({ name: 'dashboard' })
+    wrapper.unmount()
+  })
+})
+
+describe('SignInView passkey cancellation', () => {
+  it('shows a dismissed passkey prompt in the interface language', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    app.status = { frontend_capabilities: { passkey: 'live' } }
+    vi.spyOn(app, 'initialize').mockResolvedValue()
+    vi.spyOn(useAuthStore(), 'login').mockResolvedValue({
+      require_verification: true,
+      methods: [{ method: 'passkey', available: true }],
+      flow_token: 'login-flow',
+      expires_at: 2_000_000_000,
+    })
+    vi.spyOn(api, 'post').mockResolvedValueOnce({
+      flow_token: 'passkey-flow',
+      expires_at: 2_000_000_000,
+      options,
+      rp_ids: ['example.com'],
+    })
+    assertPasskey.mockRejectedValue(
+      new ClientError('passkeyCancelled', 'NotAllowedError')
+    )
+    useToast().toasts.splice(0)
+
+    const wrapper = mountSignIn(pinia)
+    const [username, password] = wrapper.findAll('input')
+    await username!.setValue('demo')
+    await password!.setValue('password')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '使用 Passkey 登录')!
+      .trigger('click')
+    await flushPromises()
+
+    expect(useToast().toasts.map((toast) => toast.message)).toEqual([
+      '已取消 Passkey 验证。',
+    ])
+    useToast().toasts.splice(0)
     wrapper.unmount()
   })
 })

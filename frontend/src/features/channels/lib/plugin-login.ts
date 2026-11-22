@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { ClientError } from '@/api/clientError'
 import type { LocalizedTextValue } from '@/features/task-plugins/types'
 export const PLUGIN_LOGIN_BROADCAST_CHANNEL = 'ren2hub-plugin-login'
 export type PluginCredentialSummary = {
@@ -47,7 +48,7 @@ export function safeLoginUrl(value: string): string | null {
 }
 export function parsePluginLoginStep(value: unknown): PluginLoginStep {
   if (!value || typeof value !== 'object')
-    throw new Error('Invalid plugin login response')
+    throw new ClientError('pluginLoginInvalidResponse')
   const step = value as Record<string, unknown>
   switch (step.type) {
     case 'redirect':
@@ -79,7 +80,7 @@ export function parsePluginLoginStep(value: unknown): PluginLoginStep {
         return step as PluginLoginStep
       break
   }
-  throw new Error('Invalid plugin login response')
+  throw new ClientError('pluginLoginInvalidResponse')
 }
 /** A login replaces the channel's one credential, so it names no key line. */
 export async function startPluginLogin(
@@ -92,7 +93,7 @@ export async function startPluginLogin(
     { signal }
   )
   if (typeof data.flow !== 'string' || !data.flow)
-    throw new Error('Invalid plugin login flow')
+    throw new ClientError('pluginLoginInvalidFlow')
   return { flow: data.flow, step: parsePluginLoginStep(data.step) }
 }
 export async function continuePluginLogin(
@@ -119,7 +120,7 @@ export async function submitPluginLoginCallback(
     { signal }
   )
   if (!Number.isSafeInteger(data.channel_id) || data.channel_id <= 0)
-    throw new Error('Invalid plugin login channel')
+    throw new ClientError('pluginLoginInvalidChannel')
   return { channel_id: data.channel_id, step: parsePluginLoginStep(data.step) }
 }
 export async function getPluginCredentials(

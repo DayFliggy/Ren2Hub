@@ -329,13 +329,13 @@ describe('native payment contracts', () => {
         url: 'http://cashier.example/pay',
         data: {},
       })
-    ).toThrow()
+    ).toThrow(expect.objectContaining({ code: 'checkoutInvalidUrl' }))
     expect(() =>
       checkoutTarget('alipay', {
         url: 'https://cashier.example/pay',
         data: { amount: 73 },
       })
-    ).toThrow()
+    ).toThrow(expect.objectContaining({ code: 'checkoutInvalidForm' }))
     expect(
       checkoutTarget('alipay', {
         url: 'https://cashier.example/pay',

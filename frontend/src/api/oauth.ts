@@ -4,6 +4,7 @@ import type { PublicStatus } from './public'
 import type { SecurityOperation } from './security'
 import { proofOptions } from './security'
 import { safeExternalUrl } from '@/utils/safeUrl'
+import { ClientError } from './clientError'
 
 export function oidcDisplayName(status: PublicStatus): string {
   return status.oidc_display_name?.trim() || 'OIDC'
@@ -41,7 +42,7 @@ export async function completeOAuth<T>(
   const popup =
     reservedPopup ??
     window.open('', 'ren2hub-oauth', 'popup,width=560,height=720')
-  if (!popup) throw new Error('OAuth popup blocked')
+  if (!popup) throw new ClientError('oauthPopupBlocked')
   try {
     const flow = await api.post<{
       flow_token: string
@@ -58,8 +59,7 @@ export async function completeOAuth<T>(
       },
       proof ? proofOptions(proof) : undefined
     )
-    if (signal?.aborted)
-      throw new DOMException('OAuth verification cancelled', 'AbortError')
+    if (signal?.aborted) throw new ClientError('oauthCancelled', 'AbortError')
     let authorizationURL = flow.authorization_url
     if (!authorizationURL) {
       const custom = status.custom_oauth_providers?.find(
@@ -95,7 +95,8 @@ export async function completeOAuth<T>(
         custom?.authorization_endpoint,
         custom?.scopes ?? '',
       ]
-      if (!client || !endpoint) throw new Error('OAuth provider unavailable')
+      if (!client || !endpoint)
+        throw new ClientError('oauthProviderUnavailable')
       const url = new URL(endpoint)
       url.searchParams.set('client_id', client)
       url.searchParams.set(
@@ -110,7 +111,7 @@ export async function completeOAuth<T>(
     const safeURL = safeExternalUrl(authorizationURL, [
       new URL(authorizationURL).origin,
     ])
-    if (!safeURL) throw new Error('Invalid OAuth authorization URL')
+    if (!safeURL) throw new ClientError('oauthInvalidAuthorizationUrl')
     return await new Promise<T>((resolve, reject) => {
       let processing = false
       const deadline = Date.now() + 5 * 60_000
@@ -122,7 +123,7 @@ export async function completeOAuth<T>(
       }
       const cancel = () => {
         finish()
-        reject(new DOMException('OAuth verification cancelled', 'AbortError'))
+        reject(new ClientError('oauthCancelled', 'AbortError'))
       }
       const listener = (event: MessageEvent) => {
         const data = event.data
@@ -158,7 +159,7 @@ export async function completeOAuth<T>(
         if (popup.closed || Date.now() >= deadline) {
           finish()
           popup.close()
-          reject(new DOMException('OAuth verification cancelled', 'AbortError'))
+          reject(new ClientError('oauthCancelled', 'AbortError'))
         }
       }, 500)
       window.addEventListener('message', listener)

@@ -15,6 +15,7 @@ import {
   type PluginLoginInput,
   type PluginLoginStep,
 } from '../lib/plugin-login'
+import { errorMessage } from '@/api/clientError'
 const props = defineProps<{ channelId: number }>()
 const emit = defineEmits<{ close: []; done: [] }>()
 const { t, locale } = useI18n()
@@ -113,8 +114,7 @@ async function send(input?: PluginLoginInput) {
       }
     }
   } catch (cause) {
-    if (isCurrent(current))
-      error.value = cause instanceof Error ? cause.message : String(cause)
+    if (isCurrent(current)) error.value = errorMessage(cause, t)
   } finally {
     if (isCurrent(current)) busy.value = false
   }
