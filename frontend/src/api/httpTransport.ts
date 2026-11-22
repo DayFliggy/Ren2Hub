@@ -96,53 +96,79 @@ function toApiError(error: unknown): never {
   throw error
 }
 
-/** Bound XHR downloads without bypassing this transport's authentication retry. */
-async function downloadBlob(
+function downloadBlob(
   client: AxiosInstance,
   url: string,
   options: RequestOptions,
   headers = options.headers
 ): Promise<Blob> {
-  const limit = options.maxBytes
-  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0))
-    throw new TypeError('maxBytes must be a non-negative safe integer')
-  const controller = limit === undefined ? null : new AbortController()
-  const abort = () => controller?.abort(options.signal?.reason)
-  if (options.signal?.aborted) abort()
-  else if (controller)
-    options.signal?.addEventListener('abort', abort, { once: true })
-  let tooLarge = false
-  const sizeError = () =>
-    new ApiError('Binary download exceeds the configured limit', {
-      code: 'BINARY_DOWNLOAD_TOO_LARGE',
-    })
-  try {
-    const response = await client.request<Blob>({
+  return client
+    .request<Blob>({
       method: 'GET',
       url,
-      signal: controller?.signal ?? options.signal,
+      signal: options.signal,
       headers,
       responseType: 'blob',
       timeout: options.timeoutMs,
-      maxContentLength: limit,
-      onDownloadProgress:
-        limit === undefined
-          ? undefined
-          : ({ loaded, total }) => {
-              if (loaded > limit || (total !== undefined && total > limit)) {
-                tooLarge = true
-                controller!.abort()
-              }
-            },
     })
-    if (tooLarge || (limit !== undefined && response.data.size > limit))
-      throw sizeError()
+    .then((response) => response.data)
+}
+
+const MAX_STREAM_ERROR_BODY_CHARS = 64 * 1024
+
+/** Reads a small failed stream body so the error keeps its JSON envelope. */
+async function readStreamErrorBody(error: unknown): Promise<void> {
+  if (!axios.isAxiosError(error) || !error.response) return
+  const body: unknown = error.response.data
+  if (!(body instanceof ReadableStream)) return
+  error.response.data = null
+  const reader = (body as ReadableStream<Uint8Array>).getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+  try {
+    while (text.length <= MAX_STREAM_ERROR_BODY_CHARS) {
+      const chunk = await reader.read()
+      if (chunk.done) {
+        error.response.data = JSON.parse(text + decoder.decode())
+        return
+      }
+      text += decoder.decode(chunk.value, { stream: true })
+    }
+  } catch {
+    // A non-JSON error page keeps the HTTP status message.
+  } finally {
+    await reader.cancel().catch(() => undefined)
+  }
+}
+
+/**
+ * Opens a response body as a stream. The caller owns idle detection: a total
+ * timeout would cut a long but steadily progressing download.
+ */
+async function openStream(
+  client: AxiosInstance,
+  url: string,
+  options: RequestOptions,
+  headers: Record<string, string>
+): Promise<ReadableStream<Uint8Array>> {
+  try {
+    const response = await client.request<ReadableStream<Uint8Array>>({
+      method: 'GET',
+      url,
+      signal: options.signal,
+      headers,
+      adapter: 'fetch',
+      responseType: 'stream',
+      timeout: 0,
+    })
+    if (!(response.data instanceof ReadableStream))
+      throw new ApiError('Streaming responses are not supported', {
+        code: 'STREAM_UNSUPPORTED',
+      })
     return response.data
   } catch (error) {
-    if (tooLarge) throw sizeError()
+    await readStreamErrorBody(error)
     throw error
-  } finally {
-    if (controller) options.signal?.removeEventListener('abort', abort)
   }
 }
 
@@ -322,6 +348,53 @@ export function createHttpTransport(client: AxiosInstance): ApiTransport {
     }
   }
 
+  /**
+   * Runs a raw GET with the bearer token and one refresh after a 401.
+   * `release` frees a result that arrived for a session no longer current.
+   */
+  async function withAuthentication<T>(
+    options: RequestOptions,
+    run: (headers: Record<string, string>) => Promise<T>,
+    release: (data: T) => void = () => undefined,
+    retry = true
+  ): Promise<T> {
+    const snapshot = getAuthSessionSnapshot()
+    const bundle = snapshot.bundle
+    const headers = { ...options.headers }
+    if (bundle) {
+      headers.Authorization = `${bundle.token_type} ${bundle.access_token}`
+    }
+    try {
+      const data = await run(headers)
+      if (!isAuthSessionIdentityCurrent(snapshot)) {
+        release(data)
+        throw staleSessionError()
+      }
+      return data
+    } catch (error) {
+      if (!isAuthSessionIdentityCurrent(snapshot)) {
+        throw staleSessionError(error)
+      }
+      const canRefresh = Boolean(
+        retry &&
+        bundle &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 401
+      )
+      if (!canRefresh) return toApiError(error)
+      let outcome: RefreshOutcome
+      try {
+        outcome = await refreshAuthentication(snapshot)
+      } catch (refreshError) {
+        return toApiError(refreshError)
+      }
+      if (outcome === 'refreshed')
+        return withAuthentication(options, run, release, false)
+      if (outcome === 'stale') throw staleSessionError(error)
+      throw new AuthSessionInvalidatedError(error)
+    }
+  }
+
   return {
     request<T>(
       method: HttpMethod,
@@ -330,41 +403,20 @@ export function createHttpTransport(client: AxiosInstance): ApiTransport {
     ): Promise<ApiResponse<T>> {
       return requestOnce(method, url, options, true)
     },
-    async getBlob(url: string, options: RequestOptions = {}): Promise<Blob> {
-      async function download(retry: boolean): Promise<Blob> {
-        const snapshot = getAuthSessionSnapshot()
-        const bundle = snapshot.bundle
-        const headers = { ...options.headers }
-        if (bundle) {
-          headers.Authorization = `${bundle.token_type} ${bundle.access_token}`
-        }
-        try {
-          const data = await downloadBlob(client, url, options, headers)
-          if (!isAuthSessionIdentityCurrent(snapshot)) throw staleSessionError()
-          return data
-        } catch (error) {
-          if (!isAuthSessionIdentityCurrent(snapshot)) {
-            throw staleSessionError(error)
-          }
-          const canRefresh = Boolean(
-            retry &&
-            bundle &&
-            axios.isAxiosError(error) &&
-            error.response?.status === 401
-          )
-          if (!canRefresh) return toApiError(error)
-          let outcome: RefreshOutcome
-          try {
-            outcome = await refreshAuthentication(snapshot)
-          } catch (refreshError) {
-            return toApiError(refreshError)
-          }
-          if (outcome === 'refreshed') return download(false)
-          if (outcome === 'stale') throw staleSessionError(error)
-          throw new AuthSessionInvalidatedError(error)
-        }
-      }
-      return download(true)
+    getBlob(url: string, options: RequestOptions = {}): Promise<Blob> {
+      return withAuthentication(options, (headers) =>
+        downloadBlob(client, url, options, headers)
+      )
+    },
+    getStream(
+      url: string,
+      options: RequestOptions = {}
+    ): Promise<ReadableStream<Uint8Array>> {
+      return withAuthentication(
+        options,
+        (headers) => openStream(client, url, options, headers),
+        (stream) => void stream.cancel().catch(() => undefined)
+      )
     },
   }
 }

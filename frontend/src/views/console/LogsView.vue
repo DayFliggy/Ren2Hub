@@ -12,13 +12,7 @@ import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
-import {
-  exportUserLogs,
-  logExportLimit,
-  logExportLimitParams,
-  MAX_LOG_EXPORT_BYTES,
-  type LogExportLimit,
-} from '@/api/logExport'
+import { LOG_EXPORT_STALLED } from '@/api/logExport'
 import { useAppStore } from '@/stores/app'
 import { parseLogPage } from '@/api/liveContracts'
 import { ApiError } from '@/api/types'
@@ -50,8 +44,9 @@ import {
 } from '@/components/console/log-ui/logContent'
 import LogReasoningEffort from '@/components/console/log-ui/LogReasoningEffort.vue'
 import {
-  getLogExportValues,
+  exportLogFiles,
   LOG_EXPORT_HEADERS,
+  type LogExportType,
 } from '@/components/console/log-ui/logExport'
 import LogPerformanceCell from '@/components/console/log-ui/LogPerformanceCell.vue'
 import LogUsageCell from '@/components/console/log-ui/LogUsageCell.vue'
@@ -63,7 +58,6 @@ import {
   localDayEndMs,
   localDayStartMs,
 } from '@/utils/format'
-import { createSpreadsheetExportStream } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -71,7 +65,6 @@ const app = useAppStore()
 const canExport = computed(
   () => auth.isAdmin || app.status.log_export_enabled !== false
 )
-const maxRangeDays = computed(() => app.status.log_max_range_days ?? 365)
 const toast = useToast()
 
 const rows = ref<LogItem[]>([])
@@ -86,7 +79,7 @@ const type = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const exportOpen = ref(false)
-const exportType = ref('csv')
+const exportType = ref<LogExportType>('csv')
 const exportStartDate = ref('')
 const exportEndDate = ref('')
 function openExport() {
@@ -348,14 +341,19 @@ watch(page, load)
 const exporting = ref(false)
 let exportController: AbortController | null = null
 
-function download(parts: string[], mime: string, ext: string) {
-  const blob = new Blob(parts, { type: mime })
+function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `ren2hub-logs-${new Date().toISOString().slice(0, 10)}.${ext}`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function exportErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === LOG_EXPORT_STALLED)
+    return t('logs.exportStalled')
+  return error instanceof ApiError ? error.message : String(error)
 }
 
 async function doExport() {
@@ -363,72 +361,42 @@ async function doExport() {
   const controller = new AbortController()
   exportController = controller
   exporting.value = true
+  let savedFiles = 0
   try {
     const {
       p: _p,
       page_size: _pageSize,
       ...filters
     } = currentParams(exportStartDate.value, exportEndDate.value)
-    const headers = LOG_EXPORT_HEADERS.map((key) =>
-      t(`logs.exportHeaders.${key}`)
-    )
-    const json = exportType.value === 'json'
-    const format = exportType.value === 'excel' ? 'excel' : 'csv'
-    const spreadsheet = json
-      ? null
-      : createSpreadsheetExportStream(headers, format)
-    const parts: string[] = []
-    let outputBytes = 0
-    let written = 0
-    const append = (part: string) => {
-      outputBytes += new TextEncoder().encode(part).byteLength
-      if (outputBytes > MAX_LOG_EXPORT_BYTES) {
-        throw new ApiError(t('logs.exportTooLarge'), {
-          code: 'LOG_EXPORT_TOO_LARGE',
-        })
-      }
-      parts.push(part)
-    }
-    if (json) append('[')
-    else append(spreadsheet!.prefix)
-    // A capped export still delivers its first rows; the file keeps them.
-    const outcome = await exportUserLogs(filters, controller.signal, (log) => {
-      if (json) {
-        if (written > 0) append(',')
-        append(JSON.stringify(log))
-      } else {
-        append(spreadsheet!.appendRow(getLogExportValues(log, getLocale())))
-      }
-      written++
-    }).then(
-      (count) => ({ count, limit: null as LogExportLimit | null }),
-      (error: unknown) => {
-        const limit = logExportLimit(error)
-        if (!limit || limit.count !== written) throw error
-        return { count: limit.count, limit }
-      }
-    )
-    if (json) append(']')
-    else append(spreadsheet!.suffix)
-    download(
-      parts,
-      json ? 'application/json;charset=utf-8' : spreadsheet!.mime,
-      json ? 'json' : spreadsheet!.ext
-    )
+    const { count, files } = await exportLogFiles({
+      filters,
+      type: exportType.value,
+      headers: LOG_EXPORT_HEADERS.map((key) => t(`logs.exportHeaders.${key}`)),
+      locale: getLocale(),
+      signal: controller.signal,
+      save: (blob, filename) => {
+        savedFiles++
+        download(blob, filename)
+      },
+    })
     exportOpen.value = false
-    const { count, limit } = outcome
-    if (limit)
-      toast.warning(t('logs.exportLimited', logExportLimitParams(limit)))
-    else toast.success(t('logs.exported', { count }))
+    toast.success(
+      files > 1
+        ? t('logs.exportedParts', { count, files })
+        : t('logs.exported', { count })
+    )
   } catch (error) {
-    // An unmount mid-export is a cancellation, not a failure to report.
-    if (controller.signal.aborted) return
+    // Files already saved hold only part of the range; say so either way.
+    if (controller.signal.aborted) {
+      if (savedFiles > 0)
+        toast.warning(t('logs.exportCancelledPartial', { files: savedFiles }))
+      return
+    }
+    const reason = exportErrorMessage(error)
     toast.error(
-      error instanceof ApiError && error.code === 'LOG_EXPORT_TOO_LARGE'
-        ? t('logs.exportTooLarge')
-        : error instanceof ApiError
-          ? error.message
-          : String(error)
+      savedFiles > 0
+        ? t('logs.exportFailedPartial', { reason, files: savedFiles })
+        : reason
     )
   } finally {
     if (exportController === controller) {
@@ -786,7 +754,7 @@ onBeforeUnmount(() => {
           class="w-full"
         />
         <p class="mt-2 text-sm text-[var(--text-secondary)]">
-          {{ t('logs.exportRangeHint', { days: maxRangeDays }) }}
+          {{ t('logs.exportRangeHint') }}
         </p>
       </FormField>
       <FormField group :label="t('logs.docType')">

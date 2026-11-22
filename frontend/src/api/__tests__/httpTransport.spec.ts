@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
+import axios, { type AxiosInstance } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -59,99 +59,92 @@ function conflict(code: string) {
 beforeEach(clearAuthBundle)
 
 describe('HTTP authentication transport', () => {
-  it.each([createHttpTransport, createPublicHttpTransport])(
-    'aborts oversized binary downloads during transfer without requesting a refresh',
-    async (createTransport) => {
-      setAuthBundle(bundle)
-      let aborted = false
-      const request = vi.fn(async (config: AxiosRequestConfig) => {
-        config.onDownloadProgress?.({
-          loaded: 4,
-          total: 101,
-          bytes: 4,
-          lengthComputable: true,
-        })
-        aborted = Boolean(config.signal?.aborted)
-        throw new axios.CanceledError('cancelled')
-      })
-      const transport = createTransport({ request } as unknown as AxiosInstance)
-      await expect(
-        transport.getBlob!('/api/log/self/export', { maxBytes: 100 })
-      ).rejects.toMatchObject({ code: 'BINARY_DOWNLOAD_TOO_LARGE' })
-      expect(aborted).toBe(true)
-      expect(request).toHaveBeenCalledOnce()
-      expect(getAuthBundle()?.access_token).toBe('old-token')
-    }
-  )
-
-  it('bounds downloads when the server does not send a content length', async () => {
-    let aborted = false
-    const request = vi.fn(async (config: AxiosRequestConfig) => {
-      config.onDownloadProgress?.({
-        loaded: 101,
-        bytes: 101,
-        lengthComputable: false,
-      })
-      aborted = Boolean(config.signal?.aborted)
-      throw new axios.CanceledError('cancelled')
-    })
-    const transport = createHttpTransport({
-      request,
-    } as unknown as AxiosInstance)
-    await expect(
-      transport.getBlob!('/api/log/self/export', { maxBytes: 100 })
-    ).rejects.toMatchObject({ code: 'BINARY_DOWNLOAD_TOO_LARGE' })
-    expect(aborted).toBe(true)
-  })
-
-  it('forwards caller cancellation to a size-limited download', async () => {
-    const controller = new AbortController()
-    const request = vi.fn(
-      (config: AxiosRequestConfig) =>
-        new Promise<never>((_, reject) => {
-          config.signal?.addEventListener?.('abort', () =>
-            reject(new axios.CanceledError('caller cancelled'))
-          )
-          controller.abort()
-        })
-    )
-    const transport = createHttpTransport({
-      request,
-    } as unknown as AxiosInstance)
-    await expect(
-      transport.getBlob!('/api/log/self/export', {
-        maxBytes: 100,
-        signal: controller.signal,
-      })
-    ).rejects.toMatchObject({ message: 'caller cancelled' })
-    expect(request.mock.calls[0]?.[0].signal?.aborted).toBe(true)
-  })
-
-  it('retains the download byte limit across authentication refresh', async () => {
+  it('opens a log stream with the bearer token, no total timeout and one refresh', async () => {
     setAuthBundle(bundle)
-    const data = new Blob(['{}'])
+    const body = new ReadableStream<Uint8Array>()
+    const signal = new AbortController().signal
     const request = vi
       .fn()
       .mockRejectedValueOnce(unauthorized())
       .mockResolvedValueOnce({
         data: { success: true, data: { ...bundle, access_token: 'new-token' } },
       })
-      .mockResolvedValueOnce({ data })
+      .mockResolvedValueOnce({ data: body })
     const transport = createHttpTransport({
       request,
     } as unknown as AxiosInstance)
     await expect(
-      transport.getBlob!('/api/log/self/export', {
-        maxBytes: 100,
-        timeoutMs: 120_000,
-      })
-    ).resolves.toBe(data)
-    expect(request.mock.calls[2]?.[0]).toMatchObject({
-      headers: { Authorization: 'Bearer new-token' },
-      timeout: 120_000,
-      maxContentLength: 100,
-      onDownloadProgress: expect.any(Function),
+      transport.getStream!('/api/log/self/export?type=2', { signal })
+    ).resolves.toBe(body)
+    expect(request).toHaveBeenCalledTimes(3)
+    expect(request.mock.calls[0]?.[0]).toMatchObject({
+      headers: { Authorization: 'Bearer old-token' },
     })
+    expect(request.mock.calls[2]?.[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/log/self/export?type=2',
+      headers: { Authorization: 'Bearer new-token' },
+      signal,
+      adapter: 'fetch',
+      responseType: 'stream',
+      timeout: 0,
+    })
+  })
+
+  it('keeps the JSON error envelope of a failed log stream', async () => {
+    mergeServerMessages('zh-CN', { 'Too many requests': '请求过于频繁' })
+    await setLocale('zh-CN')
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            JSON.stringify({
+              success: false,
+              code: 'RATE_LIMITED',
+              message_key: 'Too many requests',
+            })
+          )
+        )
+        controller.close()
+      },
+    })
+    const request = vi.fn().mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 429'), {
+        isAxiosError: true,
+        response: { status: 429, data: body },
+      })
+    )
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+    await expect(
+      transport.getStream!('/api/log/self/export')
+    ).rejects.toMatchObject({
+      status: 429,
+      code: 'RATE_LIMITED',
+      message: '请求过于频繁',
+    })
+    await setLocale('en')
+  })
+
+  it('refuses and closes a log stream opened for a session that has since changed', async () => {
+    setAuthBundle(bundle)
+    const cancel = vi.fn()
+    const request = vi.fn().mockImplementation(async () => {
+      setAuthBundle({
+        ...bundle,
+        session: { ...bundle.session, sid: 'session-2' },
+        user: { ...bundle.user, id: 2 },
+      })
+      return { data: new ReadableStream({ cancel }) }
+    })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+    await expect(
+      transport.getStream!('/api/log/self/export')
+    ).rejects.toMatchObject({ status: 409, code: 'AUTH_SESSION_CHANGED' })
+    expect(cancel).toHaveBeenCalledOnce()
   })
 
   it('refreshes a log download while preserving its timeout and cancellation', async () => {

@@ -54,11 +54,13 @@ export interface ApiClient {
   ): Promise<T>
   getBlob(
     url: string,
-    options?: Pick<
-      RequestOptions,
-      'signal' | 'headers' | 'timeoutMs' | 'maxBytes'
-    >
+    options?: Pick<RequestOptions, 'signal' | 'headers' | 'timeoutMs'>
   ): Promise<Blob>
+  /** Opens a GET body as a stream; it has no total timeout. */
+  getStream(
+    url: string,
+    options?: Pick<RequestOptions, 'signal' | 'headers'>
+  ): Promise<ReadableStream<Uint8Array>>
 }
 
 export interface ApiClientOptions {
@@ -200,6 +202,20 @@ export function createApiClient(
         )
       }
       return transport.getBlob(url, options)
+    },
+    getStream: (url, options) => {
+      if (!transport.getStream) {
+        return Promise.reject(
+          new ApiError(
+            'Streaming downloads are not supported by this transport',
+            {
+              status: 501,
+              code: 'STREAM_DOWNLOAD_UNSUPPORTED',
+            }
+          )
+        )
+      }
+      return transport.getStream(url, options)
     },
   }
 }

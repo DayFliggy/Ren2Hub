@@ -109,11 +109,11 @@
   "Another log export is running. Try again after it finishes.": "已有日志导出正在运行，请等待完成后重试。",
   "Failed to export logs": "日志导出失败",
   "Incomplete or invalid log export": "日志导出不完整或格式无效",
+  "Log export is busy. Try again later.": "导出任务繁忙，请稍后再试。",
   "Attachment filename must not exceed {{count}} characters": "附件文件名不能超过 {{count}} 个字符",
   "Unable to read or save token routing": "无法读取或保存令牌路由",
   "invalid token routing configuration": "令牌路由配置无效",
   "channel is unavailable or unauthorized": "渠道不可用或未获授权",
   "token routing version conflict": "令牌路由版本冲突，请刷新后重试",
-  "Token not found": "令牌不存在",
-  "Log export is too large for the browser": "日志导出超过浏览器限制，请缩小时间范围后重试"
+  "Token not found": "令牌不存在"
 }

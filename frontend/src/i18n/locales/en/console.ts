@@ -2047,7 +2047,7 @@ export default {
 
   logs: {
     exportRangeHint:
-      'Uses the current filters. Maximum {days} days; leaving dates empty exports the last {days} days.',
+      'Uses the current filters. Leave dates empty to export all logs.',
     exportHeaders: {
       time: 'Time',
       token: 'Token',
@@ -2136,11 +2136,14 @@ export default {
     emptyTitle: 'No data found',
     emptyHint: 'Adjust your filters and try again',
     loadFailed: 'Logs could not be loaded',
-    exportTooLarge:
-      'This export is too large for the browser. Narrow the filters.',
-    exportLimited:
-      'The export limit ({rows} rows or {size} MiB) was reached; the first {count} records were exported. Narrow the time range to export the rest.',
+    exportStalled:
+      'The export stopped receiving data for 60 seconds and was cancelled.',
+    exportCancelledPartial:
+      'Export cancelled. The {files} file(s) already downloaded contain only part of the records.',
+    exportFailedPartial:
+      '{reason} The {files} file(s) already downloaded contain only part of the records; export again.',
     exported: 'Exported {count} records',
+    exportedParts: 'Exported {count} records in {files} files',
     exportTruncated:
       'Over the {limit} row limit — exported the first {count}. Narrow the filters.',
     selectDateRange: 'Select date range',
@@ -3448,8 +3451,7 @@ export default {
       selfUseMode: 'Self-use mode',
       logUserExport: 'Allow users to export logs',
       logMaxRangeDays: 'Maximum log time range (days)',
-      logMaxRangeDaysHint:
-        'Limits user log and dashboard queries, and every log export.',
+      logMaxRangeDaysHint: 'Limits user log and dashboard queries.',
       logConsume: 'Log quota consumption',
       smtpServer: 'SMTP server',
       smtpPort: 'SMTP port',

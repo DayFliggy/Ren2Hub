@@ -1966,8 +1966,7 @@ export default {
   },
 
   logs: {
-    exportRangeHint:
-      '沿用当前筛选条件；最多导出 {days} 天，未选日期时导出最近 {days} 天。',
+    exportRangeHint: '沿用当前筛选条件；未选日期时导出全部日志。',
     exportHeaders: {
       time: '时间',
       token: '令牌',
@@ -2056,10 +2055,13 @@ export default {
     emptyTitle: '查询不到数据',
     emptyHint: '请重新输入筛选条件',
     loadFailed: '日志加载失败',
-    exportTooLarge: '导出内容过大，请缩小筛选范围后重试。',
-    exportLimited:
-      '已达到导出上限（{rows} 条或 {size} MiB），已导出前 {count} 条。请缩小时间范围后再导出其余记录。',
+    exportStalled: '导出连续 60 秒未收到数据，已中止。',
+    exportCancelledPartial:
+      '导出已取消，已下载的 {files} 个文件只包含部分记录。',
+    exportFailedPartial:
+      '{reason} 已下载的 {files} 个文件只包含部分记录，请重新导出。',
     exported: '已导出 {count} 条记录',
+    exportedParts: '已导出 {count} 条记录，分 {files} 个文件',
     exportTruncated:
       '结果超过 {limit} 条上限，已导出前 {count} 条，请缩小筛选范围',
     selectDateRange: '选择日期范围',
@@ -3317,7 +3319,7 @@ export default {
       selfUseMode: '自用模式',
       logUserExport: '允许用户导出日志',
       logMaxRangeDays: '日志最大查询跨度（天）',
-      logMaxRangeDaysHint: '限制普通用户日志与仪表盘查询，以及所有日志导出。',
+      logMaxRangeDaysHint: '限制普通用户日志与仪表盘查询。',
       logConsume: '记录额度消耗日志',
       smtpServer: 'SMTP 服务器',
       smtpPort: 'SMTP 端口',

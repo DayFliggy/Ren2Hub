@@ -2,6 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { expect, test, type Locator } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
+// Response of a real export rejected at the global concurrency limit.
+const busyFixture = new URL(
+  '../fixtures/native/log-export-busy.json',
+  import.meta.url
+)
+
 async function expectUnclipped(locator: Locator) {
   await expect(locator).toBeVisible()
   await expect(locator).toBeInViewport({ ratio: 1 })
@@ -72,31 +78,25 @@ for (const [theme, mobile] of [
     await configureStablePage(page, { theme })
     let exportURL = ''
     let fail = false
-    let limited = false
+    let busyServer = false
+    // The fixture file is pretty-printed; the server writes compact JSON.
+    const busy = JSON.stringify(JSON.parse(await readFile(busyFixture, 'utf8')))
     await page.route('**/api/log/self/export?*', (route) => {
       exportURL = route.request().url()
+      if (busyServer)
+        return route.fulfill({
+          contentType: 'application/json',
+          body: busy,
+        })
       return route.fulfill({
         contentType: 'application/x-ndjson',
         body:
           JSON.stringify(row) +
           '\n' +
           JSON.stringify(
-            limited
-              ? {
-                  success: false,
-                  code: 'LOG_EXPORT_LIMIT_EXCEEDED',
-                  message_key: 'Log export limit exceeded',
-                  data: {
-                    count: 1,
-                    bytes: 320,
-                    truncated: true,
-                    max_rows: 10000,
-                    max_bytes: 33554432,
-                  },
-                }
-              : fail
-                ? { success: false, message: 'Export unavailable' }
-                : { success: true, data: { count: 1 } }
+            fail
+              ? { success: false, message: 'Export unavailable' }
+              : { success: true, data: { count: 1 } }
           ),
       })
     })
@@ -107,7 +107,9 @@ for (const [theme, mobile] of [
     await page.getByRole('button', { name: '导出', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '导出数据' })
     await expect(
-      dialog.getByText('沿用当前筛选条件', { exact: false })
+      dialog.getByText('沿用当前筛选条件；未选日期时导出全部日志。', {
+        exact: true,
+      })
     ).toBeVisible()
     await dialog.getByRole('button', { name: '选择日期范围' }).click()
     const calendar = dialog.getByRole('dialog', { name: '选择日期范围' })
@@ -207,12 +209,21 @@ for (const [theme, mobile] of [
     expect(csv).toContain(String(Number.MAX_SAFE_INTEGER))
     expect(csv).toContain("'=untrusted")
     await expect(dialog).not.toBeVisible()
+    await expect(
+      page.getByText('已导出 1 条记录', { exact: true })
+    ).toBeVisible()
+    if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
+      await page.screenshot({ path: testInfo.outputPath('export-success.png') })
+    }
     fail = true
     await page.getByRole('button', { name: '导出', exact: true }).click()
     await dialog.getByRole('button', { name: '确认', exact: true }).click()
     await expect(
       page.getByText('Export unavailable', { exact: true })
     ).toBeVisible()
+    // Without dates the export covers all logs: both bounds are open.
+    expect(new URL(exportURL).searchParams.get('start_timestamp')).toBe('0')
+    expect(new URL(exportURL).searchParams.get('end_timestamp')).toBe('0')
     await expect(dialog).toBeVisible()
     await expectUnclipped(dialog.getByRole('heading', { name: '导出数据' }))
     await expectUnclipped(
@@ -221,19 +232,19 @@ for (const [theme, mobile] of [
     if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
       await page.screenshot({ path: testInfo.outputPath('export-error.png') })
     }
-    // A capped export keeps the rows the server sent and says so.
-    limited = true
-    const capped = page.waitForEvent('download')
+    // A full server rejects the export at once; the dialog stays open.
+    busyServer = true
+    let downloaded = false
+    page.on('download', () => (downloaded = true))
     await dialog.getByRole('button', { name: '确认', exact: true }).click()
-    const cappedPath = await (await capped).path()
-    expect(await readFile(cappedPath!, 'utf8')).toContain("'=untrusted")
     await expect(
-      page.getByText(
-        '已达到导出上限（10000 条或 32 MiB），已导出前 1 条。请缩小时间范围后再导出其余记录。',
-        { exact: true }
-      )
-    ).toBeVisible()
-    await expect(dialog).not.toBeVisible()
+      page.getByText('导出任务繁忙，请稍后再试。', { exact: true })
+    ).toBeInViewport({ ratio: 1 })
+    await expect(dialog).toBeVisible()
+    expect(downloaded).toBe(false)
+    if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
+      await page.screenshot({ path: testInfo.outputPath('export-busy.png') })
+    }
     await assertNoHorizontalOverflow(page)
   })
 }

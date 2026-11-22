@@ -7,8 +7,6 @@ export interface RequestOptions {
   data?: unknown
   signal?: AbortSignal
   timeoutMs?: number
-  /** Stop a binary download once its declared or received bytes exceed this limit. */
-  maxBytes?: number
   headers?: Record<string, string>
 }
 
@@ -19,4 +17,8 @@ export interface ApiTransport {
     options?: RequestOptions
   ): Promise<ApiResponse<T>>
   getBlob?(url: string, options?: RequestOptions): Promise<Blob>
+  getStream?(
+    url: string,
+    options?: RequestOptions
+  ): Promise<ReadableStream<Uint8Array>>
 }

@@ -5,12 +5,12 @@ import { getLocale } from '@/i18n'
 import { serverResponseMessage } from '@/i18n/serverMessages'
 import type { LogItem } from '@/types/console'
 
-// The server deliberately streams NDJSON and has no upstream row/byte cap.
-// Bound parsing and output, and avoid retaining the entire response as both
-// text and parsed rows alongside the spreadsheet.
-export const MAX_LOG_EXPORT_BYTES = 64 * 1024 * 1024
-export const MAX_LOG_EXPORT_ROWS = 100_000
+// The server streams NDJSON without a total row or byte cap. Records are
+// parsed one line at a time; only a malformed single line is refused.
 const MAX_LOG_EXPORT_LINE_CHARS = 2 * 1024 * 1024
+/** Abort when the server sends nothing for this long, before or during the body. */
+export const LOG_EXPORT_IDLE_TIMEOUT_MS = 60_000
+export const LOG_EXPORT_STALLED = 'LOG_EXPORT_STALLED'
 
 function failedExport(): ApiError {
   return new ApiError(
@@ -23,218 +23,149 @@ function failedExport(): ApiError {
   )
 }
 
-function tooLargeExport(): ApiError {
-  return new ApiError('Log export is too large for the browser', {
-    code: 'LOG_EXPORT_TOO_LARGE',
-  })
-}
-
-const LIMIT_CODE = 'LOG_EXPORT_LIMIT_EXCEEDED'
-
-/** The server stopped at its row or byte cap after sending `count` rows. */
-export type LogExportLimit = {
-  count: number
-  maxRows: number
-  maxBytes: number
+function abortError(): DOMException {
+  return new DOMException('Aborted', 'AbortError')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isCount(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0
-}
-
-/**
- * Checks the final record against the rows received. A capped export throws
- * a LOG_EXPORT_LIMIT_EXCEEDED error whose rows are the first `count` records.
- */
+/** Checks the final record against the rows received. */
 function checkTerminal(terminal: unknown, count: number): void {
   if (!isRecord(terminal) || !('success' in terminal)) throw failedExport()
-  if (terminal.success !== true && terminal.code === LIMIT_CODE) {
-    const data = terminal.data
-    if (
-      !isRecord(data) ||
-      data.truncated !== true ||
-      data.count !== count ||
-      !isCount(data.max_rows) ||
-      !isCount(data.max_bytes)
-    )
-      throw failedExport()
-    const limit: LogExportLimit = {
-      count,
-      maxRows: data.max_rows,
-      maxBytes: data.max_bytes,
-    }
-    throw new ApiError(
-      serverResponseMessage(getLocale(), terminal) ||
-        'Log export limit exceeded',
-      { business: true, code: LIMIT_CODE, data: limit }
-    )
-  }
   if (terminal.success !== true) {
     throw new ApiError(
       serverResponseMessage(getLocale(), terminal) || 'Failed to export logs',
-      { business: true }
+      {
+        business: true,
+        code: typeof terminal.code === 'string' ? terminal.code : undefined,
+      }
     )
   }
   if (!isRecord(terminal.data) || terminal.data.count !== count)
     throw failedExport()
 }
 
-/** Parameters of the logs.exportLimited message. */
-export function logExportLimitParams(limit: LogExportLimit) {
-  return {
-    count: limit.count,
-    rows: limit.maxRows,
-    size: Math.floor(limit.maxBytes / (1024 * 1024)),
-  }
-}
-
-export function logExportLimit(error: unknown): LogExportLimit | null {
-  return error instanceof ApiError && error.code === LIMIT_CODE
-    ? (error.data as LogExportLimit)
-    : null
-}
-
-/** Validate records only after the successful final record has arrived. */
-function parseExportRecords(records: unknown[]): LogItem[] {
-  const terminal = records.pop()
-  checkTerminal(terminal, records.length)
-  return parseLogPage({
-    page: 1,
-    page_size: Math.max(1, records.length),
-    total: records.length,
-    items: records,
-  }).items
-}
-
-/** A file is downloadable only after the server's successful final record. */
-export function parseLogExport(text: string): LogItem[] {
-  if (text.length > MAX_LOG_EXPORT_BYTES) throw tooLargeExport()
-  const trimmed = text.trim()
-  if (!trimmed) throw failedExport()
-  let records: unknown[]
+function parseRecord(record: unknown): LogItem {
   try {
-    records = trimmed.split('\n').map((line) => JSON.parse(line) as unknown)
+    return parseLogPage({ page: 1, page_size: 1, total: 1, items: [record] })
+      .items[0]!
   } catch {
     throw failedExport()
   }
-  if (records.length - 1 > MAX_LOG_EXPORT_ROWS) throw tooLargeExport()
-  return parseExportRecords(records)
 }
 
-/** Parse the NDJSON response incrementally without creating a full text copy. */
+/**
+ * Parses the NDJSON response incrementally; only the current partial line is
+ * buffered. `onChunk` runs for every received chunk so callers can track idle
+ * time. Aborting `signal` cancels the stream.
+ */
 export async function parseLogExportStream(
   stream: ReadableStream<Uint8Array>,
   signal: AbortSignal,
-  onLog: (log: LogItem) => void
+  onLog: (log: LogItem) => void,
+  onChunk: () => void = () => undefined
 ): Promise<number> {
   const reader = stream.getReader()
+  const cancel = () => void reader.cancel(signal.reason).catch(() => undefined)
+  signal.addEventListener('abort', cancel, { once: true })
   const decoder = new TextDecoder()
   let buffer = ''
   let count = 0
-  let bytes = 0
   let terminal: unknown
   const consumeLine = (line: string) => {
     if (!line.trim()) return
-    if (line.length > MAX_LOG_EXPORT_LINE_CHARS) throw tooLargeExport()
-    if (terminal !== undefined) throw failedExport()
-    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (line.length > MAX_LOG_EXPORT_LINE_CHARS || terminal !== undefined)
+      throw failedExport()
+    let record: unknown
     try {
-      const record = JSON.parse(line) as unknown
-      if (record && typeof record === 'object' && 'success' in record) {
-        terminal = record
-        return
-      }
-      if (count >= MAX_LOG_EXPORT_ROWS) throw tooLargeExport()
-      const [log] = parseLogPage({
-        page: 1,
-        page_size: 1,
-        total: 1,
-        items: [record],
-      }).items
-      onLog(log!)
-      count++
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'LOG_EXPORT_TOO_LARGE')
-        throw error
+      record = JSON.parse(line)
+    } catch {
       throw failedExport()
     }
+    if (isRecord(record) && 'success' in record) {
+      terminal = record
+      return
+    }
+    onLog(parseRecord(record))
+    count++
   }
   try {
     while (true) {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      if (signal.aborted) throw abortError()
       const chunk = await reader.read()
+      if (signal.aborted) throw abortError()
       if (chunk.done) break
-      bytes += chunk.value.byteLength
-      if (bytes > MAX_LOG_EXPORT_BYTES) throw tooLargeExport()
+      onChunk()
       buffer += decoder.decode(chunk.value, { stream: true })
+      let start = 0
       let newline = buffer.indexOf('\n')
       while (newline >= 0) {
-        consumeLine(buffer.slice(0, newline))
-        buffer = buffer.slice(newline + 1)
-        newline = buffer.indexOf('\n')
+        consumeLine(buffer.slice(start, newline))
+        start = newline + 1
+        newline = buffer.indexOf('\n', start)
       }
-      if (buffer.length > MAX_LOG_EXPORT_LINE_CHARS) throw tooLargeExport()
+      buffer = buffer.slice(start)
+      if (buffer.length > MAX_LOG_EXPORT_LINE_CHARS) throw failedExport()
     }
-    buffer += decoder.decode()
-    consumeLine(buffer)
+    consumeLine(buffer + decoder.decode())
     checkTerminal(terminal, count)
     return count
   } catch (error) {
-    await reader.cancel(error)
+    await reader.cancel(error).catch(() => undefined)
     throw error
   } finally {
+    signal.removeEventListener('abort', cancel)
     reader.releaseLock()
   }
 }
 
-export function exportUserLogs(
-  filters: Record<string, unknown>,
-  signal: AbortSignal
-): Promise<LogItem[]>
-export function exportUserLogs(
-  filters: Record<string, unknown>,
-  signal: AbortSignal,
-  onLog: (log: LogItem) => void
-): Promise<number>
+/**
+ * Streams the caller's own logs to `onLog` and resolves with the row count
+ * once the server confirms it. Fails with LOG_EXPORT_STALLED after
+ * `idleTimeoutMs` without data.
+ */
 export async function exportUserLogs(
   filters: Record<string, unknown>,
   signal: AbortSignal,
-  onLog?: (log: LogItem) => void
-): Promise<LogItem[] | number> {
-  const collected: LogItem[] = []
-  const emit = onLog ?? ((log: LogItem) => collected.push(log))
+  onLog: (log: LogItem) => void,
+  idleTimeoutMs = LOG_EXPORT_IDLE_TIMEOUT_MS
+): Promise<number> {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(filters))
     query.set(key, String(value))
-  const blob = await api
-    .getBlob(`/api/log/self/export?${query}`, {
-      signal,
-      timeoutMs: 120_000,
-      maxBytes: MAX_LOG_EXPORT_BYTES,
+  const controller = new AbortController()
+  const forwardAbort = () => controller.abort(signal.reason)
+  if (signal.aborted) forwardAbort()
+  else signal.addEventListener('abort', forwardAbort, { once: true })
+  let stalled = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const resetIdle = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      stalled = true
+      controller.abort()
+    }, idleTimeoutMs)
+  }
+  resetIdle()
+  try {
+    if (controller.signal.aborted) throw abortError()
+    const stream = await api.getStream(`/api/log/self/export?${query}`, {
+      signal: controller.signal,
     })
-    .catch((error: unknown) => {
-      if (
-        error instanceof ApiError &&
-        error.code === 'BINARY_DOWNLOAD_TOO_LARGE'
-      )
-        throw tooLargeExport()
-      throw error
-    })
-  if (blob.size > MAX_LOG_EXPORT_BYTES) throw tooLargeExport()
-  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-  if (typeof blob.stream === 'function')
-    return onLog
-      ? parseLogExportStream(blob.stream(), signal, emit)
-      : parseLogExportStream(blob.stream(), signal, emit).then(() => collected)
-  // Older test transports may expose only text(); production browsers support
-  // Blob.stream(), while this fallback preserves transport compatibility.
-  const text = await blob.text()
-  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-  const logs = parseLogExport(text)
-  for (const log of logs) emit(log)
-  return onLog ? logs.length : collected
+    return await parseLogExportStream(
+      stream,
+      controller.signal,
+      onLog,
+      resetIdle
+    )
+  } catch (error) {
+    if (stalled && !signal.aborted)
+      throw new ApiError('Log export stalled', { code: LOG_EXPORT_STALLED })
+    throw error
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', forwardAbort)
+  }
 }
