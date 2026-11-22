@@ -2,36 +2,38 @@
 
 现行路由由 `router/` 注册，管理权限采用 NewAPI authz 与 PAT scope 目录。Vue 使用同一合同；不存在 `/api/next` 兼容层。模型调用 API Key、浏览器会话和管理 PAT 是不同凭据。
 
-| 路由 | 用途与边界 |
-| --- | --- |
-| `/v1/models`、`/v1beta/models` | 鉴权后的原生模型目录 |
-| `/v1/chat/completions`、`/v1/messages`、`/v1/responses` | Chat、Claude、Responses；流式和转换取决于适配器 |
-| `/v1/responses/compact`、GET `/v1/responses` | 原生 Compact 与 Responses WebSocket |
-| `/v1/realtime`、音频、图片、视频及插件路由 | 以 relay/task/video router 真实注册和所选模型能力为准 |
-| `GET/PUT /api/token/:id/routing` | 自有Token偏好；原生 `routing:read/write` 权限 |
-| `GET /api/token/:id/routing/channels` | 当前可选渠道，不含完整渠道密钥和 `in_flight` |
+| 路由                                                                             | 用途与边界                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/v1/models`、`/v1beta/models`                                                   | 鉴权后的原生模型目录                                                                                                                                                                                |
+| `/v1/chat/completions`、`/v1/messages`、`/v1/responses`                          | Chat、Claude、Responses；流式和转换取决于适配器                                                                                                                                                     |
+| `/v1/responses/compact`、GET `/v1/responses`                                     | 原生 Compact 与 Responses WebSocket                                                                                                                                                                 |
+| `/v1/realtime`、音频、图片、视频及插件路由                                       | 以 relay/task/video router 真实注册和所选模型能力为准                                                                                                                                               |
+| `GET/PUT /api/token/:id/routing`                                                 | 自有Token偏好；原生 `routing:read/write` 权限                                                                                                                                                       |
+| `GET /api/token/:id/routing/channels`                                            | 当前可选渠道，不含完整渠道密钥和 `in_flight`                                                                                                                                                        |
 | `GET /api/token/:id/routing/preview?model=...&path=...&stream=...&transport=...` | 当前配置的静态资格预览，不调用供应商；transport 为 http（默认）或 websocket，WS 仅 /v1/responses；非法 transport/stream 为 400 ROUTING_INVALID，不支持静态预览的路径为 400 preview_path_unsupported |
 
 路由保存 `{mode:"auto"|"ordered",selected_only,version,entries:[{channel_id,enabled}],max_channel_ratio:null|"1.5"}`。全平台配置为 `auto`、`selected_only=false`、零条目。选定渠道时两种模式均要求 1–100 条互不重复的条目。保存时按数组顺序重写 `position`，顺序模式按此选路。管理员删除最后一条后 GET 仍返回 `selected_only=true`，令牌拒绝普通调用直到重新配置。非法请求返回 400，未授权渠道返回 403，版本冲突返回 409，不可见令牌返回 404。创建令牌时只接受省略 `type` 或传 `"auto"`，其他值（含 `null` 和空串）返回 400。列表和详情的 `type`、`selected_only` 和 `route_channel_count` 表示选路方式、范围和条目总数。删除业务分组，旧组参数明确拒绝：`/api/channel/*`、`POST|PUT /api/token/`、`/api/user/`、`/api/user/self` 和 `*/routing` 的写请求只要请求体非空，不论 Content-Type 都检查，非 JSON 请求体返回 400 `invalid JSON request`。
 
 预览响应回显解析后的 `model`、`transport` 和 `stream`（WS 为 true），并给出 `ordering`：顺序模式为 `"ordered"`，自动模式为 `"weighted_random_per_request"`，表示加权随机按每个请求单独计算，预览只是其中一次抽样。条目为 `{channel_id,name?,eligible,reason,channel_ratio}`。自动模式只列出候选集合内服务所查模型、且可路由的渠道，被禁用的渠道与模型目录一样不出现；顺序模式按列表顺序列出全部条目，指向被禁用或已删除渠道的条目保留 `reason`（如 `channel_unavailable`），但不返回 `name`，`channel_ratio` 为空串。普通用户视图（模型目录与 `routing/channels` 共用 `service.RouteChannel`）的共享字段为 `id`、`name`、`type`、`status`、`models`、`supported_endpoints`、`channel_ratio`、`max_concurrency`、`eligible` 和可选的 `filter_reason`。模型目录的渠道项另含 `lab`（`id`、`name`、`source`），用于厂商分类展示，不参与路由或计费；`routing/channels` 不因共用字段而增加该项。实时 `in_flight` 只出现在管理端渠道列表、搜索、详情和更新响应里。
 
-| 聚合接口 | 合同 |
-| --- | --- |
-| `GET /api/user/model-catalog?token_id=` | 会话用户或本人 Key 的模型、公开渠道、端点及原生基础价×渠道倍率；不返回地址、代理或凭据 |
-| `GET /api/channel/priority/order` | 原生优先级快照与 revision |
-| `POST /api/channel/priority/reorder` | NewAPI 版本校验、预览及事务更新；revision 冲突、移动无效或越界时返回 HTTP 200 加 `success:false` |
-| `GET /api/channel/labs` | 全平台厂商分类聚合；分类不控制选路 |
-| `GET /api/home/metrics` | 消费日志请求计数及 24 个明确时间区间，共享短缓存 |
-| `GET /api/pricing/count` | `{models}` 为原生 `/api/pricing` 列出的模型数，供游客首页显示；门控与 `/api/pricing` 相同（`HeaderNavModuleAuth("pricing")`），PAT 规则同为不限 scope |
-| `GET /api/data/self/summary` | 本人区间、对比、模型/Token 分布；计数、token、额度和缓存读写来自 `quota_data`，`hourly` 是按小时升序、不缺小时的序列 |
-| `GET /api/performance/routing` | Root 读取当前用户/渠道占用与近期真实尝试观察 |
-| `GET /api/performance/quality?hours=24` | Root，PAT scope `ops:read`；全站跨模型按小时汇总 `perf_metrics`，`hours` 取 1–720 |
-| `GET /api/performance/stats` | 原生字段之外追加 `system_usage`（主机 CPU、内存）和 `db_pool`（`sql.DB.Stats()`） |
-| `/api/user/affiliate` | 本人规则、奖励、records、脱敏 invitees 及幂等全额 transfer |
-| `/api/admin/affiliate` | 返利记录和个人比例/邀请码管理；按订单回收返利在 `/api/user/topup/admin/affiliate-reversal`，见 [API](../billing/API.md)；全局配置使用原生 options |
+| 聚合接口                                | 合同                                                                                                                                                  |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/user/model-catalog?token_id=` | 会话用户或本人 Key 的模型、公开渠道、端点及原生基础价×渠道倍率；不返回地址、代理或凭据                                                                |
+| `GET /api/channel/priority/order`       | 原生优先级快照与 revision                                                                                                                             |
+| `POST /api/channel/priority/reorder`    | NewAPI 版本校验、预览及事务更新；revision 冲突、移动无效或越界时返回 HTTP 200 加 `success:false`                                                      |
+| `GET /api/channel/labs`                 | 全平台厂商分类聚合；分类不控制选路                                                                                                                    |
+| `GET /api/home/metrics`                 | 消费日志请求计数及 24 个明确时间区间，共享短缓存                                                                                                      |
+| `GET /api/pricing/count`                | `{models}` 为原生 `/api/pricing` 列出的模型数，供游客首页显示；门控与 `/api/pricing` 相同（`HeaderNavModuleAuth("pricing")`），PAT 规则同为不限 scope |
+| `GET /api/data/self/summary`            | 本人区间、对比、模型/Token 分布；计数、token、额度和缓存读写来自 `quota_data`，`hourly` 是按小时升序、不缺小时的序列                                  |
+| `GET /api/performance/routing`          | Root 读取当前用户/渠道占用与近期真实尝试观察                                                                                                          |
+| `GET /api/performance/quality?hours=24` | Root，PAT scope `ops:read`；全站跨模型按小时汇总 `perf_metrics`，`hours` 取 1–720                                                                     |
+| `GET /api/performance/stats`            | 原生字段之外追加 `system_usage`（主机 CPU、内存）和 `db_pool`（`sql.DB.Stats()`）                                                                     |
+| `/api/user/affiliate`                   | 本人规则、奖励、records、脱敏 invitees 及幂等全额 transfer                                                                                            |
+| `/api/admin/affiliate`                  | 返利记录和个人比例/邀请码管理；按订单回收返利在 `/api/user/topup/admin/affiliate-reversal`，见 [API](../billing/API.md)；全局配置使用原生 options     |
 
 厂商分类还用于原生定价目录 `supplementVendorID` 的缺失厂商补全；只补展示归属，不改变已有厂商、模型价格、路由或计费。
+
+渠道管理读响应按有效权限投影配置：仅 Root 且具有有效 `channel:write` 的调用方读取原值，其他调用方会看到 `redacted_fields` 与整块字符串占位 `{"__ren2hub_redacted__":true}`。`header_override`、`param_override` 非空时隐藏；带代理身份的 `setting`、含高级路由认证或非空 `plugin_config` 的 `settings` 整块隐藏。更新时省略上述字段保留原值；`header_override`、`param_override` 显式空字符串清空，其余配置仍须通过对应渠道类型的合法性校验。完整占位只在该字段对当前调用方确实已隐藏时表示保留。新增或标签编辑含占位标记返回 400 `CHANNEL_REDACTED_FIELD_INVALID`。更新成功返回数据库重新读取后的投影；若已保存但重读失败，返回 500、`success:false`、`code: "CHANNEL_UPDATE_READ_FAILED"`、`updated:true`，不把已保存报成未保存。
 
 渠道 `channel_ratio` 为大于 0、不超过 1000、最多 18 位小数、十进制指数在 -18 到 18 之间的十进制字符串，用户/渠道 `max_concurrency` 为非负整数，0 表示无限。修改 `channel_ratio` 需要 ChannelSensitiveWrite：只有 ChannelWrite 的管理员提交不同的倍率时返回 HTTP 200、`success:false`，整条请求不生效；提交与当前值等价的写法（如 `"1.0"`）仍然允许。`max_concurrency` 只影响运行，按非敏感字段处理。自动排序与资金接点见[渠道路由](UNIFIED_ROUTING.md)。
 

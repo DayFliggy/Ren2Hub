@@ -751,6 +751,10 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 	if addChannelRequest.Channel != nil {
+		if channelContainsRedaction(addChannelRequest.Channel) {
+			rejectChannelRedaction(c)
+			return
+		}
 		clearChannelProjections(addChannelRequest.Channel)
 		if _, ok := provided.Channel["channel_ratio"]; !ok {
 			addChannelRequest.Channel.ChannelRatio = "1"
@@ -1014,6 +1018,11 @@ func EditTagChannels(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	if channelContainsRedaction(&model.Channel{HeaderOverride: channelTag.HeaderOverride, ParamOverride: channelTag.ParamOverride}) {
+		rejectChannelRedaction(c)
+		return
+	}
+
 	if channelTag.Tag == "" {
 		common.ApiErrorT(c, "Tag cannot be empty")
 		return
@@ -1137,7 +1146,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	if err := normalizeChannelRedactions(c, &channel, originChannel, requestData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "CHANNEL_REDACTED_FIELD_INVALID", "message": "Invalid redacted channel field"})
+		rejectChannelRedaction(c)
 		return
 	}
 
@@ -1309,14 +1318,14 @@ func UpdateChannel(c *gin.Context) {
 		updateAudit["base_url_source"] = "plugin_default"
 	}
 	recordManageAudit(c, "channel.update", updateAudit)
-	channel.Key = ""
-	attachChannelInFlight([]*model.Channel{&channel.Channel})
-	clearChannelInfo(&channel.Channel)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    projectChannelCredentials(c, &channel.Channel),
-	})
+	savedChannel, err := model.GetChannelById(channel.Id, false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "CHANNEL_UPDATE_READ_FAILED", "updated": true, "message": "Channel was updated, but reading the saved channel failed"})
+		return
+	}
+	attachChannelInFlight([]*model.Channel{savedChannel})
+	clearChannelInfo(savedChannel)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": projectChannelCredentials(c, savedChannel)})
 	return
 }
 

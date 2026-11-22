@@ -23,3 +23,5 @@ Vue沿用上游会话提示：后端随Refresh Cookie写入非HttpOnly的 `new_a
 提供商插件登录使用原生 AuthFlow、用户/会话/flow 绑定与 CAS；它与站点 OAuth 分开。凭据摘要接口需要渠道读取权限，登录和继续操作需要渠道敏感写权限，秘密不进入摘要响应。
 
 管理员发布用户协议或隐私政策后，登录和注册页显示勾选项及文档链接，未勾选时密码登录、Passkey 主登录、OAuth 登录与注册都被前端阻止；两步验证里的 Passkey 属于已同意的同一次登录。没有发布文档时不显示。服务端没有对应校验，与上游相同。
+
+微信验证码登录的 `GET /api/oauth/wechat` 在消费验证码和建立会话前检查 `Sec-Fetch-Site`：头存在时只允许 `same-origin`，其它值返回 403；不带该头的非浏览器请求保留既有行为。通用 OAuth GET 回调由每个登录 flow 的浏览器 Cookie 绑定保护；退役 Telegram GET 登录返回 410。

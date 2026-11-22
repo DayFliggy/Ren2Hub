@@ -57,6 +57,9 @@ func getWeChatIdByCode(code string) (string, error) {
 }
 
 func WeChatAuth(c *gin.Context) {
+	if !allowLegacyLoginBrowserOrigin(c) {
+		return
+	}
 	if !common.WeChatAuthEnabled {
 		common.ApiErrorT(c, "{{provider}} login and registration has not been enabled by administrator", providerParams("WeChat"))
 		return

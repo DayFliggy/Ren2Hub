@@ -14,7 +14,7 @@ import (
 )
 
 // pinProtectedFetchTarget 固定本地校验过的解析结果，避免代理二次解析。
-// 开启防护时逐个验证所有结果；关闭域名 IP 过滤也不允许绕过固定目标的 IP 检查。
+// 仅在策略要求检查目标 IP 时解析；其余情况保留代理原生解析。
 func pinProtectedFetchTarget(req *http.Request, resolver ssrfResolver, getProtection func() (*common.SSRFProtection, bool, error)) (*http.Request, error) {
 	host := req.URL.Hostname()
 	if strings.Contains(host, "%") {
@@ -43,6 +43,9 @@ func pinProtectedFetchTarget(req *http.Request, resolver ssrfResolver, getProtec
 			return nil, err
 		}
 	}
+	if !enabled || (net.ParseIP(host) == nil && !protection.ApplyIPFilterForDomain) {
+		return req, nil
+	}
 	ips := []net.IPAddr{{IP: net.ParseIP(host)}}
 	if ips[0].IP == nil {
 		ips, err = resolver.LookupIPAddr(req.Context(), host)
@@ -57,10 +60,8 @@ func pinProtectedFetchTarget(req *http.Request, resolver ssrfResolver, getProtec
 		if addr.Zone != "" || addr.IP == nil {
 			return nil, fmt.Errorf("invalid resolved IP address")
 		}
-		if enabled {
-			if err := protection.ValidateResolvedIP(host, addr.IP); err != nil {
-				return nil, err
-			}
+		if err := protection.ValidateResolvedIP(host, addr.IP); err != nil {
+			return nil, err
 		}
 	}
 	pinned := req.Clone(req.Context())
@@ -87,6 +88,9 @@ func (t *pinnedProxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	transport := t.base.Clone()
 	transport.DisableKeepAlives = true
 	transport.Proxy = http.ProxyURL(t.proxy)
+	if pinned == req {
+		return transport.RoundTrip(req)
+	}
 	if transport.TLSClientConfig == nil {
 		transport.TLSClientConfig = &tls.Config{}
 	}

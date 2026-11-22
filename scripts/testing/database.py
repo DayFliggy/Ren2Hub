@@ -93,6 +93,7 @@ PAIRED_TESTS = (
 PROVIDER_TESTS = (
     ("model", "TestRestoredRound3ChannelStatusFailureRestoresCache"),
     ("model", "TestChannelStatusFailureDatabaseMatrix"),
+    ("model", "TestChannelStatusCacheFastPathDatabaseMatrix"),
     ("model", "TestChannelCacheReloadSerializesStatusPublication"),
     ("model", "TestChannelStatusCacheSnapshotsAreImmutable"),
     ('controller', 'TestEpayRSAModeSignsOrdersAndVerifiesCallbacks'),

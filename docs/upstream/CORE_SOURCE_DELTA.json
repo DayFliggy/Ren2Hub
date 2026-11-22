@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 831,
     "adapted": 333,
-    "extension": 490,
+    "extension": 495,
     "removed": 47
   },
   "files": [
@@ -1060,7 +1060,7 @@
       "path": "controller/channel.go",
       "status": "adapted",
       "upstream_sha256": "acd8081b1208f6bba858062a6b248a602c78aa5124e913a143ec69ab53126c6f",
-      "local_sha256": "9bde31b71c971f1f23c196857667c3eff55cb76b5b1e973f8604e4946979e8c6",
+      "local_sha256": "86e0d46df977ac5e2b1edbae4aaed6ceed8e3fea5950a1fce854354f83a15a8e",
       "reasons": [
         "audit-local-safety",
         "catalog-stats",
@@ -1073,8 +1073,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。",
-        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。 R2 AUD-AUTH-1/3/7：共用字段定义脱敏param_override与插件配置，新增和标签入口拒绝占位，保存后重读投影并明确已保存的读取失败。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
         "current_hunk_review": true
       }
     },
@@ -1177,14 +1177,14 @@
       "path": "controller/channel_credentials.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2f7091fe9eb1ff3a9db3ba137fbf47aa0c483d5d344cfd3cf616a8b397240e95",
+      "local_sha256": "bd2d9a3203308b42479dd15d8f23f9829d3879729a94ebc81a0e4aa527ff5efe",
       "reasons": [
         "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。",
-        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+        "basis": "WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。 R2 AUD-AUTH-1/3/7：共用字段定义脱敏param_override与插件配置，新增和标签入口拒绝占位，保存后重读投影并明确已保存的读取失败。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
     },
     {
@@ -3459,18 +3459,30 @@
       "path": "controller/wechat.go",
       "status": "adapted",
       "upstream_sha256": "e8c78757719f044b2784238e9cd24b62d096f3f8fc842a3afbd6fe6af3078540",
-      "local_sha256": "d843029556b5c45c7334ced36aa65c42e2fdb309660ff35286260f4e25b79636",
+      "local_sha256": "e7c5b8f8040e55182dbd9f4d47c609106e46b28517f7c2c41597e2884dd97ba7",
       "reasons": [
-        "affiliate"
+        "affiliate",
+        "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/wechat.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/wechat.go#1"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/wechat.go#1 R2 AUD-AUTH-6：验证码GET登录在消费前拒绝非同源浏览器请求，缺Fetch Metadata头保留原生客户端合同。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
+        "current_hunk_review": true
+      }
+    },
+    {
+      "path": "controller/wechat_browser_origin.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ec41084dda4ce22cc3b9533b1eac331271cdc8082c2aeb482232d0ad13609676",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "R2 AUD-AUTH-6：验证码GET登录在消费前拒绝非同源浏览器请求，缺Fetch Metadata头保留原生客户端合同。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
     },
     {
@@ -4787,7 +4799,7 @@
       "path": "model/channel_security_state_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cd72d57549c4905601cf7fd4fd6dcec345a22fd63dad20665076c9462c58b034"
+      "local_sha256": "9654741cd25e5f44ce13df7505985952bff66c4fc0c85dbe840799e9f5fe3b7e"
     },
     {
       "path": "model/channel_settings_test.go",
@@ -4799,7 +4811,7 @@
       "path": "model/channel_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6eb1e8f58d2fd300faac8e378729ee0bba617f969c3de99977b41154030c218e",
+      "local_sha256": "fd8d3ab176b96779efdbf867a4ed0decb4621043787bee59be7c0e0e72d0fe72",
       "reasons": [
         "audit-local-safety",
         "single-key-channel",
@@ -4807,9 +4819,15 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。",
-        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。 R2 AUD-AUTH-4：缓存只读快路径跳过已满足目标的状态写，未命中和真实变更仍以数据库事务为依据。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
+    },
+    {
+      "path": "model/channel_status_fast_path_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "aeb4a204bfa4ecbc8dc2e7dcdf63b137a2b1d9d0f72d362a5ec595e87a4e95b8"
     },
     {
       "path": "model/channel_status_lock_test.go",
@@ -11513,6 +11531,12 @@
       }
     },
     {
+      "path": "router/channel_credentials_audit_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "752f52f6496a8c555121ded1d1565652090a0c6f52191d13c8f15d98047807c8"
+    },
+    {
       "path": "router/channel_router_test.go",
       "status": "adapted",
       "upstream_sha256": "e43b4287de7dca2d09f1fe818ffbf2a4873e867a01c26e3c4cf945358f9a62f6",
@@ -11933,6 +11957,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "4125ff7a6b5d745c4391e187073ef94c57e6ff2dd43b6646c1ea6592a83a0f0d"
+    },
+    {
+      "path": "router/wechat_browser_origin_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d3993afd8e087c31bd03fa8b34ef3bac012097d4120be2930bfa8b3234e5ed40"
     },
     {
       "path": "service/access_token_scope.go",
@@ -12412,18 +12442,15 @@
       "path": "service/channel_upstream_ratio_http.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "84927bc12e86a6c3da1b37d5ce2b6694fb0a5c86c5b5e295622ba597816a3ec4",
+      "local_sha256": "295c379c11e57e7f09a90768185dd16988c0827e2c11acc85eee84999d1692f8",
       "reasons": [
+        "audit-local-safety",
         "upstream-ratio"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_http.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/channel_upstream_ratio_http.go#1"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_http.go#1 R2 AUD-AUTH-2/5：仅解析结果将被IP过滤时固定代理解析，其余保留代理DNS并应用开启的域名与端口规则。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
     },
     {
@@ -12448,7 +12475,7 @@
       "path": "service/channel_upstream_ratio_proxy_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a6332f8648ba5a0f7069749db660dfad9a021a1022a48d458a9bef972827f9fc"
+      "local_sha256": "f8f912f355e5ad84d8146c18e43d379210dcb7810e1e8ea4d9479fa45c8ea778"
     },
     {
       "path": "service/channel_upstream_ratio_record.go",
@@ -13316,21 +13343,28 @@
       "path": "service/protected_fetch_pinned_proxy.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "04af6fa6ad83791b8bc4737fb12a939d94e6dd05ebaa7df0a64ccd7478da5f6f",
+      "local_sha256": "e7d12f2065d001c47b0f515a8862646cac01705b7633ba7debab5ac9a01cc8fe",
       "reasons": [
+        "audit-local-safety",
         "upstream-ratio"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "上游倍率探测代理请求固定本地校验的解析 IP，保留 HTTP Host 与 TLS 主机身份；见 SYNC_LEDGER.md 现行本地差异。",
-        "method": "本地扩展安全边界审阅和本地代理、DNS、TLS 桩回归"
+        "basis": "上游倍率探测代理请求固定本地校验的解析 IP，保留 HTTP Host 与 TLS 主机身份；见 SYNC_LEDGER.md 现行本地差异。 R2 AUD-AUTH-2/5：仅解析结果将被IP过滤时固定代理解析，其余保留代理DNS并应用开启的域名与端口规则。",
+        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
+    },
+    {
+      "path": "service/protected_fetch_proxy_policy_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "afc9254751634b664ef6321c34215f3a18b4b7a7e411e12d9b0cb1bfbb60d259"
     },
     {
       "path": "service/protected_fetch_proxy_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ca00e0ae6ff3875e022ea10dc6d8ce4e770ee4cdf7e1dd4042904a6d92cabb59"
+      "local_sha256": "5c35bc0c71c7b52a81e65f30e37c99e17edbd3c7c9fc63bb0cfbbd1a1defcd13"
     },
     {
       "path": "service/protected_fetch_validation.go",

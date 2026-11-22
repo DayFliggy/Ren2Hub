@@ -143,4 +143,8 @@
 
 ## 审计回归边界
 
+- 状态读取快路径：`model:^TestChannelStatusCacheFastPathDatabaseMatrix$`，已达目标或人工停用保护时不等全局状态锁、不查库；缓存未命中与真实写入仍以数据库为准。三库按每方言独立的 task helper 执行，冻结迁移的失败回滚断言保持。
+
 - 批量资金：`model:^(TestQuotaBatchHydrationAtomicityDatabaseMatrix|TestQuotaCacheHitsDoNotWaitForReservationShard|TestQuotaBatchFlushReleasesGlobalLockAndMergesFailure|TestQuotaBatchDeletedBalancesDatabaseMatrix|TestTokenQuotaHydrationRechecksCacheAfterLock|TestUnlimitedTokenBatchReservationDoesNotRelock|TestQuotaAuthenticationReloadsDirtyCacheAfterRedisRecovery)$`。用户与 Token 退款/扣减同步发布，水合不能重复计算；命中不阻塞、锁后二查、写库失败合并、软删除记账、硬删除终止及 Redis 恢复的认证缓存。两项矩阵跑三库；共享状态用新镜像手工 race 验证。
+- 渠道秘密与保存结果：`router:^(TestChannelReadRedactsParamOverridesAndPluginConfig|TestChannelPluginConfigReadAndOmittedWritePreserveCredentials|TestChannelParamOverrideWritesPreserveReplaceAndClear|TestChannelAddAndTagRejectRedactedFields|TestChannelUpdateResponseReportsReadFailureAfterPersisting)$`。四字段共享脱敏与写入规则，保存成功后返回重新读取的投影，读取失败明确 `updated:true`；生产夹具同时覆盖参数、插件配置和读取失败。
+- 代理策略与登录来源：`service:^(TestProtectedFetchProxyHonorsProtectionMode|TestUpstreamRatioProxyHonorsProtectionMode)$` 覆盖关闭防护、关闭域名 IP 过滤与全开配置；`router:^TestWeChatLoginRouteRejectsCrossOriginBrowserRequests$` 覆盖真实登录入口在消费验证码前拒绝跨来源头、缺头兼容和合法重试。

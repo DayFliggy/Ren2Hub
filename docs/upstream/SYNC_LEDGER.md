@@ -93,7 +93,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 同步上游时，上游对多 Key 代码的改动（`channel_info`、`GetNextEnabledKey`、`handlerMultiKeyUpdate`、`multi_key/manage`、`key_index`、`MultiKeyMode` 及 Key 级状态）按“不吸收”在窗口文件里逐项写明；同一文件里与多 Key 无关的改动照常吸收，并保持本节的接点。
 
-上游倍率探测的代理请求由 `service/protected_fetch_pinned_proxy.go` 固定本地解析结果，防护开启时逐个校验所有 IP，任一不允许即拒绝；HTTP 保留原 Host，HTTPS CONNECT 使用 IP、证书按原主机名校验，HTTPS 代理自身证书单独校验。每次代理请求独立 transport，通用受保护抓取同样复用此扩展；每一跳重定向重新执行校验，管理员配置的代理本身可为本地地址。共享目标校验拒绝带 zone 的 IPv6。
+上游倍率探测的代理请求由 `service/protected_fetch_pinned_proxy.go` 固定本地解析结果，防护开启时逐个校验所有 IP，任一不允许即拒绝；HTTP 保留原 Host，HTTPS CONNECT 使用 IP、证书按原主机名校验，HTTPS 代理自身证书单独校验。通用受保护抓取同样复用此扩展；仅防护开启且目标为 IP 字面量或启用域名 IP 过滤时固定解析，防护关闭或关闭域名 IP 过滤时沿原生代理解析。防护开启仍检查域名和端口，每一跳重定向重新执行适用校验，管理员配置的代理本身可为本地地址。共享目标校验拒绝带 zone 的 IPv6。
 
 B1 已批准的本地安全边界（`audit-local-safety`）：
 
@@ -107,8 +107,8 @@ B2 已批准的权限与输出边界：
 
 - 本人日志统计按用户 ID 限制额度与 RPM/TPM，改名不丢历史；管理员显式搜索保留 LIKE。用户列表只投影已知的非秘密设置，通知目标 URL 与凭据不返回。
 - 公共分页归一到正数及最多 100 行，页码限制防止 offset 溢出。日志导出最多 10000 行及 32 MiB 数据，终行明确返回 `LOG_EXPORT_LIMIT_EXCEEDED` 与已导出计数，不把截断报成功。
-- OAuth 登录的每个 flow 绑定独立 HttpOnly 浏览器 Cookie，见[认证](../authentication.md)。渠道读取按 Root 与有效写权限投影秘密，完整脱敏占位或省略字段不会写回；敏感更新同时要求账户权限与 PAT scope。`header_override` 显式空字符串清空，省略保留；省略 `setting` 时读取已存的插件绑定配置完成校验，不清空。
-- 状态更新失败返回明确错误；不存在、未变与持久化失败分开，批量列出失败项。缓存只在事务提交后发布，快照不原地修改；刷新读取失败保留原缓存并报告。普通编辑的能力事务边界仍属 ROUTE-1。
+- OAuth 登录的每个 flow 绑定独立 HttpOnly 浏览器 Cookie，见[认证](../authentication.md)。渠道读取按 Root 与有效写权限投影秘密，header_override、param_override与带身份的setting、含高级认证或插件配置的settings按整块投影；完整脱敏占位或省略字段不会写回，新增及标签编辑拒绝占位；敏感更新同时要求账户权限与 PAT scope。`header_override`、`param_override` 显式空字符串清空，省略保留；省略 `setting` 时读取已存的插件绑定配置完成校验，不清空。更新响应重新读取数据库后投影，读取失败以500和updated:true明确已保存；接口见[扩展接口](../routing/GATEWAY_API.md)。
+- 状态更新失败返回明确错误；不存在、未变与持久化失败分开，批量列出失败项。缓存只在事务提交后发布，快照不原地修改；刷新读取失败保留原缓存并报告。缓存已处于目标状态或人工停用挡住自动停用时，读取快路径不等待状态锁或查库；缓存未命中和实际变更以数据库事务为依据。普通编辑的能力事务边界仍属 ROUTE-1。
 - 上游响应复制过滤凭据、Cookie 和逐跳头（含 Connection 声明项）；通配请求头不转发 WebSocket 认证子协议。错误各字符串字段、嵌套 metadata 与前置日志共用净化，内部重试码及 cause 保留；错误体读取失败仍关闭响应体。
 
 ## 与上游相同、未在本地修复的已知问题

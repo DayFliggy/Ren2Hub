@@ -49,6 +49,12 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 // a post-commit hook may reload the cache and acquire this lock again.
 func updateChannelStatusAndCache(channelID, status int, reason string) (bool, error) {
 	if common.MemoryCacheEnabled {
+		// A cached no-op avoids queuing a failure storm behind unrelated writes.
+		// A miss or an actual transition still uses the durable row as authority.
+		if cached, err := CacheGetChannel(channelID); err == nil &&
+			(cached.Status == status || (status == common.ChannelStatusAutoDisabled && cached.Status == common.ChannelStatusManuallyDisabled)) {
+			return false, nil
+		}
 		channelStatusLock.Lock()
 		defer channelStatusLock.Unlock()
 	}

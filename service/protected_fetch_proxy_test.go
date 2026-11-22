@@ -26,7 +26,7 @@ func newProxyFetchTestClient(t *testing.T, proxyURL string, resolver ssrfResolve
 	t.Helper()
 	u, err := url.Parse(proxyURL)
 	require.NoError(t, err)
-	client := newProtectedFetchHTTPClientWithProxy(resolver, nil, staticProtection(&common.SSRFProtection{}), http.ProxyURL(u))
+	client := newProtectedFetchHTTPClientWithProxy(resolver, nil, staticProtection(&common.SSRFProtection{ApplyIPFilterForDomain: true}), http.ProxyURL(u))
 	client.Timeout = 3 * time.Second
 	t.Cleanup(client.CloseIdleConnections)
 	return client

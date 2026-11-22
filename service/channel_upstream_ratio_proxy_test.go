@@ -150,8 +150,7 @@ func TestUpstreamRatioProxyRejectsMixedPrivateResolution(t *testing.T) {
 	fetch := system_setting.GetFetchSetting()
 	fetch.EnableSSRFProtection = true
 	fetch.AllowPrivateIp = false
-	// 即使关闭域名 IP 过滤，固定解析也不能把私网地址交给代理。
-	fetch.ApplyIPFilterForDomain = false
+	fetch.ApplyIPFilterForDomain = true
 	fetch.DomainFilterMode = false
 	fetch.IpFilterMode = false
 	client, err := newUpstreamRatioHTTPClient("http://8.8.8.8:8080")
@@ -166,6 +165,7 @@ func TestUpstreamRatioProxyRejectsMixedPrivateResolution(t *testing.T) {
 
 func TestUpstreamRatioHTTPSProxyVerifiesProxyIdentity(t *testing.T) {
 	setupUpstreamRatioTest(t)
+	configureSSRFTestFetchSetting(t)
 	ratioProxyDNS(t, net.ParseIP("1.1.1.1"))
 	proxy := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, r.URL.Host) }))
 	defer proxy.Close()
