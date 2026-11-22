@@ -1620,7 +1620,7 @@
       "path": "controller/log_export_protection_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "61584514b8b9a2343e26f4794e4255cb86c1cf9043d6f4dbf58854a54c41a082"
+      "local_sha256": "02cff42254333c17cbf163053e69c65050f2f11a0c0cfc70f54582142ada22aa"
     },
     {
       "path": "controller/log_export_test.go",
@@ -5141,7 +5141,7 @@
       "path": "model/log_export_batches.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d5a8c1fbb7cd010c670883a4bcf07586f399f6bc1eb9a4ad2c07ec4bd986e3fd",
+      "local_sha256": "18055de1f23f70d6288003295e175b65389cd54fad820beaa450bf06279169bc",
       "reasons": [
         "audit-local-safety"
       ],

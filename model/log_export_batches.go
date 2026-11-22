@@ -14,10 +14,11 @@ const logExportQueryTimeout = 30 * time.Second
 func streamLogBatches(tx *gorm.DB, order string, fn func(*Log) error) error {
 	ctx := tx.Statement.Context
 	// Freeze the auto-increment watermark independently of created_at: backdated
-	// inserts made during the export must not enter later batches.
+	// inserts made during the export must not enter later batches. Read the
+	// global primary-key maximum so export filters cannot turn this into a scan.
 	queryCtx, cancel := context.WithTimeout(ctx, logExportQueryTimeout)
 	var upperID int
-	err := tx.WithContext(queryCtx).Model(&Log{}).Select("COALESCE(MAX(logs.id), 0)").Scan(&upperID).Error
+	err := LOG_DB.WithContext(queryCtx).Model(&Log{}).Select("COALESCE(MAX(logs.id), 0)").Scan(&upperID).Error
 	cancel()
 	if err != nil {
 		return err

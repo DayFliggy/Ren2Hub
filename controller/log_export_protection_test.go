@@ -96,6 +96,25 @@ func TestLogExportKeysetDatabaseMatrix(t *testing.T) {
 					}
 				}
 			}
+			// Writes after the watermark must not enter a later page, even
+			// when their timestamps place them behind the current cursor.
+			count := 0
+			require.NoError(t, model.StreamAllLogs(context.Background(), model.LogFilter{}, common.RoleAdminUser, func(log *model.Log) error {
+				if count == 0 {
+					if err := db.Create(&[]model.Log{
+						{UserId: 1, CreatedAt: now, RequestId: "inserted-now"},
+						{UserId: 1, CreatedAt: now - 400*24*3600, RequestId: "inserted-backdated"},
+					}).Error; err != nil {
+						return err
+					}
+				}
+				count++
+				require.NotEqual(t, "inserted-now", log.RequestId)
+				require.NotEqual(t, "inserted-backdated", log.RequestId)
+				return nil
+			}))
+			require.Equal(t, 12000, count)
+
 		})
 	}
 }
