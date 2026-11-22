@@ -340,6 +340,7 @@ watch(page, load)
 
 // ---------- export ----------
 
+const MULTI_FILE_NOTICE_MS = 10_000
 const exporting = ref(false)
 const exportProgress = ref<LogExportProgress>({ count: 0, files: 0 })
 let exportController: AbortController | null = null
@@ -395,11 +396,15 @@ async function doExport() {
       },
     })
     exportOpen.value = false
-    toast.success(
-      files > 1
-        ? t('logs.exportedParts', { count, files })
-        : t('logs.exported', { count })
-    )
+    // The multi-file message asks the user to check the download list, so it
+    // stays long enough to read.
+    if (files > 1)
+      toast.push(
+        'success',
+        t('logs.exportedParts', { count, files }),
+        MULTI_FILE_NOTICE_MS
+      )
+    else toast.success(t('logs.exported', { count }))
   } catch (error) {
     // Files already saved hold only part of the range; say so either way.
     if (controller.signal.aborted) {

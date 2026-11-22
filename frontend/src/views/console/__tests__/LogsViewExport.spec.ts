@@ -16,6 +16,7 @@ import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import LogsView from '@/views/console/LogsView.vue'
 
 const toast = vi.hoisted(() => ({
+  push: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
   warning: vi.fn(),
@@ -187,9 +188,13 @@ describe('LogsView export progress', () => {
     await flushPromises()
     const files = downloads.length
     expect(files).toBeGreaterThan(1)
-    expect(toast.success).toHaveBeenCalledWith(
-      `已导出 4 条，分 ${files} 个文件；若下载列表中少于 ${files} 个文件，请允许本站下载多个文件后重新导出。`
+    // Long enough to compare against the download list, unlike the default.
+    expect(toast.push).toHaveBeenCalledWith(
+      'success',
+      `已导出 4 条，分 ${files} 个文件；若下载列表中少于 ${files} 个文件，请允许本站下载多个文件后重新导出。`,
+      10_000
     )
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('keeps the single-file message unchanged', async () => {
