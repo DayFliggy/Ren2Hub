@@ -417,3 +417,39 @@ for (const [theme, mobile] of [
     }
   })
 }
+
+test('log export running English narrow', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await configureStablePage(page, { theme: 'light', locale: 'en' })
+  await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+  const running = JSON.stringify(
+    JSON.parse(await readFile(runningFixture, 'utf8'))
+  )
+  await page.route('**/api/log/self/export?*', (route) =>
+    route.fulfill({ contentType: 'application/json', body: running })
+  )
+  await Promise.all([
+    page.waitForResponse('**/api/log/self?*'),
+    page.goto('/logs'),
+  ])
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Export data' })
+  await expect(dialog).toBeVisible()
+  let downloaded = false
+  page.on('download', () => (downloaded = true))
+  await dialog.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(
+    page.getByText(
+      'Another log export is running. Try again after it finishes.',
+      { exact: true }
+    )
+  ).toBeInViewport({ ratio: 1 })
+  await expect(dialog).toBeVisible()
+  expect(downloaded).toBe(false)
+  await assertNoHorizontalOverflow(page)
+  if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
+    await page.screenshot({
+      path: testInfo.outputPath('export-running-en.png'),
+    })
+  }
+})
