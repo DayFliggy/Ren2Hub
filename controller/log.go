@@ -125,11 +125,6 @@ func exportLogs(c *gin.Context, all bool) {
 		return
 	}
 	defer release()
-	releaseSlot, ok := acquireLogExportSlot(c)
-	if !ok {
-		return
-	}
-	defer releaseSlot()
 
 	writer, ok := prepareLogExportWriter(c)
 	if !ok {

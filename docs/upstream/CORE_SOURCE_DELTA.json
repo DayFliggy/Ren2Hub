@@ -1584,7 +1584,7 @@
       "path": "controller/log.go",
       "status": "adapted",
       "upstream_sha256": "045aca343d8014a7be9175c3cd0dcf839316e1d8020c3748e3a6d7495ed1c991",
-      "local_sha256": "64732970bc55da9ddd711b920df28c5f16215f4fb92b2dad7280fdfed298b2f2",
+      "local_sha256": "78864fc71f911856594ecfe52b5e9c744d98776ae57fe8db234a818a0970bbd4",
       "reasons": [
         "audit-local-safety",
         "group-removal"
@@ -1600,13 +1600,13 @@
       "path": "controller/log_export_failure_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9122c30d43c93f74b53ccb40fe08ede7dd29151590d553521b75b2441c5c496a"
+      "local_sha256": "aeb00943b4280e27551160359a22f82d4e24240e1e835bff550bdb00c5c0d9da"
     },
     {
       "path": "controller/log_export_protection.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "64efb2755a9e47225ca6715347b1aa3dee2091bf5f5a786f0b1a3d9dc9ae4846",
+      "local_sha256": "9e9301f0c247bf1ba2c5c4b38857db4180fecdd1013b799dc5ba00e4b3d234a4",
       "reasons": [
         "audit-local-safety"
       ],
@@ -1620,7 +1620,7 @@
       "path": "controller/log_export_protection_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "02cff42254333c17cbf163053e69c65050f2f11a0c0cfc70f54582142ada22aa"
+      "local_sha256": "c564c9e719af7e549454968ee8cbb74d9ebdb78eb749e6d91d7d2545b14824e2"
     },
     {
       "path": "controller/log_export_test.go",

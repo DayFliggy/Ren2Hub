@@ -1,6 +1,0 @@
-{
-  "code": "LOG_EXPORT_BUSY",
-  "message": "Log export is busy. Try again later.",
-  "message_key": "Log export is busy. Try again later.",
-  "success": false
-}

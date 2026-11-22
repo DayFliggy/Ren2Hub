@@ -74,7 +74,6 @@ func TestLogExportFailureReleasesLock(t *testing.T) {
 			})
 			request := httptest.NewRequest(http.MethodGet, "/api/log/self/export", nil).WithContext(ctx)
 			engine.ServeHTTP(writer, request)
-			require.Empty(t, logExportSlots, "failure or cancellation releases global slot")
 			require.Positive(t, writer.writes, "the failure injection must execute")
 
 			lines := strings.Split(strings.TrimSpace(writer.Body.String()), "\n")
@@ -94,14 +93,17 @@ func TestLogExportFailureReleasesLock(t *testing.T) {
 				require.Len(t, lines, 1, "failed data writes must stop the stream")
 			}
 
-			release, acquired, err := service.AcquireLogExportLock(userID)
-			if acquired {
-				defer release()
-			}
-			require.NoError(t, err)
-			require.True(t, acquired, "failure must release the export lock for a retry")
+			requireLogExportLockReleased(t, userID)
 		})
 	}
+}
+
+func requireLogExportLockReleased(t *testing.T, userID int) {
+	t.Helper()
+	release, acquired, err := service.AcquireLogExportLock(userID)
+	require.NoError(t, err)
+	require.True(t, acquired, "export must release the user lock for a retry")
+	release()
 }
 
 type exportShortWriter struct{}
@@ -137,7 +139,7 @@ func TestLogExportRejectsUnsupportedDeadlineBeforeStreaming(t *testing.T) {
 	require.Equal(t, false, result["success"])
 	require.Equal(t, "Failed to export logs", result["message_key"])
 	require.NotContains(t, w.Body.String(), "must not stream")
-	require.Empty(t, logExportSlots)
+	requireLogExportLockReleased(t, 1)
 }
 
 type exportTrackedFailureWriter struct {

@@ -35388,7 +35388,7 @@
       ]
     },
     "controller/log.go": {
-      "local_sha256": "64732970bc55da9ddd711b920df28c5f16215f4fb92b2dad7280fdfed298b2f2",
+      "local_sha256": "78864fc71f911856594ecfe52b5e9c744d98776ae57fe8db234a818a0970bbd4",
       "hunks": [
         {
           "header": "@@ -25,7 +25,6 @@",
@@ -35401,28 +35401,28 @@
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         },
         {
-          "header": "@@ -133,24 +125,24 @@",
-          "sha256": "af450429a47d783e0fb9cf7c297da672ef3a5dadaed0947c4763495248a43a33",
+          "header": "@@ -133,24 +125,19 @@",
+          "sha256": "0d2e4589f3ea09d1eea8a45e90fcbcfb1ce073664d55ea9e365193bd2d1e5602",
+          "basis": "AUTH-7：每个用户同时只能运行一个导出，不设全局并发上限。获取用户锁后预检写截止，再发送流响应头并流式写入日志。"
+        },
+        {
+          "header": "@@ -166,7 +153,7 @@",
+          "sha256": "5547039b4a64b5eefd7ca595dbcfcf84e174c5ac65fe4d0331d8b19af697f00e",
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         },
         {
-          "header": "@@ -166,7 +158,7 @@",
-          "sha256": "a6568764bb1a79ef2a165923c1ec11eb3460ddb8cf2be9e9f88896e5af3f21d4",
+          "header": "@@ -208,8 +195,7 @@",
+          "sha256": "9b15d78b6a22118844d2bb7b9bc4bdd5e43df6393431ebd7020dabfa9053d63d",
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         },
         {
-          "header": "@@ -208,8 +200,7 @@",
-          "sha256": "03c4de0cf715914caf5a6727cf7a352aa43129a9417046b864a7ba0161dd1474",
+          "header": "@@ -228,7 +214,6 @@",
+          "sha256": "8f536da6e0b84f0d6ee28b2339824b1779d1f82921b5c349d44aa65ce100698c",
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         },
         {
-          "header": "@@ -228,7 +219,6 @@",
-          "sha256": "43b85b60425689711c4ebee5a642650cd124470206c0952b737b7f3e713d4daf",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
-        },
-        {
-          "header": "@@ -242,8 +232,7 @@",
-          "sha256": "11dffd5223bbf3d0f65777052fd891a307c469bc7f2ea4e7f05025e7a93e72d2",
+          "header": "@@ -242,8 +227,7 @@",
+          "sha256": "223c8bc9305b90a2d80d5e1540f5b61669d36779586c872e2a7b5c2deecd37bd",
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         }
       ]

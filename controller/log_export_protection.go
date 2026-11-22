@@ -11,20 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const logExportMaxConcurrent = 2
 const logExportWriteIdleTimeout = 60 * time.Second
-
-var logExportSlots = make(chan struct{}, logExportMaxConcurrent)
-
-func acquireLogExportSlot(c *gin.Context) (func(), bool) {
-	select {
-	case logExportSlots <- struct{}{}:
-		return func() { <-logExportSlots }, true
-	default:
-		common.ApiErrorStatus(c, http.StatusOK, common.NewMessage("Log export is busy. Try again later."), gin.H{"code": "LOG_EXPORT_BUSY"})
-		return nil, false
-	}
-}
 
 type logExportWriter struct {
 	writer      io.Writer

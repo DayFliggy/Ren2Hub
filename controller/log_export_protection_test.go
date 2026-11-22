@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -17,37 +16,66 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-func TestLogExportBusy(t *testing.T) {
+func TestLogExportConcurrentUsers(t *testing.T) {
 	db, _ := newAuditTestDatabase(t, "sqlite", "")
 	useLogExportDatabases(t, db, db, common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	require.NoError(t, db.AutoMigrate(&model.Log{}))
-	require.NoError(t, db.Create(&[]model.Log{{UserId: 1, CreatedAt: time.Now().Unix()}, {UserId: 2, CreatedAt: time.Now().Unix()}}).Error)
-	entered, resume, done := make(chan struct{}, 2), make(chan struct{}), make(chan struct{}, 2)
-	for _, id := range []int{1, 2} {
-		go func(id int) {
-			defer func() { done <- struct{}{} }()
-			w := &exportFailureWriter{ResponseRecorder: httptest.NewRecorder(), firstWrite: func() error { entered <- struct{}{}; <-resume; return nil }}
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, "/export", nil)
-			c.Set("id", id)
-			c.Set("role", common.RoleAdminUser)
-			ExportUserLogs(c)
-		}(id)
+	require.NoError(t, db.Create(&[]model.Log{{UserId: 1}, {UserId: 2}, {UserId: 3}}).Error)
+
+	entered := make(chan string, 3)
+	resume := make(chan struct{})
+	release := sync.OnceFunc(func() { close(resume) })
+	var workers sync.WaitGroup
+	defer workers.Wait()
+	defer release()
+	var responses []*httptest.ResponseRecorder
+	for _, id := range []int{1, 2, 3} {
+		recorder := httptest.NewRecorder()
+		responses = append(responses, recorder)
+		writer := &exportFailureWriter{ResponseRecorder: recorder, firstWrite: func() error {
+			entered <- recorder.Header().Get("Content-Type")
+			<-resume
+			return nil
+		}}
+		c, _ := gin.CreateTestContext(writer)
+		c.Request = httptest.NewRequest(http.MethodGet, "/export", nil)
+		c.Set("id", id)
+		c.Set("role", common.RoleAdminUser)
+		workers.Go(func() { ExportUserLogs(c) })
 	}
-	<-entered
-	<-entered
-	result := callLogHandler(t, ExportUserLogs, 3, common.RoleAdminUser, "")[0]
-	close(resume)
-	<-done
-	<-done
-	require.Equal(t, "LOG_EXPORT_BUSY", result["code"])
-	require.Equal(t, "Log export is busy. Try again later.", result["message_key"])
-	frontendFixture(t, "log-export-busy.json", result)
-	require.Equal(t, true, callLogHandler(t, ExportUserLogs, 3, common.RoleAdminUser, "")[0]["success"])
+	for range responses {
+		select {
+		case contentType := <-entered:
+			require.Contains(t, contentType, "application/x-ndjson")
+		case <-time.After(5 * time.Second):
+			t.Fatal("exports did not reach the first row write")
+		}
+	}
+	start := time.Now()
+	duplicate := callLogHandler(t, ExportUserLogs, 1, common.RoleAdminUser, "")
+	require.Less(t, time.Since(start), time.Second)
+	require.Len(t, duplicate, 1)
+	require.Equal(t, false, duplicate[0]["success"])
+	require.Equal(t, "Another log export is running. Try again after it finishes.", duplicate[0]["message_key"])
+	frontendFixture(t, "log-export-running.json", duplicate[0])
+
+	release()
+	workers.Wait()
+	for _, response := range responses {
+		lines := strings.Split(strings.TrimSpace(response.Body.String()), "\n")
+		require.Len(t, lines, 2)
+		var result map[string]any
+		require.NoError(t, common.UnmarshalJsonStr(lines[1], &result))
+		require.Equal(t, true, result["success"])
+	}
+	retry := callLogHandler(t, ExportUserLogs, 1, common.RoleAdminUser, "")
+	require.Len(t, retry, 2)
+	require.Equal(t, true, retry[1]["success"])
 }
 
 func TestLogExportKeysetDatabaseMatrix(t *testing.T) {
@@ -238,13 +266,7 @@ func TestLogExportHTTPWriteTimeoutAndKeepAlive(t *testing.T) {
 		t.Fatal("stalled client did not release export")
 	}
 	require.Less(t, time.Since(start), 3*time.Second)
-	require.Empty(t, logExportSlots)
-	release, acquired, err := service.AcquireLogExportLock(1)
-	require.NoError(t, err)
-	if acquired {
-		release()
-	}
-	require.True(t, acquired)
+	requireLogExportLockReleased(t, 1)
 
 	keep, err := net.Dial("tcp", server.Listener.Addr().String())
 	require.NoError(t, err)
@@ -314,7 +336,7 @@ func TestLogExportBatchQueryTimeoutReportsFailure(t *testing.T) {
 	require.Len(t, lines, 1)
 	require.Equal(t, false, lines[0]["success"])
 	require.Equal(t, "Failed to export logs", lines[0]["message_key"])
-	require.Empty(t, logExportSlots)
+	requireLogExportLockReleased(t, 1)
 }
 
 func TestLogExportSlowContinuousReaderCompletes(t *testing.T) {
