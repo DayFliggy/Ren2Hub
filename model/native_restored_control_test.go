@@ -4,14 +4,12 @@ package model
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -125,15 +123,6 @@ func TestRestoredNativeControlCredentialSQL(t *testing.T) {
 	require.NoError(t, err)
 	if strings.Contains(out.String(), "fixture-new-credential") {
 		t.Error("CONTROL_CREDENTIAL_SQL: credential included in SQL diagnostics")
-	}
-}
-func TestRestoredNativeControlSelfStatIdentity(t *testing.T) {
-	db := restoredControlDB(t, &Log{})
-	require.NoError(t, db.Create(&[]Log{{UserId: 1, Username: "probe%", Type: LogTypeConsume, Quota: 10, CreatedAt: time.Now().Unix()}, {UserId: 2, Username: "probe-other", Type: LogTypeConsume, Quota: 90, CreatedAt: time.Now().Unix()}}).Error)
-	stat, err := restoredControlSelfStat(context.Background())
-	require.NoError(t, err)
-	if stat.Quota != 10 {
-		t.Errorf("CONTROL_SELF_STAT: unrelated user quota included: %d", stat.Quota)
 	}
 }
 func TestRestoredNativeControlAdminLogs(t *testing.T) {

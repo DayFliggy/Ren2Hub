@@ -261,7 +261,7 @@ func TestFrontendContractTaskPluginChannelUpdate(t *testing.T) {
 	setupTaskPluginBindChannelTest(t)
 	const pluginKey = "contract-plugin"
 	_, err := jsplugin.DefaultRegistry.Register(`
-export const meta = {apiVersion: 1, key: "contract-plugin", name: "Contract", version: "1.0.0", author: {name: "Test"}, models: ["doc"], fetchMode: "per_task"};
+export const meta = {apiVersion: 1, key: "contract-plugin", name: "Contract", version: "1.0.0", author: {name: "Test"}, models: ["doc"], fetchMode: "per_task", upstreams: ["vendor", "new_api"]};
 export function buildSubmitRequest() { return {}; }
 export function parseSubmitResponse() { return {}; }
 export function buildQueryRequest() { return {}; }
@@ -283,8 +283,8 @@ export function parseTaskResult() { return {}; }
 		return current
 	}
 
-	// validateChannel reads task_plugin_key from the request, so a sensitive
-	// writer's rename must resend the unchanged setting with type 61.
+	// Omitted credentials retain the stored binding. An explicit empty object
+	// still requests a change and must satisfy the normal plugin validation.
 	rename := frontendFixture(t, "channel-task-plugin-rename.put.request.json", map[string]any{
 		"id": channel.Id, "name": "plugin-contract-renamed", "type": constant.ChannelTypeTaskPlugin,
 		"base_url": baseURL, "models": "doc", "model_mapping": "", "priority": 0, "weight": 1,
@@ -295,11 +295,21 @@ export function parseTaskResult() { return {}; }
 	var withoutSetting map[string]any
 	require.NoError(t, common.Unmarshal(rename, &withoutSetting))
 	delete(withoutSetting, "setting")
+	withoutSetting["header_override"] = `{"X-Credential":"new-secret"}`
 	encoded, err := common.Marshal(withoutSetting)
+	require.NoError(t, err)
+	omitted := contractRequest(t, root, http.MethodPut, "/api/channel/", encoded)
+	require.Contains(t, omitted.Body.String(), `"success":true`, omitted.Body.String())
+	assert.Equal(t, "plugin-contract-renamed", saved().Name)
+	assert.Equal(t, setting, *saved().Setting)
+	assert.Equal(t, `{"X-Credential":"new-secret"}`, *saved().HeaderOverride)
+	withoutSetting["setting"] = "{}"
+	withoutSetting["name"] = "plugin-contract-empty"
+	encoded, err = common.Marshal(withoutSetting)
 	require.NoError(t, err)
 	rejected := contractRequest(t, root, http.MethodPut, "/api/channel/", encoded)
 	assert.Contains(t, rejected.Body.String(), "task plugin key is required")
-	assert.Equal(t, "plugin-contract", saved().Name)
+	assert.Equal(t, "plugin-contract-renamed", saved().Name)
 
 	updated := contractRequest(t, root, http.MethodPut, "/api/channel/", rename)
 	require.Contains(t, updated.Body.String(), `"success":true`, updated.Body.String())
@@ -325,11 +335,15 @@ export function parseTaskResult() { return {}; }
 	assert.Equal(t, baseURL, *current.BaseURL)
 
 	// Changing type must also convert the binding fields, even if the plugin
-	// set is unchanged. Type 61 validates task_plugin_key before loading the row.
+	// set is unchanged. Type 61 validates task_plugin_key before saving the row.
 	newAPISetting := `{"force_format":true,"task_extend_plugin_keys":["contract-plugin"]}`
 	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{
 		"type": constant.ChannelTypeNewAPI, "setting": newAPISetting,
 	}).Error)
+	omitted = contractRequest(t, admin, http.MethodPut, "/api/channel/", []byte(fmt.Sprintf(`{"id":%d,"name":"new-api-omitted"}`, channel.Id)))
+	require.Contains(t, omitted.Body.String(), `"success":true`, omitted.Body.String())
+	assert.Equal(t, newAPISetting, *saved().Setting)
+	assert.Equal(t, constant.ChannelTypeNewAPI, saved().Type)
 	convertedSetting := `{"force_format":true,"task_plugin_key":"contract-plugin"}`
 	convert := frontendFixture(t, "channel-new-api-to-task-plugin.put.request.json", map[string]any{
 		"id": channel.Id, "name": "plugin-contract-converted", "type": constant.ChannelTypeTaskPlugin,

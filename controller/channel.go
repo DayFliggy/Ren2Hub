@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
@@ -236,7 +237,7 @@ func GetAllChannels(c *gin.Context) {
 		typeCounts[r.Type] = r.Count
 	}
 	common.ApiSuccess(c, gin.H{
-		"items":       channelData,
+		"items":       projectChannelsCredentials(c, channelData),
 		"total":       total,
 		"page":        pageInfo.GetPage(),
 		"page_size":   pageInfo.GetPageSize(),
@@ -434,7 +435,7 @@ func SearchChannels(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"items":       pagedData,
+			"items":       projectChannelsCredentials(c, pagedData),
 			"total":       total,
 			"type_counts": typeCounts,
 		},
@@ -464,7 +465,7 @@ func GetChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channel,
+		"data":    projectChannelCredentials(c, channel),
 	})
 	return
 }
@@ -764,7 +765,7 @@ func AddChannel(c *gin.Context) {
 	// type-61 channel dedicated to it.
 	if addChannelRequest.Channel != nil &&
 		(addChannelRequest.Channel.Type == constant.ChannelTypeTaskPlugin || len(addChannelRequest.Channel.GetSetting().TaskPluginBindings()) > 0) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
+		!middleware.CanWithAccessToken(c, authz.TaskPluginBind) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "task plugin channels require the task_plugin.bind permission",
@@ -1018,7 +1019,7 @@ func EditTagChannels(c *gin.Context) {
 		return
 	}
 	if (channelTag.ParamOverride != nil || channelTag.HeaderOverride != nil) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
+		!middleware.CanWithAccessToken(c, authz.ChannelSensitiveWrite) {
 		common.ApiErrorT(c, "Unauthorized, insufficient privileges")
 		return
 	}
@@ -1130,8 +1131,18 @@ func UpdateChannel(c *gin.Context) {
 	}
 	clearChannelReadOnlyFields(&channel, requestData)
 
+	originChannel, err := model.GetChannelById(channel.Id, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := normalizeChannelRedactions(c, &channel, originChannel, requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "CHANNEL_REDACTED_FIELD_INVALID", "message": "Invalid redacted channel field"})
+		return
+	}
+
 	if channel.Type == constant.ChannelTypeTaskPlugin &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
+		!middleware.CanWithAccessToken(c, authz.TaskPluginBind) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "task plugin channels require the task_plugin.bind permission",
@@ -1141,15 +1152,16 @@ func UpdateChannel(c *gin.Context) {
 
 	baseURLFromPluginDefault := channel.Type == constant.ChannelTypeTaskPlugin &&
 		(channel.BaseURL == nil || strings.TrimSpace(*channel.BaseURL) == "")
-	// 使用统一的校验函数
-	if err := validateChannel(&channel.Channel, false); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
-	originChannel, err := model.GetChannelById(channel.Id, true)
-	if err != nil {
-		common.ApiError(c, err)
+	// Parse settings before getters can read them. When type is omitted,
+	// validate the retained plugin only after permission and credential checks.
+	_, typeProvided := requestData["type"]
+	if typeProvided {
+		if err := validateChannelPatch(&channel, originChannel, requestData); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if err := channel.ValidateSettings(); err != nil {
+		common.ApiError(c, common.NewMessage("Invalid channel settings format: {{error}}", map[string]any{"error": err.Error()}))
 		return
 	}
 	if _, provided := requestData["channel_ratio"]; !provided {
@@ -1175,7 +1187,7 @@ func UpdateChannel(c *gin.Context) {
 	// administrators without it can still edit the rest of a gateway channel.
 	if settingProvided &&
 		!slices.Equal(channel.GetSetting().TaskPluginBindings(), originChannel.GetSetting().TaskPluginBindings()) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
+		!middleware.CanWithAccessToken(c, authz.TaskPluginBind) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "task plugin channels require the task_plugin.bind permission",
@@ -1184,7 +1196,7 @@ func UpdateChannel(c *gin.Context) {
 	}
 
 	if channelHasSensitiveChanges(&channel, originChannel, requestData) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
+		!middleware.CanWithAccessToken(c, authz.ChannelSensitiveWrite) {
 		common.ApiErrorT(c, "Unauthorized, insufficient privileges")
 		return
 	}
@@ -1222,14 +1234,10 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	// validateChannel checks the plugin config of a request that names type
-	// 61; settings sent without the type are checked against the kept plugin.
-	if channel.Type == 0 && keptType == constant.ChannelTypeTaskPlugin && channel.OtherSettings != "" {
-		if plugin, ok := jsplugin.DefaultRegistry.Get(strings.TrimSpace(keptPluginKey)); ok {
-			if err := normalizePluginConfig(&channel.Channel, plugin); err != nil {
-				common.ApiError(c, err)
-				return
-			}
+	if !typeProvided {
+		if err := validateChannelPatch(&channel, originChannel, requestData); err != nil {
+			common.ApiError(c, err)
+			return
 		}
 	}
 	if keyChanged && keptType == constant.ChannelTypeTaskPlugin {
@@ -1265,6 +1273,7 @@ func UpdateChannel(c *gin.Context) {
 		}
 		keyAfter = stored.Key
 	}
+	omitUnsubmittedChannelCredentials(&channel, requestData)
 	err = channel.Update()
 	if err != nil {
 		common.ApiError(c, err)
@@ -1306,7 +1315,7 @@ func UpdateChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channel,
+		"data":    projectChannelCredentials(c, &channel.Channel),
 	})
 	return
 }
@@ -1323,8 +1332,15 @@ func UpdateChannelStatus(c *gin.Context) {
 		return
 	}
 	result := model.UpdateChannelStatusDetailed(id, "", req.Status, "manual operation")
+	if result.Err != nil {
+		code, status := channelStatusError(result.Err)
+		c.JSON(status, gin.H{"success": false, "code": code, "data": false, "message": "Channel status update failed"})
+		return
+	}
 	if result.Changed {
-		model.InitChannelCache()
+		if err := model.ReloadChannelCache(); err != nil {
+			result.PublicationPending = true
+		}
 		if req.Status != common.ChannelStatusEnabled {
 			closeActiveChannelWebSockets([]int{id})
 		}
@@ -1352,8 +1368,16 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 	changedCount := 0
 	var disabledIDs []int
 	pendingCount := 0
+	failedIDs := make([]int, 0)
+	failures := make([]gin.H, 0)
 	for _, id := range req.Ids {
 		result := model.UpdateChannelStatusDetailed(id, "", req.Status, "manual batch operation")
+		if result.Err != nil {
+			code, _ := channelStatusError(result.Err)
+			failedIDs = append(failedIDs, id)
+			failures = append(failures, gin.H{"id": id, "code": code})
+			continue
+		}
 		if result.Changed {
 			changedCount++
 			if result.PublicationPending {
@@ -1365,7 +1389,9 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 		}
 	}
 	if changedCount > 0 {
-		model.InitChannelCache()
+		if err := model.ReloadChannelCache(); err != nil {
+			pendingCount = changedCount
+		}
 	}
 	if len(disabledIDs) > 0 {
 		closeActiveChannelWebSockets(disabledIDs)
@@ -1377,7 +1403,9 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 		"publication_pending": pendingCount,
 	})
 	c.JSON(http.StatusOK, gin.H{
-		"success":             true,
+		"success":             len(failedIDs) == 0,
+		"failed_ids":          failedIDs,
+		"failures":            failures,
 		"message":             "",
 		"data":                changedCount,
 		"publication_pending": pendingCount,
@@ -1669,7 +1697,7 @@ func CopyChannel(c *gin.Context) {
 		return
 	}
 	if (origin.Type == constant.ChannelTypeTaskPlugin || len(origin.GetSetting().TaskPluginBindings()) > 0) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
+		!middleware.CanWithAccessToken(c, authz.TaskPluginBind) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "task plugin channels require the task_plugin.bind permission"})
 		return
 	}
@@ -1963,4 +1991,11 @@ func OllamaVersion(c *gin.Context) {
 			"version": version,
 		},
 	})
+}
+
+func channelStatusError(err error) (string, int) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "CHANNEL_NOT_FOUND", http.StatusNotFound
+	}
+	return "CHANNEL_STATUS_UPDATE_FAILED", http.StatusInternalServerError
 }

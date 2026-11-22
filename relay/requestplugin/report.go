@@ -323,7 +323,7 @@ func Report(c *gin.Context, format types.RelayFormat, info *relaycommon.RelayInf
 
 // newReportError is the error a client received, as the record shows it.
 func newReportError(format types.RelayFormat, apiErr *types.NewAPIError, upstreamURLs []string) *reportError {
-	reported := &reportError{Status: apiErr.StatusCode, Code: apiErr.GetErrorCode()}
+	reported := &reportError{Status: apiErr.StatusCode, Code: apiErr.SanitizeText(string(apiErr.GetErrorCode()), upstreamURLs...)}
 	if format == types.RelayFormatClaude {
 		claudeErr := apiErr.ToClaudeError(upstreamURLs...)
 		reported.Type, reported.Message = claudeErr.Type, claudeErr.Message

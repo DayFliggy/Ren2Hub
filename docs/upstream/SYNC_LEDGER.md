@@ -93,22 +93,28 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 同步上游时，上游对多 Key 代码的改动（`channel_info`、`GetNextEnabledKey`、`handlerMultiKeyUpdate`、`multi_key/manage`、`key_index`、`MultiKeyMode` 及 Key 级状态）按“不吸收”在窗口文件里逐项写明；同一文件里与多 Key 无关的改动照常吸收，并保持本节的接点。
 
-上游倍率探测的代理请求由 `service/protected_fetch_pinned_proxy.go` 固定本地解析结果，防护开启时逐个校验所有 IP，任一不允许即拒绝；HTTP 保留原 Host，HTTPS CONNECT 使用 IP、证书按原主机名校验，HTTPS 代理自身证书单独校验。每次请求独立 transport，通用原生受保护抓取暂未使用此扩展。
+上游倍率探测的代理请求由 `service/protected_fetch_pinned_proxy.go` 固定本地解析结果，防护开启时逐个校验所有 IP，任一不允许即拒绝；HTTP 保留原 Host，HTTPS CONNECT 使用 IP、证书按原主机名校验，HTTPS 代理自身证书单独校验。每次代理请求独立 transport，通用受保护抓取同样复用此扩展；每一跳重定向重新执行校验，管理员配置的代理本身可为本地地址。共享目标校验拒绝带 zone 的 IPv6。
 
 B1 已批准的本地安全边界（`audit-local-safety`）：
 
-- Stripe、Creem、Waffo、Pancake 的已验签回调核验成功终态、冻结金额币种及商户身份；与 Epay/GMPay 共用精确十进制结算。永久不符不入账并返回 2xx、记录拒绝审计；Stripe 临时入账失败 ACK、Waffo 非成功状态、Pancake 临时查单失败 ACK 仍保留，具体字段和官方依据见[资金 API](../billing/API.md)。
 - 批量预扣在 Redis 故障回退前持同余额锁落库待处理增量，落库失败保留增量并拒绝新预扣；缓存恢复后重新同步余额，避免旧数据库或旧 Redis 余额二次消费。
+- Stripe、Creem、Waffo、Pancake 的已验签回调核验成功终态、冻结金额币种及商户身份；与 Epay/GMPay 共用精确十进制结算。永久不符不入账并返回 2xx、记录拒绝审计；Stripe 临时入账失败 ACK、Waffo 非成功状态、Pancake 临时查单失败 ACK 仍保留，具体字段和官方依据见[资金 API](../billing/API.md)。
 - Realtime 使用现有请求体与流扫描限制，双向写有期限；事件状态同锁处理，关闭双方连接并等待读协程退出后结算。逐轮与会话的重复扣费仍按 BILL-1 只登记。
 - Compact 与 OpenAI 用量识别保留 `cache_creation_input_tokens`，仅缓存创建也计费；日志聚合包含 12 小时拆分，避免总量与拆分重复累计。
 - 异步轮询以渠道和供应商任务 ID 建立独立索引，普通与批量结果只能更新所属渠道任务；成功结算和失败退款仍沿用原有 CAS 赢家路径。渠道之间独立派发并在本轮返回前等待完成，批量模式也可跨渠道并行；同渠道重复供应商 ID 仍属于原生边界。
 
+B2 已批准的权限与输出边界：
+
+- 本人日志统计按用户 ID 限制额度与 RPM/TPM，改名不丢历史；管理员显式搜索保留 LIKE。用户列表只投影已知的非秘密设置，通知目标 URL 与凭据不返回。
+- 公共分页归一到正数及最多 100 行，页码限制防止 offset 溢出。日志导出最多 10000 行及 32 MiB 数据，终行明确返回 `LOG_EXPORT_LIMIT_EXCEEDED` 与已导出计数，不把截断报成功。
+- OAuth 登录的每个 flow 绑定独立 HttpOnly 浏览器 Cookie，见[认证](../authentication.md)。渠道读取按 Root 与有效写权限投影秘密，完整脱敏占位或省略字段不会写回；敏感更新同时要求账户权限与 PAT scope。`header_override` 显式空字符串清空，省略保留；省略 `setting` 时读取已存的插件绑定配置完成校验，不清空。
+- 状态更新失败返回明确错误；不存在、未变与持久化失败分开，批量列出失败项。缓存只在事务提交后发布，快照不原地修改；刷新读取失败保留原缓存并报告。普通编辑的能力事务边界仍属 ROUTE-1。
+- 上游响应复制过滤凭据、Cookie 和逐跳头（含 Connection 声明项）；通配请求头不转发 WebSocket 认证子协议。错误各字符串字段、嵌套 metadata 与前置日志共用净化，内部重试码及 cause 保留；错误体读取失败仍关闭响应体。
+
 ## 与上游相同、未在本地修复的已知问题
 
-原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（少计费、任务缺渠道不退款、任务 ID 碰撞、统计可见范围、日志脱敏、配置原子性、支付回调核验、两处数据竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：
+原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（任务缺渠道不退款、管理员列表可见范围、调试日志、配置原子性、支付回调确认、定价与日志计数竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：
 
-- `model/channel_cache.go` 的 `InitChannelCache` 忽略 `DB.Find` 的错误，启用内存缓存时一次失败的同步会把渠道表替换为空。
-- P3：`common/page_info.go:47` 保留 `page_size=-1`，GORM 不生成 LIMIT；本人日志、Token、任务及管理员列表等使用该分页值的入口，可一次取回当前用户或管理员授权范围内的全部匹配数据，造成资源压力；不会因此绕过既有用户范围过滤。与冻结上游 `48f9df96e` 相同。
 - 非自用模式且用户启用 `AcceptUnsetRatioModel` 时，未设模型倍率、走 token 重算的按量任务按预扣定额结算，多扣或少扣取决于用量（`relay/helper/price.go:212,231`、`setting/ratio_setting/model_ratio.go:103`、`service/task_billing.go:381`、`service/task_polling.go:815`）。自用模式下会按默认倍率重算；是否跳过重算的条件与冻结上游相同，本地只以渠道倍率替代分组倍率。
 - Stripe 在 TOKENS 展示模式下的数量合同不一致，后端保持原生，Vue 停用该入口。
 
@@ -121,8 +127,8 @@ B1 已批准的本地安全边界（`audit-local-safety`）：
 
 以下历次审计记录尚未在现行源码上重新核对，处理前先复核：
 
-- Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖；`common/ssrf_protection.go` 把带 zone 的 IPv6 字面量当作域名。
-- Uptime Kuma 缺失心跳按 0 统计；日志导出没有行数和字节上限。
+- Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖。
+- Uptime Kuma 缺失心跳按 0 统计。
 
 插件的凭据日志、迟到失败、作用范围重复项和 Seedream、Doubao、Jimeng、Google/Vertex 参数问题已在[等待上游](WAITING_UPSTREAM.md)核对登记；插件系统跟随上游，不做本地补丁。
 

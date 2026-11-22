@@ -205,7 +205,9 @@ func TaskError(apiErr *types.NewAPIError) *dto.TaskError {
 	if apiErr == nil {
 		return nil
 	}
-	return &dto.TaskError{Code: string(apiErr.GetErrorCode()), Message: apiErr.Err.Error(), StatusCode: apiErr.StatusCode, LocalError: true, Error: apiErr.Err}
+	err := service.TaskErrorFromAPIError(apiErr)
+	err.LocalError = true
+	return err
 }
 
 // Stopped reports a task error a request plugin's rejection or failure

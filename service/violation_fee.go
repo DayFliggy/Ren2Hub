@@ -31,21 +31,21 @@ func HasCSAMViolationMarker(err *types.NewAPIError) bool {
 	if err == nil {
 		return false
 	}
-	if strings.Contains(err.Error(), CSAMViolationMarker) || strings.Contains(err.Error(), ContentViolatesUsageMarker) {
+	if strings.Contains(err.RawError(), CSAMViolationMarker) || strings.Contains(err.RawError(), ContentViolatesUsageMarker) {
 		return true
 	}
-	msg := err.ToOpenAIError().Message
-	return strings.Contains(msg, CSAMViolationMarker) || strings.Contains(err.Error(), ContentViolatesUsageMarker)
+	msg := err.RawOpenAIError().Message
+	return strings.Contains(msg, CSAMViolationMarker) || strings.Contains(err.RawError(), ContentViolatesUsageMarker)
 }
 
 func WrapAsViolationFeeGrokCSAM(err *types.NewAPIError) *types.NewAPIError {
 	if err == nil {
 		return nil
 	}
-	oai := err.ToOpenAIError()
+	oai := err.RawOpenAIError()
 	oai.Type = string(types.ErrorCodeViolationFeeGrokCSAM)
 	oai.Code = string(types.ErrorCodeViolationFeeGrokCSAM)
-	return types.WithOpenAIError(oai, err.StatusCode, types.ErrOptionWithSkipRetry())
+	return types.WithOpenAIError(oai, err.StatusCode, types.ErrOptionWithSkipRetry(), types.ErrOptionWithSensitiveContext(err))
 }
 
 // NormalizeViolationFeeError ensures:
@@ -63,8 +63,8 @@ func NormalizeViolationFeeError(err *types.NewAPIError) *types.NewAPIError {
 	}
 
 	if IsViolationFeeCode(err.GetErrorCode()) {
-		oai := err.ToOpenAIError()
-		return types.WithOpenAIError(oai, err.StatusCode, types.ErrOptionWithSkipRetry())
+		oai := err.RawOpenAIError()
+		return types.WithOpenAIError(oai, err.StatusCode, types.ErrOptionWithSkipRetry(), types.ErrOptionWithSensitiveContext(err))
 	}
 
 	return err

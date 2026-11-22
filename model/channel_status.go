@@ -11,6 +11,7 @@ import (
 type ChannelStatusUpdateResult struct {
 	Changed            bool
 	PublicationPending bool
+	Err                error
 }
 
 func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, reason string) (result ChannelStatusUpdateResult) {
@@ -26,30 +27,12 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 			BumpSyncTopic(SyncTopicChannels)
 		}
 	}()
-	if common.MemoryCacheEnabled {
-		channelStatusLock.Lock()
-		defer channelStatusLock.Unlock()
-		channelCache, _ := CacheGetChannel(channelId)
-		if channelCache == nil {
-			return result
-		}
-		// A request failure must not replace an admin's manual disable;
-		// otherwise automatic recovery could re-enable the channel later.
-		if status == common.ChannelStatusAutoDisabled && channelCache.Status == common.ChannelStatusManuallyDisabled {
-			return result
-		}
-		// 如果缓存渠道存在，且状态已是目标状态，直接返回
-		if channelCache.Status == status {
-			return result
-		}
-		CacheUpdateChannelStatus(channelId, status)
-	}
-
-	written, err := updateChannelStatusLocked(channelId, status, reason)
+	written, err := updateChannelStatusAndCache(channelId, status, reason)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		common.SysLog(common.LogText("failed to update channel status: channel_id=%d, status=%d, error=%v", channelId, status, err))
 	}
 	result.Changed = written
+	result.Err = err
 	if err != nil {
 		return result
 	}
@@ -62,11 +45,25 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 	return result
 }
 
+// The status lock covers the durable write and cache publication, never hooks:
+// a post-commit hook may reload the cache and acquire this lock again.
+func updateChannelStatusAndCache(channelID, status int, reason string) (bool, error) {
+	if common.MemoryCacheEnabled {
+		channelStatusLock.Lock()
+		defer channelStatusLock.Unlock()
+	}
+	written, err := updateChannelStatusLocked(channelID, status, reason)
+	if written && err == nil {
+		CacheUpdateChannelStatus(channelID, status)
+	}
+	return written, err
+}
+
 // updateChannelStatusLocked writes the status, its reason and the channel's
 // abilities in one transaction under the channel row lock (SQLite: the
 // channel key lock), the lock every writer of a channel's key or status
-// holds, so the channel and its abilities always agree. Another writer of
-// other_info finds it changed and reads it again.
+// holds. This transaction commits the channel and its abilities together.
+// Another writer of other_info finds it changed and reads it again.
 func updateChannelStatusLocked(channelID, status int, reason string) (written bool, err error) {
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		lock := sqliteChannelKeyLock(channelID)

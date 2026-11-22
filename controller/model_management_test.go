@@ -584,8 +584,10 @@ export function parseTaskResult() { return {}; }
 					type filteredResponse struct {
 						Success bool
 						Data    struct {
-							Items []model.Model
-							Total int
+							Items    []model.Model
+							Total    int
+							Page     int `json:"page"`
+							PageSize int `json:"page_size"`
 						}
 					}
 					for _, state := range []model.ModelSquareState{model.ModelSquareVisible, model.ModelSquareUnavailable, model.ModelSquareHidden, model.ModelSquarePartial} {
@@ -648,8 +650,13 @@ export function parseTaskResult() { return {}; }
 						assert.False(t, result.Success)
 					}
 					for _, query := range []string{"p=-1", "page_size=-1"} {
-						recorder := modelManagementRequest(t, SearchModelsMeta, "GET", "/api/models/search?square_state=visible&"+query, nil, nil)
-						assert.Equal(t, http.StatusBadRequest, recorder.Code)
+						var result filteredResponse
+						recorder := modelManagementRequest(t, SearchModelsMeta, "GET", "/api/models/search?square_state=visible&"+query, nil, &result)
+						assert.Equal(t, http.StatusOK, recorder.Code)
+						require.True(t, result.Success)
+						assert.Equal(t, 1, result.Data.Page)
+						assert.Equal(t, min(max(common.ItemsPerPage, 1), 100), result.Data.PageSize)
+						assert.LessOrEqual(t, len(result.Data.Items), result.Data.PageSize)
 					}
 					var oversizedPage filteredResponse
 					modelManagementRequest(t, SearchModelsMeta, "GET", "/api/models/search?square_state=visible&keyword=square-&p="+strconv.Itoa(int(^uint(0)>>1)), nil, &oversizedPage)

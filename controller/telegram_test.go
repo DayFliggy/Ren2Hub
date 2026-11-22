@@ -168,6 +168,7 @@ func (fixture *telegramOAuthFixture) authorization(t *testing.T, intent string, 
 		URL   string `json:"authorization_url"`
 	}
 	require.NoError(t, common.Unmarshal(body.Data, &data))
+	rememberOAuthTestCookie(t, data.State, response)
 	authorizationURL, err := url.Parse(data.URL)
 	require.NoError(t, err)
 	assert.Equal(t, "https://oauth.telegram.org/auth", authorizationURL.Scheme+"://"+authorizationURL.Host+authorizationURL.Path)
@@ -195,6 +196,7 @@ func telegramOAuthCallback(state, code string, identity service.AuthIdentity) *h
 	path := "/api/oauth/telegram?" + url.Values{"state": {state}, "code": {code}}.Encode()
 	return securityEnrollmentRequest("GET", path, "", "", identity, func(c *gin.Context) {
 		c.Params = gin.Params{{Key: "provider", Value: "telegram"}}
+		c.Request = oauthTestCallbackRequest(c.Request)
 		HandleOAuth(c)
 	})
 }

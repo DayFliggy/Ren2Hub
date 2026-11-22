@@ -91,6 +91,7 @@ var channelOperationalFields = map[string]struct{}{
 // channelReadOnlyFields lists server-managed/accounting fields that the general
 // channel edit endpoint must ignore even if a client sends them.
 var channelReadOnlyFields = map[string]struct{}{
+	"redacted_fields":      {},
 	"in_flight":            {},
 	"lab":                  {},
 	"routing_quality":      {},

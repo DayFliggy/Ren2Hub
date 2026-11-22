@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 842,
-    "adapted": 322,
-    "extension": 455,
+    "upstream_equal": 831,
+    "adapted": 333,
+    "extension": 489,
     "removed": 47
   },
   "files": [
@@ -429,10 +429,39 @@
       "local_sha256": "fcd8ecbd553ac2dfa2767c362c1800fffa62b92bab8767d7de9fe0067849bff4"
     },
     {
+      "path": "common/page_bounds.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a98450a090769d4b63cb42a5dc5ca348021a602f7f421e71aa7d209d5c0050af",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-6：归一分页正数上限并防止 offset 整数溢出。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "common/page_bounds_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "573307f376ac5b2d52966d432018320907ec7d825e52166d320d481a25467e8b"
+    },
+    {
       "path": "common/page_info.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "d9956ddfee58ed3c69a87b04a865308a29e9f1186aad28f2b2b6b0097953d977",
-      "local_sha256": "d9956ddfee58ed3c69a87b04a865308a29e9f1186aad28f2b2b6b0097953d977"
+      "local_sha256": "9a5bd6c122651a7aff4dc37e5e774bf9d44d57aa008e830d0da44bfa68dc7b3a",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-6：归一分页正数上限并防止 offset 整数溢出。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "common/password_crypto.go",
@@ -508,15 +537,30 @@
     },
     {
       "path": "common/ssrf_protection.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "7b5ed08eafdb9b256f04f1d4d0204e3c6645fb601f64d1a6b6b29168b538a29c",
-      "local_sha256": "7b5ed08eafdb9b256f04f1d4d0204e3c6645fb601f64d1a6b6b29168b538a29c"
+      "local_sha256": "b791427975729df4cf7dbd8c445086ccd504af959dc2233aa0149d007dc0b620",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "common/ssrf_protection_test.go",
       "status": "upstream_equal",
       "upstream_sha256": "0211a4b8083776a167267dfb5d11986556c027e4bfd8d879ae8353791c6bb033",
       "local_sha256": "0211a4b8083776a167267dfb5d11986556c027e4bfd8d879ae8353791c6bb033"
+    },
+    {
+      "path": "common/ssrf_zone_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8a8c54b5d73017519ae03b097af1a4934f32411122695ec4cf7d02389e0ac6dd"
     },
     {
       "path": "common/str.go",
@@ -936,7 +980,7 @@
       "path": "controller/auth_flow_test.go",
       "status": "adapted",
       "upstream_sha256": "98f21cb724e50548fdfceb53e5a85f896e5d14179198d3bbb9e49e2cfda0c7a6",
-      "local_sha256": "6b3d8b96e17c8b8f5cd491013a750bc78940c8cade237fd5a88635611400cd99"
+      "local_sha256": "765cb9509fd8a89a71135a5d5a84f4b4a7da601532d0db21759ebfb332db8b76"
     },
     {
       "path": "controller/auth_session.go",
@@ -1016,8 +1060,9 @@
       "path": "controller/channel.go",
       "status": "adapted",
       "upstream_sha256": "acd8081b1208f6bba858062a6b248a602c78aa5124e913a143ec69ab53126c6f",
-      "local_sha256": "ec24851ac24b39e542e70ccb3e19045425f1327cdee5b10e2f48b61ce34c2668",
+      "local_sha256": "9bde31b71c971f1f23c196857667c3eff55cb76b5b1e973f8604e4946979e8c6",
       "reasons": [
+        "audit-local-safety",
         "catalog-stats",
         "channel-ratio",
         "concurrency",
@@ -1028,40 +1073,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/channel.go#1",
-          "controller/channel.go#11",
-          "controller/channel.go#12",
-          "controller/channel.go#13",
-          "controller/channel.go#14",
-          "controller/channel.go#15",
-          "controller/channel.go#16",
-          "controller/channel.go#17",
-          "controller/channel.go#18",
-          "controller/channel.go#19",
-          "controller/channel.go#2",
-          "controller/channel.go#20",
-          "controller/channel.go#21",
-          "controller/channel.go#22",
-          "controller/channel.go#23",
-          "controller/channel.go#24",
-          "controller/channel.go#25",
-          "controller/channel.go#26",
-          "controller/channel.go#27",
-          "controller/channel.go#28",
-          "controller/channel.go#29",
-          "controller/channel.go#3",
-          "controller/channel.go#30",
-          "controller/channel.go#4",
-          "controller/channel.go#5",
-          "controller/channel.go#6",
-          "controller/channel.go#7",
-          "controller/channel.go#8",
-          "controller/channel.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -1087,8 +1101,9 @@
       "path": "controller/channel_authz.go",
       "status": "adapted",
       "upstream_sha256": "b12bfb34de9dfd7c646c09e50a2dee79ffce74766236f777ef34b41dd8359672",
-      "local_sha256": "381f1ddead3487ebec168f1eb00f78a9e9b44b9f990e6de9ba78efa88c58d0d9",
+      "local_sha256": "92e5f3125eea7cd074f53998e0e0b0ed4af9d2be51432e0bd89127d90d408c6e",
       "reasons": [
+        "audit-local-safety",
         "catalog-stats",
         "channel-ratio",
         "concurrency",
@@ -1097,16 +1112,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/channel_authz.go#1",
-          "controller/channel_authz.go#2",
-          "controller/channel_authz.go#3",
-          "controller/channel_authz.go#4",
-          "controller/channel_authz.go#5"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -1164,6 +1172,26 @@
       "status": "adapted",
       "upstream_sha256": "7ca5b1093dbee35de297784aa7c99dc56025cdf7c53ffb39496ceaa95d1ad884",
       "local_sha256": "75f0f9826b00f2068b5265fff4d512a5892dcb6e51cd3dc8d9ef764a0087eaca"
+    },
+    {
+      "path": "controller/channel_credentials.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2f7091fe9eb1ff3a9db3ba137fbf47aa0c483d5d344cfd3cf616a8b397240e95",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/channel_credentials_database_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fbffb2bf912a2aabb8ccf7e7081329166e0b0791510cf1114fd10b622d0f40ea"
     },
     {
       "path": "controller/channel_inference.go",
@@ -1471,7 +1499,7 @@
       "path": "controller/frontend_contract_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aa77f3b71c44eb0ce22c7c3949d9a32e5dd9e42b188d593fc613e8169b2de89c"
+      "local_sha256": "413e38efc7d56799e70602e442fb901f9682d876a32700df61f9ff80062182b1"
     },
     {
       "path": "controller/gmpay.go",
@@ -1556,27 +1584,49 @@
       "path": "controller/log.go",
       "status": "adapted",
       "upstream_sha256": "045aca343d8014a7be9175c3cd0dcf839316e1d8020c3748e3a6d7495ed1c991",
-      "local_sha256": "d22e1b4c9755a23db41beb9136d6c427397a7e0f400031084dac631e11c85305",
+      "local_sha256": "fa217779c85079148805f8075966322e2dbc90b7dde03264ff9f40b70d995f87",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/log.go#1",
-          "controller/log.go#3",
-          "controller/log.go#4"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
+    },
+    {
+      "path": "controller/log_export_budget.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4222b2eb712e953cd2efdaacb18f605d80c2d5c9769ac210e242577e437b31ae",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/log_export_failure_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6af1b81834271bce464b8227047699d127651dcd42b1c01e283686256fb14e93"
     },
     {
       "path": "controller/log_export_test.go",
       "status": "adapted",
       "upstream_sha256": "bffa0cb2bd3f08ed4593bf469235205e465df01435686dd2d3090acbc147feef",
       "local_sha256": "56bac44724a9dcae1a54f4f579a8d4c3a5ac6a54a2a8aa2e5f2a7039b2b17b18"
+    },
+    {
+      "path": "controller/log_identity_bounds_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "0e4e19edf6772f7f5e25ec850da7a40e0b70641977b57b48fa39b37f45c80f95"
     },
     {
       "path": "controller/login_verification.go",
@@ -1703,27 +1753,22 @@
       "path": "controller/model_management_test.go",
       "status": "adapted",
       "upstream_sha256": "f722866950eb9e9c39d97bf215014ef1715021dd235956c00e338bcfcc72a216",
-      "local_sha256": "110df0966a533422f76c6087ec8ab83724f433f0a6e78fdf13a99f9ba9772565"
+      "local_sha256": "a829b7efde11c1985a4140afe99962caaeaed88e7772d461496e3f9375012fab"
     },
     {
       "path": "controller/model_meta.go",
       "status": "adapted",
       "upstream_sha256": "d27cec27d53d18d7960eefca0ed6b71eb9b4954f773fde92984cdfafcad44ae2",
-      "local_sha256": "f8175ac9a6d7e5ae1211dfbbc03190e4a073f7c735b9ab5c60bfc2d57977fc87",
+      "local_sha256": "ac09b2e9aaf03abb3cb0c8995b410aff26e409e3f7f5d79abee7ce4427ec0b3c",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/model_meta.go#1",
-          "controller/model_meta.go#2",
-          "controller/model_meta.go#3",
-          "controller/model_meta.go#4"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4 AUTH-6：归一分页正数上限并防止 offset 整数溢出。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -1826,27 +1871,43 @@
       "path": "controller/oauth.go",
       "status": "adapted",
       "upstream_sha256": "5d8179526e2bc7184fa561bbae9c0a18088abe03cb8eeb1f366cf907aff7156d",
-      "local_sha256": "0eed6ec63b0d5a010535921fce15d23c1700b0c94c0816cbef9423e901eb7117",
+      "local_sha256": "cc66a8436bd113b4ba79679683b7e0798e87a6c3f4b98b67b0f1c2e19c727441",
       "reasons": [
-        "affiliate"
+        "affiliate",
+        "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/oauth.go#1",
-          "controller/oauth.go#2",
-          "controller/oauth.go#3"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
       "path": "controller/oauth_affiliate_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "69e14bef7325c9125fe7f01f02dbc976c291967960d0268402c228218f9b2244"
+      "local_sha256": "8813767dd3a883ce4290eb382fe67239d2d33e26814a0b4fab796911cc4db467"
+    },
+    {
+      "path": "controller/oauth_browser_binding.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "81d9b5d827b1f146fdba6df065acdbb0d1788ca37a0b8e1e34a9e14f7d0f690f",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/oauth_browser_binding_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "aa2e2ee78a442c210e136ca11c621820e53e6456ad103e30c4f26fc5af4a6f57"
     },
     {
       "path": "controller/option.go",
@@ -2240,8 +2301,9 @@
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "1452637bbb04917f8bebfcacddaac1ef43aded2e0bfd417b3691cdeea8edf441",
-      "local_sha256": "12f818901d003642ef93e7f1fb88bb43799425467134a3f3b80a5352c75ef872",
+      "local_sha256": "e72e22d5be107525465b79f7e8f92e7bf59780da84565bc42a3f9a46d33170ba",
       "reasons": [
+        "audit-local-safety",
         "channel-ratio",
         "concurrency",
         "group-removal",
@@ -2253,26 +2315,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/relay.go#1",
-          "controller/relay.go#10",
-          "controller/relay.go#11",
-          "controller/relay.go#12",
-          "controller/relay.go#13",
-          "controller/relay.go#14",
-          "controller/relay.go#15",
-          "controller/relay.go#2",
-          "controller/relay.go#3",
-          "controller/relay.go#4",
-          "controller/relay.go#5",
-          "controller/relay.go#6",
-          "controller/relay.go#7",
-          "controller/relay.go#8",
-          "controller/relay.go#9"
-        ],
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
     },
@@ -2709,9 +2753,9 @@
     },
     {
       "path": "controller/telegram_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "7838feae7063822a5c514a47c37a50386fa4e21745eb02bd104109d372869a2e",
-      "local_sha256": "7838feae7063822a5c514a47c37a50386fa4e21745eb02bd104109d372869a2e"
+      "local_sha256": "e00f81dc49a28f632059cbd23c649d2cac7dd69ec4f29ee137c5a8f91643baf3"
     },
     {
       "path": "controller/theme_compat_test.go",
@@ -3284,9 +3328,10 @@
       "path": "controller/user.go",
       "status": "adapted",
       "upstream_sha256": "b02c6be9055ed0767e5667882eaaed84132388f9c436437459d80f54e76e4b08",
-      "local_sha256": "c9593a3ccf4bb7ff8d9b39f14dfe70c81f52eeb844d626bc7cd59aaada84ebf8",
+      "local_sha256": "d23d734d5e361811e02c54d25266ad16ec687e2d34e62391cf0d9a2d5ce6a70b",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "catalog-stats",
         "concurrency",
         "group-removal",
@@ -3297,22 +3342,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "controller/user.go#1",
-          "controller/user.go#10",
-          "controller/user.go#11",
-          "controller/user.go#12",
-          "controller/user.go#13",
-          "controller/user.go#2",
-          "controller/user.go#4",
-          "controller/user.go#5",
-          "controller/user.go#7",
-          "controller/user.go#8",
-          "controller/user.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -3320,6 +3352,26 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "c4a244a711597137877dac8817b446d41323c47f09155f158dfa03c4b591e487"
+    },
+    {
+      "path": "controller/user_list_projection.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "728851b270445a6e93701ac8c980c1a667e3e8b95055630aebde364f802dcb39",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "controller/user_list_projection_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "0a8f547b02c9728bd3a5c0650caf5815f7a7cbf56245611004241e03baa2ffb1"
     },
     {
       "path": "controller/user_manage_test.go",
@@ -3795,6 +3847,20 @@
       "status": "upstream_equal",
       "upstream_sha256": "9240e9eb680daa5334322c59f2b6a1fb58b40a4046c6cb5d3e48cde960f191c7",
       "local_sha256": "9240e9eb680daa5334322c59f2b6a1fb58b40a4046c6cb5d3e48cde960f191c7"
+    },
+    {
+      "path": "middleware/channel_effective_permissions.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e613438f333ae7a44b7b60bfc825f4cf5626c2f222f08c085cfbc6e170084cc5",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
     },
     {
       "path": "middleware/cors.go",
@@ -4510,23 +4576,17 @@
       "path": "model/channel_cache.go",
       "status": "adapted",
       "upstream_sha256": "123f8c4cc847ea0bd23843cfe135191dc601d568584fb401271ec01e7ed191e1",
-      "local_sha256": "41927e6f4ac643601665b13a993e7309590e0026620f38506518f0746caf69a2",
+      "local_sha256": "897f9c9af4144077625b8613da0f0e08d2e6bc300d7f4dc540ce27a9597d8047",
       "reasons": [
+        "audit-local-safety",
         "group-removal",
         "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/channel_cache.go#1",
-          "model/channel_cache.go#2",
-          "model/channel_cache.go#3",
-          "model/channel_cache.go#4"
-        ],
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
     },
@@ -4724,6 +4784,12 @@
       }
     },
     {
+      "path": "model/channel_security_state_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "cd72d57549c4905601cf7fd4fd6dcec345a22fd63dad20665076c9462c58b034"
+    },
+    {
       "path": "model/channel_settings_test.go",
       "status": "upstream_equal",
       "upstream_sha256": "96a66f5f70e006df37def323bd142ed750672e5457b552a689129cf1a74ee42b",
@@ -4733,19 +4799,16 @@
       "path": "model/channel_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "01cc2caab5d38aa9c1badd90f52ba2915a8b8be1e3fb0d8c50ffd32d929537ad",
+      "local_sha256": "6eb1e8f58d2fd300faac8e378729ee0bba617f969c3de99977b41154030c218e",
       "reasons": [
+        "audit-local-safety",
         "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/channel_status.go#1"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
@@ -4753,6 +4816,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "8554dd400d5651dc579f25e051453d4998b3e3206666f1c5a7ff6ae82bb14086"
+    },
+    {
+      "path": "model/channel_status_rollback_regression_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "045507294c69df0e7cc6c2fa2ff2a46087eadf0e8b25b0a3b7cdcb2a833d296b"
     },
     {
       "path": "model/channel_status_test.go",
@@ -5017,29 +5086,16 @@
       "path": "model/log.go",
       "status": "adapted",
       "upstream_sha256": "405448720fdbfc44ea01d16d67ad5ae465f16ea6b1a1c8e302b6485b7e207bb9",
-      "local_sha256": "5a0b340edd689b3201c99a67bd828296e980c72c372d59ccfd90cbeaf790efd8",
+      "local_sha256": "6d18cf41c3cde44c78ebea804d21ee138f60cf050fd9af9e1b3a72cb9a565e21",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/log.go#10",
-          "model/log.go#11",
-          "model/log.go#12",
-          "model/log.go#14",
-          "model/log.go#2",
-          "model/log.go#3",
-          "model/log.go#4",
-          "model/log.go#5",
-          "model/log.go#6",
-          "model/log.go#7",
-          "model/log.go#8",
-          "model/log.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -5059,6 +5115,26 @@
       "status": "upstream_equal",
       "upstream_sha256": "1aeca20a7c4a04e2dcc3360359a7d8c1aedc2e730a7632cbd6ead148b6b13d5c",
       "local_sha256": "1aeca20a7c4a04e2dcc3360359a7d8c1aedc2e730a7632cbd6ead148b6b13d5c"
+    },
+    {
+      "path": "model/log_statistics_scope.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e0992782ee0efd90eb560e41c8c9afcb83517ae735299ef7d9ace43d0fb32e20",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "model/log_statistics_scope_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f4b3f1f5ce12641f1c6f351f13c8742e28bca262c1bac11cdb0c286d901ac92c"
     },
     {
       "path": "model/login_verification.go",
@@ -5256,13 +5332,13 @@
       "path": "model/native_restored_control_adapter_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1"
+      "local_sha256": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37"
     },
     {
       "path": "model/native_restored_control_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda"
+      "local_sha256": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b"
     },
     {
       "path": "model/native_restored_funds_count_test.go",
@@ -5274,7 +5350,7 @@
       "path": "model/native_restored_round3_control_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f31bd32194b65096e02212c9e9e8be68db280fbbb0879a44edc9f09688b56752"
+      "local_sha256": "d7bf91ca49d508c4757519623b1caa9b56a2305271e8af318a939b7fd9f50a77"
     },
     {
       "path": "model/option.go",
@@ -6981,6 +7057,12 @@
       "local_sha256": "2a58db941589610d3172a2667a31f054e772bcf7168a6337ff4a9e454f818366"
     },
     {
+      "path": "pkg/perf_metrics/error_projection_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3c64adfe8281bb6fe52f8d019053075a6eaf56b1f4ea598a8acc4e0fa37b340d"
+    },
+    {
       "path": "pkg/perf_metrics/flush.go",
       "status": "adapted",
       "upstream_sha256": "0c1e613e24da16a9fb492da816a98fdc2a1bd78cf68ffe3144578fcb372288a3",
@@ -7062,9 +7144,18 @@
     },
     {
       "path": "pkg/perf_metrics/outcome.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "5ea2950b0a0f012bee891c94a284596e04d2e3d329f903cbdc1f6b9634bfb8c5",
-      "local_sha256": "5ea2950b0a0f012bee891c94a284596e04d2e3d329f903cbdc1f6b9634bfb8c5"
+      "local_sha256": "2b35550fe6773743412c830bcf6e406c5fa3a053c811de0f04c35f65d5f7a632",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "pkg/perf_metrics/types.go",
@@ -7657,20 +7748,16 @@
       "path": "relay/channel/api_request.go",
       "status": "adapted",
       "upstream_sha256": "d7d2eedb5359cd0ea2f5d47126b0d67d94f4c8c2f2cca05281ee15c1cb5db3bb",
-      "local_sha256": "f9c98f2c7e5271c845cf97e3779906f2cae6a5a2dbcd8a8a182b736003066677",
+      "local_sha256": "a3c7e00d1a9b39204892ea86738bf219a8789a83251587e05a3b804a566d86b9",
       "reasons": [
+        "audit-local-safety",
         "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/channel/api_request.go#1",
-          "relay/channel/api_request.go#2",
-          "relay/channel/api_request.go#3"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -8171,6 +8258,12 @@
       "local_sha256": "762f747d83cf276457609e2a437dd272afe5d703579dbc7269171ab58a1ad607"
     },
     {
+      "path": "relay/channel/header_credentials_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d857694a335724f4500e495da745ae1823c1e0b5d57da2e942a782a10ac4194b"
+    },
+    {
       "path": "relay/channel/jimeng/adaptor.go",
       "status": "upstream_equal",
       "upstream_sha256": "81207930a210dd66698dbb8a23bd3ade7f2411104b4b3a324511d5cfa3f8d96f",
@@ -8250,9 +8343,18 @@
     },
     {
       "path": "relay/channel/minimax/tts.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "bf0855aa71f022d63bdfa31f5df1222c69c9e00079dc4837117024d39b1f4943",
-      "local_sha256": "bf0855aa71f022d63bdfa31f5df1222c69c9e00079dc4837117024d39b1f4943"
+      "local_sha256": "85f1b0190d6255acfb5d16ceeea31e6f6675c502d030aa1f47669f2c4fde4d6f",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "relay/channel/mistral/adaptor.go",
@@ -8364,9 +8466,24 @@
     },
     {
       "path": "relay/channel/openai/audio.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "0753f2dac6819168d9d08abd688e8ed38bcbc36842a900dca4a199f1e295eff5",
-      "local_sha256": "0753f2dac6819168d9d08abd688e8ed38bcbc36842a900dca4a199f1e295eff5"
+      "local_sha256": "4cbb5740e5c09a67e760fdc7ca001e0cc383ae9ba388ac12e6cd21eb05dedf8e",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
+    },
+    {
+      "path": "relay/channel/openai/audio_response_headers_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "de0d8659beb399372ed4b9f1c743a5b32f58ebca0833091aba342a2377d80518"
     },
     {
       "path": "relay/channel/openai/chat_via_responses.go",
@@ -9325,20 +9442,23 @@
       "path": "relay/common/override.go",
       "status": "adapted",
       "upstream_sha256": "c0f7750d83564891277a27ba9f26087eb9a1b94a002667688d050dad517d9f8b",
-      "local_sha256": "a8985387820df71618ad741b6f4c0a9e6f7c84e3a221c73f6a690d1989b1137c",
+      "local_sha256": "52eb077bbd53c0552823d40bf25ce3f6aef57c6e8fadb66267ea1ae1c34c6fec",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/common/override.go#2"
-        ],
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
+    },
+    {
+      "path": "relay/common/override_error_projection_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3ae4355ce1a96bb40cf4631a7ef0f01598c3927a8c7a7a6db9dd760703b8cc4b"
     },
     {
       "path": "relay/common/override_test.go",
@@ -9693,6 +9813,12 @@
       "local_sha256": "f4417c8488773f6e54a19878aa0e59deac84465f7d34ebf13b36681432cd9cbf"
     },
     {
+      "path": "relay/helper/response_headers_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c74e18892b3e0b553f106b5124a85f4535c5c107b343ff15bf565b0eca7ee2f3"
+    },
+    {
       "path": "relay/helper/route_stream_output_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -9702,41 +9828,32 @@
       "path": "relay/helper/stream_result.go",
       "status": "adapted",
       "upstream_sha256": "b20152fba629563da7850455a9e82580e3355bc87ee87c5077a251f835ece1c6",
-      "local_sha256": "0f245e00aea1a48664f8493dcabea9c0e095d8e4ab8bf9d1b7807be1f72f39f1",
+      "local_sha256": "9053468799a8f46d7d92e2f2cb4a0a5e5b8923756a6c0723b0b73e9f9dabf7af",
       "reasons": [
+        "audit-local-safety",
         "stream-output-observation"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_result.go#1, relay/helper/stream_result.go#2, relay/helper/stream_result.go#3",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/helper/stream_result.go#1",
-          "relay/helper/stream_result.go#2",
-          "relay/helper/stream_result.go#3"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_result.go#1, relay/helper/stream_result.go#2, relay/helper/stream_result.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
       "path": "relay/helper/stream_scanner.go",
       "status": "adapted",
       "upstream_sha256": "0ce0797e4ab920313591f21456f029ee23f9e2c59c126f68c01f952481cbc59f",
-      "local_sha256": "b250d62a1bac529fc44a409a04a2289f763958cce2754d4d3f3d69e6231afecb",
+      "local_sha256": "e32bfece8b866ca75544e8b92111e6e13f8b63ab35196e79f5df3b72a79e9ce6",
       "reasons": [
+        "audit-local-safety",
         "stream-output-observation"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/helper/stream_scanner.go#1",
-          "relay/helper/stream_scanner.go#3",
-          "relay/helper/stream_scanner.go#4",
-          "relay/helper/stream_scanner.go#5"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -9955,6 +10072,12 @@
       "local_sha256": "dd134bc895298962b188a5a3d0a18ecd1a90ec07f796ff8a5cd1b61b676f168b"
     },
     {
+      "path": "relay/requestplugin/error_projection_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4a4812f24c237b825e309ec57839ce0ebe1e5169ad02c1653ae0dbf1ce438527"
+    },
+    {
       "path": "relay/requestplugin/extract.go",
       "status": "upstream_equal",
       "upstream_sha256": "54302bb38f0ee44b6d0647e5051378925d3604c81b647851d7afc65367518529",
@@ -10035,28 +10158,15 @@
       "path": "relay/requestplugin/relay.go",
       "status": "adapted",
       "upstream_sha256": "db1212128fbee0971a06044771d60695165898e1770cee22a339813957b56ce1",
-      "local_sha256": "aeb9516af39c8ce801c2736e0e8bd99cac7026c1e77187cfb4f53b658829fd2c",
+      "local_sha256": "5929c38a6866408338e6df4364e57015ad7b91dcd066018eaa2cff72f4a29bec",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/requestplugin/relay.go#1",
-          "relay/requestplugin/relay.go#10",
-          "relay/requestplugin/relay.go#11",
-          "relay/requestplugin/relay.go#2",
-          "relay/requestplugin/relay.go#3",
-          "relay/requestplugin/relay.go#4",
-          "relay/requestplugin/relay.go#5",
-          "relay/requestplugin/relay.go#6",
-          "relay/requestplugin/relay.go#7",
-          "relay/requestplugin/relay.go#8",
-          "relay/requestplugin/relay.go#9"
-        ],
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
     },
@@ -10084,20 +10194,15 @@
       "path": "relay/requestplugin/report.go",
       "status": "adapted",
       "upstream_sha256": "83bf15663e91132fa9c124785cfc9e025791f39062df6f690fa279566f482053",
-      "local_sha256": "175b9a629aeefc597257319489ce1254f1a48607d50314673b453cbd7129fb35",
+      "local_sha256": "447a2d2cd11d743c900f819a308a2f18e9b7ad6cef2665acc29719f953b9e57c",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/requestplugin/report.go#1",
-          "relay/requestplugin/report.go#2",
-          "relay/requestplugin/report.go#3"
-        ],
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
     },
@@ -11283,9 +11388,38 @@
     },
     {
       "path": "relaykit/types/error.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "91338f820f7d84bb47618fd34361ddf91b935928a9e001f096eceae668b0ebd6",
-      "local_sha256": "91338f820f7d84bb47618fd34361ddf91b935928a9e001f096eceae668b0ebd6"
+      "local_sha256": "a58974ff298c587b5c82ab224ea916a29c712ebc11ca7d3fe66b99505cbc5748",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
+    },
+    {
+      "path": "relaykit/types/error_projection_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4ce168c092d74b8253c7fe890a4f5092a3c1135d0c0ab2ebb11fe4165b5cc7fa"
+    },
+    {
+      "path": "relaykit/types/error_sanitization.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5744625df9b0618ea264e8455d59aed5414ba83e2368c692638ca51d6591d8ae",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
     },
     {
       "path": "relaykit/types/file_data.go",
@@ -11400,6 +11534,12 @@
       "status": "adapted",
       "upstream_sha256": "e43b4287de7dca2d09f1fe818ffbf2a4873e867a01c26e3c4cf945358f9a62f6",
       "local_sha256": "8ad9e005429922dcb3ca25ed0cf28ae1253a5a95782baccfdccb00fd4f7e3eae"
+    },
+    {
+      "path": "router/channel_security_state_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "653906cf848114c006ecfcca731ab8bd0113ef8af75f6010c771174d1fbb9f60"
     },
     {
       "path": "router/dashboard.go",
@@ -11531,6 +11671,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "46651f455fa8c4ec75ce53945223db42dbbf6ce5ce047dda9bab398aad39fd16"
+    },
+    {
+      "path": "router/oauth_browser_binding_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "442c8a31d576bec68370456af511b235a1d7647392a7bea48517eace9317d676"
     },
     {
       "path": "router/payment_receipt_verification_test.go",
@@ -11724,6 +11870,12 @@
           "router/token-routing.go#1"
         ]
       }
+    },
+    {
+      "path": "router/user_data_boundary_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4e1de3df62c76c98afda7fef24c209e49f9f539c6ba75f801f81b185c359213e"
     },
     {
       "path": "router/video-router.go",
@@ -12131,13 +12283,16 @@
       "path": "service/channel.go",
       "status": "adapted",
       "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
-      "local_sha256": "badb0aee339db24a6ff28f203fc40d4ba2bbec06426e288c026416fdbc83f3b9",
+      "local_sha256": "7f556cd4d1ae4235599b80911b555a03970b58a99916f2c66b4f986298713ed5",
       "reasons": [
+        "audit-local-safety",
         "single-key-channel"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。"
+        "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -12602,9 +12757,18 @@
     },
     {
       "path": "service/error.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "c8ad27f7163dd9136b26c7e690737a06901116a66b95bcacfa610fea58c74480",
-      "local_sha256": "c8ad27f7163dd9136b26c7e690737a06901116a66b95bcacfa610fea58c74480"
+      "local_sha256": "20e05351f0e7f24e9e7cf7628e5c966ceced72706b8a60d71fff9f1cf2d8312f",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "service/error_test.go",
@@ -12754,9 +12918,18 @@
     },
     {
       "path": "service/http.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "6bf1e26cd6cc7e72851cd04e8bf16427c11bb5c886dcc6fdac85b7e506bcc65f",
-      "local_sha256": "6bf1e26cd6cc7e72851cd04e8bf16427c11bb5c886dcc6fdac85b7e506bcc65f"
+      "local_sha256": "2a7980818a564682d7aa819e5d6f972a32af016f8a202396ce9f7cd5720c4d46",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "service/http_client.go",
@@ -13137,15 +13310,24 @@
     },
     {
       "path": "service/protected_fetch_client.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "5c99569972ed1938d46dcab361611cea83c234a04885e362b59075f92661b795",
-      "local_sha256": "5c99569972ed1938d46dcab361611cea83c234a04885e362b59075f92661b795"
+      "local_sha256": "fe7496a994412bbc1829c76d84a0d7a12b0c0fdd3d604245dcb8a199600e519c",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "service/protected_fetch_client_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "9488bca1a10b0de0df9cb42b023d82ca212d074ddabc953800a7fb27f32a6101",
-      "local_sha256": "9488bca1a10b0de0df9cb42b023d82ca212d074ddabc953800a7fb27f32a6101"
+      "local_sha256": "f80602a1cd44333bba14afd912736ec1e5d92ab3da5d2bd09cb7902af366ef2f"
     },
     {
       "path": "service/protected_fetch_pinned_proxy.go",
@@ -13159,6 +13341,26 @@
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
         "basis": "上游倍率探测代理请求固定本地校验的解析 IP，保留 HTTP Host 与 TLS 主机身份；见 SYNC_LEDGER.md 现行本地差异。",
         "method": "本地扩展安全边界审阅和本地代理、DNS、TLS 桩回归"
+      }
+    },
+    {
+      "path": "service/protected_fetch_proxy_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ca00e0ae6ff3875e022ea10dc6d8ce4e770ee4cdf7e1dd4042904a6d92cabb59"
+    },
+    {
+      "path": "service/protected_fetch_validation.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "134ff9059384b865d9ac4e2cb46dc1f751c7669f50d2f2ff7c24e114dea7f1de",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
@@ -13287,19 +13489,36 @@
       "path": "service/relay_error.go",
       "status": "adapted",
       "upstream_sha256": "5f1bbfa45a7a8c875a501b8a8fe174435c102af29af94c64dd72bcf102fd99a5",
-      "local_sha256": "bde8401f7389b823334bd1703961ae4c980949f4cae75254c1c4f48b481a3a70",
+      "local_sha256": "3769a214568e468d9c8d2c226371f43498fbb1fdee84040dc24491e61dfe1d72",
       "reasons": [
+        "audit-local-safety",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/relay_error.go#1, service/relay_error.go#2",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/relay_error.go#1",
-          "service/relay_error.go#2"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/relay_error.go#1, service/relay_error.go#2 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
+      }
+    },
+    {
+      "path": "service/relay_error_boundary_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "018eb027d55c2a1f644c38587e0259ce1b65c49b1fba0767ef6560e974ba10a0"
+    },
+    {
+      "path": "service/relay_error_context.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4666270e5c461f7ca22dd6296e2f85c8d2b5bd6f2c55255a06fdb6342439e8a2",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
@@ -13324,23 +13543,17 @@
       "path": "service/request_policy.go",
       "status": "adapted",
       "upstream_sha256": "f4c0eb4c06c5489bb359004dc0eadc71dde5a4cc2c7fae2a588072cdeadeacd3",
-      "local_sha256": "461eabbddb3e8565e70003bd6dd7fa7364634e68ecaccd86bd412d7989580d2e",
+      "local_sha256": "97cc20b80d59fbbdc0171d7162907ffaf8453c00ce01abc56fb0b8cdfd66ce20",
       "reasons": [
+        "audit-local-safety",
         "group-removal",
         "single-key-channel",
         "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/request_policy.go#1",
-          "service/request_policy.go#2",
-          "service/request_policy.go#3",
-          "service/request_policy.go#4"
-        ],
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
     },
@@ -13655,14 +13868,16 @@
       "path": "service/route_outcome.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4b03c9e2cf4cf33c76ef7c265520af05fa5539b953cdbc9e5642afb5bf57a315",
+      "local_sha256": "df8e05201ef40a1dffc1d9ab585b20f856c9ca509b8a544d9ca7d2a65d4a24ff",
       "reasons": [
-        "token-routing",
-        "ops-metrics"
+        "audit-local-safety",
+        "ops-metrics",
+        "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "自动路由证据的结果收窄与判定：上游把上下文超长包成无可识别错误码的失败时改记 ignored；流式正常结束但没有内容事件时按上游输出用量和请求级结束原因记 ignored 或 failure。只影响熔断、质量和观测样本；重试、原生性能统计和客户响应不变。"
+        "basis": "自动路由证据的结果收窄与判定：上游把上下文超长包成无可识别错误码的失败时改记 ignored；流式正常结束但没有内容事件时按上游输出用量和请求级结束原因记 ignored 或 failure。只影响熔断、质量和观测样本；重试、原生性能统计和客户响应不变。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
     },
     {
@@ -14295,6 +14510,26 @@
       "local_sha256": "478b81e9e287e65d072293c95197a11325585256ff63290f21e861932da7d144"
     },
     {
+      "path": "service/upstream_boundary_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e3543f4461aff15d25b59c64e19910a89da85efe919a81b30314a2108ead488c"
+    },
+    {
+      "path": "service/upstream_response_headers.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5d2296b31e01be23b55aeb006df439f6bc36f79ac99d8689c5e10f01a73fb0fd",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
       "path": "service/upstream_usage_billing_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -14367,8 +14602,9 @@
       "path": "service/violation_fee.go",
       "status": "adapted",
       "upstream_sha256": "ee38f6a2b2243f41f05f44bd81c0ef39250cafc1d3d5f2031715d90987014f88",
-      "local_sha256": "a9cc6b7c93b10e1d9a4a287c2adf64b781c2f9b44e5038692d3d29d152a549f3",
+      "local_sha256": "e6d81c96c56f427e5f8f04b910445407af38374403113e0e44401dff793fe727",
       "reasons": [
+        "audit-local-safety",
         "channel-ratio",
         "group-removal",
         "retired",
@@ -14376,16 +14612,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/violation_fee.go#1",
-          "service/violation_fee.go#2",
-          "service/violation_fee.go#3",
-          "service/violation_fee.go#4",
-          "service/violation_fee.go#5"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -15334,7 +15563,7 @@
       "kind": "approved_contract"
     },
     "audit-local-safety": {
-      "basis": "用户批准的资金回执核验、余额一致性、Realtime 生命周期、缓存用量与任务隔离。",
+      "basis": "用户批准的资金回执核验、余额一致性、生命周期、权限、凭据隔离及状态失败处理。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }

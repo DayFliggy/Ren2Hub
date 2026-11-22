@@ -98,6 +98,7 @@ var passthroughSkipHeaderNamesLower = map[string]struct{}{
 	"sec-websocket-key":        {},
 	"sec-websocket-version":    {},
 	"sec-websocket-extensions": {},
+	"sec-websocket-protocol":   {},
 }
 
 var headerPassthroughRegexCache sync.Map // map[string]*regexp.Regexp

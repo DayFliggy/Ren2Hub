@@ -31,7 +31,7 @@ func (r *StreamResult) Error(err error) {
 	r.status.RecordError(err.Error())
 	var apiErr *types.NewAPIError
 	if errors.As(err, &apiErr) {
-		r.status.MarkFailed(string(apiErr.GetErrorCode()), apiErr.ToOpenAIError().Type, apiErr.StatusCode)
+		r.status.MarkFailed(string(apiErr.GetErrorCode()), apiErr.RawOpenAIError().Type, apiErr.StatusCode)
 	}
 }
 

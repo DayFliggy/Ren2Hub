@@ -288,6 +288,9 @@ func (p *SSRFProtection) ValidateNetworkTarget(host string, port int) error {
 	if host == "" {
 		return fmt.Errorf("invalid host")
 	}
+	if strings.Contains(host, "%") {
+		return fmt.Errorf("ipv6 zone host is not allowed")
+	}
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("invalid port: %d", port)
 	}

@@ -30,11 +30,12 @@ type oauthStateRequest struct {
 }
 
 type oauthFlowPayload struct {
-	AffiliateCode   string                         `json:"affiliate_code,omitempty"`
-	Verification    *service.OAuthVerificationFlow `json:"verification,omitempty"`
-	Telegram        *oauth.TelegramOAuthFlow       `json:"telegram,omitempty"`
-	SessionIdentity *service.AuthIdentity          `json:"session_identity,omitempty"`
-	Authorization   *model.AuthFlowAuthorization   `json:"authorization,omitempty"`
+	BrowserNonceHash string                         `json:"browser_nonce_hash,omitempty"`
+	AffiliateCode    string                         `json:"affiliate_code,omitempty"`
+	Verification     *service.OAuthVerificationFlow `json:"verification,omitempty"`
+	Telegram         *oauth.TelegramOAuthFlow       `json:"telegram,omitempty"`
+	SessionIdentity  *service.AuthIdentity          `json:"session_identity,omitempty"`
+	Authorization    *model.AuthFlowAuthorization   `json:"authorization,omitempty"`
 }
 
 // providerParams returns the params of messages that name the OAuth provider.
@@ -111,6 +112,16 @@ func GenerateOAuthCode(c *gin.Context) {
 			flowPayload.Verification = verification
 		}
 	}
+	var browserNonce string
+	if request.Intent == model.AuthFlowIntentLogin {
+		var err error
+		browserNonce, err = newOAuthBrowserNonce()
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		flowPayload.BrowserNonceHash = oauthBrowserNonceHash(browserNonce)
+	}
 	payload, err := common.Marshal(flowPayload)
 	if err != nil {
 		writeSecurityOperationError(c, err)
@@ -129,6 +140,9 @@ func GenerateOAuthCode(c *gin.Context) {
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return
+	}
+	if request.Intent == model.AuthFlowIntentLogin {
+		writeOAuthBrowserCookie(c, state, browserNonce, expiresAt)
 	}
 	bindingStarted = request.Intent == model.AuthFlowIntentBind
 	data := gin.H{"flow_token": state, "expires_at": expiresAt.Unix()}
@@ -162,6 +176,10 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
+	if err := validateOAuthBrowserBinding(c, state, pendingFlow); err != nil {
+		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("State parameter is empty or mismatched"), gin.H{"code": "OAUTH_FLOW_BROWSER_MISMATCH"})
+		return
+	}
 	consumeMatch := model.AuthFlowMatch{
 		Purpose:  model.AuthFlowPurposeOAuth,
 		Provider: providerName,
@@ -239,6 +257,7 @@ func HandleOAuth(c *gin.Context) {
 			writeAccountStatusError(c, http.StatusForbidden, "State parameter is empty or mismatched")
 			return
 		}
+		clearOAuthBrowserCookie(c, state, pendingFlow.Intent)
 		errorDescription := c.Query("error_description")
 		if errorDescription == "" {
 			errorDescription = errorCode
@@ -281,6 +300,7 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
+	clearOAuthBrowserCookie(c, state, flow.Intent)
 	switch flow.Intent {
 	case model.AuthFlowIntentLogin:
 		handleOAuthLogin(c, provider, oauthUser, token, flow)

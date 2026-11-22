@@ -1,0 +1,13 @@
+{
+  "code": "LOG_EXPORT_LIMIT_EXCEEDED",
+  "data": {
+    "bytes": 2837788,
+    "count": 10000,
+    "max_bytes": 33554432,
+    "max_rows": 10000,
+    "truncated": true
+  },
+  "message": "Log export limit exceeded",
+  "message_key": "Log export limit exceeded",
+  "success": false
+}

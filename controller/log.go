@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -138,17 +139,9 @@ func exportLogs(c *gin.Context, all bool) {
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
-	count := 0
+	budget := logExportBudget{}
 	writeLog := func(log *model.Log) error {
-		line, err := common.Marshal(log)
-		if err != nil {
-			return err
-		}
-		if _, err := c.Writer.Write(append(line, '\n')); err != nil {
-			return err
-		}
-		count++
-		return nil
+		return budget.write(c.Writer, log)
 	}
 	ctx := c.Request.Context()
 	if all {
@@ -161,11 +154,18 @@ func exportLogs(c *gin.Context, all bool) {
 	}
 	// The status is already sent, so the result object becomes the last line.
 	if err != nil {
+		if errors.Is(err, errLogExportLimit) {
+			common.ApiErrorStatus(c, http.StatusOK, common.NewMessage("Log export limit exceeded"), gin.H{
+				"code": "LOG_EXPORT_LIMIT_EXCEEDED",
+				"data": gin.H{"count": budget.count, "bytes": budget.bytes, "truncated": true, "max_rows": logExportMaxRows, "max_bytes": logExportMaxBytes},
+			})
+			return
+		}
 		common.SysError(common.LogText("failed to export logs: %s", err.Error()))
 		common.ApiErrorT(c, "Failed to export logs")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"count": count})
+	common.ApiSuccess(c, gin.H{"count": budget.count})
 }
 
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。
@@ -226,7 +226,6 @@ func GetLogsStat(c *gin.Context) {
 }
 
 func GetLogsSelfStat(c *gin.Context) {
-	username := c.GetString("username")
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -240,7 +239,7 @@ func GetLogsSelfStat(c *gin.Context) {
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
-	quotaNum, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
+	quotaNum, err := model.SumUsedQuotaForUser(c.GetInt("id"), logType, startTimestamp, endTimestamp, modelName, tokenName, channel)
 	if err != nil {
 		common.ApiError(c, err)
 		return

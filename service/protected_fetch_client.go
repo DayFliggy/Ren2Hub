@@ -89,7 +89,7 @@ func newProtectedFetchHTTPClientWithProxy(resolver ssrfResolver, dialContext fun
 			proxy:         proxy,
 			transports:    make(map[string]*http.Transport),
 		},
-		CheckRedirect: checkProtectedFetchRedirect,
+		CheckRedirect: checkPinnedFetchRedirect,
 	}
 	if common.RelayTimeout != 0 {
 		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
@@ -101,7 +101,7 @@ func (t *ssrfProtectedRoundTripper) RoundTrip(req *http.Request) (*http.Response
 	if req == nil || req.URL == nil {
 		return nil, fmt.Errorf("invalid request")
 	}
-	if err := ValidateSSRFProtectedFetchURL(req.URL.String()); err != nil {
+	if err := validateProtectedFetchRequest(req, t.getProtection); err != nil {
 		return nil, err
 	}
 
@@ -109,7 +109,11 @@ func (t *ssrfProtectedRoundTripper) RoundTrip(req *http.Request) (*http.Response
 	if err != nil {
 		return nil, err
 	}
-	return t.transportFor(proxyURL).RoundTrip(req)
+	base := t.transportFor(proxyURL)
+	if proxyURL != nil {
+		return (&pinnedProxyRoundTripper{base: base, proxy: proxyURL, resolver: t.resolver, getProtection: t.getProtection}).RoundTrip(req)
+	}
+	return base.RoundTrip(req)
 }
 
 func (t *ssrfProtectedRoundTripper) CloseIdleConnections() {

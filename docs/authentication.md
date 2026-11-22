@@ -18,7 +18,7 @@ Vue沿用上游会话提示：后端随Refresh Cookie写入非HttpOnly的 `new_a
 
 `TRUSTED_PROXIES` 仅声明实际反向代理，不能信任客户端提供的任意转发头。API与模型请求限流沿用原生middleware及Redis/内存行为；不再声明旧“每逻辑请求成功名额持久租约”和独立准入合同。当前产品仅单节点，认证子系统的缓存能力不授予扩容授权。
 
-站点OAuth、Passkey、两步验证和密码加密继续采用NewAPI。旧 Codex/type 57 专用渠道退役不等于删除站点OAuth登录。权限菜单由后端能力/权限投影控制，最终授权始终在服务端完成。
+站点OAuth、Passkey、两步验证和密码加密继续采用NewAPI。OAuth 登录 flow 另绑定发起浏览器：`ren2hub_oauth_` 加 state 的 SHA-256 前 24 个十六进制字符为 Cookie 名，随机值不进入 JSON 响应；HttpOnly、SameSite=Lax、Path=`/api/oauth/`，Secure 沿站点配置，有效期 10 分钟。浏览器绑定缺失或 Cookie 错配时，在换码前返回 403，并带 `code: "OAUTH_FLOW_BROWSER_MISMATCH"`，不消费 flow、不创建会话。无效或过期 state、已消费 flow、绑定或验证身份时的会话不匹配等其他 403 保留各自原有响应，不使用这个 code；成功消费或提供商取消后只删除对应 Cookie，临时换码失败保留重试。绑定和验证身份沿既有会话授权。旧 Codex/type 57 专用渠道退役不等于删除站点OAuth登录。权限菜单由后端能力/权限投影控制，最终授权始终在服务端完成。
 
 提供商插件登录使用原生 AuthFlow、用户/会话/flow 绑定与 CAS；它与站点 OAuth 分开。凭据摘要接口需要渠道读取权限，登录和继续操作需要渠道敏感写权限，秘密不进入摘要响应。
 

@@ -64,6 +64,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	if err == nil {
 		return
 	}
+	BindRelayErrorContext(c, err)
 	upstreamURLs := common.UpstreamAddresses(c)
 	logger.LogError(c, common.LogText("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.MaskSensitiveErrorWithStatusCode(upstreamURLs...))))
 	if ShouldDisableChannel(err) && channelError.AutoBan {
@@ -82,6 +83,7 @@ func RecordRelayErrorLog(c *gin.Context, channelId int, err *types.NewAPIError, 
 	if !constant.ErrorLogEnabled || !types.IsRecordErrorLog(err) {
 		return
 	}
+	BindRelayErrorContext(c, err)
 	userId := c.GetInt("id")
 	tokenName := c.GetString("token_name")
 	modelName := c.GetString("original_model")
@@ -91,7 +93,7 @@ func RecordRelayErrorLog(c *gin.Context, channelId int, err *types.NewAPIError, 
 		other.SetPublic("request_path", c.Request.URL.Path)
 	}
 	other.SetPublic("error_type", err.GetErrorType())
-	other.SetPublic("error_code", err.GetErrorCode())
+	other.SetPublic("error_code", err.SanitizeText(string(err.GetErrorCode())))
 	other.SetPublic("status_code", err.StatusCode)
 	AppendRelayLogAdminInfo(c, relayInfo, other)
 	appendRequestPluginRecord(relayInfo, other)

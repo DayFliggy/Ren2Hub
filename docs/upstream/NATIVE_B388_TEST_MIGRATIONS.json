@@ -826,10 +826,12 @@
       ],
       "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
       "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
-      "diagnostics": [
-        "TestRestoredNativeControlSelfStatIdentity",
-        "TestRestoredNativeControlAdminLogs"
-      ]
+      "diagnostics": ["TestRestoredNativeControlAdminLogs"],
+      "local_contract_regression": {
+        "test": "TestRestoredNativeControlSelfStatIdentity",
+        "file": "model/log_statistics_scope_test.go",
+        "basis": "AUTH-1 用户批准本人统计按 ID 查询；旧 adapter 调用管理员 LIKE 查询，不再代表本人接口。adapter 改为本人 ID=1，正确断言保持原样并转普通测试。"
+      }
     },
     {
       "scope": "control",
@@ -899,10 +901,14 @@
       "original_sha256": "3ddfd86675f87e78b9533b88e90384e2c98be0c14df4afa52e37218d912be17f",
       "diagnostics": [
         "TestRestoredNativeControlAdminLogs",
-        "TestRestoredNativeControlSelfStatIdentity",
         "funds admin user visibility probe"
       ],
-      "retained": "三库日志导出、字段权限、分页、筛选、self身份断言保留；只有root排除和用户层级段移出，未反转断言。"
+      "retained": "三库日志导出、字段权限、分页、筛选、self身份断言保留；只有root排除和用户层级段移出，未反转断言。",
+      "local_contract_regression": {
+        "test": "TestRestoredNativeControlSelfStatIdentity",
+        "file": "model/log_statistics_scope_test.go",
+        "basis": "AUTH-1 用户批准本人统计按 ID 查询；旧 adapter 调用管理员 LIKE 查询，不再代表本人接口。adapter 改为本人 ID=1，正确断言保持原样并转普通测试。"
+      }
     },
     {
       "scope": "control",
@@ -1523,10 +1529,12 @@
             ],
             "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
             "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
-            "diagnostics": [
-              "TestRestoredNativeControlSelfStatIdentity",
-              "TestRestoredNativeControlAdminLogs"
-            ]
+            "diagnostics": ["TestRestoredNativeControlAdminLogs"],
+            "local_contract_regression": {
+              "test": "TestRestoredNativeControlSelfStatIdentity",
+              "file": "model/log_statistics_scope_test.go",
+              "basis": "AUTH-1 用户批准本人统计按 ID 查询；旧 adapter 调用管理员 LIKE 查询，不再代表本人接口。adapter 改为本人 ID=1，正确断言保持原样并转普通测试。"
+            }
           }
         ]
       },
@@ -1630,10 +1638,12 @@
             ],
             "archive": "scripts/testing/fixtures/known_upstream_restored/control/archive/controller__log_visibility_test.go.txt",
             "original_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2",
-            "diagnostics": [
-              "TestRestoredNativeControlSelfStatIdentity",
-              "TestRestoredNativeControlAdminLogs"
-            ]
+            "diagnostics": ["TestRestoredNativeControlAdminLogs"],
+            "local_contract_regression": {
+              "test": "TestRestoredNativeControlSelfStatIdentity",
+              "file": "model/log_statistics_scope_test.go",
+              "basis": "AUTH-1 用户批准本人统计按 ID 查询；旧 adapter 调用管理员 LIKE 查询，不再代表本人接口。adapter 改为本人 ID=1，正确断言保持原样并转普通测试。"
+            }
           }
         ]
       },
@@ -2855,6 +2865,12 @@
     "integrated_validation": "最终冻结源正常/race及四个既有回归另行执行；外部提案对照不代替集成验证。"
   },
   "approved_local_regressions": [
+    {
+      "issue": "ROUTE-4",
+      "test": "TestRestoredRound3ChannelStatusFailureRestoresCache",
+      "file": "model/channel_status_rollback_regression_test.go",
+      "basis": "状态事务失败不发布缓存，原正确断言不变，迁为普通三库回归。"
+    },
     {
       "issue": "FUND-5",
       "test": "TestRestoredNativeStripeWebhookAcknowledgesPermanentRejections",

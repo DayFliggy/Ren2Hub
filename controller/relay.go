@@ -101,6 +101,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	defer func() {
 		if newAPIError != nil {
+			service.BindRelayErrorContext(c, newAPIError)
 			service.RecordRequestPolicyTermination(c, newAPIError)
 			logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
@@ -238,6 +239,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		finishReply()
 
+		service.BindRelayErrorContext(c, newAPIError)
 		service.FinishRouteAttempt(c, relayInfo, newAPIError)
 		if newAPIError == nil {
 			service.MarkRequestPolicySuccess(c, relayInfo.StreamStatus)

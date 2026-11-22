@@ -22,17 +22,43 @@ var channelSyncLock sync.RWMutex
 var channelCacheReloadLock sync.Mutex
 
 func InitChannelCache() {
+	_ = ReloadChannelCache()
+}
+
+// ReloadChannelCache retains the last complete snapshot when storage cannot be read.
+func ReloadChannelCache() error {
 	channelCacheReloadLock.Lock()
 	defer channelCacheReloadLock.Unlock()
 	if !common.MemoryCacheEnabled {
 		InvalidatePricingCache()
 		rebuildTaskAliasView()
-		return
+		return nil
 	}
+	if err := reloadChannelSnapshot(); err != nil {
+		return err
+	}
+	// Lock ordering: InvalidatePricingCache acquires updatePricingLock, and
+	// GetPricing (holding updatePricingLock) nests channelSyncLock.RLock via
+	// loadPricingAdvancedCustomConfigs. channelSyncLock MUST be released before
+	// invalidating the pricing cache, otherwise the reversed order deadlocks.
+	InvalidatePricingCache()
+	rebuildTaskAliasView()
+	common.SysLog(common.LogText("channels synced from database"))
+	return nil
+}
+
+// Lock order: reload lock -> status lock -> channelSyncLock. A status write
+// cannot commit between this snapshot's database read and its publication.
+func reloadChannelSnapshot() error {
+	channelStatusLock.Lock()
+	defer channelStatusLock.Unlock()
 	newChannelId2channel := make(map[int]*Channel)
 	newChannel2advancedCustomConfig := make(map[int]*kitdto.AdvancedCustomConfig)
 	var channels []*Channel
-	DB.Find(&channels)
+	if err := DB.Find(&channels).Error; err != nil {
+		common.SysError(common.LogText("failed to reload channel cache: %v", err))
+		return err
+	}
 	for _, channel := range channels {
 		newChannelId2channel[channel.Id] = channel
 		if channel.Type == constant.ChannelTypeAdvancedCustom {
@@ -46,13 +72,7 @@ func InitChannelCache() {
 	channelsIDM = newChannelId2channel
 	channel2advancedCustomConfig = newChannel2advancedCustomConfig
 	channelSyncLock.Unlock()
-	// Lock ordering: InvalidatePricingCache acquires updatePricingLock, and
-	// GetPricing (holding updatePricingLock) nests channelSyncLock.RLock via
-	// loadPricingAdvancedCustomConfigs. channelSyncLock MUST be released before
-	// invalidating the pricing cache, otherwise the reversed order deadlocks.
-	InvalidatePricingCache()
-	rebuildTaskAliasView()
-	common.SysLog(common.LogText("channels synced from database"))
+	return nil
 }
 
 func SyncChannelCache(frequency int) {
@@ -84,7 +104,9 @@ func CacheUpdateChannelStatus(id int, status int) {
 	channelSyncLock.Lock()
 	defer channelSyncLock.Unlock()
 	if channel, ok := channelsIDM[id]; ok {
-		channel.Status = status
+		copy := *channel
+		copy.Status = status
+		channelsIDM[id] = &copy
 	}
 }
 

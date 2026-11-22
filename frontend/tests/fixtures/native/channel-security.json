@@ -1,0 +1,137 @@
+{
+  "redacted_channel": {
+    "body": {
+      "data": {
+        "id": 1,
+        "type": 1,
+        "key": "",
+        "openai_organization": null,
+        "test_model": null,
+        "status": 1,
+        "name": "channel-security",
+        "weight": 0,
+        "created_time": 0,
+        "test_time": 0,
+        "response_time": 0,
+        "base_url": "",
+        "other": "",
+        "balance": 0,
+        "balance_updated_time": 0,
+        "models": "test-model",
+        "used_quota": 0,
+        "model_mapping": null,
+        "status_code_mapping": "",
+        "priority": 0,
+        "auto_ban": 1,
+        "other_info": "",
+        "tag": null,
+        "setting": "{\"__ren2hub_redacted__\":true}",
+        "param_override": null,
+        "header_override": "{\"__ren2hub_redacted__\":true}",
+        "remark": null,
+        "settings": "{\"__ren2hub_redacted__\":true}",
+        "channel_ratio": "1",
+        "max_concurrency": 0,
+        "in_flight": 0,
+        "lab": {
+          "id": "unknown",
+          "name": "unknown",
+          "source": "unknown"
+        },
+        "redacted_fields": ["header_override", "setting", "settings"]
+      },
+      "message": "",
+      "success": true
+    },
+    "status": 200
+  },
+  "redacted_field_invalid": {
+    "body": {
+      "code": "CHANNEL_REDACTED_FIELD_INVALID",
+      "message": "Invalid redacted channel field",
+      "success": false
+    },
+    "status": 400
+  },
+  "status_batch_failure": {
+    "body": {
+      "data": 0,
+      "failed_ids": [1, 99999],
+      "failures": [
+        {
+          "code": "CHANNEL_STATUS_UPDATE_FAILED",
+          "id": 1
+        },
+        {
+          "code": "CHANNEL_NOT_FOUND",
+          "id": 99999
+        }
+      ],
+      "message": "",
+      "publication_pending": 0,
+      "success": false
+    },
+    "status": 200
+  },
+  "status_batch_partial": {
+    "body": {
+      "data": 1,
+      "failed_ids": [99999],
+      "failures": [
+        {
+          "code": "CHANNEL_NOT_FOUND",
+          "id": 99999
+        }
+      ],
+      "message": "",
+      "publication_pending": 1,
+      "success": false
+    },
+    "status": 200
+  },
+  "status_changed": {
+    "body": {
+      "data": true,
+      "message": "",
+      "publication_pending": false,
+      "success": true
+    },
+    "status": 200
+  },
+  "status_missing": {
+    "body": {
+      "code": "CHANNEL_NOT_FOUND",
+      "data": false,
+      "message": "Channel status update failed",
+      "success": false
+    },
+    "status": 404
+  },
+  "status_publication_pending": {
+    "body": {
+      "data": true,
+      "message": "",
+      "publication_pending": true,
+      "success": true
+    },
+    "status": 200
+  },
+  "status_storage_failure": {
+    "body": {
+      "code": "CHANNEL_STATUS_UPDATE_FAILED",
+      "data": false,
+      "message": "Channel status update failed",
+      "success": false
+    },
+    "status": 500
+  },
+  "status_unchanged": {
+    "body": {
+      "data": false,
+      "message": "",
+      "publication_pending": false,
+      "success": true
+    },
+    "status": 200
+  }
+}

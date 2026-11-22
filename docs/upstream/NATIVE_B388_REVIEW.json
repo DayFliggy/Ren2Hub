@@ -33556,42 +33556,47 @@
       ]
     },
     "model/channel_cache.go": {
-      "local_sha256": "41927e6f4ac643601665b13a993e7309590e0026620f38506518f0746caf69a2",
+      "local_sha256": "897f9c9af4144077625b8613da0f0e08d2e6bc300d7f4dc540ce27a9597d8047",
       "hunks": [
         {
           "header": "@@ -1,24 +1,17 @@",
           "sha256": "d4f8863f48a7a4f4dbf923533403e04ff619d05c9aa82f235bb78f143c32a6f4",
-          "basis": "删除业务分组与上游随机选渠：删除 errors、math/rand、sort、strings、dto、ratio_setting 导入，它们只供分组索引和 GetRandomSatisfiedChannel 使用；删除 group2model2channels 分组索引变量（group-removal、token-routing）。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         },
         {
-          "header": "@@ -48,58 +41,8 @@",
-          "sha256": "1ae2eefc3323c54a0ff54703da567034eae7bd663f2a9e1ffc24e4ee8e409453",
-          "basis": "删除业务分组：InitChannelCache 不再按分组建模型到渠道的索引（group-removal）；删除多 Key：不再预解析 Keys、不再保留轮询下标（single-key-channel）。"
+          "header": "@@ -29,17 +22,43 @@",
+          "sha256": "318c14dfeeb97f6d93f8db5da27dc9f54b81d9ebafcb35c0dca5b62a79638530",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         },
         {
-          "header": "@@ -120,108 +63,6 @@",
-          "sha256": "e486ae02e584e2d1ef55ee2095ec1a4f959e71a27acf9684ceeee2f70480e917",
-          "basis": "删除上游随机选渠：GetRandomSatisfiedChannel 由每 Token 自动或有序手动路由取代（token-routing），它按分组索引选渠（group-removal）。"
+          "header": "@@ -48,68 +67,12 @@",
+          "sha256": "c17c7a81a8b908173167227db652d41a48c49aaf6197ab21a66705d447b1d13e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         },
         {
-          "header": "@@ -236,24 +77,6 @@",
-          "sha256": "bffa8250a47dff90d79fc81cb95356dceb77108b9a3489e0a96d0dcf9cbf1cf3",
-          "basis": "删除多 Key：删除 CacheGetChannelInfo，渠道没有 ChannelInfo（single-key-channel）。"
+          "header": "@@ -118,108 +81,6 @@",
+          "sha256": "9d849580be386a12f9a2436e365b77826b853745ad04daf3bfe09de7e0216d7b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         },
         {
-          "header": "@@ -262,20 +85,6 @@",
-          "sha256": "09658d3d78f83f0a0dd80103036019e8b54852211a91488778c921d55e1ec597",
-          "basis": "删除业务分组：CacheUpdateChannelStatus 不再从分组索引里摘除停用渠道（group-removal）。"
+          "header": "@@ -236,24 +97,6 @@",
+          "sha256": "d3a8784196d37b8b192c942b215d95a828fbc432bf5ea08e875c7427ed64f60d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         },
         {
-          "header": "@@ -292,8 +101,8 @@",
-          "sha256": "8205027fa026045be4f4e64483f7e14f449da0dc3b6d349a2cb54e9ae9a76231",
-          "basis": "删除多 Key：CacheUpdateChannel 更新前的调试日志不再输出轮询下标（single-key-channel）。"
+          "header": "@@ -261,21 +104,9 @@",
+          "sha256": "2a20ec3d02ebaaeda935eb3d7b53515968773ce14ec3624fcae6a1e07aec2645",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         },
         {
-          "header": "@@ -305,7 +114,7 @@",
-          "sha256": "70eb69978a0bf156559c703f2a4241e876279e9efa0ba552ef6ea0a5a0f0536d",
-          "basis": "删除多 Key：CacheUpdateChannel 更新后的调试日志不再输出轮询下标（single-key-channel）。"
+          "header": "@@ -292,8 +123,8 @@",
+          "sha256": "726e6254ef9630fb0ef53008efe7d9065323cd3df9143f245953f272d0a63e94",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -305,7 +136,7 @@",
+          "sha256": "df592706b1f6dd11cc09c6037628aaa7f63da5cb4963cdf2ee47563e7d121a66",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_cache.go#1, model/channel_cache.go#2, model/channel_cache.go#3, model/channel_cache.go#4。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews；删除多 Key 的段见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
         }
       ]
     },
@@ -33813,12 +33818,22 @@
       "regression": "relay/channel/xunfei/route_scan_test.go:TestRouteScanBeforeAndAfterXunfeiDial"
     },
     "relay/common/override.go": {
-      "local_sha256": "a8985387820df71618ad741b6f4c0a9e6f7c84e3a221c73f6a690d1989b1137c",
+      "local_sha256": "52eb077bbd53c0552823d40bf25ce3f6aef57c6e8fadb66267ea1ae1c34c6fec",
       "hunks": [
         {
           "header": "@@ -2211,9 +2211,6 @@",
           "sha256": "5b48804c8620a6cac02a2051fb660fc45e2533c0d2b9afe06846b67aef6c2c0f",
-          "basis": "移除条件上下文里的业务分组字段（user_group、token_group、using_group），对应原审查 relay/common/override.go#2。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -2249,7 +2246,7 @@",
+          "sha256": "10420f056ac67b0abd573f70fc7b74c4d1f8f925c41a159bf67971731cbc386f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -2258,7 +2255,7 @@",
+          "sha256": "7903533ac28a497fd1f013a94097eb53a28a20b759e5b64eec1a09e91f150dd7",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/common/override.go#2；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         }
       ]
     },
@@ -33853,62 +33868,67 @@
       ]
     },
     "relay/requestplugin/relay.go": {
-      "local_sha256": "aeb9516af39c8ce801c2736e0e8bd99cac7026c1e77187cfb4f53b658829fd2c",
+      "local_sha256": "5929c38a6866408338e6df4364e57015ad7b91dcd066018eaa2cff72f4a29bec",
       "hunks": [
         {
           "header": "@@ -73,9 +73,8 @@",
           "sha256": "1332a6711dc7e028be5dc315ffb1740ef28493972b290235be6a908939eff8af",
-          "basis": "删除业务分组：Ingress 选实例不读请求分组。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -85,11 +84,11 @@",
           "sha256": "62c581f92c6317547f7c3e6eaf35d6eda8ad34e5d9a6c38a3f77b279c9669b9a",
-          "basis": "删除业务分组：Ingress 的 Call 不带 Group。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -138,9 +137,9 @@",
           "sha256": "8c363b5b969840956ff9d3ca5e8d1c16c73852a6d0f8507b3bfea44d598cc3ad",
-          "basis": "删除业务分组：渠道选定后的迟到 ingress 选实例不传 group。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -177,7 +176,7 @@",
           "sha256": "10096be7d0017673e636fcfd744a6c9ae1300fabe379cca52d2bd88e88491825",
-          "basis": "删除业务分组：egress 选实例不传 group。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -315,7 +314,7 @@",
-          "sha256": "b7d0fe554fa76a89340af5141737abf3dfdf23339e8969ed0ca1c84e36fb369d",
-          "basis": "删除业务分组：request 阶段选实例不传 group。"
+          "header": "@@ -206,7 +205,9 @@",
+          "sha256": "d48901adf6a1381fa3b6f2cbe859d78464767fcf51a05c9e7b31d3664d390f8f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -405,7 +404,7 @@",
-          "sha256": "4e7c8965a4e6ea8badfd086c1fd7a4d0eaea81eeedc5206a080df756dfb76e06",
-          "basis": "删除业务分组：egress 重放判断不传 group。"
+          "header": "@@ -315,7 +316,7 @@",
+          "sha256": "9639ca5dc28a4376394573cbf2ba7d1f15cde37de613251803f661904a81155f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -422,10 +421,10 @@",
-          "sha256": "6d62363d58974b139bc4b0eb2d8776b2b4ba076f5457280483199b008d845b0b",
-          "basis": "删除业务分组：attemptCall 不带 Group。"
+          "header": "@@ -405,7 +406,7 @@",
+          "sha256": "4af0510090c35db8c298afe6dd4ca0f8e12a06398000069886b8fba3ad26fc20",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -438,16 +437,6 @@",
-          "sha256": "b4020acf5922153080ba19c06bd2bc412be14f7b5947b6e105223a8f8a34c484",
-          "basis": "删除业务分组：删除 requestGroup（按 Token 分组或自动分组结算选实例）。"
+          "header": "@@ -422,10 +423,10 @@",
+          "sha256": "34ddf55d9be9fa57601b5735234c55304a1573e5cc0f8689e114a454aeb95e7e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -580,10 +569,10 @@",
-          "sha256": "62f70626a8620d64cb8da0b8121bcf0c6ccb582df91735847d7f381004ed26ac",
-          "basis": "删除业务分组：Call 结构删除 Group 字段。"
+          "header": "@@ -438,16 +439,6 @@",
+          "sha256": "beaae58d1a76a703a2879c138d07f35953f82cb2c6ea61ffa77fd6f175caa2fd",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -651,7 +640,7 @@",
-          "sha256": "3bc87da2ff2ea12ea71a0b301911008acfa79193f79753bf97e52c96420340a8",
-          "basis": "删除业务分组：试运行的 Call 不带 Group；带 group 的试运行请求由 controller/request_plugin.go 拒绝。"
+          "header": "@@ -580,10 +571,10 @@",
+          "sha256": "ed3cdd865b8e1b6073780fe73e8093e8714aaf0930b45591841f39071d3fe3a6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -715,7 +704,7 @@",
-          "sha256": "a4098a87b7e00f1dfce12ae8da090deae2a0bca5a684ea8887e4958e86411b26",
-          "basis": "删除业务分组：回复阶段选实例不传 group。"
+          "header": "@@ -651,7 +642,7 @@",
+          "sha256": "6a3cd0cf095c96cd9e336f7072ade166e692d3b8c5a5f5bbaed20d8cfb59b92b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -715,7 +706,7 @@",
+          "sha256": "ae1bdcdc2a732d683f9135f8ea27d7a81eaa24b3314a276b4fa53a0491f130a9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/relay.go#1, relay/requestplugin/relay.go#10, relay/requestplugin/relay.go#11, relay/requestplugin/relay.go#2, relay/requestplugin/relay.go#3, relay/requestplugin/relay.go#4, relay/requestplugin/relay.go#5, relay/requestplugin/relay.go#6, relay/requestplugin/relay.go#7, relay/requestplugin/relay.go#8, relay/requestplugin/relay.go#9；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         }
       ]
     },
@@ -33928,22 +33948,27 @@
       ]
     },
     "relay/requestplugin/report.go": {
-      "local_sha256": "175b9a629aeefc597257319489ce1254f1a48607d50314673b453cbd7129fb35",
+      "local_sha256": "447a2d2cd11d743c900f819a308a2f18e9b7ad6cef2665acc29719f953b9e57c",
       "hunks": [
         {
           "header": "@@ -105,8 +105,8 @@",
           "sha256": "08bdbcf389d4a7623a8b809837beec4e9aa5f222ad0f5c2f7112d125df1936df",
-          "basis": "删除业务分组：capture 签名去掉 group，保留上游的 channelType。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -231,14 +231,14 @@",
           "sha256": "274f0e19348116b10a2422c4a25eb2fcf52f2508b611fcf66fd925f4b78e9f11",
-          "basis": "删除业务分组：Report 的 Call 不再带 Group，scope 调用不传 group。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -280,7 +280,7 @@",
           "sha256": "86e50eab59591803e4b3f99c0cdb62146f8ee74cb138192e228f0f49f16435fc",
-          "basis": "无业务分组与观测插件保留。（对应原审查 relay/requestplugin/report.go#3）按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -323,7 +323,7 @@",
+          "sha256": "c7bca411a8a139ca9212082173b755bb3ba60d9d0c1b973aed087a5eafd8b3f8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/requestplugin/report.go#1, relay/requestplugin/report.go#2, relay/requestplugin/report.go#3；冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         }
       ]
     },
@@ -34123,47 +34148,52 @@
       ]
     },
     "service/request_policy.go": {
-      "local_sha256": "461eabbddb3e8565e70003bd6dd7fa7364634e68ecaccd86bd412d7989580d2e",
+      "local_sha256": "97cc20b80d59fbbdc0171d7162907ffaf8453c00ce01abc56fb0b8cdfd66ce20",
       "hunks": [
         {
           "header": "@@ -6,8 +6,6 @@",
           "sha256": "0574580b0352c164d792bc17db24da44d660bbc641b40fcd14800a09f10b725d",
-          "basis": "多 Key 健康项删除后不再读 common/constant 上下文（single-key-channel）。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -24,16 +22,17 @@",
           "sha256": "313fcd363a99dba93811b3b8bd9e481a5db9c145813bde88d404e3f551503562",
-          "basis": "逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。 自动扫描记录及移除 Group 继续遵循既有合同。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -43,7 +42,6 @@",
           "sha256": "b3f371a3cc8efdbf51cf457a692c197cf74752db58aa463e1a06e1d014c95e03",
-          "basis": "移除按业务分组选择渠道的 SelectedGroup 状态。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -51,6 +49,7 @@",
           "sha256": "4ea3eef49a89405c0e4b4da17ff9df4d001fba97152f161c3161608193e848f3",
-          "basis": "routeScanState 为每个请求保存轮次和已选择但尚未发送的渠道。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -68,14 +67,14 @@",
           "sha256": "27ea4a47f76781ac7f55a873b6e5a5d3d004594e5a96fb7556762b7c7a86bf14",
-          "basis": "AddEvent 在策略事件锁内跟踪扫描结果和轮次，沿用事件上限，取消业务分组的默认填充。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
           "header": "@@ -87,11 +86,10 @@",
           "sha256": "f72602f56f5c9493fdd23c7aa5d7d5e3cb8ea50ae72aa30b1fecfa40c30fc47b",
-          "basis": "BeginAttempt 去掉 group 参数并删除 SelectedGroup（无业务分组），对应原审查 service/request_policy.go 的去组段；上游 1c63cc8c9 已在冻结目标内，本段只剩去组差异。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -140,9 +138,6 @@",
-          "sha256": "6c928891c3dc84056536f4867a565c35295c33487fe5ea2217745ed3d10e56de",
-          "basis": "一条渠道一把 Key，自动停用只记 channel_disable_requested，不再有 key_disable_requested（single-key-channel）。"
+          "header": "@@ -130,9 +128,10 @@",
+          "sha256": "faa996b521b3cbc4f20db3399e7480b19540688345000f0a14fa6ae6ba216e32",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -196,6 +191,7 @@",
-          "sha256": "05b6f9e0064ceb6214f68e97b3ad6b7e84f7a2c03c027f206d5add14a22ef415",
-          "basis": "首次终止时输出选中后、上游发送前遭拒的扫描摘要，保留原生终止决策和错误码。按新上游 3a407cc9b 重算段指纹，本地差异内容未变。"
+          "header": "@@ -140,9 +139,6 @@",
+          "sha256": "92ad5da91e556b9198c36960dfa88da03476da49b35e67453a6cc9d5020d8469",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -191,13 +187,15 @@",
+          "sha256": "31f495cafeba52d4afbf9ad9f401f358c8e6c2a62832c401f361e079f71041c0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/request_policy.go#1, service/request_policy.go#2, service/request_policy.go#3, service/request_policy.go#4。当前逐段裁定见 NATIVE_B388_REVIEW.json 的 current_file_reviews 与 SYNC_LEDGER.md#自动选渠诊断接点。 逐次尝试证据作为可选管理员日志载荷，与已有渠道/轮次/扫描事件共用一条记录。冻结目标推进到 3a407cc9b 后按新上游逐段重新登记，现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         }
       ]
     },
@@ -34268,102 +34298,107 @@
       ]
     },
     "controller/relay.go": {
-      "local_sha256": "12f818901d003642ef93e7f1fb88bb43799425467134a3f3b80a5352c75ef872",
+      "local_sha256": "e72e22d5be107525465b79f7e8f92e7bf59780da84565bc42a3f9a46d33170ba",
       "hunks": [
         {
           "header": "@@ -73,7 +73,6 @@",
           "sha256": "33e7ef263bb9336c533082ea0195608dae42661c1d08ce5891d7069a088d8b14",
-          "basis": "移除业务分组的废弃读点。"
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -141,7 +140,7 @@",
-          "sha256": "65208aee5ebd040f02f60b32bfe9551024364facbb3215f0b7daf7bade327fc2",
-          "basis": "入口插件终止时保存最终路由策略。"
+          "header": "@@ -102,6 +101,7 @@",
+          "sha256": "a6f6f8558a43d91b1a3e755650ab997ada7780cc9d6c813e2fc5cbf9267bfa42",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -169,6 +168,8 @@",
-          "sha256": "8db58ef3597c821e4fe6d8e1098978cd1ab5f1c04b88d875364f8390de1e59d3",
-          "basis": "请求结束时记录本轮渠道结果并统一退款。"
+          "header": "@@ -141,7 +141,7 @@",
+          "sha256": "4569a3ce3ab7d4f2c09211976b60166c6df3842cf5a39bece93ff4a71bc08845",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -183,16 +184,9 @@",
-          "sha256": "14d9e3467dca7eec68fcc597786a1c9c2ee1a161463903c8bc4db470618e562e",
-          "basis": "选定渠道再预扣以采用其倍率，重试不传业务分组。"
+          "header": "@@ -169,6 +169,8 @@",
+          "sha256": "7fce349f043cea8a0416ca8c85b58589977218f343acafb47161b0316e9a34b5",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -208,11 +202,11 @@",
-          "sha256": "eb372244806c2e3d95849c09bac85c7ce7039520c9910058e0dc702902aeb9db",
-          "basis": "候选耗尽保留上一次上游错误，使用已选渠道计价。"
+          "header": "@@ -183,16 +185,9 @@",
+          "sha256": "419e1a78801e9390ed6fe917e410f9ec64d9d9ce80f5603849124f875dab5cce",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -244,6 +238,7 @@",
-          "sha256": "901a64d1dda582ba4922906b513590b9ce89d5ac7cff421b28bc9c21361dbdee",
-          "basis": "重试前完成上一轮渠道观测。"
+          "header": "@@ -208,11 +203,11 @@",
+          "sha256": "93e6e1cfaf491f06536664e23befc3afff520101ec757f1eeb402d5995e48f25",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -255,7 +250,7 @@",
-          "sha256": "81d72eff0ba62b9883b286765c3de54b41991d0dc96efe3c01de2633422eba18",
-          "basis": "故障处理按渠道唯一凭据记录。"
+          "header": "@@ -244,6 +239,8 @@",
+          "sha256": "0a01935de9f7ed5572dfb1b6574d25037be75d1dcf28dda99d9508519c9e1833",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -286,38 +281,6 @@",
-          "sha256": "31d04097fc9e0da8cacbda19496e3058e1e25ce85b50943d9c9a8a12ba35f27d",
-          "basis": "Claude 计数使用独立的原生上游转发入口。"
+          "header": "@@ -255,7 +252,7 @@",
+          "sha256": "6bb9cd61609f3d788c99d3f77848cfc53632d4a7b608d3b641eca5e006b05860",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -326,37 +289,25 @@",
-          "sha256": "0edf20c6b0719b60703120ec2439c8f7e643709e51fa571db82366d8189d1723",
-          "basis": "首次尝试复用已选渠道，重试按 Token 路由重新准入并初始化渠道元数据。"
+          "header": "@@ -286,38 +283,6 @@",
+          "sha256": "37acc470e73de48410a4ac522f0add288b371b3e99a9607eb61b8a17e1b93880",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -395,7 +346,7 @@",
-          "sha256": "9594d2bbc491e110fc8d5f208f59e85682818ffa6e336d34bffd34e3bc610653",
-          "basis": "MJ 图片种子复用当前请求的渠道和并发上下文。"
+          "header": "@@ -326,37 +291,25 @@",
+          "sha256": "fcfb5fc466493787c6352f7cb14c62201450094a5716c2edc6d189b391ec4f19",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -451,7 +402,7 @@",
-          "sha256": "1e00cf36a218f8a82bf101f0c27c5c8c9c8e65342f5dfa5f3a9899b7aa0bd07b",
-          "basis": "MJ 终止时记录最终路由策略。"
+          "header": "@@ -395,7 +348,7 @@",
+          "sha256": "992b760a9fa0eaaa2ea328dcf0a460cf5766966ca09a733fafe8e6f74a582287",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -604,11 +555,13 @@",
-          "sha256": "44b8091b538b3ea24a1edf6d17e8bdf7badd89160b856310325f6088ecc4adfa",
-          "basis": "任务结束释放渠道并发槽，并保留最近一次已发送请求的失败。"
+          "header": "@@ -451,7 +404,7 @@",
+          "sha256": "6293074cb3309f659f57d745b73a874a3e13859aa3be52bbf2c26e9e934bdcac",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -644,7 +597,7 @@",
-          "sha256": "60d047e9ee7184009812df7153813f1c8dc2bacf944c04e63b3fe97ec9a54635",
-          "basis": "任务入口插件拒绝时记录最终路由策略。"
+          "header": "@@ -604,11 +557,13 @@",
+          "sha256": "4b762a1784b2cca557aa2c8e83a65ad3da750035e54f0ec83cb98f5253d770d2",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -658,13 +611,15 @@",
-          "sha256": "09fc000b7cc084f8c6d666c8f3e66714d8d6d6635c4a15fc9c57f9ccad2a4b6a",
-          "basis": "每次任务尝试清空流状态、业务拒绝和输出计数，重试参数不带分组。上游的 RetryIndex 与运行时请求头清理照原文。"
+          "header": "@@ -644,7 +599,7 @@",
+          "sha256": "62ea4c2730023accb3d9bc36059bd2b9428e6d1248354374dea4c1701c09ae9a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -678,8 +633,18 @@",
-          "sha256": "6d093c5ce014d8c5b2ddaaa211a56431987f517262f795bf36021bf2ae3a04b9",
-          "basis": "续作复用原任务渠道并重新检查准入与容量，取消和固定渠道准入失败分别记录。"
+          "header": "@@ -658,13 +613,15 @@",
+          "sha256": "9776e79a297a3ee2e6e28bd7627a9e9bd69cde553be377c950f2e32dd814b6b9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -691,9 +656,20 @@",
-          "sha256": "a4463c9be4765c125fb0ed657db56473271b786ff8ec65c99d98ef5ffdfba730",
-          "basis": "选择渠道后检查取消。候选耗尽时优先保留此前实际发送的上游错误。"
+          "header": "@@ -678,8 +635,18 @@",
+          "sha256": "8ac75d65b5ed715a3128d88de3dfa18cf88888f6c61a685cd51cf0bac6bdcdcf",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -712,6 +688,15 @@",
-          "sha256": "0980b97ba266684f580098241f19cac1522a10e1d53a5fb8b5d6e4ab0d1773dc",
-          "basis": "按轮记录是否实际发送、本地业务拒绝与渠道结果。"
+          "header": "@@ -691,9 +658,20 @@",
+          "sha256": "df9d7f1fd7361cd6644ac75040bc5475a6bf71188cd2697cc6fefb5bdcc453dd",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -723,13 +708,15 @@",
-          "sha256": "5b6a90c4f669d58f213923233cfbec10fc5d9ad9dd0b105cf079d9bb9942fd3f",
-          "basis": "只保存已发请求的上游错误，渠道错误使用单把 Key。"
+          "header": "@@ -712,6 +690,15 @@",
+          "sha256": "9e47b67f38a3bda575add1946d922be3fefbaedbadda40d4ba22dc3b665d2c4e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         },
         {
-          "header": "@@ -794,12 +781,11 @@",
-          "sha256": "ebf1829e1d0782f87bbd7c48d6884b2a7b85a7cb0359402b17a3e47047cd52b3",
-          "basis": "钱包任务去掉订阅标识，价格快照按渠道倍率保存。"
+          "header": "@@ -723,13 +710,15 @@",
+          "sha256": "c21964274c3b9ca5c6a0d3e614c707e0b469a2a41ff5e99b52eb2782c64e770b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -794,12 +783,11 @@",
+          "sha256": "d754981c6dd1737952f373c84a3062172d7a8485d2dbdfa19a6ba02ae8ce920a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/relay.go#1, controller/relay.go#10, controller/relay.go#11, controller/relay.go#12, controller/relay.go#13, controller/relay.go#14, controller/relay.go#15, controller/relay.go#2, controller/relay.go#3, controller/relay.go#4, controller/relay.go#5, controller/relay.go#6, controller/relay.go#7, controller/relay.go#8, controller/relay.go#9。HTTP 中继和任务的入口插件、Midjourney 请求插件在写本地终止错误行前记录最终的策略决策。见 SYNC_LEDGER.md#自动选渠诊断接点。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 现行逐段依据见 NATIVE_B388_REVIEW.json 的 current_file_reviews。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         }
       ]
     },
@@ -35044,6 +35079,871 @@
           "header": "@@ -275,51 +263,6 @@",
           "sha256": "afca95f3bb3f6ea32d111bc5d6d78602dff1c0d53e5b712ac7faffe47d001bfa",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/waffo_pancake.go#1, service/waffo_pancake.go#2 FUND-5：按官方回执字段核验终态、金额币种及商户身份；永久不符审计并确认，复用订单行锁结算。"
+        }
+      ]
+    },
+    "common/page_info.go": {
+      "local_sha256": "9a5bd6c122651a7aff4dc37e5e774bf9d44d57aa008e830d0da44bfa68dc7b3a",
+      "hunks": [
+        {
+          "header": "@@ -74,9 +74,6 @@",
+          "sha256": "9c0606f936af0633728bad82ce8a3fce67002e5e359bc72118d3f86529d1616d",
+          "basis": "AUTH-6：归一分页正数上限并防止 offset 整数溢出。"
+        }
+      ]
+    },
+    "common/ssrf_protection.go": {
+      "local_sha256": "b791427975729df4cf7dbd8c445086ccd504af959dc2233aa0149d007dc0b620",
+      "hunks": [
+        {
+          "header": "@@ -288,6 +288,9 @@",
+          "sha256": "074dc7b0428fdf07247f20966dc41f168df730538cc49e255be65ca192ba6933",
+          "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。"
+        }
+      ]
+    },
+    "controller/channel.go": {
+      "local_sha256": "9bde31b71c971f1f23c196857667c3eff55cb76b5b1e973f8604e4946979e8c6",
+      "hunks": [
+        {
+          "header": "@@ -2,7 +2,6 @@",
+          "sha256": "1b1da538fe1732d1cdbd6354d01839ef5f8eb327b5c6ff1d0594dff8486c3666",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -10,11 +9,11 @@",
+          "sha256": "5fc70cc694b0dd84ddda106dea15c79085e6561face10486bb5fd41560123850",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -46,7 +45,6 @@",
+          "sha256": "b75682915c339cad94504d428274f7f971f6135fd472a6c8b5cc677fb67b2e69",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -69,12 +67,10 @@",
+          "sha256": "e27e3adb6670fbeb1d50ffff3db5c5068e77d90c70717a5b122d25b3ce1ba5fa",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -91,81 +87,6 @@",
+          "sha256": "e082d2984197886d308e4efec288faa6ac99bf7a24dff861f2a6fed4cc46dad7",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -176,9 +97,9 @@",
+          "sha256": "bade4ac72c1991e618376acdc2f96b527d6e0d719ec2eeb647c8c26a6f3f71dc",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -225,7 +146,6 @@",
+          "sha256": "984ad4203a1c4343ae6fa4cb7b992fa9fe4f8ea8b0de2f851baccff580b6d515",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -238,16 +158,22 @@",
+          "sha256": "e73c1648ec87c5c2c7c7b16c6c5d8abfb6ddf942e8183e4325cbfe251f4d4ae0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -258,7 +184,7 @@",
+          "sha256": "6ef1e82364879c06073acdd45da4e94d819486d522d791804982372cc410a79a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -269,13 +195,13 @@",
+          "sha256": "04766850bd8b157475df48f853f2dcbc84bab674f6d1af5fc45edd229e121540",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -287,11 +213,16 @@",
+          "sha256": "683290e8222712e850d023853c16ca0c5dfe007c2362133d18f30176de839f03",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -306,7 +237,7 @@",
+          "sha256": "336b618a3f013aea9c1a3bf45d380255666cdbdfeb2deccd2ebdd75b5b551e7d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -393,7 +324,6 @@",
+          "sha256": "aa5a3604b83e1b7cad112f037c41715132f83bd85d75f5d4bc64e7c7d112175b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -402,7 +332,7 @@",
+          "sha256": "c4114d2cf7514dfde000a6b4363eefaa108b84cbad0a073ce0c7687891223ffb",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -410,7 +340,7 @@",
+          "sha256": "1dcc3bdf063c3bb97a268aaba6cdfe349bb7a8510fe729962bdcc360e001a7b6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -421,7 +351,7 @@",
+          "sha256": "84c01e913c71bd380e8fcbb0055b34b42284a90a6542a945df0fd6b5b6f9cb36",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -443,6 +373,21 @@",
+          "sha256": "ef3c48154534c9861303a9493baf9a4dd889eb601bc5f35d7bbd9a35c0f2fa1d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -490,7 +435,7 @@",
+          "sha256": "b775ead4b32899c7159a9097097abbcb9e91504ade409b0cbbe2a2b515bd8ce4",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -510,12 +455,17 @@",
+          "sha256": "6bb5586561e726e5e12e061ea878f51403159f17958672d3d67431b9d7c2c881",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -718,66 +668,18 @@",
+          "sha256": "59ceab7e476a462f7fa7f06c4abf740650de5a52611c55ad6fa97beb783a3a7e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -816,17 +718,54 @@",
+          "sha256": "7b421ea238c044d8611440ba9fd97d1a59d5d314c01244bab4fdd77081afaef8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -859,32 +798,6 @@",
+          "sha256": "8821f61b6e9280a35c11f56c1b78175626d1f18b10e207f9864e8a2e54d1ca84",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -915,6 +828,10 @@",
+          "sha256": "9d5e56d0461c9c9dfa3b75cbca7dbca29c2bff9586ac97f2704b7e302482ceaf",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -923,11 +840,7 @@",
+          "sha256": "17d5ee485d3433880fbb6147fa41653bbc243c50cb9905e00fd9b2ae78bd78b8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -971,27 +884,20 @@",
+          "sha256": "7adbc38dad17070ac0db592d43f84882e429ea57ff00f5a15c4ab5df23742094",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1009,26 +915,19 @@",
+          "sha256": "3547b4b4e6ae4f0b20a7adf0547d77b0ddefeec911a71dd00255b735c32aa6b2",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1051,7 +950,6 @@",
+          "sha256": "37822672d1f5de5f336a8c7ab59802adb6121366029de6711aa575b03aed4523",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1121,7 +1019,7 @@",
+          "sha256": "74858d9285c9d48dade86dc0b59335d444e4da4ea1f927b02c7796e53ef1a43b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1141,7 +1039,7 @@",
+          "sha256": "fdb0d4ba3683609eb466449f5ff46ad49870880136b1b7883a6d35413248434a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1169,18 +1067,15 @@",
+          "sha256": "9f5ba0ec0e10f04f947b405078eb4e261893dd6d10f36a3bf7541659c6f60b19",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1198,8 +1093,6 @@",
+          "sha256": "04fc7a744a2f838970a7ca59bc3400688ee7d665d2db2af41b4abb69290edb25",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1231,10 +1124,25 @@",
+          "sha256": "beb48cd9d4eae5cb231b3783e323d4095e16679ff3c36f1daccd6169e8bafdda",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1244,14 +1152,25 @@",
+          "sha256": "637eca946bde4224fec864c324873a2411b285f7388d9cbd45f1e807f3c5b001",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1268,7 +1187,7 @@",
+          "sha256": "33762c2deb75c6659fc565f8670f33c5eb96ac6c45ff74ac4c16084d6743f068",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1276,102 +1195,13 @@",
+          "sha256": "91c082697461ec25ea8ca2f309c96dff1a8cec38d1b1d06e94da990e8921f50a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1386,18 +1216,28 @@",
+          "sha256": "d495392e80215460f69ccbeab07df231c16d5afafbf979226aa8c3f7f7544025",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1415,19 +1255,16 @@",
+          "sha256": "16aef5aeb6f8b1d38d7e0d5bc5ed5e33bd100225291509c9f652a163c5c64202",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1436,6 +1273,7 @@",
+          "sha256": "5882efe323bb3f4edf537aa28baa9ad30e1621af08ab84de5b9d891b7e4e8920",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1453,9 +1291,6 @@",
+          "sha256": "e59876d17a7ed9076ef461d5dc1aa5b5e840dc984e4caad9814556a35b90fce3",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1475,11 +1310,12 @@",
+          "sha256": "93ea19569cc68b5feacdeea96d69ef4786adcdd58a74794a23bfce55cd243010",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1495,22 +1331,31 @@",
+          "sha256": "e082d1e91f5b3d145405e79b4cdc76829cd28048e05087c87f26419bc2046b7e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1522,29 +1367,48 @@",
+          "sha256": "a21922dc52ddcf3c94f86b228f1beb05df168b8564e1e93b5a2c43d69b60db77",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1716,9 +1580,7 @@",
+          "sha256": "ab0697c4207056c9df5a16e3eb303f7e200870312846f614c50fdffe22b5d5e9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1835,7 +1697,7 @@",
+          "sha256": "3cf026d8cd1d9ef53cc3e2d66f64e2bad40e3e7ede74d91dac6a7042eafb7b43",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -1875,485 +1737,6 @@",
+          "sha256": "94a5e8f2f06bb76cca367bce4fee6302e6cec7999cd0b014b6b8b9273a8372d0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        },
+        {
+          "header": "@@ -2609,3 +1992,10 @@",
+          "sha256": "015bad8c972ee6bad32cb9cac0ff8dd6820d9a4490e3959a4b00c68943b29050",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel.go#1, controller/channel.go#11, controller/channel.go#12, controller/channel.go#13, controller/channel.go#14, controller/channel.go#15, controller/channel.go#16, controller/channel.go#17, controller/channel.go#18, controller/channel.go#19, controller/channel.go#2, controller/channel.go#20, controller/channel.go#21, controller/channel.go#22, controller/channel.go#23, controller/channel.go#24, controller/channel.go#25, controller/channel.go#26, controller/channel.go#27, controller/channel.go#28, controller/channel.go#29, controller/channel.go#3, controller/channel.go#30, controller/channel.go#4, controller/channel.go#5, controller/channel.go#6, controller/channel.go#7, controller/channel.go#8, controller/channel.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。"
+        }
+      ]
+    },
+    "controller/channel_authz.go": {
+      "local_sha256": "92e5f3125eea7cd074f53998e0e0b0ed4af9d2be51432e0bd89127d90d408c6e",
+      "hunks": [
+        {
+          "header": "@@ -1,6 +1,14 @@",
+          "sha256": "81d4e08c62442410c3242ca1362fbefab553b75ac409e8e11ce15082e9d5c7d0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        },
+        {
+          "header": "@@ -30,7 +38,8 @@",
+          "sha256": "cd7f48206601483e17f22977d2b385d5bc1aa512b18e577613dd17cab775e3ea",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        },
+        {
+          "header": "@@ -70,7 +79,7 @@",
+          "sha256": "38c0c11ef3a982d5dd85b12a3a7d72ec55bd6deff352e90d3a3566c5aa1f3982",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        },
+        {
+          "header": "@@ -82,6 +91,10 @@",
+          "sha256": "dd7ef78ee7a138ac68a3ed18821dc878dd9a3c88446ebf8b9d02c8c3d3d56404",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        },
+        {
+          "header": "@@ -91,7 +104,48 @@",
+          "sha256": "5bb8244922903f55dc83a66675439671ed7450e0d738bfc4b96c8c3febb0de41",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        },
+        {
+          "header": "@@ -127,7 +181,7 @@",
+          "sha256": "335062947846ee395aa37281cd2a12d6ac5d724e3c930e612dbc7b1f91216cd5",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        },
+        {
+          "header": "@@ -135,6 +189,4 @@",
+          "sha256": "c7f8fb680cf72ae33feae65bceb9ca438d8b96d8af696ff2e2d355da7aaa718d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/channel_authz.go#1, controller/channel_authz.go#2, controller/channel_authz.go#3, controller/channel_authz.go#4, controller/channel_authz.go#5。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1：渠道秘密只读投影与占位省略，敏感写检查账户和 PAT 权限交集。"
+        }
+      ]
+    },
+    "controller/log.go": {
+      "local_sha256": "fa217779c85079148805f8075966322e2dbc90b7dde03264ff9f40b70d995f87",
+      "hunks": [
+        {
+          "header": "@@ -1,6 +1,7 @@",
+          "sha256": "2012bb7ae5c6a9d2e0e2f0904ffea3544193a2a5410a49615c0bd15494763b8c",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -25,7 +26,6 @@",
+          "sha256": "e9ef6d262d49614f5ce8d03cea09aa4544b010c5971c17f6f75ba9140c4bd75d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -139,17 +139,9 @@",
+          "sha256": "cbb39363edf4791e3218c750e7822a80a829e29b2cbab3cff663f3dd1d4babc8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -162,11 +154,18 @@",
+          "sha256": "72e71906c39aa3a021f352e06e4772a00ad5a80d1efd4803b5696cce5597468e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -208,8 +207,7 @@",
+          "sha256": "0d4ccb67f741740c601e22a26a238bf4ac8870495f1357891f3d86003849a7ce",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -228,7 +226,6 @@",
+          "sha256": "42a0cd880a2917ed6a7532fd561e230af48988ceccc396a5c84be3a3965022e8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -242,8 +239,7 @@",
+          "sha256": "aa8aeb3cfc399e9199154d09c18c2f59474e2134b8d5a4562b0a2f79f621f7fd",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/log.go#1, controller/log.go#3, controller/log.go#4 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        }
+      ]
+    },
+    "controller/model_meta.go": {
+      "local_sha256": "ac09b2e9aaf03abb3cb0c8995b410aff26e409e3f7f5d79abee7ce4427ec0b3c",
+      "hunks": [
+        {
+          "header": "@@ -32,10 +32,6 @@",
+          "sha256": "ba043aceddd7e6e26ecd2383ed15e3d15eaa2a4093bc8936806ed560c938763b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4 AUTH-6：归一分页正数上限并防止 offset 整数溢出。"
+        },
+        {
+          "header": "@@ -280,7 +276,6 @@",
+          "sha256": "d564ca81e2f1fb6be33bf8d9ee1f0d11f4a51d1d0ad431026dee24ede6561bb6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4 AUTH-6：归一分页正数上限并防止 offset 整数溢出。"
+        },
+        {
+          "header": "@@ -290,7 +285,6 @@",
+          "sha256": "c0b286e1f3710fcba5a2b65f538c9514ded963b6b743accc9f692246d11378fe",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4 AUTH-6：归一分页正数上限并防止 offset 整数溢出。"
+        },
+        {
+          "header": "@@ -300,7 +294,6 @@",
+          "sha256": "854f8e8656f7439779e9e770f792c663c0141ed421fe61ad376b6fde41f503bf",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4 AUTH-6：归一分页正数上限并防止 offset 整数溢出。"
+        },
+        {
+          "header": "@@ -314,16 +307,12 @@",
+          "sha256": "c242ce79937553ceaa4a84f875112127ac20debc73c1d793f52d9fd68e160385",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/model_meta.go#1, controller/model_meta.go#2, controller/model_meta.go#3, controller/model_meta.go#4 AUTH-6：归一分页正数上限并防止 offset 整数溢出。"
+        }
+      ]
+    },
+    "controller/oauth.go": {
+      "local_sha256": "cc66a8436bd113b4ba79679683b7e0798e87a6c3f4b98b67b0f1c2e19c727441",
+      "hunks": [
+        {
+          "header": "@@ -30,11 +30,12 @@",
+          "sha256": "6839a1298fa958d3d9de32cebcacbb3657dd3e702069c2003eca31516e3e166e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -110,6 +111,16 @@",
+          "sha256": "6b3849b9fa1f0667b8889a2073dae502abfd9efb1d39c0d22cf3511444db6f62",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -130,6 +141,9 @@",
+          "sha256": "afc86ba866bf5113261c9ddacb66c7120ce552c350741c489aa869f97e9ce03b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -162,6 +176,10 @@",
+          "sha256": "eb8e4675d1a69702f65bda301c186d1183b58afd6c6a9d411d2e112c5007d63e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -239,6 +257,7 @@",
+          "sha256": "4c67c53cf76a7f0fdd8a6b38616b4d0aaa297ddd76a43cd4a95a289b82ad8504",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -281,6 +300,7 @@",
+          "sha256": "f07f8bd87a2f4fecea63b81df3891ec7dd709bb998ed32b9076f28971c156ae1",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -512,18 +532,14 @@",
+          "sha256": "724edcc9d2f0f0e4731c3bfad2834aafe28360037147bb0665d28ed415aa13b0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -544,12 +560,12 @@",
+          "sha256": "7af29ff12d4c26a939732b88762881701f47b17cfc641e5cf980b0299032f3a9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        },
+        {
+          "header": "@@ -573,7 +589,7 @@",
+          "sha256": "adf63def62380fe33a2c18c0306f523f6484d7230fd3eeb29fedd3399541401e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/oauth.go#1, controller/oauth.go#2, controller/oauth.go#3 AUTH-3：登录 flow 绑定发起浏览器 HttpOnly Cookie，消费前验证，现有 bind/verify 会话合同保留。"
+        }
+      ]
+    },
+    "controller/user.go": {
+      "local_sha256": "d23d734d5e361811e02c54d25266ad16ec687e2d34e62391cf0d9a2d5ce6a70b",
+      "hunks": [
+        {
+          "header": "@@ -8,6 +8,7 @@",
+          "sha256": "7ca071f8b0c839a0e0430de7fa25c25cb9f2d64affe53755c31462391427b767",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -272,23 +273,24 @@",
+          "sha256": "81528d8562178c7ece946e21f76e86731398b7a8f9bab2f6b416761592e40b39",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -319,9 +321,6 @@",
+          "sha256": "a6518da4e96ed0f129fa8391ec11dca68645e0587990f95b2fb99d8686b6f504",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -339,6 +338,9 @@",
+          "sha256": "beab414bfdf941cec1322f94e62e4fb77ca34ac2f3d4ca71ae0d54d67adbc89d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -353,7 +355,6 @@",
+          "sha256": "d270197313edce7e0ad725b590022271082a43d7592039724b786583621cd63f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -368,7 +369,10 @@",
+          "sha256": "94c51b325abeb41df60cf444f9666596c750d22789d23b6dcafe53a3c1a00132",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -409,59 +413,13 @@",
+          "sha256": "d9d99180b993135193b62524889e4cf89112a68520c55de349f3405ad419f5a8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -508,13 +466,16 @@",
+          "sha256": "4bc575f2b03f344985c1b2a743e47c746e3b51bd3ca182f2e017947b3e34806e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -553,106 +514,23 @@",
+          "sha256": "8f6ae9c42fc4e7f0c1bf289b52c70b84c5280ffaa8447c0fe4eda9a839ad6605",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -708,29 +586,7 @@",
+          "sha256": "a50a2627338a1575fb3b02b5f54bf0ab1e3481cee504f7ad68e1d598a39efcec",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -951,6 +807,7 @@",
+          "sha256": "df1213bb6838011a7c5976e218ba3d71db4ebd5e90e7616bf78c0749e04d78db",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -1032,10 +889,11 @@",
+          "sha256": "5c835fbc54dd2fc411a1f6e9f8b8957b1278caf39daba5e76e88a0eabdadfd79",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -1084,10 +942,11 @@",
+          "sha256": "7b0a9550162191b8541df74ed99dc7d8cfc37964536ba88d4cb6410f4034f1ef",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -1304,7 +1163,7 @@",
+          "sha256": "99a9b6e4a3df136bbd07bb7d1f24f276c180d5a0bc17a233df8b0229d731d61d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        },
+        {
+          "header": "@@ -1312,9 +1171,10 @@",
+          "sha256": "d90e547318e285e377850a6f72368b79d7304d3cdb48238af9d637f2b8dd8074",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/user.go#1, controller/user.go#10, controller/user.go#11, controller/user.go#12, controller/user.go#13, controller/user.go#2, controller/user.go#4, controller/user.go#5, controller/user.go#7, controller/user.go#8, controller/user.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） AUTH-2：用户列表与搜索只投影非秘密设置，错误不泄露原始配置。"
+        }
+      ]
+    },
+    "model/log.go": {
+      "local_sha256": "6d18cf41c3cde44c78ebea804d21ee138f60cf050fd9af9e1b3a72cb9a565e21",
+      "hunks": [
+        {
+          "header": "@@ -72,7 +72,6 @@",
+          "sha256": "2b772beaa740d17e67f88682220b32f4ba4a2e794080db7d0a63938e94712429",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -277,7 +276,7 @@",
+          "sha256": "47d8c9f951d6a784f455ced9d15f1a2d773cf6fbf1a738fab51da5c535404c75",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -305,7 +304,6 @@",
+          "sha256": "c83d8301470bc51227a1dd65f2015711b6f9a0dac94f92721a41b0fe787bb247",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -333,7 +331,6 @@",
+          "sha256": "59667e8bdba962845e1c0d1d17ca312b3e27d9cb7a120d17cf101d7af63af5c8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -374,7 +371,6 @@",
+          "sha256": "1af79eb07ffdddc30b544962eb4c093556ac48e593096be5857fd529013347f5",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -406,7 +402,6 @@",
+          "sha256": "49fa4878dee1e65d3f0f155204a217e55d953daab3ff564da990ad885692cc6f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -422,7 +417,6 @@",
+          "sha256": "c89e5add67b2ba0a86ca6deb5c2df704cf3859d5d56ffc65e27f1d8a5fc84273",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -451,7 +445,6 @@",
+          "sha256": "0b1f67fda90dc76e2d15101d3f3f0f7b2df64de2b1c80143ea78ea4e77c58d79",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -469,7 +462,6 @@",
+          "sha256": "5cac17ff708af84b6bea4585441ede0fe0bdae22b5fecfe102fecf336773a365",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -487,7 +479,6 @@",
+          "sha256": "e59707343bb13b8a4d1f7f413930ae3791a08add8919974d6a376f8d2b40d61d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -520,9 +511,6 @@",
+          "sha256": "aef225251d02a65d8d4f35e7fa0f3e321cae099fa43fbf1deadaf03e54142b94",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -690,11 +678,15 @@",
+          "sha256": "88cf61e996c2a398efe9160256c947259e2a40e5be4efe133e35053c143eaffa",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        },
+        {
+          "header": "@@ -721,10 +713,6 @@",
+          "sha256": "f068ea7375eb695b7ad1a8804b1b06768c0feb226457296c1222a87ed2214ee8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/log.go#10, model/log.go#11, model/log.go#12, model/log.go#14, model/log.go#2, model/log.go#3, model/log.go#4, model/log.go#5, model/log.go#6, model/log.go#7, model/log.go#8, model/log.go#9 AUTH-1/7：本人统计按不可变用户 ID 共用查询，导出行数/字节上限和明确截断终行。"
+        }
+      ]
+    },
+    "pkg/perf_metrics/outcome.go": {
+      "local_sha256": "2b35550fe6773743412c830bcf6e406c5fa3a053c811de0f04c35f65d5f7a632",
+      "hunks": [
+        {
+          "header": "@@ -47,7 +47,7 @@",
+          "sha256": "c87d3f586ffffa263c51e7a4d1af23622c89da6c02612dcc862768f37b6c65d8",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "relay/channel/api_request.go": {
+      "local_sha256": "a3c7e00d1a9b39204892ea86738bf219a8789a83251587e05a3b804a566d86b9",
+      "hunks": [
+        {
+          "header": "@@ -98,6 +98,7 @@",
+          "sha256": "0ee2676054b158bf4df1e242cdbe1a079305201ec6e235e6b863c9e0a8645251",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -498,11 +499,16 @@",
+          "sha256": "175eecabeb1cec68d6563bf36726ce146e02036483086d2bb4d6df7d1d8caa79",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -567,6 +573,10 @@",
+          "sha256": "786a539f4b796d70d22f944753cc97f9965d264c44ffb96a21b6a1373c19889f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -582,6 +592,7 @@",
+          "sha256": "3a88742738471488b24b3d0c9e1f953f6404a55e3b5b9dfaf1c17e08c1006fc3",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/api_request.go#1, relay/channel/api_request.go#2, relay/channel/api_request.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "relay/channel/minimax/tts.go": {
+      "local_sha256": "85f1b0190d6255acfb5d16ceeea31e6f6675c502d030aa1f47669f2c4fde4d6f",
+      "hunks": [
+        {
+          "header": "@@ -185,7 +185,7 @@",
+          "sha256": "65b484fa514d72362dcea99a0ec212afc2fc374b06926e6d1b4f3cb80270cec5",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "relay/channel/openai/audio.go": {
+      "local_sha256": "4cbb5740e5c09a67e760fdc7ca001e0cc383ae9ba388ac12e6cd21eb05dedf8e",
+      "hunks": [
+        {
+          "header": "@@ -29,7 +29,7 @@",
+          "sha256": "e7d96df4903283dab4cd17f6bfc18ff859efe8ef0312ff3d1657dc7b64f56560",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "relay/helper/stream_result.go": {
+      "local_sha256": "9053468799a8f46d7d92e2f2cb4a0a5e5b8923756a6c0723b0b73e9f9dabf7af",
+      "hunks": [
+        {
+          "header": "@@ -1,6 +1,7 @@",
+          "sha256": "1fe477f7296fb77ee576edd02bd4724ff1ca7f60dbb457bc30089e7f829b5195",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_result.go#1, relay/helper/stream_result.go#2, relay/helper/stream_result.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -11,13 +12,14 @@",
+          "sha256": "5579fb85f44cf2b38239f9f8d80b90ae3ec50b76aaec80f8178a6717bb0195a3",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_result.go#1, relay/helper/stream_result.go#2, relay/helper/stream_result.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -29,14 +31,22 @@",
+          "sha256": "518eadc11e82d2a72f859877ed0b2ab51bfad8f50645bd4a6e5ff587615d0a2d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_result.go#1, relay/helper/stream_result.go#2, relay/helper/stream_result.go#3 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "relay/helper/stream_scanner.go": {
+      "local_sha256": "e32bfece8b866ca75544e8b92111e6e13f8b63ab35196e79f5df3b72a79e9ce6",
+      "hunks": [
+        {
+          "header": "@@ -62,7 +62,7 @@",
+          "sha256": "55e06586fdd612e159dde73099de79de0840b3e4f002bebfce7e671c6ffadd1f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -110,6 +110,10 @@",
+          "sha256": "e03aaa538be5b9aa82b1b563299de49f86a7eb150ffe0e348495c4aa065b6452",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -245,7 +249,7 @@",
+          "sha256": "d49d1f6e013f3d80cea74df4977f58185e51559dd9110dca4b6449558be652c3",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -324,8 +328,12 @@",
+          "sha256": "816898426e830e7e0eeb8e8cb983bb4f045d29df9b8282bba1ba7f38a6ae2aa0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -343,7 +351,11 @@",
+          "sha256": "c6683500ad75ceb6bb4c3b75e36e4b7ebab6b156a6e5501a36993a4a6c0d7ed2",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "relaykit/types/error.go": {
+      "local_sha256": "a58974ff298c587b5c82ab224ea916a29c712ebc11ca7d3fe66b99505cbc5748",
+      "hunks": [
+        {
+          "header": "@@ -91,14 +91,16 @@",
+          "sha256": "f128d6090d9f62582ad6653c980244256efb50324d4d4fc4dfb14a4fa67a5c1c",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -129,9 +131,9 @@",
+          "sha256": "b30251a85120510c583b71fc9e4defa7ea1ccb5550b4769448c4b830dad464ef",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -155,13 +157,9 @@",
+          "sha256": "132ffada06748aa34929dad43305af09020f98c94f54780d218a6b0677612b64",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -185,36 +183,7 @@",
+          "sha256": "779ff9b68fc5c711339fc0a47a5d160e4f0a3237e62eb07cfba3584236009f17",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -238,12 +207,12 @@",
+          "sha256": "24bf62d0e6d904e872dba0052db6db1cb411d2fd27217f17ca698a19b9f6ddc9",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -277,7 +246,7 @@",
+          "sha256": "bd3934c04321fd570e91f46ecaabc293ad5a834f7629d5e25de691c1b192df6a",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -407,7 +376,7 @@",
+          "sha256": "5a7a4e0983608a2f98145c8c07e1f741eb2d7255e73b435bdfe7b9ee32734afd",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "service/channel.go": {
+      "local_sha256": "7f556cd4d1ae4235599b80911b555a03970b58a99916f2c66b4f986298713ed5",
+      "hunks": [
+        {
+          "header": "@@ -47,7 +47,7 @@",
+          "sha256": "1063b15e1bd7f5e59ec3425aeca1cf67c640ff08e1c47200855a00ef69481368",
+          "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -86,7 +86,7 @@",
+          "sha256": "7796452a839f48358e7abb12793ae33ceb441d87a5bf510e0cc78b6f2fdf0e1e",
+          "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "service/error.go": {
+      "local_sha256": "20e05351f0e7f24e9e7cf7628e5c966ceced72706b8a60d71fff9f1cf2d8312f",
+      "hunks": [
+        {
+          "header": "@@ -60,7 +60,7 @@",
+          "sha256": "e2169646b4522980413d8565400f3a487eedced34ca186bba884c2cbcca554ec",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -86,14 +86,16 @@",
+          "sha256": "238d1e8aa225032d222cb0165ad7d22f441e5f661259c050e9078cb799b2e70e",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -118,6 +120,7 @@",
+          "sha256": "43122f0abef8f7a0f947e797bc925206fcb4e3d76a0cf64b62b1a73b782059dc",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -131,6 +134,7 @@",
+          "sha256": "c0c7f1f35c492409bab6d3bd2a8b1ee7480f02e0ebd63fd283e816008f89b0e9",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -200,16 +204,15 @@",
+          "sha256": "03cd56f622f3411f5ac83cbfa43ac77fab1add19102a3cd5d7472227d7b8e473",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -224,8 +227,8 @@",
+          "sha256": "cbeb990eb4d412ca1bcc3bbbe0698928d74856e442a836956073f723c10680c9",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "service/http.go": {
+      "local_sha256": "2a7980818a564682d7aa819e5d6f972a32af016f8a202396ce9f7cd5720c4d46",
+      "hunks": [
+        {
+          "header": "@@ -5,7 +5,6 @@",
+          "sha256": "f1a79f3dab48b6d5659bdb75e75a589b50fb72fea630c92f6eb8fe768df864b3",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -23,24 +22,6 @@",
+          "sha256": "ed83b9fb8462aae2c10cf3b15488972322493d1c794614014e64073404763ab3",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -54,7 +35,7 @@",
+          "sha256": "5f1edb6a81d005f300a764779a0fc09fd6be5e7b54db3289011663e171970c6e",
+          "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "service/protected_fetch_client.go": {
+      "local_sha256": "fe7496a994412bbc1829c76d84a0d7a12b0c0fdd3d604245dcb8a199600e519c",
+      "hunks": [
+        {
+          "header": "@@ -89,7 +89,7 @@",
+          "sha256": "3c596e4e7b48e60e73c137c575f391ed8016aa0e1f8efed8ebf1fd0543b2cd80",
+          "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。"
+        },
+        {
+          "header": "@@ -101,7 +101,7 @@",
+          "sha256": "79911800414ce78ad845cfdfabbf9f3ee6d9bf680b2e19c822bf867bdf1acddd",
+          "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。"
+        },
+        {
+          "header": "@@ -109,7 +109,11 @@",
+          "sha256": "301d1e414463e5e6d21823e00689e22e3cb4fc39b68bc2656c4e3c5b7f33991d",
+          "basis": "AUTH-4/5：通用代理复用固定解析传输并校验所有 IP/逐跳重定向，统一拒绝 zone。"
+        }
+      ]
+    },
+    "service/relay_error.go": {
+      "local_sha256": "3769a214568e468d9c8d2c226371f43498fbb1fdee84040dc24491e61dfe1d72",
+      "hunks": [
+        {
+          "header": "@@ -64,6 +64,7 @@",
+          "sha256": "95c813a3a628e9d6712572ef6b7fb5e7c1d8eebfc61aa52b38f1bdf238967985",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/relay_error.go#1, service/relay_error.go#2 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -82,17 +83,17 @@",
+          "sha256": "aa4752fb4c8c9bcf197e81f5666c2e12ad1ac80f56ee22880d9689eeb1980aae",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/relay_error.go#1, service/relay_error.go#2 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -103,5 +104,5 @@",
+          "sha256": "315ae4c73d4d392ef60ff8c14d4edbe0a7135d39625652349afdfcdb4f53936e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/relay_error.go#1, service/relay_error.go#2 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        }
+      ]
+    },
+    "service/violation_fee.go": {
+      "local_sha256": "e6d81c96c56f427e5f8f04b910445407af38374403113e0e44401dff793fe727",
+      "hunks": [
+        {
+          "header": "@@ -31,21 +31,21 @@",
+          "sha256": "9daa7de5fe18c4e89c0eed77f22641c80913bbf032b29d879754cb6752710a3c",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -63,8 +63,8 @@",
+          "sha256": "30ddecdffe9be3a9d57f55aef61c339cb38f268408c18f9d4383c4ca272046d8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -81,16 +81,16 @@",
+          "sha256": "31e6c93e553cc55eaecc36623a73ca69f5a06d32217c238886e6b233a952d508",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -104,9 +104,6 @@",
+          "sha256": "88bf204de4cf96d35afd5e807e299ea9d02f44f5f0fb4c424ec7c70f851b4863",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -116,8 +113,8 @@",
+          "sha256": "84d40441f787424f55b95d14ea42ab4b6c648d4c23acb5c5a1bd4d2c3bffed87",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -127,7 +124,7 @@",
+          "sha256": "bd8616b87dd47afe68b2879b95b9ca0755d8b458f6c0d6d2a5d3eed642a702b6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -140,7 +137,7 @@",
+          "sha256": "91e9ba4f842e68fbeb64cbf2446ee531ea783a21547c8263b89bbfca80a28201",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
+        },
+        {
+          "header": "@@ -156,7 +153,6 @@",
+          "sha256": "6f5c3055de79896de945758c9a6c549ec88bc3eaf7da0a2c617d38d370ea9e99",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/violation_fee.go#1, service/violation_fee.go#2, service/violation_fee.go#3, service/violation_fee.go#4, service/violation_fee.go#5；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。"
         }
       ]
     }

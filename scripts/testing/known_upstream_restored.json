@@ -909,8 +909,8 @@
       "test": "TestRestoredNativeControlAdminLogs",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -943,8 +943,8 @@
       "test": "TestRestoredNativeControlAdminQuota",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -978,8 +978,8 @@
       "test": "TestRestoredNativeControlChannelPostCommitReadFailure",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1012,8 +1012,8 @@
       "test": "TestRestoredNativeControlConsoleNormalization",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1046,8 +1046,8 @@
       "test": "TestRestoredNativeControlConsoleNormalizationMatrix",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1117,8 +1117,8 @@
       "test": "TestRestoredNativeControlCredentialSQL",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1151,8 +1151,8 @@
       "test": "TestRestoredNativeControlCurrencyValidation",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1198,8 +1198,8 @@
       "test": "TestRestoredNativeControlOptionCreatedRowRollback",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1233,8 +1233,8 @@
       "test": "TestRestoredNativeControlOptionWriteFailure",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1268,8 +1268,8 @@
       "test": "TestRestoredNativeControlPricingFailure",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1302,8 +1302,8 @@
       "test": "TestRestoredNativeControlRootReadFailure",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -1330,48 +1330,14 @@
       }
     },
     {
-      "id": "model/TestRestoredNativeControlSelfStatIdentity",
-      "module": ".",
-      "package": "model",
-      "test": "TestRestoredNativeControlSelfStatIdentity",
-      "fixtures": {
-        "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
-        "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
-        "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredNativeControlSelfStatIdentity": "fail"
-        },
-        "assertions": {},
-        "messages": {
-          "TestRestoredNativeControlSelfStatIdentity": [
-            "CONTROL_SELF_STAT: unrelated user quota included: 100"
-          ]
-        }
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-baseline-probes-sqlite.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/control/database-comparison-v2/control-native-probes-sqlite.jsonl",
-        "baseline_log_sha256": "43629fae74e0adf34679a92ec8cdc298d49e11987d113c703ffd6344a3bbe6b2",
-        "upstream_log_sha256": "5fb83ad3c0453a2086b88712db9cfa8a46d3e502462bd503a19d06e5c10bd765",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/app/scripts/testing/fixtures/known_upstream_restored/control/database-preflight.json",
-        "declaration_sha256": "7c379b738706cec7a33b85661531f2071c2699794f0f6469ab69ac75119e7882"
-      }
-    },
-    {
       "id": "model/TestRestoredNativeTopUpCountIsCapped",
       "module": ".",
       "package": "model",
       "test": "TestRestoredNativeTopUpCountIsCapped",
       "fixtures": {
         "model/native_restored_channel_update_test.go": "d1b075e995de26412d7f76d0e626518a31f1ef7c11a2cf5a782bc524ff7155c2",
-        "model/native_restored_control_test.go": "eded7406af19352906b652ba24c93dabba0d213113692675f48766df62324eda",
-        "model/native_restored_control_adapter_test.go": "9ddf8504b29979956df5ddccf716a9ba1ae4765c6196d01c7b952609744601f1",
+        "model/native_restored_control_test.go": "7cd60e1987a044ae83ba8fe732b505388aab0bf390b976ee9b530a600c6bbd8b",
+        "model/native_restored_control_adapter_test.go": "44bb401506e7b81a39a6e06bf9114d9d41e12f537fe304bb2b8dd07c99413e37",
         "model/native_restored_funds_count_test.go": "5eaf922e961cec379d788533217b6669dc3eb0f8ed28e2176c9f8c06a9a8562b",
         "model/native_restored_console_matrix_test.go": "e1bf8e85179c8618350a4e9a748f5a0fbe21ac11a0f203e467d9acdddd3c303f"
       },
@@ -2187,7 +2153,9 @@
           "TestRestoredProbeRegexCacheOversize": "fail"
         },
         "assertions": {
-          "TestRestoredProbeRegexCacheOversize": ["Should be false"]
+          "TestRestoredProbeRegexCacheOversize": [
+            "Should be false"
+          ]
         },
         "messages": {
           "TestRestoredProbeRegexCacheOversize": [
@@ -2221,7 +2189,9 @@
           "TestRestoredProbeRegexCacheReleasesOldEntries": "fail"
         },
         "assertions": {
-          "TestRestoredProbeRegexCacheReleasesOldEntries": ["Should be true"]
+          "TestRestoredProbeRegexCacheReleasesOldEntries": [
+            "Should be true"
+          ]
         },
         "messages": {
           "TestRestoredProbeRegexCacheReleasesOldEntries": [
@@ -2793,7 +2763,7 @@
       "package": "model",
       "test": "TestRestoredRound3ProviderCompactFilterAttribution",
       "fixtures": {
-        "model/native_restored_round3_control_test.go": "f31bd32194b65096e02212c9e9e8be68db280fbbb0879a44edc9f09688b56752"
+        "model/native_restored_round3_control_test.go": "d7bf91ca49d508c4757519623b1caa9b56a2305271e8af318a939b7fd9f50a77"
       },
       "expected": {
         "nodes": {
@@ -2818,46 +2788,12 @@
       }
     },
     {
-      "id": "model/TestRestoredRound3ChannelStatusFailureRestoresCache",
-      "module": ".",
-      "package": "model",
-      "test": "TestRestoredRound3ChannelStatusFailureRestoresCache",
-      "fixtures": {
-        "model/native_restored_round3_control_test.go": "f31bd32194b65096e02212c9e9e8be68db280fbbb0879a44edc9f09688b56752"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredRound3ChannelStatusFailureRestoresCache": "fail"
-        },
-        "assertions": {
-          "TestRestoredRound3ChannelStatusFailureRestoresCache": [
-            "Not equal: expected: 1 actual : 3"
-          ]
-        },
-        "messages": {
-          "TestRestoredRound3ChannelStatusFailureRestoresCache": [
-            "testify: a rejected database write must not leave a disabled cache row"
-          ]
-        }
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/preflight/round2/baseline2382-probes/01.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/preflight/round2/native-probes/01.jsonl",
-        "baseline_log_sha256": "5e5df0f8b275ae28b6a0f0422d269a0b3963ff1f4efb1aad618c11e670738993",
-        "upstream_log_sha256": "7ec5100b0a14e02f34b0334cc97994625acf526f9ec8a981b686be43b0442b35",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
-        "declaration_sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
-      }
-    },
-    {
       "id": "model/TestRestoredRound3AbilityModelNormalization",
       "module": ".",
       "package": "model",
       "test": "TestRestoredRound3AbilityModelNormalization",
       "fixtures": {
-        "model/native_restored_round3_control_test.go": "f31bd32194b65096e02212c9e9e8be68db280fbbb0879a44edc9f09688b56752"
+        "model/native_restored_round3_control_test.go": "d7bf91ca49d508c4757519623b1caa9b56a2305271e8af318a939b7fd9f50a77"
       },
       "expected": {
         "nodes": {
@@ -2937,7 +2873,7 @@
       "package": "model",
       "test": "TestRestoredRound3PublicAbilityZeroWeight",
       "fixtures": {
-        "model/native_restored_round3_control_test.go": "f31bd32194b65096e02212c9e9e8be68db280fbbb0879a44edc9f09688b56752"
+        "model/native_restored_round3_control_test.go": "d7bf91ca49d508c4757519623b1caa9b56a2305271e8af318a939b7fd9f50a77"
       },
       "expected": {
         "nodes": {

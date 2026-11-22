@@ -156,7 +156,7 @@ func (a *routeAttempt) requestContextOverflow(apiErr *types.NewAPIError) bool {
 			return false
 		}
 	}
-	for _, signal := range []string{string(root.GetErrorCode()), root.ToOpenAIError().Type} {
+	for _, signal := range []string{string(root.GetErrorCode()), root.RawOpenAIError().Type} {
 		if class, _ := routeErrorCodeClass(signal); class == routeErrorAccount {
 			return false
 		}

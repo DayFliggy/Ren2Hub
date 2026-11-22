@@ -91,14 +91,16 @@ const (
 )
 
 type NewAPIError struct {
-	Err            error
-	RelayError     any
-	skipRetry      bool
-	recordErrorLog *bool
-	errorType      ErrorType
-	errorCode      ErrorCode
-	StatusCode     int
-	Metadata       json.RawMessage
+	Err             error
+	RelayError      any
+	skipRetry       bool
+	recordErrorLog  *bool
+	errorType       ErrorType
+	errorCode       ErrorCode
+	StatusCode      int
+	Metadata        json.RawMessage
+	upstreamURLs    []string
+	sensitiveValues []string
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -129,9 +131,9 @@ func (e *NewAPIError) Error() string {
 	}
 	if e.Err == nil {
 		// fallback message when underlying error is missing
-		return string(e.errorCode)
+		return e.SanitizeText(string(e.errorCode))
 	}
-	return e.Err.Error()
+	return e.SanitizeText(e.Err.Error())
 }
 
 func (e *NewAPIError) ErrorWithStatusCode() string {
@@ -155,13 +157,9 @@ func (e *NewAPIError) MaskSensitiveError(upstreamURLs ...string) string {
 		return ""
 	}
 	if e.Err == nil {
-		return string(e.errorCode)
+		return e.SanitizeText(string(e.errorCode), upstreamURLs...)
 	}
-	errStr := e.Err.Error()
-	if e.errorCode == ErrorCodeCountTokenFailed {
-		return errStr
-	}
-	return kitutil.MaskSensitiveInfo(errStr, upstreamURLs...)
+	return e.SanitizeText(e.Err.Error(), upstreamURLs...)
 }
 
 func (e *NewAPIError) MaskSensitiveErrorWithStatusCode(upstreamURLs ...string) string {
@@ -185,36 +183,7 @@ func (e *NewAPIError) SetMessage(message string) {
 // ToOpenAIError masks the upstream addresses in the message; pass those of the
 // channel that produced the error, or none when no channel did.
 func (e *NewAPIError) ToOpenAIError(upstreamURLs ...string) OpenAIError {
-	var result OpenAIError
-	switch e.errorType {
-	case ErrorTypeOpenAIError:
-		if openAIError, ok := e.RelayError.(OpenAIError); ok {
-			result = openAIError
-		}
-	case ErrorTypeClaudeError:
-		if claudeError, ok := e.RelayError.(ClaudeError); ok {
-			result = OpenAIError{
-				Message: e.Error(),
-				Type:    claudeError.Type,
-				Param:   "",
-				Code:    e.errorCode,
-			}
-		}
-	default:
-		result = OpenAIError{
-			Message: e.Error(),
-			Type:    string(e.errorType),
-			Param:   "",
-			Code:    e.errorCode,
-		}
-	}
-	if e.errorCode != ErrorCodeCountTokenFailed {
-		result.Message = kitutil.MaskSensitiveInfo(result.Message, upstreamURLs...)
-	}
-	if result.Message == "" {
-		result.Message = string(e.errorType)
-	}
-	return result
+	return e.sanitizeOpenAIError(e.RawOpenAIError(), upstreamURLs...)
 }
 
 // ToClaudeError masks the upstream addresses like ToOpenAIError.
@@ -238,12 +207,12 @@ func (e *NewAPIError) ToClaudeError(upstreamURLs ...string) ClaudeError {
 			Type:    string(e.errorType),
 		}
 	}
-	if e.errorCode != ErrorCodeCountTokenFailed {
-		result.Message = kitutil.MaskSensitiveInfo(result.Message, upstreamURLs...)
-	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)
 	}
+	mask := e.textMask(upstreamURLs...)
+	result.Message = e.SanitizeText(result.Message, upstreamURLs...)
+	result.Type = mask(result.Type)
 	return result
 }
 
@@ -277,7 +246,7 @@ func NewOpenAIError(err error, errorCode ErrorCode, statusCode int, ops ...NewAP
 	if errors.As(err, &newErr) {
 		if newErr.RelayError == nil {
 			openaiError := OpenAIError{
-				Message: newErr.Error(),
+				Message: newErr.RawError(),
 				Type:    string(errorCode),
 				Code:    errorCode,
 			}
@@ -407,7 +376,7 @@ func ErrOptionWithStatusCode(statusCode int) NewAPIErrorOptions {
 func ErrOptionWithHideErrMsg(replaceStr string) NewAPIErrorOptions {
 	return func(e *NewAPIError) {
 		if kitutil.Debug.Load() {
-			fmt.Printf("ErrOptionWithHideErrMsg: %s, origin error: %s", replaceStr, e.Err)
+			fmt.Printf("ErrOptionWithHideErrMsg: %s, origin error: %s", e.SanitizeText(replaceStr), e.Error())
 		}
 		e.Err = errors.New(replaceStr)
 	}

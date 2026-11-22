@@ -47,7 +47,7 @@ MATRIX_TESTS = {
         "TestVendorManagementDatabaseMatrix", "TestModelDeletionDatabaseMatrix",
         "TestSharedModelPluginPricingDatabaseMatrix", "TestDeleteRedemptionBatch",
         "TestAuditDatabaseMatrix", "TestPreConsumePolicyDatabaseMatrix",
-        "TestRequestPolicyRoutingDatabaseMatrix", "TestLogExportDatabaseMatrix",
+        "TestRequestPolicyRoutingDatabaseMatrix", "TestLogExportDatabaseMatrix", "TestSelfLogStatIdentityDatabaseMatrix", "TestChannelCredentialPreservationDatabaseMatrix",
         "TestAPITokenAuditDatabaseMatrix", "TestDeletedSelectedChannelsDatabaseMatrix",
     ),
     "pkg/perf_metrics": ("TestPerformanceAggregationAndFlush",),
@@ -91,6 +91,10 @@ PAIRED_TESTS = (
     ("controller", "TestIndependentAuditLogStores"),
 )
 PROVIDER_TESTS = (
+    ("model", "TestRestoredRound3ChannelStatusFailureRestoresCache"),
+    ("model", "TestChannelStatusFailureDatabaseMatrix"),
+    ("model", "TestChannelCacheReloadSerializesStatusPublication"),
+    ("model", "TestChannelStatusCacheSnapshotsAreImmutable"),
     ('controller', 'TestEpayRSAModeSignsOrdersAndVerifiesCallbacks'),
     ('controller', 'TestUpdateOptionValidatesEpaySignSettings'),
     ("service", "TestBumpSyncTopicAddsAPendingTask"),
@@ -200,7 +204,7 @@ RESTORED_DATABASE_TESTS = {
         "scripts/testing/fixtures/known_upstream_restored/control/database-preflight.json"
     for suffix in (
         "OptionWriteFailure", "OptionCreatedRowRollback", "CurrencyValidation",
-        "ConsoleNormalization", "CredentialSQL", "SelfStatIdentity", "AdminLogs",
+        "ConsoleNormalization", "CredentialSQL", "AdminLogs",
         "PricingFailure", "RootReadFailure", "AdminQuota",
     )
 }
@@ -212,7 +216,6 @@ RESTORED_DATABASE_TESTS[("model", "TestRestoredNativeControlChannelPostCommitRea
 )
 for test in (
     "TestRestoredRound3AbilityModelNormalization",
-    "TestRestoredRound3ChannelStatusFailureRestoresCache",
     "TestRestoredRound3PublicAbilityZeroWeight",
 ):
     RESTORED_DATABASE_TESTS[("model", test)] = "docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json"

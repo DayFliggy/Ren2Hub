@@ -133,10 +133,11 @@ func performAffiliateOAuthRegistration(t *testing.T, flow, affiliate string) *ht
 		}
 		require.NoError(t, common.Unmarshal(stateResponse.Body.Bytes(), &state))
 		require.True(t, state.Success, stateResponse.Body.String())
+		rememberOAuthTestCookie(t, state.Data.FlowToken, stateResponse)
 		path = "/api/oauth/affiliate-test?code=test&state=" + url.QueryEscape(state.Data.FlowToken)
 	}
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	router.ServeHTTP(response, oauthTestCallbackRequest(httptest.NewRequest(http.MethodGet, path, nil)))
 	return response
 }
 

@@ -2246,7 +2246,7 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]any {
 		errorType := string(info.LastError.GetErrorType())
 		lastError := map[string]any{
 			"status_code": info.LastError.StatusCode,
-			"message":     info.LastError.Error(),
+			"message":     info.LastError.RawError(),
 			"code":        code,
 			"error_code":  code,
 			"type":        errorType,
@@ -2255,7 +2255,7 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]any {
 		}
 		ctx["last_error"] = lastError
 		ctx["last_error_status_code"] = info.LastError.StatusCode
-		ctx["last_error_message"] = info.LastError.Error()
+		ctx["last_error_message"] = info.LastError.RawError()
 		ctx["last_error_code"] = code
 		ctx["last_error_type"] = errorType
 	}
