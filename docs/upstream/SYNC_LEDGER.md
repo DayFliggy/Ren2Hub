@@ -88,7 +88,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 - 写入口：`POST /api/channel/` 拒绝 `multi_to_single` 模式和 `multi_key_mode`、`key_mode` 字段，`PUT /api/channel/` 拒绝 `key_mode` 与 `multi_key_mode`，没有 `/api/channel/multi_key/manage`；创建（批量创建先按行拆成各渠道）、改 Key 和改变 Key 的读法（类型、插件或 Vertex `vertex_key_type`，对保留的 Key）都经 `validateSingleKey` 拒绝多行 Key，只有 Vertex 服务账号和声明 `oauth2_jwt` 认证的任务插件凭据这两种 JSON 对象可以跨行；批量创建（每行一条渠道）照旧。
 - 运行时：`middleware/distributor.go` 直接取渠道 Key；`ChannelMeta`、上下文、`admin_info` 和请求策略事件都没有多 Key 字段；`types.NewChannelError` 不带多 Key 标记；Responses WebSocket 锁定连接只比较 Key 文本；Vertex 令牌缓存按渠道 ID；原任务续作、上游模型拉取、上游倍率识别和推理服务状态都用渠道 Key。
 - 插件凭据：登录替换渠道里的凭据，已存凭据属于本插件时把它交给 `login` 并要求同一账号；请求不再带 `add` 和 `key_index`（被拒绝），`plugin_credentials` 不带 `index`。刷新、`relogin` 停用、`scheduled` 和余额都按渠道进行；一个账号在同一插件只登录在一条渠道上，任务轮询仍按提交任务的账号分批。
-- 存储与状态：`model.Channel` 没有 `channel_info` 和 `Keys`，新安装不建 `channel_info` 列；`UpdateChannelStatusDetailed` 只写渠道状态，`DisableChannelByTag` 直接按标签停用，渠道缓存不预解析 Key。没有每渠道轮询锁，渠道行锁是每渠道的写入边界：`UpdateChannelStatusDetailed` 的状态写入，以及 Key 与凭据写入的 `UpdateChannelLocked`、`UpdateTaskPluginChannelLocked`、`UpdateScheduledChannelLocked`，都在锁住渠道行的事务里同时写渠道和能力表（SQLite 上四处共用每渠道 Key 锁），所以渠道状态和 `abilities.enabled` 总是一致；其他 `other_info` 写入方经 `UpdateChannelOtherInfo` 比较写入，遇到改动重读。
+- 存储与状态：`model.Channel` 没有 `channel_info` 和 `Keys`，新安装不建 `channel_info` 列；`UpdateChannelStatusDetailed` 只写渠道状态，`DisableChannelByTag` 直接按标签停用，渠道缓存不预解析 Key。没有每渠道轮询锁，渠道行锁是每渠道的写入边界：`UpdateChannelStatusDetailed` 的状态写入，以及 Key 与凭据写入的 `UpdateChannelLocked`、`UpdateTaskPluginChannelLocked`、`UpdateScheduledChannelLocked`，都在锁住渠道行的事务里同时写渠道和能力表（SQLite 上四处共用每渠道 Key 锁），这些写入方在各自事务内保证渠道状态和 `abilities.enabled` 一致；普通编辑独立重建能力表的并发覆盖风险见[等待上游](WAITING_UPSTREAM.md) ROUTE-1；其他 `other_info` 写入方经 `UpdateChannelOtherInfo` 比较写入，遇到改动重读。
 - Vue：渠道表单只有单密钥和批量密钥，编辑时一个字段替换 Key；插件凭据面板只有登录和重新登录。
 
 同步上游时，上游对多 Key 代码的改动（`channel_info`、`GetNextEnabledKey`、`handlerMultiKeyUpdate`、`multi_key/manage`、`key_index`、`MultiKeyMode` 及 Key 级状态）按“不吸收”在窗口文件里逐项写明；同一文件里与多 Key 无关的改动照常吸收，并保持本节的接点。
@@ -100,23 +100,23 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（少计费、任务缺渠道不退款、任务 ID 碰撞、统计可见范围、日志脱敏、配置原子性、支付回调核验、两处数据竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：
 
 - `model/channel_cache.go` 的 `InitChannelCache` 忽略 `DB.Find` 的错误，启用内存缓存时一次失败的同步会把渠道表替换为空。
-- Jimeng 非 V3 请求静默使用 5 秒，提交与完成计费使用同一时长函数，计费与实际发送一致；这是参数被静默改写，不是计费偏差（`plugins/tasks/jimeng/plugin.js:224,376`，与冻结上游相同）。
 - P3：`common/page_info.go:47` 保留 `page_size=-1`，GORM 不生成 LIMIT；本人日志、Token、任务及管理员列表等使用该分页值的入口，可一次取回当前用户或管理员授权范围内的全部匹配数据，造成资源压力；不会因此绕过既有用户范围过滤。与冻结上游 `48f9df96e` 相同。
 - 非自用模式且用户启用 `AcceptUnsetRatioModel` 时，未设模型倍率、走 token 重算的按量任务按预扣定额结算，多扣或少扣取决于用量（`relay/helper/price.go:212,231`、`setting/ratio_setting/model_ratio.go:103`、`service/task_billing.go:381`、`service/task_polling.go:815`）。自用模式下会按默认倍率重算；是否跳过重算的条件与冻结上游相同，本地只以渠道倍率替代分组倍率。
 - Stripe 在 TOKENS 展示模式下的数量合同不一致，后端保持原生，Vue 停用该入口。
 
 以下计费与任务问题已对照当前源码和冻结上游 `48f9df96e` 核实，相关行为相同，只登记、不修：
 
-- Realtime 每轮 `preConsumeUsage` 经 `service/quota.go:128` 直扣，用量同时累加；会话结束后又按累计用量结算，存在重复扣费（`relay/channel/openai/relay_realtime.go:195,216,295`、`relay/websocket.go:59`、`service/quota.go:217`）。
-- Waffo 将所有非 `PAY_SUCCESS` 状态（包括处理中状态）写成失败终态，后续成功通知会因订单不再 pending 而不能入账（`controller/topup_waffo.go:383`、`model/topup_settlement.go:177`）。网关是否实际发送处理中通知尚无运行验证。
-- Midjourney 轮询读不到渠道时，批量将任务标为失败而不退款（`controller/midjourney.go:91`）；原生行为边界见[披露](NATIVE_B388_DISCLOSURES.md)。
-- Doubao 将空串 `metadata.duration` 原样合入请求，估算时按最大时长预扣（`plugins/tasks/doubao/plugin.js:864,874,960`）。完成时有用量 tokens 可按其结算（同文件 `:1062`），不能把较高预扣一概视为最终多扣。
+- BILL-1（P2，上游同款多计费，按用户决定只登记）：Realtime 每轮 `preConsumeUsage` 经 `service/quota.go:128` 直扣，用量同时累加；会话结束后又按累计用量结算，存在重复扣费（`relay/channel/openai/relay_realtime.go:195,216,295`、`relay/websocket.go:59`、`service/quota.go:217`）。
+- FUND-3（P2，上游同款多计费，按用户决定只登记）：Waffo 将所有非 `PAY_SUCCESS` 状态（包括处理中状态）写成失败终态，后续成功通知会因订单不再 pending 而不能入账（`controller/topup_waffo.go:383`、`model/topup_settlement.go:177`）。网关是否实际发送处理中通知尚无运行验证。
+- BILL-4（P2，上游同款多计费，按用户决定只登记）：Midjourney 轮询读不到渠道时，批量将任务标为失败而不退款（`controller/midjourney.go:91`）；原生行为边界见[披露](NATIVE_B388_DISCLOSURES.md)。
 - 易支付对已验签但永久无效的回调仍返回 `fail`，可能产生重复回调噪声（`controller/topup.go:477,489`）。返回 `fail` 的结构与上游相同，其中金额不符的回执核验是本地扩展。
 
 以下历次审计记录尚未在现行源码上重新核对，处理前先复核：
 
-- Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖；Jimeng 的 openai_video 校验忽略 `metadata.req_key`；Google 和 Vertex 在 `/v1/videos` 丢失顶层 `resolution`；`common/ssrf_protection.go` 把带 zone 的 IPv6 字面量当作域名；batch 上游返回未请求的任务 ID 时，`updateBatchTasks` 按平台级映射更新另一渠道的任务。
+- Midjourney 轮询在两个渠道的 `mj_id` 相同时互相覆盖；`common/ssrf_protection.go` 把带 zone 的 IPv6 字面量当作域名；batch 上游返回未请求的任务 ID 时，`updateBatchTasks` 按平台级映射更新另一渠道的任务。
 - Uptime Kuma 缺失心跳按 0 统计；日志导出没有行数和字节上限。
+
+插件的凭据日志、迟到失败、作用范围重复项和 Seedream、Doubao、Jimeng、Google/Vertex 参数问题已在[等待上游](WAITING_UPSTREAM.md)核对登记；插件系统跟随上游，不做本地补丁。
 
 ## 等待上游的项
 

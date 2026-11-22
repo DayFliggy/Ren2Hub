@@ -2,19 +2,19 @@
 
 Ren2Hub 以 NewAPI 原生钱包作为唯一资金来源。账户 `quota`、Token `remain_quota` / `unlimited_quota` 及 `used_quota` 沿用整数与 JSON number 合同，标准单位为 `500000 quota = 1 USD`。展示十进制字符串不改变记账单位或原生计算精度。
 
-| 入口 | 职责 |
-| --- | --- |
-| `service/billing_session.go` | 每个逻辑调用唯一预扣、最终结算与退款状态；更贵重试前严格补足 |
-| `service/funding_source.go`、`model/quota_reserve.go` | 余额充足条件下预扣钱包，最终差额按原生规则处理 |
-| `service/text_quota.go`、`service/tiered_settle.go` | 原生用量、模型价格与表达式；渠道倍率在最终取整前应用一次 |
-| `model/model_pricing_config.go`、`setting/ratio_setting/` | 唯一模型价格配置及上游默认值 |
-| `service/task_billing.go`、`service/task_polling.go` | 原生任务计费与轮询；保存提交时渠道倍率 |
-| `model/topup.go`、`model/gmpay.go`、`model/affiliate.go` | 充值成功、额度入账与返利同事务；来源唯一，最多一次 |
+| 入口                                                      | 职责                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| `service/billing_session.go`                              | 每个逻辑调用唯一预扣、最终结算与退款状态；更贵重试前严格补足 |
+| `service/funding_source.go`、`model/quota_reserve.go`     | 余额充足条件下预扣钱包，最终差额按原生规则处理               |
+| `service/text_quota.go`、`service/tiered_settle.go`       | 原生用量、模型价格与表达式；渠道倍率在最终取整前应用一次     |
+| `model/model_pricing_config.go`、`setting/ratio_setting/` | 唯一模型价格配置及上游默认值                                 |
+| `service/task_billing.go`、`service/task_polling.go`      | 原生任务计费与轮询；保存提交时渠道倍率                       |
+| `model/topup.go`、`model/gmpay.go`、`model/affiliate.go`  | 充值成功、额度入账与返利同事务；来源唯一，最多一次           |
 
 新路由强制估算预扣，不采用原生信任免预扣分支。顺序为认证解析、用户占槽、候选与渠道占槽、当前资格复核、估算预扣、实际发送、观察与结算释放。更贵渠道重试必须在余额条件下补足，失败不发送；更便宜渠道在最终结算退差。估算不是费用上限，实际用量超过估算仍遵循原生最终结算。严格余额条件作用于预扣和补预扣；原生 `WalletFunding.Settle` 的正差扣减不带余额条件，所以不能把严格预扣理解为最终余额绝不为负。
 
 任务已被供应商接收后，最终 `Reserve` 失败且尚未写入 HTTP 响应时，返回 403、不保存可轮询任务，并调用原生异步退款；异步退款失败及供应商已开展工作的成本风险仍在，不能承诺自动取消供应商任务。如果流式响应已经写入，则不会改写为 403，仍继续原生任务保存和结算路径。这里披露的是源码分支边界，不代表已完成真实供应商成本或进程崩溃注入验证。
 
-业务分组及组间倍率已退役。实际价格是全局模型价格乘本次绑定的渠道倍率，与上游一致；充值加赠不改变实付，按本金另赠额度（见[充值加赠](TOPUP_BONUS.md)）；管理员后续修改不追溯已发送调用和在途任务。不存在第二价格库、旧 schema 5 资金事件、冻结报价、加密求值重放或独立资金恢复系统。资金来源与 Token 的结算仍是原生分步操作，消费日志不是与余额同事务的不可变账本。
+业务分组及组间倍率已退役。实际价格是全局模型价格乘本次绑定的渠道倍率，与上游一致；充值加赠不改变实付，按本金另赠额度（见[充值加赠](TOPUP_BONUS.md)）；在途任务和音频结算仍可能重取当前倍率，管理员改价可影响最终费用，边界见[等待上游](../upstream/WAITING_UPSTREAM.md) BILL-3。不存在第二价格库、旧 schema 5 资金事件、冻结报价、加密求值重放或独立资金恢复系统。资金来源与 Token 的结算仍是原生分步操作，消费日志不是与余额同事务的不可变账本。
 
 返利记录和管理员额度操作记录只承担本领域的归因、冻结及幂等职责，不扩展成通用账本。兑换码不产生返利。进程中断、异步退款和日志失败的限制遵从原生实现，不能宣称具备旧系统的崩溃恢复保证。详见[定价](PRICING.md)和[恢复说明](RECOVERY.md)。
