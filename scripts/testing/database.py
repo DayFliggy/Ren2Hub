@@ -39,7 +39,7 @@ MATRIX_TESTS = {
         "TestMigrationSchemaStability", "TestRedemptionSortingDatabases",
         "TestRequestPolicyDatabaseMatrix", "TestAdminTicketsKeepDeletedOwnersDatabases",
         "TestTopUpQueryDatabases", "TestTopUpBonusDatabaseMatrix", "TestChannelUpstreamRatioDatabases",
-        "TestNativeTopUpFacadeDatabaseMatrix", "TestQuotaReserveRedisLossDatabaseMatrix", "TestQuotaBatchHydrationAtomicityDatabaseMatrix", "TestQuotaBatchDeletedBalancesDatabaseMatrix", "TestVerifiedTopUpReceiptDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
+        "TestNativeTopUpFacadeDatabaseMatrix", "TestQuotaReserveRedisLossDatabaseMatrix", "TestQuotaBatchHydrationAtomicityDatabaseMatrix", "TestQuotaDirectSyncHydrationDatabaseMatrix", "TestQuotaBatchDeletedBalancesDatabaseMatrix", "TestVerifiedTopUpReceiptDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
         "TestBatchSetChannelTagDatabaseMatrix",
     ),
     "controller": (
@@ -94,6 +94,7 @@ PROVIDER_TESTS = (
     ("model", "TestRestoredRound3ChannelStatusFailureRestoresCache"),
     ("model", "TestChannelStatusFailureDatabaseMatrix"),
     ("model", "TestChannelStatusCacheFastPathDatabaseMatrix"),
+    ("model", "TestManualChannelStatusOverridesStaleCacheDatabaseMatrix"),
     ("model", "TestChannelCacheReloadSerializesStatusPublication"),
     ("model", "TestChannelStatusCacheSnapshotsAreImmutable"),
     ('controller', 'TestEpayRSAModeSignsOrdersAndVerifiesCallbacks'),

@@ -48,7 +48,7 @@ func TestChannelStatusFailureDatabaseMatrix(t *testing.T) {
 		require.Equal(t, common.ChannelStatusEnabled, cached.Status)
 		requireChannelAndAbilities(t, channel.Id, common.ChannelStatusEnabled)
 	})
-	t.Run("commit publishes after transaction and reload repairs cached no-op", func(t *testing.T) {
+	t.Run("commit publishes after transaction and manual write repairs stale cache", func(t *testing.T) {
 		require.NoError(t, DB.Callback().Update().After("gorm:update").Register("test:check_uncommitted_cache", func(tx *gorm.DB) {
 			if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "Ability" {
 				cached, err := CacheGetChannel(channel.Id)
@@ -67,11 +67,6 @@ func TestChannelStatusFailureDatabaseMatrix(t *testing.T) {
 		// Simulate a stale snapshot claiming enabled while durable state is disabled.
 		CacheUpdateChannelStatus(channel.Id, common.ChannelStatusEnabled)
 		result = UpdateChannelStatusDetailed(channel.Id, "", common.ChannelStatusEnabled, "recover")
-		require.NoError(t, result.Err)
-		require.False(t, result.Changed, "a cached no-op avoids querying the durable row")
-		requireChannelAndAbilities(t, channel.Id, common.ChannelStatusManuallyDisabled)
-		require.NoError(t, ReloadChannelCache())
-		result = UpdateChannelStatusDetailed(channel.Id, "", common.ChannelStatusEnabled, "recover after reload")
 		require.NoError(t, result.Err)
 		require.True(t, result.Changed)
 		requireChannelAndAbilities(t, channel.Id, common.ChannelStatusEnabled)

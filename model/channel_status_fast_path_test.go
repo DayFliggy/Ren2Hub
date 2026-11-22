@@ -24,6 +24,7 @@ func TestChannelStatusCacheFastPathDatabaseMatrix(t *testing.T) {
 		cached, target int
 	}{
 		{"already_disabled", common.ChannelStatusAutoDisabled, common.ChannelStatusAutoDisabled},
+		{"already_enabled", common.ChannelStatusEnabled, common.ChannelStatusEnabled},
 		{"manual_blocks_auto", common.ChannelStatusManuallyDisabled, common.ChannelStatusAutoDisabled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,7 +33,7 @@ func TestChannelStatusCacheFastPathDatabaseMatrix(t *testing.T) {
 			require.NoError(t, DB.Callback().Query().Before("gorm:query").Register("fast:no-query", func(tx *gorm.DB) { queries.Add(1); tx.AddError(errors.New("unexpected status query")) }))
 			channelStatusLock.Lock()
 			done := make(chan ChannelStatusUpdateResult, 1)
-			go func() { done <- UpdateChannelStatusDetailed(channel.Id, "key", tc.target, "already satisfied") }()
+			go func() { done <- UpdateChannelStatusAutomatic(channel.Id, tc.target, "already satisfied") }()
 			var result ChannelStatusUpdateResult
 			fast := false
 			select {
@@ -55,7 +56,7 @@ func TestChannelStatusCacheFastPathDatabaseMatrix(t *testing.T) {
 		channelSyncLock.Lock()
 		delete(channelsIDM, channel.Id)
 		channelSyncLock.Unlock()
-		result := UpdateChannelStatusDetailed(channel.Id, "key", common.ChannelStatusEnabled, "recover")
+		result := UpdateChannelStatusAutomatic(channel.Id, common.ChannelStatusEnabled, "recover")
 		require.NoError(t, result.Err)
 		require.True(t, result.Changed)
 		requireChannelAndAbilities(t, channel.Id, common.ChannelStatusEnabled)
@@ -63,7 +64,7 @@ func TestChannelStatusCacheFastPathDatabaseMatrix(t *testing.T) {
 	t.Run("database_remains_write_authority", func(t *testing.T) {
 		require.NoError(t, DB.Model(&Channel{}).Where("id = ?", channel.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
 		CacheUpdateChannelStatus(channel.Id, common.ChannelStatusEnabled)
-		result := UpdateChannelStatusDetailed(channel.Id, "key", common.ChannelStatusAutoDisabled, "stale enabled")
+		result := UpdateChannelStatusAutomatic(channel.Id, common.ChannelStatusAutoDisabled, "stale enabled")
 		require.NoError(t, result.Err)
 		require.False(t, result.Changed)
 		var stored Channel

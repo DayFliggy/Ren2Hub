@@ -252,12 +252,11 @@ func TestAutoDisableKeepsManualDisable(t *testing.T) {
 				common.MemoryCacheEnabled = cacheEnabled
 
 				channel := Channel{Name: t.Name(), Key: "key-a", Status: tc.initialStatus, Models: "test-model"}
-				usingKey := "key-a"
 				channel.SetOtherInfo(map[string]any{"status_reason": "manual operation", "status_time": int64(1234)})
 				require.NoError(t, channel.Insert())
 				InitChannelCache()
 
-				changed := UpdateChannelStatus(channel.Id, usingKey, common.ChannelStatusAutoDisabled, "provider rejected key")
+				changed := UpdateChannelStatusAutomatic(channel.Id, common.ChannelStatusAutoDisabled, "provider rejected key").Changed
 				assert.Equal(t, tc.wantChanged, changed)
 
 				stored, err := GetChannelById(channel.Id, true)
@@ -310,7 +309,12 @@ func TestUpdateChannelStatusBumpsChannelsOnlyForChangesByHand(t *testing.T) {
 				{name: "an admin enables a channel", id: single.Id, status: common.ChannelStatusEnabled, bump: true},
 			} {
 				before := revision()
-				changed := UpdateChannelStatus(step.id, step.usingKey, step.status, step.name)
+				var changed bool
+				if step.usingKey != "" {
+					changed = UpdateChannelStatusAutomatic(step.id, step.status, step.name).Changed
+				} else {
+					changed = UpdateChannelStatus(step.id, step.usingKey, step.status, step.name)
+				}
 				assert.Equal(t, step.bump || step.usingKey != "", changed, step.name)
 				assert.Equal(t, step.bump, before != revision(), step.name)
 			}
@@ -342,7 +346,7 @@ func TestAutoDisableOfAPluginKeyKeepsLocalSyncRevision(t *testing.T) {
 			require.NoError(t, channel.Insert())
 
 			before := revision()
-			require.True(t, UpdateChannelStatus(channel.Id, "key-a", common.ChannelStatusAutoDisabled, "quota"))
+			require.True(t, UpdateChannelStatusAutomatic(channel.Id, common.ChannelStatusAutoDisabled, "quota").Changed)
 			assert.Equal(t, before, revision())
 			stored, err := GetChannelById(channel.Id, true)
 			require.NoError(t, err)

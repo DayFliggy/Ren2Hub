@@ -35,6 +35,8 @@
 
 渠道管理读响应按有效权限投影配置：仅 Root 且具有有效 `channel:write` 的调用方读取原值，其他调用方会看到 `redacted_fields` 与整块字符串占位 `{"__ren2hub_redacted__":true}`。`header_override`、`param_override` 非空时隐藏；带代理身份的 `setting`、含高级路由认证或非空 `plugin_config` 的 `settings` 整块隐藏。更新时省略上述字段保留原值；`header_override`、`param_override` 显式空字符串清空，其余配置仍须通过对应渠道类型的合法性校验。完整占位只在该字段对当前调用方确实已隐藏时表示保留。新增或标签编辑含占位标记返回 400 `CHANNEL_REDACTED_FIELD_INVALID`。更新成功返回数据库重新读取后的投影；若已保存但重读失败，返回 500、`success:false`、`code: "CHANNEL_UPDATE_READ_FAILED"`、`updated:true`，不把已保存报成未保存。
 
+管理员单个、批量及标签启停均读取数据库事务中的实际状态；内存缓存值相同不能跳过手动修改。只有请求失败自动停用和测试成功自动恢复可使用缓存快路径。
+
 渠道 `channel_ratio` 为大于 0、不超过 1000、最多 18 位小数、十进制指数在 -18 到 18 之间的十进制字符串，用户/渠道 `max_concurrency` 为非负整数，0 表示无限。修改 `channel_ratio` 需要 ChannelSensitiveWrite：只有 ChannelWrite 的管理员提交不同的倍率时返回 HTTP 200、`success:false`，整条请求不生效；提交与当前值等价的写法（如 `"1.0"`）仍然允许。`max_concurrency` 只影响运行，按非敏感字段处理。自动排序与资金接点见[渠道路由](UNIFIED_ROUTING.md)。
 
 `summary` 不含个人以外的数据。`meta.source` 为 `"quota_data"`，`meta.available` 等于 `DataExportEnabled`；为 false 时计数为 0、序列为空数组，表示没有数据来源，不表示用量为 0。耗时和成功率按本人消费日志计算，`meta.coverage.latency`、`meta.coverage.success_rate` 为 false 或区间内没有样本时对应值为 `null`，不拿全站 `perf_metrics` 代替。`quota_data` 每 `meta.flush_interval_minutes` 分钟落库一次，最近的小时可能尚未写入。

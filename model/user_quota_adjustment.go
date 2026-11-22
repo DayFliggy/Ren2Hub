@@ -63,6 +63,12 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 	if value > common.MaxWalletQuota || value < -common.MaxWalletQuota {
 		return nil, ErrWalletQuotaLimitExceeded
 	}
+	// A debit or override must not commit between another publisher's database
+	// read and cache write. Do not flush before the transaction: Before/After
+	// and override retain their database-only meaning; pending debits settle
+	// after commit when the authoritative cache snapshot is published.
+	unlock := lockQuotaReservation(BatchUpdateTypeUserQuota, userID)
+	defer unlock()
 
 	var adjustment UserQuotaAdjustment
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -154,13 +160,8 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 		return nil, err
 	}
 
-	// Apply only the committed difference, preserving outstanding reservations.
-	// Both balances are bounded above, so their difference fits in int64.
-	delta := int64(adjustment.After) - int64(adjustment.Before)
-	if delta != 0 && !adjustment.Replayed {
-		if err := cacheIncrUserQuota(userID, delta); err != nil {
-			common.SysError(common.LogText("failed to sync manual quota adjustment for user %d: %s", userID, err))
-		}
+	if !adjustment.Replayed {
+		updateQuotaCacheLocked(BatchUpdateTypeUserQuota, userID, "", 0, true)
 	}
 	return &adjustment, nil
 }

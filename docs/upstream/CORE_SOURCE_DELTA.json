@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 831,
-    "adapted": 333,
-    "extension": 495,
+    "upstream_equal": 830,
+    "adapted": 334,
+    "extension": 500,
     "removed": 47
   },
   "files": [
@@ -3377,7 +3377,7 @@
       "path": "controller/user_manage_test.go",
       "status": "adapted",
       "upstream_sha256": "9ec3f058238615355d9df93d9f9f2a4e0cf657d268b9fa6328235811dafd13f6",
-      "local_sha256": "4219cf2df484eec076f91c6948bd371a822efe0131e93d914e7c33550f1178d3"
+      "local_sha256": "e99ae3fc0c47f70f21637d8590efd28401bf6bc31817cba52b3341e977dc10d7"
     },
     {
       "path": "controller/user_publication.go",
@@ -4799,7 +4799,7 @@
       "path": "model/channel_security_state_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9654741cd25e5f44ce13df7505985952bff66c4fc0c85dbe840799e9f5fe3b7e"
+      "local_sha256": "4c779c911fec38b62d46dc722374b8c5f26ed23385fd6d613f4553a627987261"
     },
     {
       "path": "model/channel_settings_test.go",
@@ -4811,7 +4811,7 @@
       "path": "model/channel_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "fd8d3ab176b96779efdbf867a4ed0decb4621043787bee59be7c0e0e72d0fe72",
+      "local_sha256": "52540a319360caff7cfc97f5ed2ed0fcb027f494f9b4082bb29de0b312bcc78c",
       "reasons": [
         "audit-local-safety",
         "single-key-channel",
@@ -4819,15 +4819,15 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。 R2 AUD-AUTH-4：缓存只读快路径跳过已满足目标的状态写，未命中和真实变更仍以数据库事务为依据。",
-        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_status.go#1。状态、状态原因和能力表在锁住渠道行的同一事务里写入，与 Key 和凭据写入共用每渠道行锁（SQLite：每渠道 Key 锁），见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 WEB-1、ROUTE-2/3/4：渠道秘密投影、有效权限交集、状态失败上抛和提交后缓存快照发布。 R2 AUD-AUTH-4：缓存只读快路径跳过已满足目标的状态写，未命中和真实变更仍以数据库事务为依据。 R3 AUD-AUTH-9：显式自动来源才允许缓存快路径，手动单个、批量和标签状态以数据库事务为准。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。"
       }
     },
     {
       "path": "model/channel_status_fast_path_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aeb4a204bfa4ecbc8dc2e7dcdf63b137a2b1d9d0f72d362a5ec595e87a4e95b8"
+      "local_sha256": "f094023b6a685b78e0d00b132967b5686b428af2aea0b66b35b0e1dc8566fd76"
     },
     {
       "path": "model/channel_status_lock_test.go",
@@ -4842,10 +4842,16 @@
       "local_sha256": "045507294c69df0e7cc6c2fa2ff2a46087eadf0e8b25b0a3b7cdcb2a833d296b"
     },
     {
+      "path": "model/channel_status_source_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5f069291a8392833a8167b5be2311a6bd875f7d871635963769c4735ee991652"
+    },
+    {
       "path": "model/channel_status_test.go",
       "status": "adapted",
       "upstream_sha256": "547dddbdf2435b470988c0b65c8be631950a0b8ac49cd37a65f4affc0a9c991e",
-      "local_sha256": "8f9286e4ce1bcbe56625a56decd6b8b645502d2bd7f350c439d9c55b6aa605b9"
+      "local_sha256": "0d435fe3d32c0c86c457753736999dde34e89a35ef99dd862f86d30e895243fc"
     },
     {
       "path": "model/channel_upstream_ratio.go",
@@ -4873,9 +4879,18 @@
     },
     {
       "path": "model/checkin.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "36a0eab8170fe1fb17e38d89ed24eeef4c492d7e07e820216cbec71054a9128a",
-      "local_sha256": "36a0eab8170fe1fb17e38d89ed24eeef4c492d7e07e820216cbec71054a9128a"
+      "local_sha256": "6ed22048e0088778b1b85495bc22e6488cc106d4950d8a676b8eb55cf1dee095",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "model/clickhouse_log_test.go",
@@ -5577,6 +5592,12 @@
       "local_sha256": "6a6e9fb531254f7323cf582783d6bc288068241a4c84ec3263cacc37d81d5e93"
     },
     {
+      "path": "model/quota_direct_sync_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a7f53e2238459b946a91d233b2789b87008943dc133808c58792a2318bf8531d"
+    },
+    {
       "path": "model/quota_reserve.go",
       "status": "adapted",
       "upstream_sha256": "c32fad73379ed6191a765eaff995632f6543ae5267e57c03062da5b7fa980ade",
@@ -5595,14 +5616,14 @@
       "path": "model/quota_reserve_batch.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b7ce733698291cc617380fc66b33c6c30c58121e96fe69028149885d4d8feda7",
+      "local_sha256": "32137f912b368211a4e6fb0009152461a19fda5f894aa8d89097d1304ce2df6e",
       "reasons": [
         "audit-local-safety"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
-        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
+        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。"
       }
     },
     {
@@ -5610,6 +5631,20 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "106217b7f0d17af7b16e6dcabaaa4255a638bf9ba27b242000d682ab822793f1"
+    },
+    {
+      "path": "model/quota_reserve_sync.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e93d20aa837c6f68d381e1cb5c5b9079a550216baded940af57e190f66c6a5b4",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。"
+      }
     },
     {
       "path": "model/quota_reserve_test.go",
@@ -5933,7 +5968,7 @@
       "path": "model/token.go",
       "status": "adapted",
       "upstream_sha256": "db42a2d9d3c5a5a6a6a2d019435922629c476498eb3d4cc25a75252ee68c0158",
-      "local_sha256": "aae1bce5d9a05537c35f51c45ef738b7f27e09cb90218d9d7e1aba9534bb0f4d",
+      "local_sha256": "47733d9bb5ccfb8fc0360828cd1c673ca7773017dcb3691e6584027cbf54411a",
       "reasons": [
         "audit-local-safety",
         "auth-cache-integrity",
@@ -5942,8 +5977,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
-        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
         "current_hunk_review": true
       }
     },
@@ -6302,7 +6337,7 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "3091ef0c632a3e18a9fd3ca9d4e4582e81e29c8dad5752e71cfc3cdd427cc5d3",
+      "local_sha256": "162942f4b1fd925a2e3ea3e3e2f410663aab78d777974b6eb9ca22cebe468d63",
       "reasons": [
         "affiliate",
         "audit-local-safety",
@@ -6314,8 +6349,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
-        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
         "current_hunk_review": true
       }
     },
@@ -6357,7 +6392,7 @@
       "path": "model/user_cache.go",
       "status": "adapted",
       "upstream_sha256": "51beac86c2139bcb0e2ca64a64ffebf35dd5e2051baf62724e3010a74abc5228",
-      "local_sha256": "72c9338b1da4acc1016ae14296f39ff9f948bbdcff4e240cadf5e04acad3a432",
+      "local_sha256": "8b4901141027e64bf17fd5c64e91db3daa0a43db25dc895a2d4bd775bbe52dbf",
       "reasons": [
         "audit-local-safety",
         "auth-cache-integrity",
@@ -6366,8 +6401,8 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。",
-        "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。 R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
         "current_hunk_review": true
       }
     },
@@ -6393,23 +6428,17 @@
       "path": "model/user_quota_adjustment.go",
       "status": "adapted",
       "upstream_sha256": "8df04e504bd239a5ae1beacc35cf08ce8fa3df58416374885fe4ad2e90fa0291",
-      "local_sha256": "6c90974bd2e6556ac046716334141abecf712fc568e674cbd3c7c5841ec1bdf1",
+      "local_sha256": "7f002ce96d5dd59415f6476648765b6e5b86fbdb80d82ac23f8d995b1f844269",
       "reasons": [
         "affiliate",
+        "audit-local-safety",
         "topup-bonus"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/user_quota_adjustment.go#1",
-          "model/user_quota_adjustment.go#2",
-          "model/user_quota_adjustment.go#3",
-          "model/user_quota_adjustment.go#4",
-          "model/user_quota_adjustment.go#5"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_quota_adjustment.go#1, model/user_quota_adjustment.go#2, model/user_quota_adjustment.go#3, model/user_quota_adjustment.go#4, model/user_quota_adjustment.go#5；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -11549,6 +11578,12 @@
       "local_sha256": "653906cf848114c006ecfcca731ab8bd0113ef8af75f6010c771174d1fbb9f60"
     },
     {
+      "path": "router/channel_status_source_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5239835d1955e205a8e6f01e8cddcc882cc6baf21a780f9257fc8ccf5b45f337"
+    },
+    {
       "path": "router/dashboard.go",
       "status": "upstream_equal",
       "upstream_sha256": "5a76e635cffe4ab8d7860eb30928619c5d9df1382c47358eb2641878f69b72f5",
@@ -12296,15 +12331,15 @@
       "path": "service/channel.go",
       "status": "adapted",
       "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
-      "local_sha256": "7f556cd4d1ae4235599b80911b555a03970b58a99916f2c66b4f986298713ed5",
+      "local_sha256": "982a3c63b08f0feef99ace4878da7ad84f48bf8e0ff95b8b4dbee3bc1c6b144e",
       "reasons": [
         "audit-local-safety",
         "single-key-channel"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
-        "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
+        "basis": "自动停用后的 scheduled 触发按渠道进行，不再传使用的 Key（single-key-channel）。 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。 R3 AUD-AUTH-9：显式自动来源才允许缓存快路径，手动单个、批量和标签状态以数据库事务为准。",
+        "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
         "current_hunk_review": true
       }
     },
@@ -12418,6 +12453,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "e508a4447e907153763956f23113145dcf68bf32e1ded50b0f478f771b0e8a12",
       "local_sha256": "e508a4447e907153763956f23113145dcf68bf32e1ded50b0f478f771b0e8a12"
+    },
+    {
+      "path": "service/channel_status_source_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d746b7aab079a1c902170f4e7fa5e2006f52e2df63a0376aa3904a86316cc063"
     },
     {
       "path": "service/channel_upstream_ratio.go",

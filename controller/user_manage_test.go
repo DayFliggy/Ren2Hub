@@ -579,20 +579,23 @@ func TestManageUserQuotaConcurrentSnapshots(t *testing.T) {
 
 func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 	for _, tc := range []struct {
-		name, mode                               string
-		before, cached, value, after, wantCached int
-		failUpdate, failCache, missingCache      bool
+		name, mode                                string
+		before, pending, value, after, wantCached int
+		failUpdate, failCache, missingCache       bool
 	}{
-		{name: "add_preserves_reservations", mode: "add", before: 1000, cached: 900, value: 500, after: 1500, wantCached: 1400},
-		{name: "subtract_preserves_reservations", mode: "subtract", before: 1000, cached: 900, value: 500, after: 500, wantCached: 400},
-		{name: "override_preserves_reservations", mode: "override", before: 1000, cached: 900, value: 2000, after: 2000, wantCached: 1900},
-		{name: "large_odd_difference", mode: "override", before: common.MaxWalletQuota - 1, cached: common.MaxWalletQuota - 1, value: -common.MaxWalletQuota, after: -common.MaxWalletQuota, wantCached: -common.MaxWalletQuota},
-		{name: "rollback_does_not_change_cache", mode: "subtract", before: 1000, cached: 900, value: 500, after: 1000, wantCached: 900, failUpdate: true},
+		{name: "add_preserves_reservations", mode: "add", before: 1000, pending: 100, value: 500, after: 1500, wantCached: 1400},
+		{name: "subtract_preserves_reservations", mode: "subtract", before: 1000, pending: 100, value: 500, after: 500, wantCached: 400},
+		{name: "override_preserves_reservations", mode: "override", before: 1000, pending: 100, value: 2000, after: 2000, wantCached: 1900},
+		{name: "large_odd_difference", mode: "override", before: common.MaxWalletQuota - 1, value: -common.MaxWalletQuota, after: -common.MaxWalletQuota, wantCached: -common.MaxWalletQuota},
+		{name: "rollback_does_not_change_cache", mode: "subtract", before: 1000, pending: 100, value: 500, after: 1000, wantCached: 900, failUpdate: true},
 		{name: "cache_error_keeps_committed_change", mode: "add", before: 1000, value: 500, after: 1500, failCache: true},
 		{name: "missing_cache_is_not_partially_created", mode: "add", before: 1000, value: 500, after: 1500, missingCache: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db := setupManageUserTestDB(t)
+			oldBatch := common.BatchUpdateEnabled
+			common.BatchUpdateEnabled = tc.pending > 0
+			t.Cleanup(func() { common.BatchUpdateEnabled = oldBatch })
 			operator := createQuotaTestOperator(t, db, common.RoleRootUser)
 			server := miniredis.RunT(t)
 			oldRDB := common.RDB
@@ -615,7 +618,23 @@ func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 				}
 			}
 			require.NotEmpty(t, quotaKey)
-			server.HSet(quotaKey, "Quota", strconv.Itoa(tc.cached))
+			// Use a real accepted reservation: every cache debit has a matching
+			// pending record or durable write, never a cache-only balance.
+			if tc.pending > 0 {
+				accepted, err := model.TryReserveUserQuota(user.Id, tc.pending)
+				require.NoError(t, err)
+				require.True(t, accepted)
+				require.Equal(t, strconv.Itoa(tc.before-tc.pending), server.HGet(quotaKey, "Quota"))
+				defer func() {
+					if tc.failUpdate {
+						require.NoError(t, db.Callback().Update().Remove("test:cache_quota_rollback"))
+					}
+					server.SetError("")
+					server.Del(quotaKey)
+					_, err := model.GetUserCache(user.Id) // Flush any reservation left by the rollback case.
+					require.NoError(t, err)
+				}()
+			}
 			if tc.missingCache {
 				server.Del(quotaKey)
 			}
@@ -632,7 +651,22 @@ func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","operation_id":"quota-audit-operation","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
 			assert.Contains(t, recorder.Body.String(), fmt.Sprintf(`"success":%t`, !tc.failUpdate))
 			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Equal(t, tc.after, user.Quota)
+			wantDB := tc.after
+			if !tc.failUpdate {
+				wantDB -= tc.pending
+			}
+			assert.Equal(t, wantDB, user.Quota)
+			if !tc.failUpdate {
+				var response struct {
+					Data struct {
+						Before int `json:"before"`
+						After  int `json:"after"`
+					} `json:"data"`
+				}
+				require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+				assert.Equal(t, tc.before, response.Data.Before)
+				assert.Equal(t, tc.after, response.Data.After)
+			}
 			if tc.missingCache {
 				// Log username lookup may hydrate the whole user after commit.
 				if server.Exists(quotaKey) {

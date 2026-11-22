@@ -106,18 +106,7 @@ func quotaCacheDirty(kind, id int) bool {
 func queueQuotaDelta(kind, id int, key string, delta int) error {
 	unlock := lockQuotaReservation(kind, id)
 	defer unlock()
-	if common.RedisEnabled {
-		var err error
-		if kind == BatchUpdateTypeUserQuota {
-			_, err = cacheApplyUserQuotaDelta(id, int64(delta))
-		} else {
-			_, err = cacheApplyTokenQuotaDelta(id, key, int64(delta))
-		}
-		if err != nil {
-			quotaCacheNeedsReload[kind].Store(id, true)
-			common.SysLog(common.LogText("failed to update batch quota cache: type=%d id=%d error=%v", kind, id, err))
-		}
-	}
+	updateQuotaCacheLocked(kind, id, key, delta, false)
 	addNewRecord(kind, id, delta)
 	return nil
 }

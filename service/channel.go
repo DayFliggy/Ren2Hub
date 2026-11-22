@@ -36,7 +36,7 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 		return
 	}
 
-	success := model.UpdateChannelStatus(channelError.ChannelId, channelError.UsingKey, common.ChannelStatusAutoDisabled, reason)
+	success := model.UpdateChannelStatusAutomatic(channelError.ChannelId, common.ChannelStatusAutoDisabled, reason).Changed
 	if success {
 		closeWebSockets, channel := shouldCloseActiveWebSocketsAfterDisable(channelError.ChannelId)
 		if closeWebSockets {
@@ -53,7 +53,7 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 }
 
 func EnableChannel(channelId int, usingKey string, channelName string) {
-	success := model.UpdateChannelStatus(channelId, usingKey, common.ChannelStatusEnabled, "")
+	success := model.UpdateChannelStatusAutomatic(channelId, common.ChannelStatusEnabled, "").Changed
 	if success {
 		params := map[string]any{"Name": channelName, "Id": channelId}
 		NotifyChannelWatchers(formatNotifyType(channelId, common.ChannelStatusEnabled), func(lang string) (string, string) {

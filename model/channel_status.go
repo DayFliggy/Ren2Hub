@@ -14,20 +14,25 @@ type ChannelStatusUpdateResult struct {
 	Err                error
 }
 
-func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, reason string) (result ChannelStatusUpdateResult) {
-	// A status set by hand names no key and is never an automatic disable; it
-	// reaches every node within seconds. An automatic change, a disable after a
-	// failure or the re-enable after a test of the key it used, is left to the
-	// periodic channel sync: the keys of busy channels change status often, and
-	// each bump reloads the whole channel cache on every node.
-	bump := usingKey == "" && status != common.ChannelStatusAutoDisabled
+// Legacy callers without an explicit automatic source use the durable row.
+// The key parameter remains for compatibility with the upstream interface.
+func UpdateChannelStatusDetailed(channelId int, _ string, status int, reason string) ChannelStatusUpdateResult {
+	return updateChannelStatusDetailed(channelId, status, reason, false)
+}
+
+// UpdateChannelStatusAutomatic is called only by failure handling and recovery.
+func UpdateChannelStatusAutomatic(channelId, status int, reason string) ChannelStatusUpdateResult {
+	return updateChannelStatusDetailed(channelId, status, reason, true)
+}
+
+func updateChannelStatusDetailed(channelId, status int, reason string, automatic bool) (result ChannelStatusUpdateResult) {
 	// Runs after the status and abilities are written and published.
 	defer func() {
-		if result.Changed && bump {
+		if result.Changed && !automatic {
 			BumpSyncTopic(SyncTopicChannels)
 		}
 	}()
-	written, err := updateChannelStatusAndCache(channelId, status, reason)
+	written, err := updateChannelStatusAndCache(channelId, status, reason, automatic)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		common.SysLog(common.LogText("failed to update channel status: channel_id=%d, status=%d, error=%v", channelId, status, err))
 	}
@@ -47,13 +52,15 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 
 // The status lock covers the durable write and cache publication, never hooks:
 // a post-commit hook may reload the cache and acquire this lock again.
-func updateChannelStatusAndCache(channelID, status int, reason string) (bool, error) {
+func updateChannelStatusAndCache(channelID, status int, reason string, automatic bool) (bool, error) {
 	if common.MemoryCacheEnabled {
 		// A cached no-op avoids queuing a failure storm behind unrelated writes.
 		// A miss or an actual transition still uses the durable row as authority.
-		if cached, err := CacheGetChannel(channelID); err == nil &&
-			(cached.Status == status || (status == common.ChannelStatusAutoDisabled && cached.Status == common.ChannelStatusManuallyDisabled)) {
-			return false, nil
+		if automatic {
+			if cached, err := CacheGetChannel(channelID); err == nil &&
+				(cached.Status == status || (status == common.ChannelStatusAutoDisabled && cached.Status == common.ChannelStatusManuallyDisabled)) {
+				return false, nil
+			}
 		}
 		channelStatusLock.Lock()
 		defer channelStatusLock.Unlock()
