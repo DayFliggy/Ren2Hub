@@ -56,6 +56,9 @@ func getTokenFromDB(t *testing.T, id int) Token {
 
 func resetBatchUpdateTestState(t *testing.T) {
 	t.Helper()
+	for i := range quotaCacheNeedsReload {
+		quotaCacheNeedsReload[i].Clear()
+	}
 	oldBatchEnabled := common.BatchUpdateEnabled
 	common.BatchUpdateEnabled = false
 	for i := range BatchUpdateTypeCount {
@@ -65,6 +68,9 @@ func resetBatchUpdateTestState(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		common.BatchUpdateEnabled = oldBatchEnabled
+		for i := range quotaCacheNeedsReload {
+			quotaCacheNeedsReload[i].Clear()
+		}
 		for i := range BatchUpdateTypeCount {
 			batchUpdateLocks[i].Lock()
 			batchUpdateStores[i] = make(map[int]int)

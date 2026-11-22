@@ -141,13 +141,22 @@ func persistTokenQuotaDelta(id int, delta int) error {
 }
 
 func reserveUserQuotaDB(id int, quota int) (bool, error) {
+	if err := flushPendingQuota(BatchUpdateTypeUserQuota, id); err != nil {
+		return false, err
+	}
 	result := DB.Model(&User{}).
 		Where("id = ? AND quota >= ?", id, quota).
 		Update("quota", gorm.Expr("quota - ?", quota))
+	if common.RedisEnabled && result.Error == nil && result.RowsAffected == 1 {
+		quotaCacheNeedsReload[BatchUpdateTypeUserQuota].Store(id, true)
+	}
 	return result.RowsAffected == 1, result.Error
 }
 
 func reserveTokenQuotaDB(id int, quota int) (bool, error) {
+	if err := flushPendingQuota(BatchUpdateTypeTokenQuota, id); err != nil {
+		return false, err
+	}
 	result := DB.Model(&Token{}).
 		Where("id = ? AND remain_quota >= ?", id, quota).
 		Updates(map[string]any{
@@ -155,13 +164,18 @@ func reserveTokenQuotaDB(id int, quota int) (bool, error) {
 			"used_quota":    gorm.Expr("used_quota + ?", quota),
 			"accessed_time": common.GetTimestamp(),
 		})
+	if common.RedisEnabled && result.Error == nil && result.RowsAffected == 1 {
+		quotaCacheNeedsReload[BatchUpdateTypeTokenQuota].Store(id, true)
+	}
 	return result.RowsAffected == 1, result.Error
 }
 
 // TryReserveUserQuota atomically checks and deducts a user's wallet quota.
 // 缓存命中时以缓存余额为准（避免批量模式下过期的数据库余额放大并发超扣）；
-// Redis 异常或水合失败时降级为数据库条件更新，保证服务可用。
+// Redis 异常或水合失败时先持久化待处理额度，再进行数据库条件更新。
 func TryReserveUserQuota(id int, quota int) (bool, error) {
+	unlock := lockQuotaReservation(BatchUpdateTypeUserQuota, id)
+	defer unlock()
 	if quota < 0 {
 		return false, errors.New("quota cannot be negative")
 	}
@@ -172,9 +186,12 @@ func TryReserveUserQuota(id int, quota int) (bool, error) {
 		return reserveUserQuotaDB(id, quota)
 	}
 
+	if err := prepareQuotaCache(BatchUpdateTypeUserQuota, id, ""); err != nil {
+		return reserveUserQuotaDB(id, quota)
+	}
 	result, err := cacheTryReserveUserQuota(id, int64(quota))
 	if err == nil && result == cacheQuotaMiss {
-		if _, hydrateErr := GetUserCache(id); hydrateErr == nil {
+		if _, hydrateErr := getUserCacheQuotaLocked(id); hydrateErr == nil {
 			result, err = cacheTryReserveUserQuota(id, int64(quota))
 		}
 	}
@@ -200,6 +217,8 @@ func TryReserveUserQuota(id int, quota int) (bool, error) {
 // TryReserveTokenQuota atomically checks and deducts a token quota. Unlimited
 // tokens skip the balance check but still update remain/used accounting.
 func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, error) {
+	unlock := lockQuotaReservation(BatchUpdateTypeTokenQuota, id)
+	defer unlock()
 	if quota < 0 {
 		return false, errors.New("quota cannot be negative")
 	}
@@ -213,9 +232,12 @@ func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, 
 		return reserveTokenQuotaDB(id, quota)
 	}
 
+	if err := prepareQuotaCache(BatchUpdateTypeTokenQuota, id, key); err != nil {
+		return reserveTokenQuotaDB(id, quota)
+	}
 	result, err := cacheTryReserveTokenQuota(id, key, int64(quota))
 	if err == nil && result == cacheQuotaMiss {
-		if _, hydrateErr := GetTokenByKey(key, true); hydrateErr == nil {
+		if _, hydrateErr := getTokenByKeyWithQuotaLock(key, true, true); hydrateErr == nil {
 			result, err = cacheTryReserveTokenQuota(id, key, int64(quota))
 		}
 	}

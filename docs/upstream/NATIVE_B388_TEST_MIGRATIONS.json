@@ -53,8 +53,8 @@
     {
       "scope": "root",
       "original": "preflight/cache-total/native_restore_cache_total_test.go:TestRestoredNativeCacheWriteLogTotalIncludes12h",
-      "destination": "service/native_restored_cache_total_test.go",
-      "status": "known_upstream_restored",
+      "destination": "service/cache_total_regression_test.go",
+      "status": "normal_regression",
       "assertions_changed": false,
       "preflight": "preflight/cache-total/report.json"
     },
@@ -268,8 +268,9 @@
       "file": "service/task_missing_channel_test.go",
       "test": "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
       "action": "moved_to_known_upstream_restored",
-      "diagnostic": "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
-      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+      "diagnostic": "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt",
+      "contract": "缺渠道应退款保留冻结；渠道隔离与各自结算改由 TestTaskPollingChannelIdentitySettlesEachWalletOnce 普通回归保护。"
     },
     {
       "scope": "data",
@@ -2907,8 +2908,9 @@
             "file": "service/task_missing_channel_test.go",
             "test": "TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
             "action": "moved_to_known_upstream_restored",
-            "diagnostic": "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
-            "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt"
+            "diagnostic": "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel",
+            "archive": "scripts/testing/fixtures/known_upstream_restored/archive/service/task_missing_channel_test.go.txt",
+            "contract": "缺渠道应退款保留冻结；渠道隔离与各自结算改由 TestTaskPollingChannelIdentitySettlesEachWalletOnce 普通回归保护。"
           }
         ]
       },

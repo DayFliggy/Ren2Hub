@@ -1,5 +1,3 @@
-//go:build known_upstream_restored
-
 package openai
 
 import (

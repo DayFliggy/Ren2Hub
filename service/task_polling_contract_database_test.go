@@ -80,6 +80,9 @@ func TestTaskPollingContractDatabaseMatrix(t *testing.T) {
 			var version string
 			require.NoError(t, db.Raw(versionQuery).Scan(&version).Error)
 			t.Logf("database: %s", version)
+			t.Run("channel_identity_settlement", TestTaskPollingChannelIdentitySettlesEachWalletOnce)
+			t.Run("separate_channel_identity", TestTaskPollingKeepsSameUpstreamIDOnSeparateChannels)
+			t.Run("separate_batch_channel_identity", TestTaskPollingBatchKeepsSameUpstreamIDOnSeparateChannels)
 			t.Run("admission_failures_do_not_penalize_provider", TestTaskPollAdmissionFailuresAreNotUpstreamFailures)
 			t.Run("admission_deletion_has_no_side_effects", TestTaskPollAdmissionDeletionSkipsWithoutSideEffects)
 			// Terminal settlement, failure refunds and timeout refunds are task

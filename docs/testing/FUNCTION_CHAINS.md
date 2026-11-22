@@ -38,12 +38,15 @@
 
 - 入口与权限：经真实 `SetRelayRouter` 和 `TokenAuth` 的 `--go 'router:^(TestRelayOnlyPluginMatchesAdvancedCustomChannel|TestPluginConverter|TestPluginConverterEndpointsBillLikeAdvancedCustom|TestConverterFailureIsRefunded|TestSecondRejectionTakesTheUsualErrorPath|TestPluginConverterMapsVendorErrors|TestPluginStreamErrors|TestNativeCountProtocolsUseProviderCountWithoutBilling|TestNativeCountUpstreamErrorsNeverEstimate)$'`，渠道只有插件和 advanced-custom 两类；手工挂载中间件的 `--go 'controller:^(TestHTTPRetryReservesExpensiveChannelBeforeDispatch|TestResponsesWSRequestRunnerRejectsRevokedCredentials|TestResponsesWebSocketInitialUpstreamRejectionRefundsReservation)$'`。
 - 合同两侧：不适用于前端，预扣与结算不产生前端载荷；供应商侧由候选的 `billing` 部分覆盖，检查项有 `failed_upstream_refunds_wallet_and_token`、`one_native_consume_log_per_success`、`channel_ratio_once_and_key_cap_before_send`。
-- 三库矩阵：`--db TestPreConsumePolicyDatabaseMatrix TestFixedPriceBillingDatabaseMatrix TestAuthCacheIntegrityDatabaseMatrix`。
+- 三库矩阵：`--db TestQuotaReserveRedisLossDatabaseMatrix TestPreConsumePolicyDatabaseMatrix TestFixedPriceBillingDatabaseMatrix TestAuthCacheIntegrityDatabaseMatrix`。
 - 并发：`--race controller`（original-websocket 组）；`--race relay`（task-submit-billing-origin 组，只覆盖任务钱包）。缺口，文本中继的预扣（service 的 BillingSession、`model/quota_reserve.go`）没有 race 组。
 - 负向与重复：`--go 'service:^(TestForcedPreconsumeRetryReserveAndRefundBalances|TestPreConsumeBillingRejectsSaturatedQuotaBeforeDeduction|TestPreConsumeBillingRejectsNegativeQuotaBeforeDeduction|TestUpstreamUsageAppliesChannelRatioOnce|TestConsumeLogWritesExactChannelRatio)$' 'relay:^(TestPrepareRequestBillingRetryReservesThroughPreConsume|TestInvalidChannelRatioRejectedByEveryPricingEntry|TestSeedream55RealWalletReservationAndSettlement)$' 'relay/helper:^TestModelPriceHelperTieredRejectsPreConsumeOverflow$' 'model:^(TestRedisBatchReserveNeverFallsBackToStaleDatabaseBalance|TestSynchronousReserveCompensatesCacheWhenPersistenceFails|TestTokenCacheInitPreservesLiveQuotaAndFenceBlocksStaleSnapshot)$' 'controller:^(TestPreConsumeMultiplierRejectsInvalidRuntimeAndOverflow|TestResponsesWebSocketDisconnectSettlesDeliveredOutputOnce|TestResponsesWebSocketAmbiguousControlErrorClosesAndSettlesOnce)$'`。三库矩阵里的 `TestFixedPriceBillingDatabaseMatrix` 和 `TestPreConsumePolicyDatabaseMatrix` 断言重复退款只生效一次、重复结算只扣一次。
 - 升级种子：候选 `upgrade` 在旧镜像上运行 billing 组，`upgrade_snapshot` 对 `users`、`tokens`、`channels`、`token_route_profiles`、`token_route_entries`、`admin_quota_operations` 取哈希。只覆盖静态余额，不含 `logs` 和跨越升级的在途预扣。
 - 真实后端：候选的 `billing` 部分（见合同两侧）；缺口，浏览器测试不经过中继结算。
 - 缺口：原生 OpenAI、Claude、Gemini 渠道没有经真实路由并断言钱包结算的测试；没有两个请求并发争抢小额钱包或 Token 的测试；WebSocket 计费只在 SQLite 上运行。
+
+- Redis 故障恢复及批次落库：`--go 'model:^(TestQuotaReservePendingFlushFailureRetainsDebit|TestQuotaReserveWaitsForBatchFlush|TestQuotaReserveRejectsStaleAuthenticationHydration)$'`。批次失败保留待扣额，认证水合不能恢复旧余额；批次与预扣的同余额互斥另以手工 `go test -race` 运行上述测试，未登记到固定 race 组。
+- 跨渠道任务身份：`--go 'service:^(TestTaskPollingKeepsSameUpstreamIDOnSeparateChannels|TestTaskPollingBatchKeepsSameUpstreamIDOnSeparateChannels|TestTaskPollingChannelIdentitySettlesEachWalletOnce)$'`，同时纳入 `TestTaskPollingContractDatabaseMatrix`；同平台同上游 ID 按渠道分别处理、保存结果和结算，重复轮询不再次结算。缺渠道退款仍为冻结的已知问题。
 
 ## 中继协议与计量
 
@@ -56,6 +59,9 @@
 - 升级种子：缺口，升级演练只在旧镜像上重放 chat 的 JSON 与 SSE。
 - 真实后端：候选的 `websocket`、`compact`、`sdk` 部分；缺口，浏览器测试不调用 `/v1/*`。
 - 缺口：Claude、Gemini 协议没有候选合同；relaykit 的 golden 文件由转换器自己 `-update` 生成，不是录制的供应商载荷。
+
+- Realtime 生命周期：`--go 'relay/channel/openai:^(TestRealtimeMessageLimitsCloseBothPeers|TestRealtimeWriteDeadlineStopsBlockedPeer|TestRealtimeCancellationWaitsForReaders|TestRealtimeConcurrentSessionState|TestRealtimeShutdownWaitsForActiveEvent|TestRealtimeRejectsDuplicateFieldsWithoutForwarding)$'`；手工 `go test -race` 覆盖相同测试，保护帧上限、慢读者、取消收尾及双向事件共享状态。既有 Realtime 重复扣费仍登记等待上游。
+- 缓存创建用量：`--go 'relaykit/dto:^(TestCacheCreationOnlyUsageSurvivesBillingCanonicalization|TestRestoredProbeOpenAICacheCreationInputTokensAloneIsBillableUsage)$' 'relay/channel/openai:^(TestCompactPreservesCacheCreationAndResponseBody|TestRestoredProbeOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens)$' 'service:^(TestCacheCreationOnlyUsageChargesWithoutOrdinaryTokens|TestCacheWriteLogAggregateIncludes12hWithoutDoubleCounting|TestRestoredNativeCacheWriteLogTotalIncludes12h)$'`。三项原冻结的正确断言现为普通测试。
 
 ## 登录会话与权限
 

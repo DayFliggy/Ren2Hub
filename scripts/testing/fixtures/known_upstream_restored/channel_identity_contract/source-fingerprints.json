@@ -1,0 +1,20 @@
+{
+  "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "sources": {
+    "baseline": {
+      "service/task_polling.go": "d95e2605112a46d20cbb46c5783fe3267d5c2636584b0d3799f5435b4b0ca8d4",
+      "service/task_billing.go": "7626a96ad1cea5f640a0dabb6b91dbb3485e3807e07ef964129b1a2fee2823b6",
+      "service/task_billing_test.go": "6c4c62c89009804cc41c544317b62a95b08334feb689b1ca88c85d9e689849e5",
+      "model/task.go": "7f87e5e1b7ef4f4432551b314e7da67a56512a3a58e561272f73ee95c06c1e4b",
+      "service/bill4_split_probe_test.go": "928e230700252090d44735bc386134f9cc567ccafcd52828d79743d7e336d0eb"
+    },
+    "native": {
+      "service/task_polling.go": "00a2d2579fa82aa485a269e90d489ee34a7056c3c7755c00937e7bc4fa94f24d",
+      "service/task_billing.go": "1f41e2e6a0b5f375220fda35838c537285e2fde7b292cf97dfbd4da16ff91646",
+      "service/task_billing_test.go": "30f379ae66761bad31d8fc18f038d498da552f766d7cb8d90ddf1ed716ea2515",
+      "model/task.go": "5286e8381f10262f4192b012b5955c8786bfff0ad46d3134fdb280c353cacb66",
+      "service/bill4_split_probe_test.go": "928e230700252090d44735bc386134f9cc567ccafcd52828d79743d7e336d0eb"
+    }
+  }
+}

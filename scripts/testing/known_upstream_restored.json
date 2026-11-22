@@ -2371,36 +2371,6 @@
       }
     },
     {
-      "id": "relay/channel/openai/TestRestoredProbeOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens",
-      "module": ".",
-      "package": "relay/channel/openai",
-      "test": "TestRestoredProbeOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens",
-      "fixtures": {
-        "relay/channel/openai/native_restored_probe_test.go": "de54df3163308747685995ae69d2591dee886df51ed020a6538fb1db21f37019"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredProbeOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens": "fail"
-        },
-        "assertions": {
-          "TestRestoredProbeOaiResponsesCompactionKeepsExplicitCacheCreationInputTokens": [
-            "Not equal: expected: 40 actual : 0"
-          ]
-        },
-        "messages": {}
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-1/data-baseline-probes-relay-channel-openai.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-1/data-native-probes-relay-channel-openai.jsonl",
-        "baseline_log_sha256": "7e341d8a2abe4907e4e8739aedd119137be5e77e4326154fdf5114340a87eee9",
-        "upstream_log_sha256": "7d9f9aca4711e7584d905dddf3f5bc218376cfd590b30a447c04a820276d9952",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/frozen-manifest.json",
-        "declaration_sha256": "348f0d7d997fb55418ec1e897f2cf19a68d210322bda03916ee8123f247d8968"
-      }
-    },
-    {
       "id": "relay/common/TestRestoredProbeRegexCacheBound",
       "module": ".",
       "package": "relay/common",
@@ -2652,36 +2622,6 @@
       }
     },
     {
-      "id": "relaykit/dto/TestRestoredProbeOpenAICacheCreationInputTokensAloneIsBillableUsage",
-      "module": "relaykit",
-      "package": "dto",
-      "test": "TestRestoredProbeOpenAICacheCreationInputTokensAloneIsBillableUsage",
-      "fixtures": {
-        "relaykit/dto/native_restored_probe_test.go": "5886017d689f8beb9bbe761f6b590e7b09a9af173bac08d5366c08f8d5717f3d"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredProbeOpenAICacheCreationInputTokensAloneIsBillableUsage": "fail"
-        },
-        "assertions": {
-          "TestRestoredProbeOpenAICacheCreationInputTokensAloneIsBillableUsage": [
-            "Expected value not to be nil."
-          ]
-        },
-        "messages": {}
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-1/data-baseline-probes-relaykit-dto.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/round-1/data-native-probes-relaykit-dto.jsonl",
-        "baseline_log_sha256": "54f393dd0e8c62ab32b784088a8b8d95e04db58b2001aa4e55e4891f7f5c7356",
-        "upstream_log_sha256": "6d6f268070201bbea86c6639cf3fca244cb0b8e88c81777fa708f270b46f3098",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/frozen-manifest.json",
-        "declaration_sha256": "348f0d7d997fb55418ec1e897f2cf19a68d210322bda03916ee8123f247d8968"
-      }
-    },
-    {
       "id": "relaykit/relayconvert/internal/oai_chat/TestRestoredProbeChatCompletionsRequestToResponsesRequestPreservesPromptCacheOptions",
       "module": "relaykit",
       "package": "relayconvert/internal/oai_chat",
@@ -2804,27 +2744,23 @@
       }
     },
     {
-      "id": "service/TestRestoredNativeCacheWriteLogTotalIncludes12h",
+      "id": "service/TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel",
       "module": ".",
       "package": "service",
-      "test": "TestRestoredNativeCacheWriteLogTotalIncludes12h",
+      "test": "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
-        "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
-        "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
+        "service/task_missing_channel_database_test.go": "b2356a42bb3383ffcd1e0789bba35436b43e751f6304756b78b73e8f416ac86a",
+        "service/native_restored_missing_test.go": "2cbaa216c0f2a079740bddddc8a470bd7c5c727aec72094fbe439e764d9b5a7f",
+        "service/cache_total_regression_test.go": "e341354a695a09f9307318aed763d3051ea3905a4c49beed95d0f2b0ab39b8c5"
       },
       "expected": {
         "nodes": {
-          "TestRestoredNativeCacheWriteLogTotalIncludes12h": "fail",
-          "TestRestoredNativeCacheWriteLogTotalIncludes12h/12h_only": "fail",
-          "TestRestoredNativeCacheWriteLogTotalIncludes12h/split": "fail"
+          "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel": "fail"
         },
         "assertions": {
-          "TestRestoredNativeCacheWriteLogTotalIncludes12h/split": [
-            "Not equal: expected: 70 actual : 30"
-          ],
-          "TestRestoredNativeCacheWriteLogTotalIncludes12h/12h_only": [
-            "Not equal: expected: 40 actual : 0"
+          "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel": [
+            "Should be zero, but was 1000",
+            "Not equal: expected: 6000 actual : 5000"
           ]
         },
         "messages": {}
@@ -2832,60 +2768,12 @@
       "preflight": {
         "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
         "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/cache-total/baseline-probes.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/cache-total/native-probes.jsonl",
-        "baseline_log_sha256": "fe4839614cca56e26376d17dc4c1187a4673f63ab9fc04e5dc29e30b8c686ba3",
-        "upstream_log_sha256": "537dc35a51c717a8fda6228f38230d0cd2c0ce1ec064b2bf675dc43c37e9da18",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/cache-total/report.json",
-        "declaration_sha256": "44b0006fe160f7afc5179b92c7ff3fe1d6b163d7b54b83a0081a1d102777e6b2"
-      }
-    },
-    {
-      "id": "service/TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
-      "module": ".",
-      "package": "service",
-      "test": "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID",
-      "fixtures": {
-        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
-        "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
-        "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
-      },
-      "expected": {
-        "nodes": {
-          "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID": "fail",
-          "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID/first_channel_deleted_false": "fail",
-          "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID/first_channel_deleted_true": "fail"
-        },
-        "assertions": {
-          "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID/first_channel_deleted_true": [
-            "Not equal: expected: string(\"FAILURE\") actual : model.TaskStatus(\"IN_PROGRESS\")",
-            "Should be zero, but was 1000",
-            "Not equal: expected: 6000 actual : 5000",
-            "Not equal: expected: string(\"IN_PROGRESS\") actual : model.TaskStatus(\"FAILURE\")",
-            "Not equal: expected: 1 actual : 0",
-            "Not equal: expected: 0 actual : 1"
-          ],
-          "TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID/first_channel_deleted_false": [
-            "Not equal: expected: string(\"FAILURE\") actual : model.TaskStatus(\"IN_PROGRESS\")",
-            "Should be zero, but was 1000",
-            "Not equal: expected: 6000 actual : 5000",
-            "Not equal: expected: string(\"IN_PROGRESS\") actual : model.TaskStatus(\"FAILURE\")",
-            "Not equal: expected: 1000 actual : 0",
-            "Not equal: expected: 5000 actual : 6000",
-            "Not equal: expected: 1 actual : 2"
-          ]
-        },
-        "messages": {}
-      },
-      "preflight": {
-        "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
-        "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
-        "baseline_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/collision-exact/baseline.jsonl",
-        "upstream_log": "/home/work/ren2hub-native-b388-20261114/preflight/data/collision-exact/native.jsonl",
-        "baseline_log_sha256": "5178c079fb706266c9748a8cb0746591006381e7ca47314dccfcbad75b8813f2",
-        "upstream_log_sha256": "9ae3800af40b2563beeee67a7fe74dd8f933573e9c9149529f9f636309f5d3a7",
-        "declaration": "/home/work/ren2hub-native-b388-20261114/preflight/data/collision-exact/frozen-before-current.json",
-        "declaration_sha256": "3bdb40c9f39eed249d8185d518c6f12d91ff39c150cac76d8371246fe5d70db9"
+        "baseline_log": "scripts/testing/fixtures/known_upstream_restored/channel_identity_contract/baseline.jsonl",
+        "upstream_log": "scripts/testing/fixtures/known_upstream_restored/channel_identity_contract/native.jsonl",
+        "baseline_log_sha256": "ad7bb1b405d23d80d051b4c189aef3204fa18697b9d92f049d486f8eea267155",
+        "upstream_log_sha256": "646417d0f7b2a7b8b3adf2d44ea68ed3cfc56d475690c330ebe788de695de126",
+        "declaration": "scripts/testing/fixtures/known_upstream_restored/channel_identity_contract/declaration-before-current.json",
+        "declaration_sha256": "ddbe145d1b4c6635a4a657f62983d10453a1998afe7dabd9d6b13c9892f7ec8c"
       }
     },
     {
@@ -2894,9 +2782,9 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateBatchTasksKeepsTasksWhenChannelReadFails",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
-        "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
-        "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
+        "service/task_missing_channel_database_test.go": "b2356a42bb3383ffcd1e0789bba35436b43e751f6304756b78b73e8f416ac86a",
+        "service/native_restored_missing_test.go": "2cbaa216c0f2a079740bddddc8a470bd7c5c727aec72094fbe439e764d9b5a7f",
+        "service/cache_total_regression_test.go": "e341354a695a09f9307318aed763d3051ea3905a4c49beed95d0f2b0ab39b8c5"
       },
       "expected": {
         "nodes": {
@@ -2926,9 +2814,9 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
-        "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
-        "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
+        "service/task_missing_channel_database_test.go": "b2356a42bb3383ffcd1e0789bba35436b43e751f6304756b78b73e8f416ac86a",
+        "service/native_restored_missing_test.go": "2cbaa216c0f2a079740bddddc8a470bd7c5c727aec72094fbe439e764d9b5a7f",
+        "service/cache_total_regression_test.go": "e341354a695a09f9307318aed763d3051ea3905a4c49beed95d0f2b0ab39b8c5"
       },
       "expected": {
         "nodes": {
@@ -2968,9 +2856,9 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
-        "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
-        "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
+        "service/task_missing_channel_database_test.go": "b2356a42bb3383ffcd1e0789bba35436b43e751f6304756b78b73e8f416ac86a",
+        "service/native_restored_missing_test.go": "2cbaa216c0f2a079740bddddc8a470bd7c5c727aec72094fbe439e764d9b5a7f",
+        "service/cache_total_regression_test.go": "e341354a695a09f9307318aed763d3051ea3905a4c49beed95d0f2b0ab39b8c5"
       },
       "expected": {
         "nodes": {
@@ -3000,9 +2888,9 @@
       "package": "service",
       "test": "TestRestoredProbeUpdateVideoTasksRefundsPreConsumedWhenChannelMissing",
       "fixtures": {
-        "service/task_missing_channel_database_test.go": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b",
-        "service/native_restored_missing_test.go": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb",
-        "service/native_restored_cache_total_test.go": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
+        "service/task_missing_channel_database_test.go": "b2356a42bb3383ffcd1e0789bba35436b43e751f6304756b78b73e8f416ac86a",
+        "service/native_restored_missing_test.go": "2cbaa216c0f2a079740bddddc8a470bd7c5c727aec72094fbe439e764d9b5a7f",
+        "service/cache_total_regression_test.go": "e341354a695a09f9307318aed763d3051ea3905a4c49beed95d0f2b0ab39b8c5"
       },
       "expected": {
         "nodes": {

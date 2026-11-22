@@ -194,7 +194,7 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 		}
 		summary.PlatformsScanned++
 		taskChannelM := make(map[int][]string)
-		taskM := make(map[string]*model.Task)
+		taskM := make(map[int]map[string]*model.Task)
 		nullTaskIds := make([]int64, 0)
 		var nullTasks []*model.Task
 		for _, task := range tasks {
@@ -205,7 +205,10 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 				nullTasks = append(nullTasks, task)
 				continue
 			}
-			taskM[upstreamID] = task
+			if taskM[task.ChannelId] == nil {
+				taskM[task.ChannelId] = make(map[string]*model.Task)
+			}
+			taskM[task.ChannelId][upstreamID] = task
 			taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
 		}
 		if len(nullTaskIds) > 0 {
@@ -225,7 +228,7 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 			continue
 		}
 
-		DispatchPlatformUpdate(ctx, platform, taskChannelM, taskM)
+		dispatchChannelScopedTasks(ctx, platform, taskChannelM, taskM)
 	}
 	if report != nil && ctx.Err() == nil {
 		report(totalPlatforms, totalPlatforms)

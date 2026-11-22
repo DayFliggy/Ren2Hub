@@ -1,0 +1,40 @@
+package service
+
+import (
+	"context"
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"testing"
+	"time"
+)
+
+// 缺渠道退款独立于跨渠道任务 ID 去重：本用例只包含已删除渠道的任务。
+func TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel(t *testing.T) {
+	truncate(t)
+	const userID, channelID, preConsumed = 27, 27, 1000
+	seedUser(t, userID, 5000)
+	task := &model.Task{TaskID: "deleted_channel_task", UserId: userID, ChannelId: channelID, Quota: preConsumed,
+		Platform: constant.TaskPlatform("kling"), Status: model.TaskStatus(model.TaskStatusInProgress), SubmitTime: time.Now().Unix()}
+	task.PrivateData.UpstreamTaskID = "deleted_channel_upstream"
+	task.PrivateData.BillingSource = BillingSourceWallet
+	require.NoError(t, model.DB.Create(task).Error)
+	previousFactory, previousCache := GetTaskAdaptorFunc, common.MemoryCacheEnabled
+	previousTimeout, previousLimit := constant.TaskTimeoutMinutes, constant.TaskQueryLimit
+	GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return nil }
+	common.MemoryCacheEnabled = false
+	constant.TaskTimeoutMinutes = 0
+	constant.TaskQueryLimit = 100
+	t.Cleanup(func() {
+		GetTaskAdaptorFunc, common.MemoryCacheEnabled = previousFactory, previousCache
+		constant.TaskTimeoutMinutes, constant.TaskQueryLimit = previousTimeout, previousLimit
+	})
+	RunTaskPollingOnce(context.Background(), nil)
+	var stored model.Task
+	require.NoError(t, model.DB.First(&stored, task.ID).Error)
+	assert.EqualValues(t, model.TaskStatusFailure, stored.Status)
+	assert.Zero(t, stored.Quota)
+	assert.Equal(t, 5000+preConsumed, getUserQuota(t, userID))
+}

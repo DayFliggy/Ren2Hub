@@ -255,6 +255,11 @@ func GetTokenById(id int) (*Token, error) {
 }
 
 func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
+	return getTokenByKeyWithQuotaLock(key, fromDB, false)
+}
+
+// quotaLocked is true only for reservation callers that already hold the ID lock.
+func getTokenByKeyWithQuotaLock(key string, fromDB, quotaLocked bool) (token *Token, err error) {
 	if !fromDB && common.RedisEnabled {
 		// Try Redis first
 		token, err := cacheGetTokenByKey(key)
@@ -264,6 +269,17 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// Don't return error - fall through to DB
 	}
 	token = &Token{}
+	if err = DB.Where(commonKeyCol+" = ?", key).First(token).Error; err != nil {
+		return nil, err
+	}
+	if !quotaLocked {
+		unlock := lockQuotaReservation(BatchUpdateTypeTokenQuota, token.Id)
+		defer unlock()
+	}
+	if err = flushPendingQuota(BatchUpdateTypeTokenQuota, token.Id); err != nil {
+		return nil, err
+	}
+	// The ID lookup may have preceded another reservation or pending batch flush.
 	if err = DB.Where(commonKeyCol+" = ?", key).First(token).Error; err != nil {
 		return nil, err
 	}

@@ -98,7 +98,7 @@ func TestTaskPollingRefundDatabaseMatrix(t *testing.T) {
 				TestRestoredProbeUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel(t)
 				requireTaskPollingRefundLogs(t)
 			})
-			t.Run("duplicate_upstream_id_uses_own_channel", TestRestoredProbeRunTaskPollingOnceHandlesOneTaskPerUpstreamID)
+			t.Run("deleted_channel_refunds", TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel)
 		})
 	}
 }

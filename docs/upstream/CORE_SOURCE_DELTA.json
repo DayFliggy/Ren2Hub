@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 845,
-    "adapted": 319,
-    "extension": 433,
+    "upstream_equal": 842,
+    "adapted": 322,
+    "extension": 443,
     "removed": 47
   },
   "files": [
@@ -5463,15 +5463,44 @@
     },
     {
       "path": "model/quota_reserve.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "c32fad73379ed6191a765eaff995632f6543ae5267e57c03062da5b7fa980ade",
-      "local_sha256": "c32fad73379ed6191a765eaff995632f6543ae5267e57c03062da5b7fa980ade"
+      "local_sha256": "9958e8451c110772de7d8d22ffe591b7f05e5851baed4e0f9de32ff4c9cadd1e",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
+      }
+    },
+    {
+      "path": "model/quota_reserve_batch.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2b844f96460ae03ddd862a425d2ab4e71794ed067b4e846c6b171f09548a395e",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。"
+      }
+    },
+    {
+      "path": "model/quota_reserve_recovery_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "106217b7f0d17af7b16e6dcabaaa4255a638bf9ba27b242000d682ab822793f1"
     },
     {
       "path": "model/quota_reserve_test.go",
       "status": "adapted",
       "upstream_sha256": "7b41a375afb8cc578e24a000fb6d5e6f8f2eeed3cd6d3af4be563ebde4e1881e",
-      "local_sha256": "f1f08ecebe9d334997a29833983922496ae92c28455d5a65922b49c4c105784f"
+      "local_sha256": "02287832bacd83f4b6da68f53a03e5167984f0a48a3bffa915841232557c0110"
     },
     {
       "path": "model/redemption.go",
@@ -5789,23 +5818,18 @@
       "path": "model/token.go",
       "status": "adapted",
       "upstream_sha256": "db42a2d9d3c5a5a6a6a2d019435922629c476498eb3d4cc25a75252ee68c0158",
-      "local_sha256": "7eda9667173df8d26af33f0546b0727fe61796eec564c1208a00221d60a3aa38",
+      "local_sha256": "ca4b3b4d910165bd5ae3e1d292f8038985c2808dfc6c4154b77b2ffa81e33895",
       "reasons": [
+        "audit-local-safety",
         "auth-cache-integrity",
         "group-removal",
         "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/token.go#1",
-          "model/token.go#2",
-          "model/token.go#3",
-          "model/token.go#4"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -6232,23 +6256,18 @@
       "path": "model/user_cache.go",
       "status": "adapted",
       "upstream_sha256": "51beac86c2139bcb0e2ca64a64ffebf35dd5e2051baf62724e3010a74abc5228",
-      "local_sha256": "b7ecd72a0093f8dad6b31444068e1338c98af70ee6abfa9d8e4e24cbe8d4862a",
+      "local_sha256": "03a35f7c546523f33ee5b091b775db09cfb2ebf9a7462704706b3f9dd80657cc",
       "reasons": [
+        "audit-local-safety",
         "auth-cache-integrity",
         "concurrency",
         "group-removal"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "model/user_cache.go#1",
-          "model/user_cache.go#2",
-          "model/user_cache.go#3",
-          "model/user_cache.go#4"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -6318,9 +6337,18 @@
     },
     {
       "path": "model/utils.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "bc7f10fe3911e24c5d7d77431f77487ca62343fcf37cdf7b41f4867cebc91935",
-      "local_sha256": "bc7f10fe3911e24c5d7d77431f77487ca62343fcf37cdf7b41f4867cebc91935"
+      "local_sha256": "64bbba806b34b8791d36425879f4e81108b5a2a32991fbe06883ffa1287c866d",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "model/vendor_management.go",
@@ -8341,6 +8369,18 @@
       "local_sha256": "74d04440a3b368094100b363a17c0edc6406e8a007f695ab0da9fa33cae5360d"
     },
     {
+      "path": "relay/channel/openai/compact_cache_creation_regression_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "327bd4bbbd669ffdc85aa5dec2404bdaf6a8b6787826df91d9297e212e316a08"
+    },
+    {
+      "path": "relay/channel/openai/compact_cache_creation_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1c88014a8b818d1ed3e55ac1be0434d9aea170d370586e73cc2d201c4d7306ea"
+    },
+    {
       "path": "relay/channel/openai/constant.go",
       "status": "upstream_equal",
       "upstream_sha256": "99dd5c33c1245dffec2bd446dff0f0c9962d768a2e1b617b443d27e071479e64",
@@ -8377,10 +8417,24 @@
       "local_sha256": "f2a2de61209ab246b7f81b2a03e3539ff05ef82419b95c8df90423e07bf27ef6"
     },
     {
-      "path": "relay/channel/openai/native_restored_probe_test.go",
+      "path": "relay/channel/openai/realtime_lifecycle.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "de54df3163308747685995ae69d2591dee886df51ed020a6538fb1db21f37019"
+      "local_sha256": "ed88f3c435dc76cd1700fcabae1257cebde962629aa119ecaf86ead1402bf5ae",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "RELAY-1/2/3：读限、写期限、共享状态互斥与关闭后等待。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。"
+      }
+    },
+    {
+      "path": "relay/channel/openai/realtime_lifecycle_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5d17e2ad4f277e88547bbe33bc70d88d0dc9acb9544089d33cd97519e337e5f3"
     },
     {
       "path": "relay/channel/openai/relay-openai.go",
@@ -8406,19 +8460,17 @@
       "path": "relay/channel/openai/relay_realtime.go",
       "status": "adapted",
       "upstream_sha256": "cf5786a01f4d3058850887dd072b57f082e48efc35ff4607e4c6048eea3fe312",
-      "local_sha256": "9218227887bae4292507a40f9ea6db065119f12077cc46eb4ae61f727317cc34",
+      "local_sha256": "d3cfde4fe19279c3af719f4c8d070c92eac01e72d6c71e87e040b91524f1ae38",
       "reasons": [
-        "token-routing",
-        "request-field-consistency"
+        "audit-local-safety",
+        "request-field-consistency",
+        "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "relay/channel/openai/relay_realtime.go#1"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。 RELAY-1/2/3：读限、写期限、共享状态互斥与关闭后等待。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -8445,13 +8497,15 @@
       "path": "relay/channel/openai/relay_responses_compact.go",
       "status": "adapted",
       "upstream_sha256": "6f841cce34e30724213d5b1486e26373a16d490a520faf65e1d7095675b1c54a",
-      "local_sha256": "49e1caf986f20356d582f672fce29e8f93c6f90959e7a91765973623e6d6bc82",
+      "local_sha256": "a125a326c81d1d8fad8fadd8662917a2b18552255290e838a2ab0143b5a3b105",
       "reasons": [
+        "audit-local-safety",
         "token-routing"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
+        "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 BILL-6/9：缓存创建字段识别、传递与12小时聚合。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
         "current_hunk_review": true
       }
     },
@@ -10199,15 +10253,36 @@
     },
     {
       "path": "relaykit/dto/billing_usage.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "2c4d6ad31a760f9e3df25bba638b3eb510ed47eacfc0621a1889a552b389ae7b",
-      "local_sha256": "2c4d6ad31a760f9e3df25bba638b3eb510ed47eacfc0621a1889a552b389ae7b"
+      "local_sha256": "3f4a2f11bc5fc503c65f4847eb99c7b4313e92b15264811b681d407fe22400ec",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "BILL-6/9：缓存创建字段识别、传递与12小时聚合。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
+      }
     },
     {
       "path": "relaykit/dto/billing_usage_test.go",
       "status": "upstream_equal",
       "upstream_sha256": "487b53d0247027c548ef24b29e83794824052da1e197afade262913e8d516d6c",
       "local_sha256": "487b53d0247027c548ef24b29e83794824052da1e197afade262913e8d516d6c"
+    },
+    {
+      "path": "relaykit/dto/cache_creation_billing_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fd37f95354e4f3bfa118f953c4e0d6ab1097a64281277958adb1848e4a3b9490"
+    },
+    {
+      "path": "relaykit/dto/cache_creation_regression_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fe4d1bfd8e228c5807380b4fe02d34527e87b08b2cc4fb65dd3bbe3632fa50b7"
     },
     {
       "path": "relaykit/dto/channel_settings.go",
@@ -10280,12 +10355,6 @@
       "status": "upstream_equal",
       "upstream_sha256": "7397d7151727b12c334aefccdd93ee4f31a64927be819eddc7e9c76d5f675aec",
       "local_sha256": "7397d7151727b12c334aefccdd93ee4f31a64927be819eddc7e9c76d5f675aec"
-    },
-    {
-      "path": "relaykit/dto/native_restored_probe_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "5886017d689f8beb9bbe761f6b590e7b09a9af173bac08d5366c08f8d5717f3d"
     },
     {
       "path": "relaykit/dto/notify.go",
@@ -11979,6 +12048,32 @@
       "local_sha256": "66c7daaa9acff72111b5afc1c26fe96e8cb07265eb1172e92c3c55e060e6541c"
     },
     {
+      "path": "service/cache_creation_billing.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d58748a39c87a058703f10dd898d06e54b5b3fcf60735b1d2d44058411ead765",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "BILL-6/9：缓存创建字段识别、传递与12小时聚合。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。"
+      }
+    },
+    {
+      "path": "service/cache_creation_billing_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "af80fa0805a3b2f770b04f183c688663168af3931a15e619df57d9358835f78d"
+    },
+    {
+      "path": "service/cache_total_regression_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e341354a695a09f9307318aed763d3051ea3905a4c49beed95d0f2b0ab39b8c5"
+    },
+    {
       "path": "service/channel.go",
       "status": "adapted",
       "upstream_sha256": "277774efb01bc0d06a11442c9e60ec0af83c091cd856479065b6fdf55e127dc4",
@@ -12766,16 +12861,10 @@
       "local_sha256": "eb3e6b911c8729dbf5ae1c8c346631e52223a19cc526848e27c7e5a6517873c6"
     },
     {
-      "path": "service/native_restored_cache_total_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "261083af7df6cbb0edbeb70c8df791fa2f13e2a7a90c2f0803b7fc19a3d4ae8c"
-    },
-    {
       "path": "service/native_restored_missing_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f5a27a76b2b077acdb4cc3b13cec70ee41395010a321e23c71e179ce8fc30fdb"
+      "local_sha256": "2cbaa216c0f2a079740bddddc8a470bd7c5c727aec72094fbe439e764d9b5a7f"
     },
     {
       "path": "service/native_restored_round3_adapter_test.go",
@@ -13841,7 +13930,7 @@
       "path": "service/task_missing_channel_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "87db1a0827f15e635526c88e4ce304a848afc8050eb467a9755dfefd79ca1e2b"
+      "local_sha256": "b2356a42bb3383ffcd1e0789bba35436b43e751f6304756b78b73e8f416ac86a"
     },
     {
       "path": "service/task_plugin_audit.go",
@@ -13871,38 +13960,50 @@
       "path": "service/task_polling.go",
       "status": "adapted",
       "upstream_sha256": "00a2d2579fa82aa485a269e90d489ee34a7056c3c7755c00937e7bc4fa94f24d",
-      "local_sha256": "1a5d48d2ab072a38b6923f24c11c79b33006f9bd45c83d1dace8914ddcc13001",
+      "local_sha256": "079e0ddfef5f72c918f41335ed27f7d063a39aa2575008055fe49d5d1aec202b",
       "reasons": [
+        "audit-local-safety",
         "channel-ratio",
         "concurrency"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/task_polling.go#1",
-          "service/task_polling.go#11",
-          "service/task_polling.go#12",
-          "service/task_polling.go#13",
-          "service/task_polling.go#2",
-          "service/task_polling.go#8",
-          "service/task_polling.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
       }
     },
     {
       "path": "service/task_polling_contract_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "95dd9e8c21e5dfac77f7144f4e418798f73ca3859ae9c5a91a2db4e9e7b80457"
+      "local_sha256": "deaea13fddf79f16482ee22fabb6f57cb98e2c3883dda4df58f62c4bbe153992"
     },
     {
       "path": "service/task_polling_full_progress_test.go",
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "57a9a3c1b542ba031bc48244848bb84aa1c94a7f03805320d8b0636efe1844d2"
+    },
+    {
+      "path": "service/task_polling_identity.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "abcd434a0fb15be41be0b02a3d5e98ca203265a53f05912b6c7808e1b1db75bd",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。"
+      }
+    },
+    {
+      "path": "service/task_polling_identity_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "927ce340f83db909954269eab11c430e0a2204c210a66e4d4759a04587e77bab"
     },
     {
       "path": "service/task_polling_test.go",
@@ -13914,8 +14015,9 @@
       "path": "service/text_quota.go",
       "status": "adapted",
       "upstream_sha256": "ba6a6d3f5d44867186c5cbede88cf6be1085324821a17111d369d6bdb3f84dc7",
-      "local_sha256": "19385a4f33789623fea18284f020fa7184243774036260f1ac1d8f13fa8270a7",
+      "local_sha256": "84db4fdc11cc4c7be0235f619f6b980281117a4aef5819dc586f2ec535118101",
       "reasons": [
+        "audit-local-safety",
         "channel-ratio",
         "group-removal",
         "no-builtin-prices",
@@ -13923,25 +14025,9 @@
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/text_quota.go#1",
-          "service/text_quota.go#11",
-          "service/text_quota.go#12",
-          "service/text_quota.go#13",
-          "service/text_quota.go#14",
-          "service/text_quota.go#15",
-          "service/text_quota.go#16",
-          "service/text_quota.go#3",
-          "service/text_quota.go#4",
-          "service/text_quota.go#5",
-          "service/text_quota.go#6",
-          "service/text_quota.go#7",
-          "service/text_quota.go#8",
-          "service/text_quota.go#9"
-        ]
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。",
+        "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
+        "current_hunk_review": true
       }
     },
     {
@@ -15193,6 +15279,11 @@
     },
     "request-field-consistency": {
       "basis": "请求入口及 WebSocket 帧拒绝重复字段，防止计价、选模与转发解读不一致。",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
+      "kind": "approved_contract"
+    },
+    "audit-local-safety": {
+      "basis": "用户批准的B1预扣余额一致性、Realtime生命周期、渠道任务隔离与缓存用量修复。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     }

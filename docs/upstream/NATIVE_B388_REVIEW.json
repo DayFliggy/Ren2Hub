@@ -33736,12 +33736,17 @@
       ]
     },
     "relay/channel/openai/relay_responses_compact.go": {
-      "local_sha256": "49e1caf986f20356d582f672fce29e8f93c6f90959e7a91765973623e6d6bc82",
+      "local_sha256": "a125a326c81d1d8fad8fadd8662917a2b18552255290e838a2ab0143b5a3b105",
       "hunks": [
         {
           "header": "@@ -21,6 +21,7 @@",
           "sha256": "b160ce6dbee9da448b51958d7369bf457be91405f55eb9c3a6463edeeeeaf781",
-          "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+          "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -37,6 +38,7 @@",
+          "sha256": "4a9860fc778fd84459ce5585075ec2970e6efea409ef1ef2865f2d6291614c0a",
+          "basis": "在 OaiResponsesCompactionHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
         }
       ]
     },
@@ -34434,6 +34439,311 @@
           "header": "@@ -2303,3 +2303,10 @@",
           "sha256": "46eee62a84dae19b4cef29c28561103067a4986fcf1aaf35814efd638dc9fc8b",
           "basis": "通过响应取原请求上下文，兼容没有关联 HTTP 请求的响应。"
+        }
+      ]
+    },
+    "model/quota_reserve.go": {
+      "local_sha256": "9958e8451c110772de7d8d22ffe591b7f05e5851baed4e0f9de32ff4c9cadd1e",
+      "hunks": [
+        {
+          "header": "@@ -141,13 +141,22 @@",
+          "sha256": "c053fcefafc8f3dec07ad66735043de14324332998f703b477733a06ce259dac",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -155,13 +164,18 @@",
+          "sha256": "f1bf33021e51243c5f5ecfd6bee8e91f270707f423ee92010fb9fd8dfc6a6cae",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -172,9 +186,12 @@",
+          "sha256": "672ae71d476b85cf5fb21a1901c910432a4edeef1a997ba99b07bbe24c9d6087",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -200,6 +217,8 @@",
+          "sha256": "0b3c4d897f9d2746ededbd7b7854f9377de4729e5bc7e154b33c72a156fb8f6d",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -213,9 +232,12 @@",
+          "sha256": "5f5dd688decfe3f3333c3ad71f8df95f7e7b297b742c78f47be1f26351165ba7",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        }
+      ]
+    },
+    "model/token.go": {
+      "local_sha256": "ca4b3b4d910165bd5ae3e1d292f8038985c2808dfc6c4154b77b2ffa81e33895",
+      "hunks": [
+        {
+          "header": "@@ -26,38 +26,11 @@",
+          "sha256": "55b46b2f895cb521f6018ad2eacc4c491185efe99c44f380bf5e2d9bc82deab7",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -282,6 +255,11 @@",
+          "sha256": "991d3da3832a09551d64c3a8728b736c7d4f28254ca896f533fdeb00d8d5196a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -294,6 +272,17 @@",
+          "sha256": "2d54b268734272306d2d68afe009cf4a2e1e84dc4c07e4b88509b28cc81976c3",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -317,7 +306,7 @@",
+          "sha256": "e978e8e030b563238f606cfc2f3f7ab593c9a1860d50d1728cab7759e83b31c0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -333,7 +322,17 @@",
+          "sha256": "ed2f2869848ab0f595f343ef892cbaf67b80cc130814b82ac08163e512ab7792",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -455,12 +454,21 @@",
+          "sha256": "37821cf15980720f724dc02e29e6ffdcd477cb69eacbaff0f04e779825abb212",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/token.go#1, model/token.go#2, model/token.go#3, model/token.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        }
+      ]
+    },
+    "model/user_cache.go": {
+      "local_sha256": "03a35f7c546523f33ee5b091b775db09cfb2ebf9a7462704706b3f9dd80657cc",
+      "hunks": [
+        {
+          "header": "@@ -11,11 +11,11 @@",
+          "sha256": "8c457cfddb5ae76baa823e956052a63a6f85db9f779e2d7a26b54936382b93f9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -39,7 +39,7 @@",
+          "sha256": "54d9094b948444aa4dd34341c6d9a957030dac2113c0a7936d73690a340b3113",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -98,6 +98,13 @@",
+          "sha256": "aace644bf91b7b832b30e89b6f2eae09f223084c91104d59615ea4b9dbb2379f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -107,6 +114,9 @@",
+          "sha256": "942fb3024309247dc2911f7b71a3da63dcdf367795135b4aa39262812158702d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -181,14 +191,6 @@",
+          "sha256": "bd01c703be6690994b87e94005365b0c2e53c53623b96a6f7600d52ff6ab3e12",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -211,11 +213,6 @@",
+          "sha256": "ab0ce3bceb57c672dc989fd581674f50721f2c6996e565821b545c66f00c5777",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user_cache.go#1, model/user_cache.go#2, model/user_cache.go#3, model/user_cache.go#4 BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        }
+      ]
+    },
+    "model/utils.go": {
+      "local_sha256": "64bbba806b34b8791d36425879f4e81108b5a2a32991fbe06883ffa1287c866d",
+      "hunks": [
+        {
+          "header": "@@ -62,6 +62,7 @@",
+          "sha256": "d9dddf10d3e5a386ac8d9672e1a033b88c9e33cbdd5b0e68b06e50f6707b7709",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -81,6 +82,9 @@",
+          "sha256": "d3045df32acca44264b4ce21a9511a24a9b739bcfc7b7faff376b07c71423a6e",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -93,25 +97,16 @@",
+          "sha256": "9d16005fb321b229a84bc3b902cc298f2d5b72f3eb7b46e694b56d8e689d2aad",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        },
+        {
+          "header": "@@ -119,7 +114,7 @@",
+          "sha256": "414ae8eef619c8b91836345baac23816e200c0839470751a5410911cec3b3b00",
+          "basis": "BILL-2：预扣、周期批次与缓存水合共用余额同步边界。"
+        }
+      ]
+    },
+    "relay/channel/openai/relay_realtime.go": {
+      "local_sha256": "d3cfde4fe19279c3af719f4c8d070c92eac01e72d6c71e87e040b91524f1ae38",
+      "hunks": [
+        {
+          "header": "@@ -7,7 +7,6 @@",
+          "sha256": "d9bd100ca3a094240a8e9a2b5e359b5072165af7eae57893ff3004a5ecee4448",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。 RELAY-1/2/3：读限、写期限、共享状态互斥与关闭后等待。"
+        },
+        {
+          "header": "@@ -26,12 +25,20 @@",
+          "sha256": "f830ca08bc75d92aaf3e9bb63c81d68f51340b3f8ad233994aba41b572378bf7",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。 RELAY-1/2/3：读限、写期限、共享状态互斥与关闭后等待。"
+        },
+        {
+          "header": "@@ -43,12 +50,12 @@",
+          "sha256": "0f1c06917e8b002361a55c94c833df61fcc5b778821d576462c09575800e4bff",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。 RELAY-1/2/3：读限、写期限、共享状态互斥与关闭后等待。"
+        },
+        {
+          "header": "@@ -70,199 +77,235 @@",
+          "sha256": "68c749e410c0e34b7f6e0ad84b30ae55643f67168805f82c5e4b198dae4f69a6",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/channel/openai/relay_realtime.go#1 Realtime 在解码、计量及转发前拒绝冲突字段，见 SYNC_LEDGER.md#现行本地差异（request-field-consistency）。 RELAY-1/2/3：读限、写期限、共享状态互斥与关闭后等待。"
+        }
+      ]
+    },
+    "relaykit/dto/billing_usage.go": {
+      "local_sha256": "3f4a2f11bc5fc503c65f4847eb99c7b4313e92b15264811b681d407fe22400ec",
+      "hunks": [
+        {
+          "header": "@@ -92,6 +92,7 @@",
+          "sha256": "b68904bbfb38770d7b77a0dace477fd1b45579971c262309c10e7d2483b5c3ec",
+          "basis": "BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -111,6 +112,7 @@",
+          "sha256": "31d4f86723d1ef50ffa7cd846ef80c56d4d34b31150c9527b47a94fa1cc054f3",
+          "basis": "BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        }
+      ]
+    },
+    "service/task_polling.go": {
+      "local_sha256": "079e0ddfef5f72c918f41335ed27f7d063a39aa2575008055fe49d5d1aec202b",
+      "hunks": [
+        {
+          "header": "@@ -28,7 +28,7 @@",
+          "sha256": "b7ae04b3d23bb503cbd14b7808f3afefe7355b099355f3f27c7e7c23ebb2cb35",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -38,7 +38,7 @@",
+          "sha256": "ff2b929c2ca9bb5353fff32987011fc984176bb6b6ad6d5c01861b649ee47cac",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -194,7 +194,7 @@",
+          "sha256": "f288dbeabaa18e4e9632fbd7e9dfae790b77be145fbabab00d938bab482ff90b",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -205,7 +205,10 @@",
+          "sha256": "c6bee6c3d30a0dfe098cdb53a69c2ebea784157a196af561bd2bc8a7b7c686f7",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -225,7 +228,7 @@",
+          "sha256": "55adda1d0e1780fada74908ce14b3f0374b51a8efa9d7e8a12d05f3871f131c0",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -338,7 +341,7 @@",
+          "sha256": "e7a99bf216a9fa163532fc4189b1a1017f3a68548ced78b59730ee3c63ed61e8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -347,8 +350,12 @@",
+          "sha256": "8ccdb520fe0cdba3ea4dc2c5e7d3cc6f94b179ee9890c36ce40a5a82ead12fac",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -575,7 +582,10 @@",
+          "sha256": "3e7a953147bab5ac1eb903c0ab3307359ee8760772e09f87a84a5a23bf603a8c",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -787,7 +797,7 @@",
+          "sha256": "f403e383d3b40c101b2541b2d0a5e7fc6b564e15afd7246a6631c9a2ceae676f",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        },
+        {
+          "header": "@@ -861,6 +871,9 @@",
+          "sha256": "e2735a468b0f2085390b91ab1c2cf1b4e66c90ca9e9c2fd522784564791abdde",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/task_polling.go#1, service/task_polling.go#11, service/task_polling.go#12, service/task_polling.go#13, service/task_polling.go#2, service/task_polling.go#8, service/task_polling.go#9 BILL-8：渠道内供应商任务索引隔离，保留各自CAS结算。"
+        }
+      ]
+    },
+    "service/text_quota.go": {
+      "local_sha256": "84db4fdc11cc4c7be0235f619f6b980281117a4aef5819dc586f2ec535118101",
+      "hunks": [
+        {
+          "header": "@@ -53,7 +53,7 @@",
+          "sha256": "dd265a37a357ae4531e0224a8fdb9229632d980dd289788a41de7516f3368ec7",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -68,29 +68,6 @@",
+          "sha256": "537a7d5ceecf6c2be34000a1bc470f48f7bafa90ffc588a1a8d41c4112f4b44d",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -150,7 +127,7 @@",
+          "sha256": "0be3463f710af8629409ceb599149dd2db5ca6fd9188ab198181cd10532fe302",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -179,7 +156,7 @@",
+          "sha256": "6ea376c778af3a5f37b2834edaee85563bdfab80d33a7398ca7221f0566d5bc9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -205,8 +182,8 @@",
+          "sha256": "31a65a02bd4a55d1183c5c370ed0a6f235ae81f8158593259597e7db13c8a4ba",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -235,7 +212,7 @@",
+          "sha256": "959ed0cf9caef76809bb2095f8a7ab0e7993df1ac3fbd86b63caf01b64b5e5ad",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -272,13 +249,6 @@",
+          "sha256": "df634552223c5017ce8adabd535114d268f46d85a04c503c43dccb5bcf20ef49",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -292,7 +262,7 @@",
+          "sha256": "178929523af19af86b3c63cdbf719c1d9e72bb4170fa30111f31cceec115641e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -300,7 +270,7 @@",
+          "sha256": "965b606653d3dd50fd0704b0edf80a430a991b023271451eb76f5dad48b984e8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -343,7 +313,7 @@",
+          "sha256": "008b66611129ee8e622219dcdae9a791bf40c435d1b76aa35ce9e3d6dfe346a9",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -369,7 +339,7 @@",
+          "sha256": "fd824722bef68b53c66c73cbf81268bf161d494494d2ec9179f2261abb2319e4",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -442,7 +412,7 @@",
+          "sha256": "3a1a8889bb3f39556474ba6b3f3787baa6d953e4d1c32982621e489a74e18ff8",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -451,7 +421,7 @@",
+          "sha256": "62540f0282e04bf33fa06311e11af8b96df00f876f54451f93f8c54974d8d65a",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -459,7 +429,7 @@",
+          "sha256": "a6c53ef1222f642a7009cecc786ce1e40dc99ca26a305d66493ddad190123151",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -480,15 +450,15 @@",
+          "sha256": "fe2622b7421ecf309a67c96c99c20263b6f0442532bf613e66335e1b497bea03",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
+        },
+        {
+          "header": "@@ -553,7 +523,6 @@",
+          "sha256": "5bc63e27416307dd0e794ce9c84f715eacf4fd54d576a6345d1c489a27c0163e",
+          "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/text_quota.go#1, service/text_quota.go#11, service/text_quota.go#12, service/text_quota.go#13, service/text_quota.go#14, service/text_quota.go#15, service/text_quota.go#16, service/text_quota.go#3, service/text_quota.go#4, service/text_quota.go#5, service/text_quota.go#6, service/text_quota.go#7, service/text_quota.go#8, service/text_quota.go#9；2026-11-17 加赠窗口的同步结算接点（一个标识符）见 SYNC_LEDGER.md#充值加赠接点 BILL-6/9：缓存创建字段识别、传递与12小时聚合。"
         }
       ]
     }

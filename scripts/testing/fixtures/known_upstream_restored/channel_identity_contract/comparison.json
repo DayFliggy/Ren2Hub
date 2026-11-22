@@ -1,0 +1,21 @@
+{
+  "baseline": {
+    "nodes": {
+      "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel": "pass"
+    },
+    "assertions": {},
+    "messages": {}
+  },
+  "upstream": {
+    "nodes": {
+      "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel": "fail"
+    },
+    "assertions": {
+      "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel": [
+        "Should be zero, but was 1000",
+        "Not equal: expected: 6000 actual : 5000"
+      ]
+    },
+    "messages": {}
+  }
+}

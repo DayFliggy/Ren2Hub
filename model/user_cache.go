@@ -98,6 +98,13 @@ func updateUserCache(user User) error {
 
 // GetUserCache gets complete user cache from hash
 func GetUserCache(userId int) (*UserBase, error) {
+	unlock := lockQuotaReservation(BatchUpdateTypeUserQuota, userId)
+	defer unlock()
+	return getUserCacheQuotaLocked(userId)
+}
+
+// Caller owns the reservation lock, including callers hydrating before auth.
+func getUserCacheQuotaLocked(userId int) (*UserBase, error) {
 	// Try getting from Redis first
 	userCache, err := cacheGetUserBase(userId)
 	if err == nil {
@@ -107,6 +114,9 @@ func GetUserCache(userId int) (*UserBase, error) {
 	// Redis misses and read failures both fall back to the shared database. A
 	// version fence newer than the database is the one exception: allowing that
 	// snapshot would re-authorize a user while a restrictive update is pending.
+	if err := flushPendingQuota(BatchUpdateTypeUserQuota, userId); err != nil {
+		return nil, err
+	}
 	user, err := GetUserById(userId, false)
 	if err != nil {
 		return nil, err

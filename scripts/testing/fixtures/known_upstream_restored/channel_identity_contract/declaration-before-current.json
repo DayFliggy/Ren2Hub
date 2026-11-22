@@ -1,0 +1,18 @@
+{
+  "test": "TestRestoredProbeRunTaskPollingOnceRefundsDeletedChannel",
+  "baseline_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
+  "upstream_sha": "b388140acfd80369ec6243b16869daff1b4051f4",
+  "probe_sha256": "928e230700252090d44735bc386134f9cc567ccafcd52828d79743d7e336d0eb",
+  "expected_baseline": "pass",
+  "expected_upstream": {
+    "status": "FAILURE",
+    "quota": 1000,
+    "wallet": 5000
+  },
+  "correct_contract": {
+    "status": "FAILURE",
+    "quota": 0,
+    "wallet": 6000
+  },
+  "scope": "仅缺渠道退款；不包含跨渠道任务ID共享和第二任务处理顺序；尚未运行当前树"
+}
