@@ -1572,7 +1572,7 @@ export default {
     redactedSettingHidden:
       '代理、插件与透传等设置含已隐藏的凭据，保持原值不变；仅 Root 管理员可查看或修改。',
     redactedSettingsHidden:
-      '高级路由设置含已隐藏的凭据，保持原值不变；仅 Root 管理员可查看或修改。',
+      '高级路由与插件配置设置含已隐藏的凭据，保持原值不变；仅 Root 管理员可查看或修改。',
     balanceUpdated: '上游额度与倍率已同步',
     balanceQueryCompleted: '上游余额查询完成',
     balanceRawTitle: '余额查询原始响应：{name}',

@@ -111,7 +111,7 @@ describe('redacted channel fields', () => {
       'The proxy, plugin and pass-through settings contain hidden credentials'
     )
     expect(document.body.textContent).toContain(
-      'The advanced route settings contain hidden credentials'
+      'The advanced route and plugin configuration settings contain hidden credentials'
     )
     expect(
       document.body.querySelector(

@@ -1636,7 +1636,7 @@ export default {
     redactedSettingHidden:
       'The proxy, plugin and pass-through settings contain hidden credentials and are kept unchanged. Only a root administrator can view or edit them.',
     redactedSettingsHidden:
-      'The advanced route settings contain hidden credentials and are kept unchanged. Only a root administrator can view or edit them.',
+      'The advanced route and plugin configuration settings contain hidden credentials and are kept unchanged. Only a root administrator can view or edit them.',
     balanceUpdated: 'Upstream balance and ratio synced',
     balanceQueryCompleted: 'Upstream balance query completed',
     balanceRawTitle: 'Raw balance response: {name}',

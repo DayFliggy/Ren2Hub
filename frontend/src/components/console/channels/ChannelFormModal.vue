@@ -629,18 +629,23 @@ watch(
     try {
       const setting = parseChannelObject(ch?.setting)
       originalSetting.value = setting
-      pluginConfig.value =
-        setting.plugin_config &&
-        typeof setting.plugin_config === 'object' &&
-        !Array.isArray(setting.plugin_config)
-          ? structuredClone(setting.plugin_config as Record<string, unknown>)
-          : {}
       requestPlugins.value = Array.isArray(setting.request_plugins)
         ? setting.request_plugins.filter(
             (id): id is string => typeof id === 'string'
           )
         : []
-      originalOtherSettings.value = parseChannelObject(ch?.settings)
+      const otherSettings = parseChannelObject(ch?.settings)
+      originalOtherSettings.value = otherSettings
+      // plugin_config belongs to settings (relaykit ChannelOtherSettings);
+      // setting keeps only the binding and request plugins. Clone the parsed
+      // object, not the reactive proxy, which structuredClone rejects.
+      const storedConfig = otherSettings.plugin_config
+      pluginConfig.value =
+        storedConfig &&
+        typeof storedConfig === 'object' &&
+        !Array.isArray(storedConfig)
+          ? structuredClone(storedConfig as Record<string, unknown>)
+          : {}
       awsApiType.value =
         typeof originalOtherSettings.value.aws_api_type === 'string' &&
         originalOtherSettings.value.aws_api_type
@@ -761,11 +766,6 @@ async function submit() {
     if (canBindPlugin.value) {
       if (requestPlugins.value.length || 'request_plugins' in settings)
         nextSetting.request_plugins = requestPlugins.value
-      if (
-        form.type === 61 &&
-        (Object.keys(pluginConfig.value).length || 'plugin_config' in settings)
-      )
-        nextSetting.plugin_config = pluginConfig.value
     }
     // validateChannel reads task_plugin_key from the request before it loads
     // the stored channel, so every type 61 update that carries the sensitive
@@ -815,6 +815,13 @@ async function submit() {
         otherSettings.advanced_custom = parseAdvancedChannelConfig(
           advancedConfig.value
         )
+      if (
+        canBindPlugin.value &&
+        form.type === 61 &&
+        (Object.keys(pluginConfig.value).length ||
+          'plugin_config' in otherSettings)
+      )
+        otherSettings.plugin_config = pluginConfig.value
       if (
         JSON.stringify(otherSettings) !==
         JSON.stringify(originalOtherSettings.value)
@@ -1144,7 +1151,7 @@ async function submit() {
           </FormField>
 
           <fieldset
-            v-if="form.type === 61 && boundTaskPlugin"
+            v-if="form.type === 61 && boundTaskPlugin && !settingsHidden"
             :disabled="!canBindPlugin || saving"
             class="min-w-0 sibling-space-y-2"
           >

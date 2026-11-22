@@ -82,11 +82,9 @@ for (const [theme, width] of [
           models: 'fixture-model',
           model_mapping: '',
           other: '',
-          settings: '{}',
-          setting: JSON.stringify({
-            task_plugin_key: 'layout-plugin',
-            plugin_config: originalConfig,
-          }),
+          // relaykit ChannelOtherSettings owns plugin_config.
+          settings: JSON.stringify({ plugin_config: originalConfig }),
+          setting: JSON.stringify({ task_plugin_key: 'layout-plugin' }),
         }
         const writes: Record<string, unknown>[] = []
         await page.route('**/api/task_plugin_options', (route) =>
@@ -203,12 +201,16 @@ for (const [theme, width] of [
           .click()
         await expect(dialog).toHaveCount(0)
         expect(writes).toHaveLength(1)
-        if (sensitiveWrite)
-          expect(JSON.parse(String(writes[0]!.setting)).plugin_config).toEqual(
+        if (sensitiveWrite) {
+          expect(JSON.parse(String(writes[0]!.settings)).plugin_config).toEqual(
             editedConfig
           )
-        else {
+          expect(JSON.parse(String(writes[0]!.setting))).not.toHaveProperty(
+            'plugin_config'
+          )
+        } else {
           expect(writes[0]).not.toHaveProperty('setting')
+          expect(writes[0]).not.toHaveProperty('settings')
           expect(writes[0]!.name).toBe('Renamed read-only configuration')
         }
         await page.reload()

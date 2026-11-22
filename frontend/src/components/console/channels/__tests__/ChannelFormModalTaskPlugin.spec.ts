@@ -142,6 +142,39 @@ describe('task plugin channel edits', () => {
     expect(await saveAs(rootRename.name, save)).toEqual(rootRename)
   })
 
+  it('reads the plugin config from settings and saves it back there', async () => {
+    // relaykit ChannelOtherSettings owns plugin_config; setting keeps the binding.
+    const save = await openForm(
+      channel({
+        settings: JSON.stringify({ plugin_config: { endpoint: 'stored' } }),
+      })
+    )
+    const raw = query<HTMLTextAreaElement>('textarea.config-input')!
+    expect(JSON.parse(raw.value)).toEqual({ endpoint: 'stored' })
+    raw.value = JSON.stringify({ endpoint: 'edited', retries: 2 })
+    raw.dispatchEvent(new Event('input'))
+    raw.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    const payload = await saveAs('plugin-config', save)
+    expect(JSON.parse(payload.settings).plugin_config).toEqual({
+      endpoint: 'edited',
+      retries: 2,
+    })
+    expect(JSON.parse(payload.setting)).not.toHaveProperty('plugin_config')
+    expect(JSON.parse(payload.setting).task_plugin_key).toBe('contract-plugin')
+  })
+
+  it('neither shows nor sends a plugin config hidden in settings', async () => {
+    const save = await openForm(
+      channel({ settings: undefined, redacted_fields: ['settings'] })
+    )
+    expect(query('textarea.config-input')).toBeNull()
+    const payload = await saveAs('plugin-config-hidden', save)
+    expect(payload).not.toHaveProperty('settings')
+    expect(JSON.parse(payload.setting)).not.toHaveProperty('plugin_config')
+  })
+
   it('edits a type 61 channel without bind through the write-only path', async () => {
     permissions.bind = false
     const save = await openForm(channel({}))

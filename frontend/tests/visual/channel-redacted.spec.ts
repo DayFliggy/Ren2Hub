@@ -147,7 +147,7 @@ for (const [theme, width] of [
           dialog.getByText(/代理、插件与透传等设置含已隐藏的凭据/)
         ).toBeVisible()
         await expect(
-          dialog.getByText(/高级路由设置含已隐藏的凭据/)
+          dialog.getByText(/高级路由与插件配置设置含已隐藏的凭据/)
         ).toBeVisible()
         await expect(
           dialog.getByRole('switch', { name: '透传请求体' })
