@@ -2141,12 +2141,16 @@ export default {
     exportProgress: 'Exported {count} logs so far',
     exportProgressFiles: 'Exported {count} logs so far, {files} file(s) saved',
     cancelExport: 'Cancel export',
+    exportMultipleFiles:
+      'This export is large and will download as several files. If the browser asks whether to allow multiple downloads, choose Allow.',
+    exportSessionChanged: 'Your sign-in changed, so the export stopped.',
     exportCancelledPartial:
       'Export cancelled. The {files} file(s) already downloaded contain only part of the records.',
     exportFailedPartial:
       '{reason} The {files} file(s) already downloaded contain only part of the records; export again.',
     exported: 'Exported {count} records',
-    exportedParts: 'Exported {count} records in {files} files',
+    exportedParts:
+      'Exported {count} records in {files} files. If your download list has fewer than {files} files, allow this site to download multiple files and export again.',
     exportTruncated:
       'Over the {limit} row limit — exported the first {count}. Narrow the filters.',
     selectDateRange: 'Select date range',

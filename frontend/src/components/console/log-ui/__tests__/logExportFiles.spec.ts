@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { clearAuthBundle } from '@/api/authSession'
 import { api } from '@/api/client'
 import {
   exportLogFiles,
@@ -266,6 +267,58 @@ describe('log export files', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('log export session check', () => {
+  function sessionRun(lines: string[]) {
+    vi.spyOn(api, 'getStream').mockResolvedValue(streamOf(lines))
+    const files: string[] = []
+    const outcome = exportLogFiles({
+      filters: {},
+      range: { start: '', end: '' },
+      type: 'json',
+      headers: [],
+      locale: 'en',
+      signal: new AbortController().signal,
+      save: (_blob, name) => {
+        files.push(name)
+        // The account changes right after the first file is saved.
+        clearAuthBundle()
+      },
+      volumeBytes: 600,
+    })
+    return { files, outcome }
+  }
+
+  it('stops before saving the next file once the session changed', async () => {
+    const { files, outcome } = sessionRun([...rows(10), success(10)])
+    await expect(outcome).rejects.toMatchObject({
+      code: 'LOG_EXPORT_SESSION_CHANGED',
+    })
+    expect(files).toHaveLength(1)
+  })
+
+  it('does not save the last file of a finished export after a session change', async () => {
+    vi.spyOn(api, 'getStream').mockResolvedValue(
+      streamOf([...rows(2), success(2)])
+    )
+    const files: string[] = []
+    const outcome = exportLogFiles({
+      filters: {},
+      range: { start: '', end: '' },
+      type: 'json',
+      headers: [],
+      locale: 'en',
+      signal: new AbortController().signal,
+      save: (_blob, name) => files.push(name),
+      onProgress: () => undefined,
+    })
+    clearAuthBundle()
+    await expect(outcome).rejects.toMatchObject({
+      code: 'LOG_EXPORT_SESSION_CHANGED',
+    })
+    expect(files).toEqual([])
   })
 })
 

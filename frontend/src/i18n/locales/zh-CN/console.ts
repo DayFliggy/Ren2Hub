@@ -2059,12 +2059,16 @@ export default {
     exportProgress: '已导出 {count} 条',
     exportProgressFiles: '已导出 {count} 条，已保存 {files} 个文件',
     cancelExport: '取消导出',
+    exportMultipleFiles:
+      '导出较大，将分多个文件下载。浏览器若询问是否允许下载多个文件，请选择允许。',
+    exportSessionChanged: '登录状态已变化，导出已停止。',
     exportCancelledPartial:
       '导出已取消，已下载的 {files} 个文件只包含部分记录。',
     exportFailedPartial:
       '{reason} 已下载的 {files} 个文件只包含部分记录，请重新导出。',
     exported: '已导出 {count} 条记录',
-    exportedParts: '已导出 {count} 条记录，分 {files} 个文件',
+    exportedParts:
+      '已导出 {count} 条，分 {files} 个文件；若下载列表中少于 {files} 个文件，请允许本站下载多个文件后重新导出。',
     exportTruncated:
       '结果超过 {limit} 条上限，已导出前 {count} 条，请缩小筛选范围',
     selectDateRange: '选择日期范围',

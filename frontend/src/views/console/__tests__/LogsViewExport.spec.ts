@@ -10,6 +10,7 @@ import {
   vi,
 } from 'vitest'
 
+import { clearAuthBundle } from '@/api/authSession'
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import LogsView from '@/views/console/LogsView.vue'
@@ -156,5 +157,83 @@ describe('LogsView export progress', () => {
     // The dialog stays open, ready for another export.
     expect(button('确认')).toBeDefined()
     expect(dialog().textContent).not.toContain('已导出 4 条')
+  })
+
+  it('warns about multiple downloads once a second file starts', async () => {
+    const { dialog } = await startExport()
+    const notice =
+      '导出较大，将分多个文件下载。浏览器若询问是否允许下载多个文件，请选择允许。'
+    source.enqueue(encoder.encode(row(1) + '\n'))
+    await flushPromises()
+    await nextFrame()
+    expect(dialog().textContent).not.toContain(notice)
+    source.enqueue(encoder.encode([2, 3, 4].map(row).join('\n') + '\n'))
+    await flushPromises()
+    await nextFrame()
+    expect(downloads.length).toBeGreaterThan(0)
+    expect(dialog().textContent).toContain(notice)
+  })
+
+  it('tells how many files a multi-file export should have produced', async () => {
+    await startExport()
+    source.enqueue(
+      encoder.encode(
+        [1, 2, 3, 4].map(row).join('\n') +
+          '\n' +
+          JSON.stringify({ success: true, data: { count: 4 } })
+      )
+    )
+    source.close()
+    await flushPromises()
+    const files = downloads.length
+    expect(files).toBeGreaterThan(1)
+    expect(toast.success).toHaveBeenCalledWith(
+      `已导出 4 条，分 ${files} 个文件；若下载列表中少于 ${files} 个文件，请允许本站下载多个文件后重新导出。`
+    )
+  })
+
+  it('keeps the single-file message unchanged', async () => {
+    await startExport()
+    source.enqueue(
+      encoder.encode(
+        row(1) + '\n' + JSON.stringify({ success: true, data: { count: 1 } })
+      )
+    )
+    source.close()
+    await flushPromises()
+    expect(downloads).toHaveLength(1)
+    expect(toast.success).toHaveBeenCalledWith('已导出 1 条记录')
+  })
+
+  it('stops when the sign-in changes and reports the saved files as partial', async () => {
+    const { button } = await startExport()
+    source.enqueue(encoder.encode([1, 2, 3, 4].map(row).join('\n') + '\n'))
+    await flushPromises()
+    const saved = [...downloads]
+    expect(saved.length).toBeGreaterThan(0)
+    clearAuthBundle()
+    source.enqueue(encoder.encode([5, 6, 7, 8].map(row).join('\n') + '\n'))
+    await flushPromises()
+    expect(downloads).toEqual(saved)
+    expect(cancelStream).toHaveBeenCalledOnce()
+    expect(toast.error).toHaveBeenCalledWith(
+      `登录状态已变化，导出已停止。 已下载的 ${saved.length} 个文件只包含部分记录，请重新导出。`
+    )
+    expect(button('确认')).toBeDefined()
+  })
+
+  it('reports a sign-in change before any file was saved', async () => {
+    await startExport()
+    source.enqueue(encoder.encode(row(1) + '\n'))
+    await flushPromises()
+    clearAuthBundle()
+    source.enqueue(
+      encoder.encode(JSON.stringify({ success: true, data: { count: 1 } }))
+    )
+    source.close()
+    await flushPromises()
+    expect(downloads).toEqual([])
+    expect(toast.error).toHaveBeenCalledWith('登录状态已变化，导出已停止。')
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,9 @@
+import {
+  getAuthSessionSnapshot,
+  isAuthSessionIdentityCurrent,
+} from '@/api/authSession'
 import { exportUserLogs } from '@/api/logExport'
+import { ApiError } from '@/api/types'
 import type { LocaleCode } from '@/i18n'
 import type { LogItem } from '@/types/console'
 import { createExportVolumes } from '@/utils/exportVolumes'
@@ -59,6 +64,7 @@ export function getLogExportValues(
 }
 
 export type LogExportType = 'csv' | 'excel' | 'json'
+export const LOG_EXPORT_SESSION_CHANGED = 'LOG_EXPORT_SESSION_CHANGED'
 
 /** Local 'YYYY-MM-DD' days; an empty string leaves that side open. */
 export interface LogExportRange {
@@ -156,20 +162,26 @@ function volumeFormat(type: LogExportType, headers: readonly string[]) {
 
 /**
  * Streams the caller's logs into files of bounded size. Files already saved
- * stay saved when the export later fails or is cancelled; the unfinished file
- * is discarded.
+ * stay saved when the export later fails, is cancelled or the sign-in
+ * changes; the unfinished file is discarded.
  */
 export async function exportLogFiles(
   request: LogExportRequest
 ): Promise<{ count: number; files: number }> {
   const { format, ext, row } = volumeFormat(request.type, request.headers)
   const today = new Date()
+  // Files of one account must not be saved after another one signed in.
+  const session = getAuthSessionSnapshot()
   const progress = createProgressReporter(
     request.onProgress ?? (() => undefined)
   )
   const volumes = createExportVolumes(
     format,
     (blob, part) => {
+      if (!isAuthSessionIdentityCurrent(session))
+        throw new ApiError('Sign-in changed during the log export', {
+          code: LOG_EXPORT_SESSION_CHANGED,
+        })
       request.save(blob, logExportFilename(request.range, ext, part, today))
       progress.file()
     },

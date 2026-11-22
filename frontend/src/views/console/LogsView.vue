@@ -46,6 +46,7 @@ import LogReasoningEffort from '@/components/console/log-ui/LogReasoningEffort.v
 import {
   exportLogFiles,
   LOG_EXPORT_HEADERS,
+  LOG_EXPORT_SESSION_CHANGED,
   type LogExportProgress,
   type LogExportType,
 } from '@/components/console/log-ui/logExport'
@@ -355,6 +356,8 @@ function download(blob: Blob, filename: string) {
 function exportErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.code === LOG_EXPORT_STALLED)
     return t('logs.exportStalled')
+  if (error instanceof ApiError && error.code === LOG_EXPORT_SESSION_CHANGED)
+    return t('logs.exportSessionChanged')
   return error instanceof ApiError ? error.message : String(error)
 }
 
@@ -781,6 +784,12 @@ onBeforeUnmount(() => {
         />
       </FormField>
       <template #footer>
+        <p
+          v-if="exporting && exportProgress.files > 0"
+          class="mb-2 text-sm text-[var(--text-secondary)]"
+        >
+          {{ t('logs.exportMultipleFiles') }}
+        </p>
         <p
           v-if="exporting"
           class="mb-3 text-sm text-[var(--text-secondary)]"
