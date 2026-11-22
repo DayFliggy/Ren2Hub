@@ -39,6 +39,7 @@ export default {
         '该登录方式未配置，请换用其他方式或联系管理员。',
       oauthInvalidAuthorizationUrl: '登录服务返回的授权地址无效。',
       oauthCancelled: '已取消第三方登录验证。',
+      oauthBrowserMismatch: '登录已过期或在其他浏览器发起，请重新登录。',
       passkeyCancelled: '已取消 Passkey 验证。',
       pluginLoginInvalidResponse: '插件返回的登录步骤无效，请重新登录。',
       pluginLoginInvalidFlow: '插件未建立登录会话，请重新登录。',

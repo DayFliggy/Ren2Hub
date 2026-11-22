@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../client'
 import { completeOAuth, oauthProviders } from '../oauth'
 import { parsePublicStatus } from '../public'
+import { ApiError } from '../types'
 import {
   clearAffiliateAttribution,
   storeAffiliateAttribution,
@@ -119,5 +120,109 @@ describe('OAuth referral and callback contract', () => {
       )
     ).rejects.toMatchObject({ name: 'AbortError', code: 'oauthCancelled' })
     expect(popup.close).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ['OAUTH_FLOW_BROWSER_MISMATCH', { code: 'oauthBrowserMismatch' }],
+    ['FORBIDDEN', { message: 'Forbidden', status: 403, code: 'FORBIDDEN' }],
+  ])('maps only the browser binding failure (%s)', async (code, expected) => {
+    vi.spyOn(api, 'post').mockResolvedValue({ flow_token: 'flow-token' })
+    const get = vi
+      .spyOn(api, 'get')
+      .mockRejectedValue(new ApiError('Forbidden', { status: 403, code }))
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+    } as unknown as Window
+    const result = completeOAuth(
+      { github_oauth: true, github_client_id: 'client' },
+      'github',
+      'login',
+      undefined,
+      undefined,
+      undefined,
+      popup
+    )
+    await flushPromises()
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popup,
+        data: {
+          type: 'ren2hub:oauth-bind-callback',
+          provider: 'github',
+          state: 'flow-token',
+          code: 'authorization-code',
+        },
+      })
+    )
+    await expect(result).rejects.toMatchObject(expected)
+    expect(get).toHaveBeenCalledOnce()
+  })
+
+  it('sends cookies with the state and callback requests', async () => {
+    const sent: Array<{ url: string; credentials: boolean }> = []
+    const replies: unknown[] = [
+      { success: true, data: { flow_token: 'flow-token' } },
+      { success: true, data: { authenticated: true } },
+    ]
+    const nativeOpen = XMLHttpRequest.prototype.open
+    const urls = new WeakMap<XMLHttpRequest, string>()
+    vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(function (
+      this: XMLHttpRequest,
+      method: string,
+      url: string | URL
+    ) {
+      urls.set(this, String(url))
+      nativeOpen.call(this, method, url, true)
+    })
+    vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(function (
+      this: XMLHttpRequest
+    ) {
+      sent.push({ url: urls.get(this)!, credentials: this.withCredentials })
+      const body = JSON.stringify(replies.shift())
+      Object.defineProperties(this, {
+        readyState: { value: 4 },
+        status: { value: 200 },
+        statusText: { value: 'OK' },
+        responseText: { value: body },
+        response: { value: body },
+      })
+      this.getAllResponseHeaders = () => 'content-type: application/json'
+      queueMicrotask(() => this.onloadend?.(new ProgressEvent('loadend')))
+    })
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+    } as unknown as Window
+    const result = completeOAuth(
+      { github_oauth: true, github_client_id: 'client' },
+      'github',
+      'login',
+      undefined,
+      undefined,
+      undefined,
+      popup
+    )
+    await vi.waitFor(() => expect(popup.location.replace).toHaveBeenCalled())
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        source: popup,
+        data: {
+          type: 'ren2hub:oauth-bind-callback',
+          provider: 'github',
+          state: 'flow-token',
+          code: 'authorization-code',
+        },
+      })
+    )
+    await expect(result).resolves.toEqual({ authenticated: true })
+    expect(sent.map((item) => item.credentials)).toEqual([true, true])
+    expect(
+      sent.map((item) => new URL(item.url, location.origin).pathname)
+    ).toEqual(['/api/oauth/state', '/api/oauth/github'])
   })
 })

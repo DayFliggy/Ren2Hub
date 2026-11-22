@@ -44,6 +44,8 @@ export default {
       oauthInvalidAuthorizationUrl:
         'The sign-in provider returned an invalid authorization address.',
       oauthCancelled: 'Third-party sign-in was cancelled.',
+      oauthBrowserMismatch:
+        'This sign-in expired or was started in another browser. Sign in again.',
       passkeyCancelled: 'Passkey verification was cancelled.',
       pluginLoginInvalidResponse:
         'The plugin returned an invalid login step. Start the login again.',

@@ -9,6 +9,7 @@ export type ClientErrorCode =
   | 'oauthProviderUnavailable'
   | 'oauthInvalidAuthorizationUrl'
   | 'oauthCancelled'
+  | 'oauthBrowserMismatch'
   | 'passkeyCancelled'
   | 'pluginLoginInvalidResponse'
   | 'pluginLoginInvalidFlow'

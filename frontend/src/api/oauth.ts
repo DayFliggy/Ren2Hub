@@ -5,6 +5,7 @@ import type { SecurityOperation } from './security'
 import { proofOptions } from './security'
 import { safeExternalUrl } from '@/utils/safeUrl'
 import { ClientError } from './clientError'
+import { ApiError } from './types'
 
 export function oidcDisplayName(status: PublicStatus): string {
   return status.oidc_display_name?.trim() || 'OIDC'
@@ -152,7 +153,14 @@ export async function completeOAuth<T>(
           .catch((error) => {
             finish()
             popup.close()
-            reject(error)
+            // The callback rejects a browser without the cookie set with the
+            // state, e.g. an expired flow or one started elsewhere.
+            reject(
+              error instanceof ApiError &&
+                error.code === 'OAUTH_FLOW_BROWSER_MISMATCH'
+                ? new ClientError('oauthBrowserMismatch')
+                : error
+            )
           })
       }
       const timer = window.setInterval(() => {
