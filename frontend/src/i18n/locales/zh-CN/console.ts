@@ -2056,6 +2056,9 @@ export default {
     emptyHint: '请重新输入筛选条件',
     loadFailed: '日志加载失败',
     exportStalled: '导出连续 60 秒未收到数据，已中止。',
+    exportProgress: '已导出 {count} 条',
+    exportProgressFiles: '已导出 {count} 条，已保存 {files} 个文件',
+    cancelExport: '取消导出',
     exportCancelledPartial:
       '导出已取消，已下载的 {files} 个文件只包含部分记录。',
     exportFailedPartial:

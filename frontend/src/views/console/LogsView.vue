@@ -46,6 +46,7 @@ import LogReasoningEffort from '@/components/console/log-ui/LogReasoningEffort.v
 import {
   exportLogFiles,
   LOG_EXPORT_HEADERS,
+  type LogExportProgress,
   type LogExportType,
 } from '@/components/console/log-ui/logExport'
 import LogPerformanceCell from '@/components/console/log-ui/LogPerformanceCell.vue'
@@ -339,6 +340,7 @@ watch(page, load)
 // ---------- export ----------
 
 const exporting = ref(false)
+const exportProgress = ref<LogExportProgress>({ count: 0, files: 0 })
 let exportController: AbortController | null = null
 
 function download(blob: Blob, filename: string) {
@@ -356,11 +358,17 @@ function exportErrorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : String(error)
 }
 
+/** Stops the running export; files already downloaded stay downloaded. */
+function cancelExport() {
+  exportController?.abort()
+}
+
 async function doExport() {
   exportController?.abort()
   const controller = new AbortController()
   exportController = controller
   exporting.value = true
+  exportProgress.value = { count: 0, files: 0 }
   let savedFiles = 0
   try {
     const {
@@ -370,6 +378,7 @@ async function doExport() {
     } = currentParams(exportStartDate.value, exportEndDate.value)
     const { count, files } = await exportLogFiles({
       filters,
+      range: { start: exportStartDate.value, end: exportEndDate.value },
       type: exportType.value,
       headers: LOG_EXPORT_HEADERS.map((key) => t(`logs.exportHeaders.${key}`)),
       locale: getLocale(),
@@ -377,6 +386,9 @@ async function doExport() {
       save: (blob, filename) => {
         savedFiles++
         download(blob, filename)
+      },
+      onProgress: (progress) => {
+        if (exportController === controller) exportProgress.value = progress
       },
     })
     exportOpen.value = false
@@ -769,7 +781,27 @@ onBeforeUnmount(() => {
         />
       </FormField>
       <template #footer>
-        <ConsoleButton size="lg" block :loading="exporting" @click="doExport">{{
+        <p
+          v-if="exporting"
+          class="mb-3 text-sm text-[var(--text-secondary)]"
+          role="status"
+          aria-live="polite"
+        >
+          {{
+            exportProgress.files > 0
+              ? t('logs.exportProgressFiles', exportProgress)
+              : t('logs.exportProgress', exportProgress)
+          }}
+        </p>
+        <ConsoleButton
+          v-if="exporting"
+          size="lg"
+          block
+          variant="secondary"
+          @click="cancelExport"
+          >{{ t('logs.cancelExport') }}</ConsoleButton
+        >
+        <ConsoleButton v-else size="lg" block @click="doExport">{{
           t('common.confirm')
         }}</ConsoleButton>
       </template>

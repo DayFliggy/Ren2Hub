@@ -76,6 +76,35 @@ for (const [theme, mobile] of [
       mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
     )
     await configureStablePage(page, { theme })
+    // Route fulfilment sends a whole body at once. To show a running export,
+    // fetch answers it with a few rows and keeps the stream open until the
+    // request is aborted.
+    await page.addInitScript((line: string) => {
+      const native = window.fetch.bind(window)
+      window.fetch = (input, init) => {
+        const url = input instanceof Request ? input.url : String(input)
+        const holdExport = (window as { holdExport?: boolean }).holdExport
+        if (!holdExport || !url.includes('/api/log/self/export'))
+          return native(input, init)
+        const signal =
+          init?.signal ?? (input instanceof Request ? input.signal : null)
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(`${line}\n${line}\n${line}\n`)
+            )
+            signal?.addEventListener('abort', () =>
+              controller.error(new DOMException('Aborted', 'AbortError'))
+            )
+          },
+        })
+        return Promise.resolve(
+          new Response(body, {
+            headers: { 'Content-Type': 'application/x-ndjson' },
+          })
+        )
+      }
+    }, JSON.stringify(row))
     let exportURL = ''
     let fail = false
     let busyServer = false
@@ -195,6 +224,7 @@ for (const [theme, mobile] of [
     const download = page.waitForEvent('download')
     await dialog.getByRole('button', { name: '确认', exact: true }).click()
     const file = await download
+    expect(file.suggestedFilename()).toBe('ren2hub-logs-20260701-20260731.csv')
     expect(new URL(exportURL).searchParams.has('group')).toBe(false)
     expect(new URL(exportURL).searchParams.get('start_timestamp')).toBe(
       String(new Date('2026-07-01T00:00:00+08:00').getTime() / 1000)
@@ -245,6 +275,31 @@ for (const [theme, mobile] of [
     if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
       await page.screenshot({ path: testInfo.outputPath('export-busy.png') })
     }
+    // A running export shows its count and turns confirm into cancel.
+    await page.evaluate(() => {
+      ;(window as { holdExport?: boolean }).holdExport = true
+    })
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(
+      dialog.getByRole('status').getByText('已导出 3 条', { exact: true })
+    ).toBeVisible()
+    const cancel = dialog.getByRole('button', { name: '取消导出', exact: true })
+    await expectUnclipped(cancel)
+    await expect(
+      dialog.getByRole('button', { name: '确认', exact: true })
+    ).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
+      await page.screenshot({
+        path: testInfo.outputPath('export-progress.png'),
+      })
+    }
+    await cancel.click()
+    await expect(
+      dialog.getByRole('button', { name: '确认', exact: true })
+    ).toBeVisible()
+    await expect(dialog.getByRole('status')).toHaveCount(0)
+    await expect(dialog).toBeVisible()
     await assertNoHorizontalOverflow(page)
   })
 }

@@ -60,8 +60,20 @@ export function getLogExportValues(
 
 export type LogExportType = 'csv' | 'excel' | 'json'
 
+/** Local 'YYYY-MM-DD' days; an empty string leaves that side open. */
+export interface LogExportRange {
+  start: string
+  end: string
+}
+
+export interface LogExportProgress {
+  count: number
+  files: number
+}
+
 export interface LogExportRequest {
   filters: Record<string, unknown>
+  range: LogExportRange
   type: LogExportType
   /** Localized column titles for CSV and Excel. */
   headers: readonly string[]
@@ -69,7 +81,56 @@ export interface LogExportRequest {
   signal: AbortSignal
   /** Receives each complete file as soon as it is ready. */
   save: (blob: Blob, filename: string) => void
+  /** Called at most once per animation frame while the export runs. */
+  onProgress?: (progress: LogExportProgress) => void
   volumeBytes?: number
+}
+
+function compactLocalDay(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
+}
+
+/** ren2hub-logs-<start|all>-<end|today>[-partN].<ext>, in local dates. */
+export function logExportFilename(
+  range: LogExportRange,
+  ext: string,
+  part: number | null,
+  today = new Date()
+): string {
+  const start = range.start ? range.start.replaceAll('-', '') : 'all'
+  const end = range.end ? range.end.replaceAll('-', '') : compactLocalDay(today)
+  const suffix = part === null ? '' : `-part${part}`
+  return `ren2hub-logs-${start}-${end}${suffix}.${ext}`
+}
+
+/**
+ * Coalesces per-row progress into one report per animation frame, so a
+ * reactive update does not run for every parsed row.
+ */
+function createProgressReporter(report: (progress: LogExportProgress) => void) {
+  const progress: LogExportProgress = { count: 0, files: 0 }
+  let frame: number | null = null
+  const schedule = () => {
+    frame ??= requestAnimationFrame(() => {
+      frame = null
+      report({ ...progress })
+    })
+  }
+  return {
+    row() {
+      progress.count++
+      schedule()
+    },
+    file() {
+      progress.files++
+      schedule()
+    },
+    stop() {
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = null
+    },
+  }
 }
 
 function volumeFormat(type: LogExportType, headers: readonly string[]) {
@@ -102,18 +163,29 @@ export async function exportLogFiles(
   request: LogExportRequest
 ): Promise<{ count: number; files: number }> {
   const { format, ext, row } = volumeFormat(request.type, request.headers)
-  const base = `ren2hub-logs-${new Date().toISOString().slice(0, 10)}`
+  const today = new Date()
+  const progress = createProgressReporter(
+    request.onProgress ?? (() => undefined)
+  )
   const volumes = createExportVolumes(
     format,
-    (blob, part) =>
-      request.save(
-        blob,
-        `${base}${part === null ? '' : `-part${part}`}.${ext}`
-      ),
+    (blob, part) => {
+      request.save(blob, logExportFilename(request.range, ext, part, today))
+      progress.file()
+    },
     request.volumeBytes
   )
-  const count = await exportUserLogs(request.filters, request.signal, (log) =>
-    volumes.append(row(log, request.locale))
-  )
-  return { count, files: volumes.finish() }
+  try {
+    const count = await exportUserLogs(
+      request.filters,
+      request.signal,
+      (log) => {
+        volumes.append(row(log, request.locale))
+        progress.row()
+      }
+    )
+    return { count, files: volumes.finish() }
+  } finally {
+    progress.stop()
+  }
 }

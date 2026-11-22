@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/api/client'
-import { exportLogFiles } from '@/components/console/log-ui/logExport'
+import {
+  exportLogFiles,
+  logExportFilename,
+} from '@/components/console/log-ui/logExport'
 
 // jsdom's Blob has no text(); FileReader is the browser API it does provide.
 function text(blob: Blob): Promise<string> {
@@ -67,6 +70,7 @@ async function run(
   const files: { name: string; blob: Blob }[] = []
   const outcome = exportLogFiles({
     filters: {},
+    range: { start: '2026-07-01', end: '2026-07-31' },
     type,
     headers: ['时间', '模型'],
     locale: 'zh-CN',
@@ -84,7 +88,7 @@ describe('log export files', () => {
     const { files, outcome } = await run('json', [...rows(2), success(2)])
     await expect(outcome).resolves.toEqual({ count: 2, files: 1 })
     expect(files.map((file) => file.name)).toEqual([
-      expect.stringMatching(/^ren2hub-logs-\d{4}-\d{2}-\d{2}\.json$/),
+      'ren2hub-logs-20260701-20260731.json',
     ])
     const parsed = JSON.parse(await text(files[0]!.blob)) as { id: number }[]
     expect(parsed.map((log) => log.id)).toEqual([1, 2])
@@ -95,8 +99,11 @@ describe('log export files', () => {
     const { count, files: total } = await outcome
     expect(count).toBe(10)
     expect(total).toBeGreaterThan(1)
-    expect(files.map((file) => file.name.replace(/^.*-part/, 'part'))).toEqual(
-      Array.from({ length: total }, (_, index) => `part${index + 1}.json`)
+    expect(files.map((file) => file.name)).toEqual(
+      Array.from(
+        { length: total },
+        (_, index) => `ren2hub-logs-20260701-20260731-part${index + 1}.json`
+      )
     )
     const ids: number[] = []
     for (const file of files) {
@@ -173,6 +180,7 @@ describe('log export files', () => {
     const files: string[] = []
     const outcome = exportLogFiles({
       filters: {},
+      range: { start: '', end: '' },
       type: 'json',
       headers: [],
       locale: 'en',
@@ -186,5 +194,106 @@ describe('log export files', () => {
     controller.abort()
     expect(await outcome).toMatchObject({ name: 'AbortError' })
     expect(files).toHaveLength(saved)
+  })
+
+  it('never reports per row and stops reporting once the export ends', async () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    })
+    try {
+      vi.spyOn(api, 'getStream').mockResolvedValue(
+        streamOf([...rows(1200), success(1200)])
+      )
+      const progress: { count: number; files: number }[] = []
+      const outcome = exportLogFiles({
+        filters: {},
+        range: { start: '', end: '' },
+        type: 'json',
+        headers: [],
+        locale: 'en',
+        signal: new AbortController().signal,
+        save: () => undefined,
+        onProgress: (value) => progress.push({ ...value }),
+        volumeBytes: 100_000,
+      })
+      await expect(outcome).resolves.toMatchObject({ count: 1200 })
+      // 1 200 parsed rows produced no synchronous updates.
+      expect(progress).toEqual([])
+      vi.advanceTimersToNextFrame()
+      expect(progress).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows the latest count and saved files on the next frame', async () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    })
+    try {
+      const encoder = new TextEncoder()
+      let source!: ReadableStreamDefaultController<Uint8Array>
+      vi.spyOn(api, 'getStream').mockResolvedValue(
+        new ReadableStream({
+          start: (controller) => void (source = controller),
+        })
+      )
+      const progress: { count: number; files: number }[] = []
+      const saved: string[] = []
+      const outcome = exportLogFiles({
+        filters: {},
+        range: { start: '', end: '' },
+        type: 'json',
+        headers: [],
+        locale: 'en',
+        signal: new AbortController().signal,
+        save: (_blob, name) => saved.push(name),
+        onProgress: (value) => progress.push({ ...value }),
+        volumeBytes: 600,
+      })
+      source.enqueue(encoder.encode(rows(3).join('\n') + '\n'))
+      // vi.waitFor would advance the faked frames; poll with real timers.
+      while (saved.length === 0)
+        await new Promise((resolve) => setTimeout(resolve, 1))
+      expect(progress).toEqual([])
+      vi.advanceTimersToNextFrame()
+      expect(progress).toEqual([{ count: 3, files: saved.length }])
+      vi.advanceTimersToNextFrame()
+      expect(progress).toHaveLength(1)
+      source.enqueue(encoder.encode(success(3)))
+      source.close()
+      await outcome
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('log export filenames', () => {
+  const today = new Date(2026, 6, 27, 23, 30)
+  it.each([
+    ['2026-07-01', '2026-07-31', 'ren2hub-logs-20260701-20260731'],
+    ['2026-07-01', '', 'ren2hub-logs-20260701-20260727'],
+    ['', '2026-07-31', 'ren2hub-logs-all-20260731'],
+    ['', '', 'ren2hub-logs-all-20260727'],
+  ])('names %j to %j after the local dates', (start, end, base) => {
+    expect(logExportFilename({ start, end }, 'csv', null, today)).toBe(
+      `${base}.csv`
+    )
+    expect(logExportFilename({ start, end }, 'xls', 2, today)).toBe(
+      `${base}-part2.xls`
+    )
+  })
+
+  it('uses the local calendar day, not the UTC one', () => {
+    // 00:30 local on 1 August is still 31 July in UTC for zones east of UTC.
+    expect(
+      logExportFilename(
+        { start: '', end: '' },
+        'json',
+        null,
+        new Date(2026, 7, 1, 0, 30)
+      )
+    ).toBe('ren2hub-logs-all-20260801.json')
   })
 })

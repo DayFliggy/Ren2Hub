@@ -2138,6 +2138,9 @@ export default {
     loadFailed: 'Logs could not be loaded',
     exportStalled:
       'The export stopped receiving data for 60 seconds and was cancelled.',
+    exportProgress: 'Exported {count} logs so far',
+    exportProgressFiles: 'Exported {count} logs so far, {files} file(s) saved',
+    cancelExport: 'Cancel export',
     exportCancelledPartial:
       'Export cancelled. The {files} file(s) already downloaded contain only part of the records.',
     exportFailedPartial:
