@@ -1604,6 +1604,8 @@ export default {
     disabled: 'Channel disabled',
     statusUnchanged:
       'Channel status did not change. The list now shows the current server status.',
+    statusUnchangedRefreshFailed:
+      'Channel status did not change. The list could not be refreshed; try again later.',
     balanceUpdated: 'Upstream balance and ratio synced',
     balanceQueryCompleted: 'Upstream balance query completed',
     balanceRawTitle: 'Raw balance response: {name}',

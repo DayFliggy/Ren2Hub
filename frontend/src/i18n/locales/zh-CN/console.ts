@@ -1545,6 +1545,7 @@ export default {
     enabled: '渠道已启用',
     disabled: '渠道已禁用',
     statusUnchanged: '渠道状态未改变，列表已显示服务器上的当前状态',
+    statusUnchangedRefreshFailed: '渠道状态未改变，列表刷新失败，请稍后重试',
     balanceUpdated: '上游额度与倍率已同步',
     balanceQueryCompleted: '上游余额查询完成',
     balanceRawTitle: '余额查询原始响应：{name}',

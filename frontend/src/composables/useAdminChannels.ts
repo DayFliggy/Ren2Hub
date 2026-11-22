@@ -192,8 +192,15 @@ export function useAdminChannels() {
     status.value = ''
   }
 
-  async function load(options: { background?: boolean } = {}) {
-    if (!canRead.value) return
+  /**
+   * Resolves false when this refresh failed and the rows are stale. A request
+   * superseded by a newer load resolves true: the newer load owns the rows and
+   * reports its own failure.
+   */
+  async function load(
+    options: { background?: boolean } = {}
+  ): Promise<boolean> {
+    if (!canRead.value) return false
     const background = options.background === true && rows.value.length > 0
 
     if (background) refreshing.value = true
@@ -215,7 +222,7 @@ export function useAdminChannels() {
       labs.value = categories.items
       return parseChannelPage(response)
     })
-    if (result.stale) return
+    if (result.stale) return true
     loading.value = false
     refreshing.value = false
     if (!result.ok) {
@@ -225,12 +232,13 @@ export function useAdminChannels() {
           : String(result.error)
       if (rows.value.length === 0) initialError.value = message
       else toast.error(message)
-      return
+      return false
     }
     rows.value = result.value.items
     total.value = result.value.total
     typeCounts.value = result.value.type_counts
     initialError.value = ''
+    return true
   }
 
   function reloadFromFirstPage() {
@@ -259,9 +267,15 @@ export function useAdminChannels() {
     setBusy(id, action)
     try {
       const outcome = await request()
-      await load({ background: true })
+      const refreshed = await load({ background: true })
       if (outcome === UNCHANGED) {
-        toast.warning(t('channels.statusUnchanged'))
+        toast.warning(
+          t(
+            refreshed
+              ? 'channels.statusUnchanged'
+              : 'channels.statusUnchangedRefreshFailed'
+          )
+        )
         return false
       }
       toast.success(t(successKey))

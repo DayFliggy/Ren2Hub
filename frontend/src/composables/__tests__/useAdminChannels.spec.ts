@@ -144,6 +144,23 @@ describe('native channel management', () => {
     )
   })
 
+  it('says the refresh failed when the status did not change and the list could not reload', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+    vi.spyOn(api, 'postEnvelope').mockResolvedValue({
+      success: true,
+      data: false,
+      publication_pending: false,
+    })
+    const state = await setup()
+    get.mockRejectedValue(new Error('list unavailable'))
+    expect(await state.toggleStatus(channel)).toBe(false)
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(
+      'channels.statusUnchangedRefreshFailed'
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(state.rows.value.map((row) => row.id)).toEqual([channel.id])
+  })
+
   it('retains the batch changed count and reports pending publication separately', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
     vi.spyOn(api, 'postEnvelope').mockResolvedValue({
