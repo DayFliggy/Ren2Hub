@@ -238,6 +238,26 @@ describe('native channel management', () => {
     }
   )
 
+  it('reports a save whose re-read failed with the server message', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(page)
+    await replyWith('update_read_failure')
+    const state = await setup()
+    expect(
+      await state.updateChannelDetails(channel, {
+        name: 'renamed',
+        models: channel.models,
+        model_mapping: '',
+        priority: 0,
+        weight: 1,
+        max_concurrency: 0,
+      })
+    ).toBe(false)
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      'Channel was updated, but reading the saved channel failed'
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
   it('explains a rejected redacted field instead of the raw server text', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
     await replyWith('redacted_field_invalid')

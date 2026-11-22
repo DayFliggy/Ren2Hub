@@ -30,12 +30,9 @@ const channel: AdminChannel = parseChannelStatusDetails(
   channelSecurity.redacted_channel.body.data
 )
 
-// Local stand-in until the backend fixture lists param_override as well.
-const paramHidden: AdminChannel = {
-  ...channel,
-  param_override: undefined,
-  redacted_fields: [...(channel.redacted_fields ?? []), 'param_override'],
-}
+const paramHidden: AdminChannel = parseChannelStatusDetails(
+  channelSecurity.redacted_param_override.body.data
+)
 
 const overrides = [
   {

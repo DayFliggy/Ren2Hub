@@ -197,6 +197,21 @@ describe('native channel list fixture', () => {
     expect(parseChannelStatusDetails(channel).redacted_fields).toEqual([])
   })
 
+  it.each(['redacted_param_override', 'redacted_plugin_config'] as const)(
+    'drops every hidden field of %s',
+    (name) => {
+      const parsed = parseChannelStatusDetails(channelSecurity[name].body.data)
+      expect(parsed.redacted_fields).toEqual([
+        'header_override',
+        'param_override',
+        'setting',
+        'settings',
+      ])
+      for (const field of parsed.redacted_fields!)
+        expect(parsed).not.toHaveProperty(field)
+    }
+  )
+
   it('hides a redacted param_override like the other override fields', () => {
     const hidden = JSON.stringify({ __ren2hub_redacted__: true })
     const parsed = parseChannelStatusDetails({
