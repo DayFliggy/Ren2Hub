@@ -83,6 +83,16 @@ beforeEach(() => {
     if (path === '/api/performance/routing') return routingFixture()
     if (path === '/api/performance/quality') return qualityFixture()
     if (path === '/api/user/model-catalog') return modelCatalogFixture()
+    if (path === '/api/admin/system/version')
+      return { version: 'v1.0.1', build_type: 'release' }
+    if (path === '/api/admin/system/check-updates')
+      return {
+        current_version: 'v1.0.1',
+        latest_version: 'v1.0.1',
+        has_update: false,
+        build_type: 'release',
+        cached: false,
+      }
     throw new Error(`Unexpected API ${path}`)
   })
   mocks.getEnvelope.mockImplementation(async (path: string) => {
@@ -109,6 +119,7 @@ describe('historical ops layout with native data', () => {
       'resources',
       'storage',
       'tasks',
+      'update',
     ]) {
       expect(view.find(`[data-ops-section="${name}"]`).exists()).toBe(true)
     }
