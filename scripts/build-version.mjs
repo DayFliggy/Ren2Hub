@@ -9,7 +9,7 @@ const ref = process.env.GITHUB_REF || ''
 const version = ref.startsWith('refs/tags/')
   ? ref.slice('refs/tags/'.length)
   : `0.0.0-dev.${source.slice(0, 12)}`
-if (!/^[A-Za-z0-9][A-Za-z0-9.+-]*$/.test(version)) throw new Error('Invalid build version')
+if (ref.startsWith('refs/tags/') && !/^v\d+\.\d+\.\d+$/.test(version)) throw new Error('Expected a vX.Y.Z release tag')
 if (process.argv.includes('--github-env')) {
   if (!process.env.GITHUB_ENV) throw new Error('GITHUB_ENV is missing')
   appendFileSync(process.env.GITHUB_ENV, `VERSION=${version}\nSOURCE_SHA=${source}\n`)

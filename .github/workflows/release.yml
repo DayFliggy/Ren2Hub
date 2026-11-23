@@ -1,20 +1,16 @@
-name: Release (Linux, macOS, Windows)
+name: Ren2Hub Release
+on:
+  push:
+    tags: ['v*']
+
 permissions:
   contents: write
 
 env:
   GOWORK: 'off'
-
-on:
-  workflow_dispatch:
-    inputs:
-      name:
-        description: 'reason'
-        required: false
-  push:
-    tags:
-      - '*'
-      - '!*-alpha*'
+  CGO_ENABLED: '0'
+  GOOS: linux
+  GOARCH: amd64
 
 jobs:
   linux:
@@ -36,7 +32,6 @@ jobs:
       - name: Determine Version
         run: |
           node scripts/build-version.mjs --github-env
-          node scripts/build-version.mjs --json > build-source.json
       - name: Build Frontend
         env:
           CI: ""
@@ -50,140 +45,17 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - name: Build Backend (amd64)
+      - name: Build and package linux/amd64
         run: |
-          go mod download
-          go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$VERSION' -extldflags '-static'" -o new-api-$VERSION
-      - name: Build Backend (arm64)
-        run: |
-          sudo apt-get update
-          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y gcc-aarch64-linux-gnu
-          CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$VERSION' -extldflags '-static'" -o new-api-arm64-$VERSION
-      - name: Generate checksums
-        run: sha256sum new-api-* > checksums-linux.txt
-
+          go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" \
+            -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$VERSION' -X 'github.com/QuantumNous/new-api/common.BuildType=release'" -o ren2hub .
+          archive="ren2hub_${VERSION#v}_linux_amd64.tar.gz"
+          tar -czf "$archive" ren2hub LICENSE NOTICE THIRD-PARTY-LICENSES.md
+          sha256sum "$archive" > checksums.txt
       - name: Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          fail_on_unmatched_files: true
           files: |
-            build-source.json
-            LICENSE
-            NOTICE
-            THIRD-PARTY-LICENSES.md
-            new-api-*
-            checksums-linux.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  macos:
-    name: macOS Release
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: '1.4.0'
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: '24'
-
-      - name: Determine Version
-        run: |
-          node scripts/build-version.mjs --github-env
-          node scripts/build-version.mjs --json > build-source.json
-      - name: Build Frontend
-        env:
-          CI: ""
-          NODE_OPTIONS: "--max-old-space-size=4096"
-        run: |
-          cd frontend
-          bun install --frozen-lockfile
-          bun run build
-          bun ../scripts/prepare-frontend-embed.mjs
-          cd ..
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-      - name: Build Backend
-        run: |
-          go mod download
-          go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" -ldflags "-X 'github.com/QuantumNous/new-api/common.Version=$VERSION'" -o new-api-macos-$VERSION
-      - name: Generate checksums
-        run: shasum -a 256 new-api-macos-* > checksums-macos.txt
-
-      - name: Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            build-source.json
-            LICENSE
-            NOTICE
-            THIRD-PARTY-LICENSES.md
-            new-api-macos-*
-            checksums-macos.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  windows:
-    name: Windows Release
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: '1.4.0'
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: '24'
-
-      - name: Determine Version
-        run: |
-          node scripts/build-version.mjs --github-env
-          node scripts/build-version.mjs --json > build-source.json
-      - name: Build Frontend
-        env:
-          CI: ""
-        run: |
-          cd frontend
-          bun install --frozen-lockfile
-          bun run build
-          bun ../scripts/prepare-frontend-embed.mjs
-          cd ..
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-      - name: Build Backend
-        run: |
-          go mod download
-          go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$VERSION'" -o new-api-$VERSION.exe
-      - name: Generate checksums
-        run: sha256sum new-api-*.exe > checksums-windows.txt
-
-      - name: Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            build-source.json
-            LICENSE
-            NOTICE
-            THIRD-PARTY-LICENSES.md
-            new-api-*.exe
-            checksums-windows.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            ren2hub_*_linux_amd64.tar.gz
+            checksums.txt
