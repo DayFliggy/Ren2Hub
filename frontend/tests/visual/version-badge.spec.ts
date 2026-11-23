@@ -72,13 +72,60 @@ async function gotoDashboard(page: Page) {
   await expect(page.locator('.topbar-nav')).toBeVisible({ timeout: 30_000 })
 }
 
-/** One badge beside the brand: the sidebar from lg up, the top bar below.
- *  It is a sibling of the brand link, never inside it. */
-async function checkPlacement(page: Page, mobile: boolean) {
+type Layout = 'expanded' | 'collapsed' | 'mobile'
+
+async function collapseSidebar(page: Page) {
+  // After the fixture's own init script, which expands the sidebar.
+  await page.addInitScript(() =>
+    window.localStorage.setItem('ren2hub_sidebar_collapsed', 'true')
+  )
+}
+
+/** One badge, a sibling of the brand link: the sidebar from lg up, the top
+ *  bar below. Its dot sits on the top-right corner of the site name, or of
+ *  the logo when the name is hidden, and its target leaves the brand link
+ *  clickable. */
+async function checkPlacement(page: Page, layout: Layout) {
   await expect(badge(page)).toHaveCount(1)
-  const home = mobile ? '.topbar-brand' : 'aside [data-sidebar-version-slot]'
+  const brand =
+    layout === 'mobile'
+      ? '.topbar-brand [data-console-brand-link]'
+      : 'aside.console-sidebar [data-console-brand-link]'
+  const home = layout === 'mobile' ? '.topbar-brand' : 'aside.console-sidebar'
   await expect(page.locator(`${home} [data-version-badge]`)).toBeVisible()
   await expect(page.locator('a [data-version-badge]')).toHaveCount(0)
+
+  const mark = page.locator(
+    `${brand} ${layout === 'expanded' ? 'span' : 'img'}`
+  )
+  const corner = (await mark.boundingBox())!
+  const dot = (await badge(page).locator('.version-badge-dot').boundingBox())!
+  expect(
+    Math.abs(dot.x + dot.width / 2 - (corner.x + corner.width))
+  ).toBeLessThanOrEqual(8)
+  expect(Math.abs(dot.y + dot.height / 2 - corner.y)).toBeLessThanOrEqual(8)
+  if (layout !== 'mobile') {
+    const aside = (await page.locator('aside.console-sidebar').boundingBox())!
+    expect(dot.x + dot.width).toBeLessThanOrEqual(aside.x + aside.width)
+    expect(dot.y).toBeGreaterThanOrEqual(aside.y)
+  }
+
+  // 44px, except beside the logo of the 64px collapsed sidebar, where a
+  // 44px target would cover the logo link; 24px is the minimum there.
+  const target = (await badge(page).boundingBox())!
+  const size = layout === 'collapsed' ? 24 : 44
+  expect(Math.min(target.width, target.height)).toBeGreaterThanOrEqual(size)
+  for (const part of layout === 'expanded' ? ['img', 'span'] : ['img']) {
+    const box = (await page.locator(`${brand} ${part}`).boundingBox())!
+    const hit = await page.evaluate(
+      ({ x, y, selector }) =>
+        document
+          .querySelector(selector)!
+          .contains(document.elementFromPoint(x, y)),
+      { x: box.x + box.width / 2, y: box.y + box.height / 2, selector: brand }
+    )
+    expect(hit).toBe(true)
+  }
 }
 
 /** The panel must stay inside the viewport, scroll nothing sideways, and on
@@ -122,12 +169,12 @@ for (const [theme, mobile] of [
     await configureStablePage(page, { theme })
     await mockRelease(page)
     await gotoDashboard(page)
-    await checkPlacement(page, mobile)
+    await checkPlacement(page, mobile ? 'mobile' : 'expanded')
     await expect(badge(page)).toHaveAttribute(
       'aria-label',
-      '版本 v1.0.1，有新版本'
+      '版本 v1.0.1，有新版本 v1.0.2'
     )
-    await expect(badge(page).locator('[data-version-badge-dot]')).toBeVisible()
+    await expect(badge(page)).toHaveAttribute('data-version-tone', 'warning')
 
     await badge(page).click()
     await expect(panel(page)).toHaveAttribute('data-version-state', 'update')
@@ -161,7 +208,11 @@ for (const [theme, mobile] of [
     await expect(
       panel(page).locator('[data-version-restart-needed]')
     ).toContainText('程序已替换，重启后生效。')
-    await expect(badge(page).locator('[data-version-badge-dot]')).toHaveCount(0)
+    await expect(badge(page)).toHaveAttribute('data-version-tone', 'warning')
+    await expect(badge(page)).toHaveAttribute(
+      'aria-label',
+      /^版本 .+，已替换，重启后生效$/
+    )
     await checkPanel(page, mobile)
     await captureEvidence(page, {
       path: testInfo.outputPath(`update-restart-${theme}-${viewport}.png`),
@@ -187,7 +238,11 @@ for (const [theme, mobile] of [
     })
     const api = recordApi(page)
     await gotoDashboard(page)
-    await expect(badge(page).locator('[data-version-badge-dot]')).toHaveCount(0)
+    await expect(badge(page)).toHaveAttribute('data-version-tone', 'neutral')
+    await expect(badge(page)).toHaveAttribute(
+      'aria-label',
+      '版本 v1.0.1，已是最新'
+    )
     await badge(page).click()
     await expect(panel(page)).toHaveAttribute('data-version-state', 'current')
     await expect(panel(page)).toContainText('已是最新')
@@ -210,25 +265,79 @@ for (const [theme, mobile] of [
   })
 }
 
-test('collapsed sidebar hides the badge until it expands', async ({
+/** The dot in each tone and layout, shot as the brand area it sits in. */
+const DOT_STATES = {
+  current: { tone: 'neutral', label: '版本 v1.0.1，已是最新' },
+  update: { tone: 'warning', label: '版本 v1.0.1，有新版本 v1.0.2' },
+  error: { tone: 'danger', label: /^版本 .+，无法检查更新$/ },
+} as const
+for (const theme of ['light', 'dark'] as const) {
+  for (const state of Object.keys(DOT_STATES) as (keyof typeof DOT_STATES)[]) {
+    for (const layout of ['expanded', 'collapsed', 'mobile'] as const) {
+      test(`version dot ${state} ${theme} ${layout}`, async ({
+        page,
+      }, testInfo) => {
+        const mobile = layout === 'mobile'
+        await page.setViewportSize(
+          mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }
+        )
+        await configureStablePage(page, {
+          theme,
+          expectedApiErrors:
+            state === 'error'
+              ? { '/api/admin/system/check-updates': [502] }
+              : undefined,
+        })
+        if (layout === 'collapsed') await collapseSidebar(page)
+        if (state === 'error') {
+          await page.route('**/api/admin/system/check-updates?*', (route) =>
+            route.fulfill({
+              status: 502,
+              json: { success: false, message: 'no release' },
+            })
+          )
+        } else {
+          await mockRelease(
+            page,
+            state === 'current'
+              ? { latest_version: 'v1.0.1', has_update: false }
+              : {}
+          )
+        }
+        await gotoDashboard(page)
+        const expected = DOT_STATES[state]
+        await expect(badge(page)).toHaveAttribute(
+          'data-version-tone',
+          expected.tone
+        )
+        await expect(badge(page)).toHaveAttribute('aria-label', expected.label)
+        await checkPlacement(page, layout)
+        await assertNoHorizontalOverflow(page)
+        await captureEvidence(page, {
+          path: testInfo.outputPath(
+            `update-dot-${state}-${theme}-${layout}.png`
+          ),
+          clip: { x: 0, y: 0, width: mobile ? 390 : 320, height: 96 },
+        })
+      })
+    }
+  }
+}
+
+test('the dot moves from the logo to the name when the sidebar expands', async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await configureStablePage(page, { theme: 'light' })
-  // After the fixture's own init script, which expands the sidebar.
-  await page.addInitScript(() =>
-    window.localStorage.setItem('ren2hub_sidebar_collapsed', 'true')
-  )
+  await collapseSidebar(page)
   await mockRelease(page)
   await gotoDashboard(page)
-  await expect(badge(page)).toHaveCount(1)
-  await expect(badge(page)).toBeHidden()
-  await assertNoHorizontalOverflow(page)
-  await captureEvidence(page, {
-    path: testInfo.outputPath('update-collapsed-light-desktop.png'),
-  })
+  await checkPlacement(page, 'collapsed')
   await page.locator('aside .console-sidebar__collapse').click()
-  await checkPlacement(page, false)
+  await checkPlacement(page, 'expanded')
+  await badge(page).click()
+  await expect(panel(page)).toHaveAttribute('data-version-state', 'update')
+  await checkPanel(page, false)
 })
 
 test('one badge keeps its state across the lg breakpoint', async ({ page }) => {
@@ -254,7 +363,7 @@ test('one badge keeps its state across the lg breakpoint', async ({ page }) => {
   await expect(panel(page)).toHaveCount(0)
   const before = checks
   await page.setViewportSize({ width: 390, height: 844 })
-  await checkPlacement(page, true)
+  await checkPlacement(page, 'mobile')
   await badge(page).click()
   // The same instance moved: the pending restart is still there and the
   // move started no second check.
@@ -272,7 +381,10 @@ test('version badge source build', async ({ page }, testInfo) => {
   await mockRelease(page, { build_type: 'source', current_version: 'dev' })
   const api = recordApi(page)
   await gotoDashboard(page)
-  await expect(badge(page)).toContainText('dev')
+  await expect(badge(page)).toHaveAttribute(
+    'aria-label',
+    '版本 dev，有新版本 v1.0.2'
+  )
   await badge(page).click()
   await expect(panel(page)).toHaveAttribute(
     'data-version-state',

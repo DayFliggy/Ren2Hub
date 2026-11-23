@@ -124,6 +124,10 @@ async function openPanel() {
 }
 const panelState = () =>
   page.get('[data-version-panel]').attributes('data-version-state')
+const tone = () =>
+  page.get('[data-version-badge]').attributes('data-version-tone')
+const badgeLabel = () =>
+  page.get('[data-version-badge]').attributes('aria-label')
 const openDialog = () =>
   wrapper!.findAllComponents(ConfirmDialog).find((d) => d.props('open'))!
 async function confirm() {
@@ -197,7 +201,7 @@ describe('version badge', () => {
     }
   )
 
-  it('shows the running version with a dot when a release is newer', async () => {
+  it('marks a newer release with a warning dot and names both versions', async () => {
     const view = await setup()
     expect(mocks.get).toHaveBeenCalledTimes(1)
     expect(mocks.get).toHaveBeenCalledWith(
@@ -206,17 +210,19 @@ describe('version badge', () => {
       expect.anything()
     )
     const badge = view.get('[data-version-badge]')
-    expect(badge.text()).toBe('v1.0.1')
+    // The brand shows no version text; the label and the panel carry it.
+    expect(badge.text()).toBe('')
     expect(badge.attributes('aria-label')).toBe(
-      'Version v1.0.1, update available'
+      'Version v1.0.1, v1.0.2 available'
     )
-    expect(view.find('[data-version-badge-dot]').exists()).toBe(true)
+    expect(tone()).toBe('warning')
   })
 
-  it('shows no dot for an up-to-date release', async () => {
+  it('keeps the dot neutral for an up-to-date release', async () => {
     replies['/api/admin/system/check-updates'] = upToDate()
-    const view = await setup()
-    expect(view.find('[data-version-badge-dot]').exists()).toBe(false)
+    await setup()
+    expect(tone()).toBe('neutral')
+    expect(badgeLabel()).toBe('Version v1.0.1, up to date')
     const panel = await openPanel()
     expect(panelState()).toBe('current')
     expect(panel.get('[data-version-current]').text()).toBe('v1.0.1')
@@ -310,6 +316,8 @@ describe('version badge', () => {
       'Could not reach GitHub for release information.'
     )
     expect(panel.text()).not.toContain('server says')
+    expect(tone()).toBe('danger')
+    expect(badgeLabel()).toMatch(/, could not check for updates$/)
     expect(panel.find('[data-version-update-now]').exists()).toBe(false)
     replies['/api/admin/system/check-updates'] = upToDate()
     await view.get('[data-version-retry]').trigger('click')
@@ -396,7 +404,9 @@ describe('version badge', () => {
     const notice = view.get('[data-version-restart-needed]').text()
     expect(notice).toContain('The program was replaced. Restart to apply it.')
     expect(notice).not.toContain('v1.0.2')
-    expect(view.find('[data-version-badge-dot]').exists()).toBe(false)
+    expect(tone()).toBe('warning')
+    // The cleared check leaves the running version to /api/status, unset here.
+    expect(badgeLabel()).toMatch(/, replaced; restart to apply$/)
     expect(view.find('[data-version-update-now]').exists()).toBe(false)
     expect(view.find('[data-version-restart-service]').exists()).toBe(false)
   })
@@ -407,7 +417,7 @@ describe('version badge', () => {
       current_version: 'v1.0.2',
       latest_version: 'v1.0.2',
     }
-    const view = await setup()
+    await setup()
     replies['/api/admin/system/check-updates'] = check({
       current_version: 'v1.0.2',
       has_update: false,
@@ -419,7 +429,8 @@ describe('version badge', () => {
       expect.anything()
     )
     expect(panelState()).toBe('current')
-    expect(view.get('[data-version-badge]').text()).toBe('v1.0.2')
+    expect(tone()).toBe('neutral')
+    expect(badgeLabel()).toBe('Version v1.0.2, up to date')
   })
 
   it('ignores a second update while the first runs', async () => {
@@ -456,6 +467,7 @@ describe('version badge', () => {
     await startUpdate()
     expect(panelState()).toBe('action-error')
     expect(errorText()).toContain(text)
+    expect(tone()).toBe('danger')
     // The server may have failed to restore the old binary as well.
     expect(errorText()).not.toContain('restored')
     expect(view.text()).not.toContain('server says')

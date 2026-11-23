@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ExternalLink,
   RefreshCw,
-  Tag,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { publicApi } from '@/api/public'
@@ -36,8 +35,9 @@ import VersionRollback from './VersionRollback.vue'
 import './version.css'
 
 /**
- * Root version badge after Sub2API's VersionBadge: the brand area shows the
- * running version with a dot when a release is newer; the panel shows one
+ * Root version badge after Sub2API's VersionBadge: a status dot at the
+ * top-right corner of the brand name, or of the logo when the name is hidden.
+ * Its colour and label give the state; the panel shows the version and one
  * state at a time. Operations live here, not in the panel, so closing the
  * panel never cancels them and reopening shows their progress or result.
  * The top bar mounts it only for Root and keys it by account, so a lost role
@@ -103,6 +103,33 @@ const state = computed(() => {
   if (!info.value) return 'loading'
   if (info.value.has_update) return isRelease.value ? 'update' : 'source-update'
   return 'current'
+})
+
+/** The dot's colour: neutral while current or loading, warning while
+ *  something waits for the admin, danger after a failure. */
+const tone = computed(() => {
+  if (state.value === 'action-error' || state.value === 'check-error')
+    return 'danger'
+  if (state.value === 'current' || state.value === 'loading') return 'neutral'
+  return 'warning'
+})
+const badgeLabel = computed(() => {
+  const version = current.value
+  const latest = displayVersion(info.value?.latest_version ?? '')
+  const key = {
+    restarting:
+      restartState.value === 'waiting'
+        ? 'badgeRestarting'
+        : 'badgeRestartUnknown',
+    'action-error': 'badgeActionFailed',
+    'check-error': 'badgeCheckFailed',
+    'restart-needed': 'badgeRestart',
+    loading: 'badgeChecking',
+    update: 'badgeUpdate',
+    'source-update': 'badgeUpdate',
+    current: 'badgeCurrent',
+  }[state.value]
+  return t(key, { version, latest })
 })
 
 function message(cause: unknown, context: ErrorContext) {
@@ -284,27 +311,15 @@ onBeforeUnmount(() => {
     <button
       ref="trigger"
       type="button"
-      class="version-badge focus-ring"
+      class="version-badge"
       data-version-badge
-      :aria-label="
-        hasUpdate
-          ? t('badgeUpdate', { version: current })
-          : t('badge', { version: current })
-      "
+      :data-version-tone="tone"
+      :aria-label="badgeLabel"
       aria-haspopup="dialog"
       :aria-expanded="open"
       @click="toggle"
     >
-      <span class="version-badge-tag">
-        <Tag :size="14" class="version-badge-icon" aria-hidden="true" />
-        <span class="version-badge-text">{{ current }}</span>
-        <span
-          v-if="hasUpdate"
-          class="version-badge-dot"
-          aria-hidden="true"
-          data-version-badge-dot
-        />
-      </span>
+      <span class="version-badge-dot" aria-hidden="true" />
     </button>
 
     <Teleport to="body">

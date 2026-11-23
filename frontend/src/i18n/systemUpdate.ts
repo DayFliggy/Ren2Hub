@@ -1,7 +1,13 @@
-// Messages of the Root version badge in the console top bar.
+// Messages of the Root version badge in the console brand area.
 const zh = {
-  badge: '版本 {version}',
-  badgeUpdate: '版本 {version}，有新版本',
+  badgeChecking: '版本 {version}，正在检查更新',
+  badgeCurrent: '版本 {version}，已是最新',
+  badgeUpdate: '版本 {version}，有新版本 {latest}',
+  badgeRestart: '版本 {version}，已替换，重启后生效',
+  badgeRestarting: '版本 {version}，正在重启',
+  badgeRestartUnknown: '版本 {version}，重启结果未确认',
+  badgeCheckFailed: '版本 {version}，无法检查更新',
+  badgeActionFailed: '版本 {version}，操作失败',
   title: '版本与更新',
   refresh: '检查更新',
   checking: '正在检查更新…',
@@ -64,8 +70,14 @@ const zh = {
 }
 
 const en: typeof zh = {
-  badge: 'Version {version}',
-  badgeUpdate: 'Version {version}, update available',
+  badgeChecking: 'Version {version}, checking for updates',
+  badgeCurrent: 'Version {version}, up to date',
+  badgeUpdate: 'Version {version}, {latest} available',
+  badgeRestart: 'Version {version}, replaced; restart to apply',
+  badgeRestarting: 'Version {version}, restarting',
+  badgeRestartUnknown: 'Version {version}, restart not confirmed',
+  badgeCheckFailed: 'Version {version}, could not check for updates',
+  badgeActionFailed: 'Version {version}, the operation failed',
   title: 'Version and updates',
   refresh: 'Check for updates',
   checking: 'Checking for updates…',

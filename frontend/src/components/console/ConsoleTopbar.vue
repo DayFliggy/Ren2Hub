@@ -91,33 +91,42 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <RouterLink
-          :to="{ name: 'dashboard' }"
-          class="flex min-h-11 items-center gap-2.5 sm:min-h-0"
-          aria-current-value="false"
-          data-console-brand-link
-          :aria-label="`${app.systemName} ${t('nav.dashboard')}`"
-        >
-          <img
-            :src="app.logo"
-            alt=""
-            aria-hidden="true"
-            class="pencil-brand-frame h-8 w-8 shrink-0 object-contain"
-            style="filter: var(--brand-icon-shadow)"
-          />
-          <span
-            class="display-title hidden whitespace-nowrap text-lg font-bold tracking-tight text-[var(--text-primary)] sm:inline"
-            >{{ app.systemName }}</span
-          >
-        </RouterLink>
-        <!-- One badge for the console, beside the brand: here below lg, moved
-             into the sidebar brand at lg and above. The move keeps the same
+        <!-- One badge for the console at the top-right corner of the name, or
+             of the logo while the name is hidden: here below lg, moved into
+             the sidebar brand at lg and above. The move keeps the same
              instance, so a running update survives a breakpoint change.
              Keyed by account: a lost Root role or another account unmounts
              the badge, which ends the old account's restart watch. -->
-        <Teleport defer to="[data-sidebar-version-slot]" :disabled="!isDesktop">
-          <VersionBadge v-if="auth.isRoot" :key="auth.user?.id" />
-        </Teleport>
+        <div class="topbar-brand-mark relative flex min-w-0 items-center">
+          <RouterLink
+            :to="{ name: 'dashboard' }"
+            class="flex min-h-11 items-center gap-2.5 sm:min-h-0"
+            aria-current-value="false"
+            data-console-brand-link
+            :aria-label="`${app.systemName} ${t('nav.dashboard')}`"
+          >
+            <img
+              :src="app.logo"
+              alt=""
+              aria-hidden="true"
+              class="pencil-brand-frame h-8 w-8 shrink-0 object-contain"
+              style="filter: var(--brand-icon-shadow)"
+            />
+            <span
+              class="display-title hidden whitespace-nowrap text-lg font-bold tracking-tight text-[var(--text-primary)] sm:inline"
+              >{{ app.systemName }}</span
+            >
+          </RouterLink>
+          <div class="version-anchor">
+            <Teleport
+              defer
+              to="[data-sidebar-version-slot]"
+              :disabled="!isDesktop"
+            >
+              <VersionBadge v-if="auth.isRoot" :key="auth.user?.id" />
+            </Teleport>
+          </div>
+        </div>
       </div>
 
       <!-- center nav (desktop) -->
@@ -297,6 +306,16 @@ html.dark .topbar-header {
   }
   .topbar-brand {
     gap: 8px;
+  }
+  /* The version badge hangs from the logo's corner (32px logo) on phones and
+     from the name's corner once the name shows. */
+  .topbar-brand-mark {
+    --version-anchor-rise: 16px;
+  }
+  @media (min-width: 640px) {
+    .topbar-brand-mark {
+      --version-anchor-rise: 0.5rem;
+    }
   }
   .topbar-brand [data-console-brand-link] {
     min-height: 44px;

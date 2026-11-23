@@ -1,67 +1,65 @@
-/* Root version badge in the console brand area and its panel. Only shared
-   theme tokens: light keeps the original look, dark follows B1 Studio. The
-   button is the 44px target; the tag inside it is the small visible label. */
+/* Root version badge and its panel. Only shared theme tokens: light keeps
+   the original look, dark follows B1 Studio.
+
+   The brand that holds the badge marks the point it hangs from with
+   .version-anchor: the top-right corner of the site name, or of the logo when
+   the name is hidden. The brand sets --version-anchor-rise (from its middle
+   up to that corner) and, when its link is wider than the logo,
+   --version-anchor-inset (from its right edge back to the logo). */
+.version-anchor {
+  position: absolute;
+  top: calc(50% - var(--version-anchor-rise, 0px));
+  left: calc(100% - var(--version-anchor-inset, 0px));
+  width: 0;
+  height: 0;
+}
+
+/* The button is a transparent 44px target hanging right and down from the
+   corner, away from the brand link; only the dot at its top-left shows. Sized
+   in px like an icon, so enlarged text does not push it out of the bar. */
 .version-badge {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.75rem;
-  height: 2.75rem;
+  position: absolute;
+  top: -6px;
+  left: -2px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--shape-control);
-  color: var(--text-secondary);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
-.version-badge-tag {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9999px;
-  background: var(--surface-muted);
-  line-height: 1.25rem;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
-}
-.version-badge:hover .version-badge-tag {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-.version-badge-text {
-  max-width: 6rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.version-badge-icon {
-  display: none;
-}
-/* A narrow phone or enlarged text leaves no room for the version text in the
-   bar; the tag becomes an icon and keeps the dot and the button's label. */
-@container console-topbar (max-width: 23.9375rem) {
-  .version-badge-tag {
-    padding: 0.3125rem;
-  }
-  .version-badge-text {
-    display: none;
-  }
-  .version-badge-icon {
-    display: block;
-  }
+.version-badge:focus-visible {
+  outline: none;
 }
 .version-badge-dot {
   position: absolute;
-  top: -0.1875rem;
-  right: -0.1875rem;
-  width: 0.5rem;
-  height: 0.5rem;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
   border-radius: 9999px;
-  background: var(--status-warning);
+  background: var(--text-tertiary);
   box-shadow: 0 0 0 2px var(--surface-solid);
+  transition: background-color 0.15s;
+}
+.version-badge:focus-visible .version-badge-dot {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.version-badge[data-version-tone='warning'] .version-badge-dot {
+  background: var(--status-warning);
+}
+.version-badge[data-version-tone='danger'] .version-badge-dot {
+  background: var(--status-danger);
+}
+/* A collapsed sidebar leaves 18px beside the logo: the target is centred on
+   the dot at the 24px minimum instead of covering the logo link. */
+.version-anchor-compact .version-badge {
+  top: -14px;
+  left: -10px;
+  width: 24px;
+  height: 24px;
+}
+.version-anchor-compact .version-badge-dot {
+  top: 8px;
+  left: 8px;
 }
 
 /* Placed by useFloatingPanel with fixed coordinates under the badge. */
