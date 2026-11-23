@@ -18,6 +18,11 @@ export function closeModalDialog(dialog: symbol): void {
   if (index !== -1) openDialogs.splice(index, 1)
 }
 
+/** Whether any modal dialog is open. A closing dialog has already left. */
+export function hasOpenModalDialog(): boolean {
+  return openDialogs.length > 0
+}
+
 /** Whether `dialog` is the open dialog that handles global Escape and Tab. */
 export function isTopmostModalDialog(dialog: symbol): boolean {
   return openDialogs.at(-1) === dialog

@@ -23,11 +23,10 @@ const release = {
 }
 
 describe('system update API contract', () => {
-  it('calls the six endpoints with the contract paths, methods and bodies', async () => {
+  it('calls the five endpoints with the contract paths, methods and bodies', async () => {
     const signal = new AbortController().signal
     const get = vi
       .spyOn(api, 'get')
-      .mockResolvedValueOnce({ version: 'v1.0.1', build_type: 'release' })
       .mockResolvedValueOnce({
         current_version: 'v1.0.1',
         latest_version: 'v1.0.1',
@@ -42,7 +41,6 @@ describe('system update API contract', () => {
       .mockResolvedValueOnce({ need_restart: true, version: '1.0.0' })
       .mockResolvedValueOnce({ restarting: true })
 
-    await systemUpdateApi.version(signal)
     await systemUpdateApi.checkUpdates(true, signal)
     await systemUpdateApi.rollbackVersions(signal)
     await systemUpdateApi.update()
@@ -50,11 +48,10 @@ describe('system update API contract', () => {
     await systemUpdateApi.restart()
 
     expect(get.mock.calls).toEqual([
-      ['/api/admin/system/version', undefined, { signal }],
       ['/api/admin/system/check-updates', { force: true }, expect.anything()],
       ['/api/admin/system/rollback-versions', undefined, expect.anything()],
     ])
-    expect(get.mock.calls[1]![2]).toMatchObject({ signal })
+    expect(get.mock.calls[0]![2]).toMatchObject({ signal })
     expect(post.mock.calls).toEqual([
       [
         '/api/admin/system/update',
@@ -73,9 +70,8 @@ describe('system update API contract', () => {
     expect(LONG_OPERATION_TIMEOUT_MS).toBe(330_000)
   })
 
-  it('parses version, check, rollback list and action results', async () => {
+  it('parses check, rollback list and action results', async () => {
     vi.spyOn(api, 'get')
-      .mockResolvedValueOnce({ version: 'v1.0.1', build_type: 'source' })
       .mockResolvedValueOnce({
         current_version: 'v1.0.1',
         latest_version: 'v1.0.2',
@@ -111,10 +107,6 @@ describe('system update API contract', () => {
       .mockResolvedValueOnce({ need_restart: true, version: '1.0.1' })
       .mockResolvedValueOnce({ restarting: true })
 
-    expect(await systemUpdateApi.version()).toEqual({
-      version: 'v1.0.1',
-      build_type: 'source',
-    })
     expect(await systemUpdateApi.checkUpdates(false)).toEqual({
       current_version: 'v1.0.1',
       latest_version: 'v1.0.2',
@@ -151,10 +143,26 @@ describe('system update API contract', () => {
     const invalid = { status: 502, code: 'INVALID_RESPONSE' }
     const get = vi.spyOn(api, 'get')
     const post = vi.spyOn(api, 'post')
-    get.mockResolvedValueOnce({ version: 'v1.0.1', build_type: 'docker' })
-    await expect(systemUpdateApi.version()).rejects.toMatchObject(invalid)
-    get.mockResolvedValueOnce({ version: '', build_type: 'release' })
-    await expect(systemUpdateApi.version()).rejects.toMatchObject(invalid)
+    get.mockResolvedValueOnce({
+      current_version: 'v1.0.1',
+      latest_version: 'v1.0.2',
+      has_update: true,
+      build_type: 'docker',
+      cached: false,
+    })
+    await expect(systemUpdateApi.checkUpdates(false)).rejects.toMatchObject(
+      invalid
+    )
+    get.mockResolvedValueOnce({
+      current_version: '',
+      latest_version: 'v1.0.2',
+      has_update: true,
+      build_type: 'release',
+      cached: false,
+    })
+    await expect(systemUpdateApi.checkUpdates(false)).rejects.toMatchObject(
+      invalid
+    )
     get.mockResolvedValueOnce({
       current_version: 'v1.0.1',
       latest_version: 'v1.0.2',

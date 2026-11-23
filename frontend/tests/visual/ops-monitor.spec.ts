@@ -24,7 +24,6 @@ const SECTIONS = [
   'resources',
   'storage',
   'tasks',
-  'update',
 ]
 const section = (page: Page, name: string) =>
   page.locator(`[data-ops-section="${name}"]`)
@@ -172,16 +171,8 @@ for (const [theme, mobile] of [
       const tops = boxes.map((box) => box!.y)
       expect(tops).toEqual([...tops].sort((a, b) => a - b))
     } else {
-      const [
-        status,
-        quality,
-        upstream,
-        gateway,
-        resources,
-        storage,
-        tasks,
-        update,
-      ] = boxes
+      const [status, quality, upstream, gateway, resources, storage, tasks] =
+        boxes
       expect(status!.y).toBeLessThan(quality!.y)
       expect(upstream!.x).toBeGreaterThan(quality!.x)
       expect(gateway!.y).toBeGreaterThan(quality!.y)
@@ -189,8 +180,6 @@ for (const [theme, mobile] of [
       expect(storage!.x).toBeGreaterThan(resources!.x)
       expect(storage!.y).toBe(resources!.y)
       expect(tasks!.width).toBeGreaterThan(quality!.width)
-      expect(update!.y).toBeGreaterThan(tasks!.y)
-      expect(update!.width).toBe(tasks!.width)
     }
     const history = page.locator('[data-ops-task-history]')
     await history.getByRole('button', { name: '展开' }).click()
@@ -214,7 +203,8 @@ for (const [theme, mobile] of [
       '/api/performance/quality',
       '/api/user/model-catalog',
       '/api/system-task/list',
-      '/api/admin/system/version',
+      // The Root version badge in the top bar.
+      '/api/admin/system/check-updates',
     ])
       expect(api.has(path), path).toBe(true)
   })
@@ -619,10 +609,7 @@ test('the window selector reloads native server resource history', async ({
 test('english labels render without raw keys', async ({ page }) => {
   await configureStablePage(page, { theme: 'light', locale: 'en' })
   await mockOps(page)
-  await mockRelease(page)
   await gotoOps(page)
-  await expect(section(page, 'update')).toContainText('Version and updates')
-  await expect(section(page, 'update')).toContainText('Update to v1.0.2')
   await expect(
     page.getByRole('heading', { level: 1, name: 'Ops monitor' })
   ).toBeVisible()
@@ -630,156 +617,7 @@ test('english labels render without raw keys', async ({ page }) => {
     'Observations with most samples'
   )
   expect(await page.locator('[data-ops-page]').innerText()).not.toMatch(
-    /\b(?:ops|gateway|quality|storage|tasks|update)\.[a-z]/
+    /\b(?:ops|gateway|quality|storage|tasks)\.[a-z]/
   )
   await assertNoHorizontalOverflow(page)
-})
-
-const RELEASE_URL = 'https://github.com/DayFliggy/Ren2Hub/releases/tag/v1.0.2'
-async function mockRelease(page: Page) {
-  await page.route('**/api/admin/system/version', (route) =>
-    route.fulfill(ok({ version: 'v1.0.1', build_type: 'release' }))
-  )
-  await page.route('**/api/admin/system/check-updates?*', (route) =>
-    route.fulfill(
-      ok({
-        current_version: 'v1.0.1',
-        latest_version: 'v1.0.2',
-        has_update: true,
-        build_type: 'release',
-        cached: false,
-        release_info: {
-          name: 'Ren2Hub v1.0.2',
-          body: '## 修复\n\n- 路由在高并发下的**排队**问题\n- 日志导出改为流式下载，详见 [文档](https://example.com/docs)\n\n```\nren2hub-app.py upgrade --version v1.0.2\n```',
-          published_at: '2026-11-20T08:00:00Z',
-          html_url: RELEASE_URL,
-        },
-      })
-    )
-  )
-  await page.route('**/api/admin/system/rollback-versions', (route) =>
-    route.fulfill(
-      ok({
-        versions: [
-          {
-            version: '1.0.0',
-            published_at: '2026-11-01T00:00:00Z',
-            html_url: RELEASE_URL.replace('1.0.2', '1.0.0'),
-          },
-        ],
-      })
-    )
-  )
-  await page.route('**/api/admin/system/update', (route) =>
-    route.fulfill(ok({ need_restart: true }))
-  )
-}
-
-/** Card controls under 44px on a touch-sized viewport. Inline links inside
- *  the release notes are prose and keep the text line height. */
-async function smallTargets(page: Page) {
-  return section(page, 'update')
-    .locator('button, [data-update-link]')
-    .evaluateAll((nodes) =>
-      nodes
-        .filter((node) => node.getBoundingClientRect().height < 44)
-        .map((node) => node.textContent?.trim())
-    )
-}
-
-for (const [theme, mobile] of [
-  ['light', false],
-  ['dark', false],
-  ['light', true],
-  ['dark', true],
-] as const) {
-  const viewport = mobile ? 'mobile' : 'desktop'
-  test(`version card release ${theme} ${viewport}`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize(
-      mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }
-    )
-    await configureStablePage(page, { theme })
-    await mockOps(page)
-    await mockRelease(page)
-    await gotoOps(page)
-    const card = section(page, 'update')
-    await expect(card).toContainText('版本与更新')
-    await expect(card.locator('[data-update-current]')).toContainText('v1.0.1')
-    await expect(card.locator('[data-update-latest]')).toContainText('v1.0.2')
-    await expect(card).toContainText('有新版本')
-    await expect(card.locator('[data-update-notes] h3')).toHaveText('修复')
-    await expect(card.locator('[data-update-link]')).toHaveAttribute(
-      'href',
-      RELEASE_URL
-    )
-    await card.scrollIntoViewIfNeeded()
-    const box = await card.boundingBox()
-    const tasks = await section(page, 'tasks').boundingBox()
-    expect(box!.y).toBeGreaterThan(tasks!.y)
-    const body = card.locator('.ops-card-body')
-    expect(
-      await body.evaluate((node) => node.scrollWidth - node.clientWidth)
-    ).toBeLessThanOrEqual(1)
-    expect(
-      await card
-        .locator('.ops-metric-value')
-        .evaluateAll((values) =>
-          values
-            .filter((value) => value.scrollWidth > value.clientWidth + 1)
-            .map((value) => value.textContent?.trim())
-        )
-    ).toEqual([])
-    await assertNoHorizontalOverflow(page)
-    if (mobile) expect(await smallTargets(page)).toEqual([])
-    await captureEvidence(card, {
-      path: testInfo.outputPath(`update-available-${theme}-${viewport}.png`),
-    })
-
-    await card.locator('[data-update-action="rollback"]').click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toContainText('回滚到旧版本')
-    await dialog.getByRole('combobox', { name: /目标版本/ }).click()
-    await page.getByRole('option', { name: /v1\.0\.0/ }).click()
-    await expect(dialog.locator('[data-update-rollback-confirm]')).toBeEnabled()
-    await captureEvidence(page, {
-      path: testInfo.outputPath(`update-rollback-${theme}-${viewport}.png`),
-    })
-    await dialog.getByRole('button', { name: '取消' }).click()
-    await expect(dialog).toHaveCount(0)
-
-    await card.locator('[data-update-action="update"]').click()
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: '更新', exact: true })
-      .click()
-    await expect(card.locator('[data-update-restart-needed]')).toContainText(
-      '程序已替换，重启后生效。'
-    )
-    await assertNoHorizontalOverflow(page)
-    if (mobile) expect(await smallTargets(page)).toEqual([])
-    await captureEvidence(card, {
-      path: testInfo.outputPath(`update-restart-${theme}-${viewport}.png`),
-    })
-  })
-}
-
-test('version card source build', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await configureStablePage(page, { theme: 'dark' })
-  await mockOps(page)
-  const api = recordApi(page)
-  await gotoOps(page)
-  const card = section(page, 'update')
-  await expect(card).toContainText('源码构建不支持后台更新。')
-  await expect(card.locator('[data-update-current]')).toContainText(
-    'native-test'
-  )
-  await expect(card.locator('[data-update-action]')).toHaveCount(0)
-  expect(api.has('/api/admin/system/check-updates')).toBe(false)
-  await assertNoHorizontalOverflow(page)
-  await captureEvidence(card, {
-    path: testInfo.outputPath('update-source-dark-mobile.png'),
-  })
 })

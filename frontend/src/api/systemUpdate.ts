@@ -9,11 +9,6 @@ import { publicApi } from './public'
 
 export type BuildType = 'release' | 'source'
 
-export interface SystemVersion {
-  version: string
-  build_type: BuildType
-}
-
 export interface ReleaseInfo {
   name: string
   body: string
@@ -50,7 +45,6 @@ export const LONG_OPERATION_TIMEOUT_MS = 330_000
 const RESTART_POLL_MS = 2_000
 export const RESTART_DEADLINE_MS = 120_000
 
-const VERSION = '/api/admin/system/version'
 const CHECK = '/api/admin/system/check-updates'
 const ROLLBACK_VERSIONS = '/api/admin/system/rollback-versions'
 const UPDATE = '/api/admin/system/update'
@@ -110,13 +104,6 @@ function updateResult(value: unknown): UpdateResult {
 }
 
 export const systemUpdateApi = {
-  async version(signal?: AbortSignal): Promise<SystemVersion> {
-    const row = record(await api.get(VERSION, undefined, { signal }), VERSION)
-    return {
-      version: requiredString(row.version, VERSION, false),
-      build_type: buildType(row.build_type, VERSION),
-    }
-  },
   async checkUpdates(
     force: boolean,
     signal?: AbortSignal
