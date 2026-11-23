@@ -56,7 +56,7 @@ def build(source, output):
         '--label','org.opencontainers.image.version='+before['git_head'],
         '--label','io.ren2hub.source-sha256='+before['working_tree_sha256'],str(snapshot)]
     require(not (output/'identity.json').exists(), 'new_build_identity_required')
-    report={'success':False,'source_before':before,'deployment_eligible':False,'build_command':command}
+    report={'success':False,'source_before':before,'build_command':command}
     private_write(output/'build-report.json',report)
     try:
         with (output/'build.log').open('wb') as stream:

@@ -25,7 +25,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 后端对齐冻结目标 `48f9df96e`，只保留用户批准的独有功能、明确改造和 Vue 实际对接所需的最小接点；历史 `verified_fix` 不构成保留理由。`NATIVE_B388_REVIEW.json` 保存对齐 b388 时对 346 个生产差异文件 1,109 段的逐段裁定（保留 873、恢复原生 169、拆分 67），这是当时的历史裁定，没有按新目标重新逐段复核；之后的窗口里仍有本地差异的文件，按新目标逐段登记在同一文件的 `current_file_reviews`。测试迁移见 `NATIVE_B388_TEST_MIGRATIONS.json`。产品合同摘要见 [AGENTS.md](../../AGENTS.md)，合同目录在 `CORE_SOURCE_DELTA.json` 的 `contracts`。
 
-后台更新参考 Sub2API `328db26f450edbdf9f8d4344a3ea903ac6396842` 的 update service 与 admin system handler。Ren2Hub 使用独立的 common、service、controller 扩展文件与 router/extensions.go，沿用 RootAuth，只有 release 构建可替换程序。20 分钟进程内缓存、强制 SHA-256 清单、linux/amd64 单资产及进程内互斥对应单节点部署。Release 工作流仅发布 semver 二进制归档，移除 docker-build、docker-image-branch、sync-release-to-gitcode 工作流。候选镜像保留独立的源码与二进制身份检查。
+后台更新参考 Sub2API `328db26f450edbdf9f8d4344a3ea903ac6396842` 的 update service 与 admin system handler。Ren2Hub 使用独立的 common、service、controller 扩展文件与 router/extensions.go，沿用 RootAuth，只有 release 构建可替换程序。归档与校验清单的初始地址须使用 HTTPS，主机为 `github.com` 或 `objects.githubusercontent.com`，且不含用户信息。HTTP 客户端跟随 CDN 重定向。20 分钟进程内缓存、强制 SHA-256 清单、linux/amd64 单资产及进程内互斥对应单节点部署。Release 工作流仅发布 semver 二进制归档，移除 docker-build、docker-image-branch、sync-release-to-gitcode 工作流。候选镜像保留独立的源码与二进制身份检查。
 
 | 模块           | 保留的差异                                                                                                                                                                                                                                                                          | 依据                                                                                                                               |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -148,7 +148,7 @@ B2 已批准的权限与输出边界：
 
 ## 最近一次正式发布
 
-2026-11-23 首次安装 Ren2Hub `4de3817f1771945b7bd1d4af1a9dc7bd9043f88d`，部署根提交 `0768a973b7bd6def2875206ca7713d85bfbc9afe`，镜像 `sha256:93bb8cfbde25cddfaba6b5c57ac9654897ddc33631da8541c3cbedfc731bf72c`。完整候选 `run-uwcbc73o` 的七组业务检查、七步隔离升级演练及常规 race 通过。路由 33 项通过、1 项已知上游差异、6 项按登记阻断；冻结诊断符合预期，退出 2，`deployment_eligible=true`。正式 HTTPS 的版本、前端资源和两个日志导出接口均已核验；真实供应商、支付和 OAuth 未调用。当前无前一版正式回退目标。运行身份、证据与恢复边界见工作区 `docs/server/SERVER_PROFILE.md`。
+2026-11-23 首次安装 Ren2Hub `4de3817f1771945b7bd1d4af1a9dc7bd9043f88d`，部署根提交 `0768a973b7bd6def2875206ca7713d85bfbc9afe`，镜像 `sha256:93bb8cfbde25cddfaba6b5c57ac9654897ddc33631da8541c3cbedfc731bf72c`。生产实例运行镜像内程序，等待首次接管。正式 HTTPS 的版本、前端资源和两个日志导出接口均已核验；真实供应商、支付和 OAuth 未调用。当前无前一版正式回退目标。运行身份、证据与恢复边界见工作区 `docs/server/SERVER_PROFILE.md`。
 
 ## 记录规则
 
@@ -156,5 +156,5 @@ B2 已批准的权限与输出边界：
 - 上游窗口推进时更新冻结目标，逐文件处置写入新的 `WINDOW_<短 SHA>.json` 并删除上一个窗口文件，刷新 `CORE_SOURCE_DELTA.json`；前端落点有变化时改前端对照表。
 - 本地差异只写模块级结论和依据链接；行为细节写进对应的专题文档，逐段裁定写进审查清单。
 - 不修的已知问题和等待上游的项各只登记一处，解决后删除；没有在现行源码上核对的条目照实标明。
-- 发布记录只保留最近一次，写明提交、镜像、实际运行的门禁范围、候选结果和没有运行的项。
+- 发布记录只保留最近一次，写明正式版本、源码提交、运行形态、已执行的验收和恢复目标。
 - `CORE_SOURCE_DELTA.json` 用小节锚点（`#现行本地差异`、`#充值加赠接点`、`#备用支付接点`）引用本文，改标题时同步改引用。

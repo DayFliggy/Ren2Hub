@@ -48,8 +48,29 @@ class ScopeRuleTests(unittest.TestCase):
             self.assertEqual(json.loads((Path(tmp) / 'routing-workload.json').read_text()), expected)
 
     def test_server_changes_select_management_on_fresh_database(self):
-        self.assertEqual(release_scope.required_parts(['model/main.go']), ['management'])
-        self.assertEqual(release_scope.required_parts(['docs/update.md']), [])
+        # 启动路径上读写已有数据的代码：迁移、已存配置解析及其共享解码、内置角色策略重置、
+        # OAuth 提供方注册、已有插件编译。它们不在同一个包里，规则不能依赖逐个列举。
+        for path in ('model/topup_bonus_migration.go', 'model/main.go', 'model/option.go',
+                     'setting/retired_business_options.go', 'setting/ratio_setting/model_ratio.go',
+                     'service/authz/seed.go', 'service/authz/adapter.go', 'types/rw_map.go', 'common/json.go',
+                     'oauth/registry.go', 'controller/task_plugin.go', 'relay/channel/openai/adaptor.go',
+                     'relaykit/dto/a.go', 'tokenkit/image.go', 'main.go', 'go.mod', 'go.sum', 'relaykit/go.mod',
+                     'Dockerfile', '.dockerignore', 'i18n/locales/zh-CN.yaml', 'VERSION', 'a_new_top_level_file',
+                     # go:embed 嵌入整棵目录：plugins/tasks 下任何子目录的 plugin.js 都会在启动时注册。
+                     'plugins/tasks/testdata/plugin.js', 'plugins/tasks/sora/plugin.js', 'plugins/tasks/sora/README.md',
+                     'relaykit/relayconvert/testdata/a.json', 'testdata/b.json', 'relaykit/README.md'):
+            self.assertEqual(release_scope.required_parts([path]), ['management'], path)
+        for path in ('frontend/src/main.ts', 'frontend/package.json', 'frontend/tests/visual/a.spec.ts',
+                     'frontend/README.md', 'docs/billing/TOPUP_BONUS.md', 'AGENTS.md', 'README.zh_CN.md',
+                     'scripts/testing/run.py', 'scripts/prepare-frontend-embed.mjs', '.github/workflows/ci.yml',
+                     '.agents/skills/a/SKILL.md', 'model/topup_test.go', 'main_test.go',
+                     'relaykit/relayconvert/internal/oai_chat/convert_test.go'):
+            self.assertEqual(release_scope.required_parts([path]), [], path)
+        self.assertEqual(release_scope.required_parts([]), [])
+        self.assertEqual(release_scope.required_parts(['docs/a.md', 'frontend/src/a.vue', 'service/b.go']), ['management'])
+        # 名称相近，但仍应运行管理合同。
+        for path in ('frontendx/a.go', 'docs.go', 'scripts.go', 'model/a_test.go.bak', 'service/testdata.go'):
+            self.assertEqual(release_scope.required_parts([path]), ['management'], path)
         with self.assertRaises(ValueError):
             release_scope.parse('upgrade')
 
@@ -112,7 +133,7 @@ class ScopedCandidateTests(unittest.TestCase):
     def manifest(self, stable=True, **overrides):
         with tempfile.TemporaryDirectory() as directory:
             runner = candidate.Candidate.__new__(candidate.Candidate)
-            runner.output, runner.workspace_sha, runner.stages = Path(directory), 'd' * 40, ('billing',)
+            runner.output, runner.stages = Path(directory), ('billing',)
             runner.report = {'success': True, 'exit_code': 0, 'source': {'candidate_sha': 'a' * 40},
                              'image': {'revision': 'a' * 40, 'id': 'sha256:' + 'e' * 64},
                              'stages': {'billing': {'success': True}}, 'cleanup': {'success': True},
@@ -124,9 +145,9 @@ class ScopedCandidateTests(unittest.TestCase):
             runner.scoped_manifest(reports, stable)
             return json.loads((runner.output / 'candidate-manifest.json').read_text())
 
-    def test_scoped_manifest_is_deployable_only_when_every_selected_stage_passed(self):
+    def test_scoped_manifest_verifies_selected_evidence(self):
         manifest = self.manifest()
-        self.assertTrue(manifest['deployment_eligible'] and manifest['success'])
+        self.assertTrue(manifest['evidence_verified'] and manifest['success'])
         self.assertEqual(manifest['scope']['parts'], ['billing'])
         # 未运行的诊断和 routing 不出现在 manifest 中，不能被读成通过。
         for key in ('diagnostics', 'known_upstream_restored', 'ordinary_race', 'upstream_exemption'):
@@ -135,13 +156,15 @@ class ScopedCandidateTests(unittest.TestCase):
         self.assertEqual(manifest['traffic'], {'scope': None, 'interface': None, 'configured_interface': 'eth0',
                                                'mounts': [['bind', '/proc/1/net/dev', '/host/proc/net/dev', True]]})
         # 运行期间源码变化会使候选证据失效。
-        self.assertFalse(self.manifest(stable=False)['deployment_eligible'])
+        self.assertFalse(self.manifest(stable=False)['evidence_verified'])
         for overrides in ({'stages': {'billing': {'success': False}}}, {'exit_code': 1}, {'error_code': 'x'},
                           {'cleanup': {'success': False}}, {'image_matches_clean_source': False}):
-            self.assertFalse(self.manifest(**overrides)['deployment_eligible'], overrides)
-        # 在确定阶段之前就失败的范围候选不可部署，manifest 仍带 scope，不会被当成完整候选校验。
+            rejected = self.manifest(**overrides)
+            self.assertFalse(rejected['evidence_verified'], overrides)
+            self.assertFalse(rejected['success'], overrides)
+        # 在确定阶段之前失败，证据不完整，manifest 仍带 scope，不会被当成完整候选校验。
         early = self.manifest(scope={'requested': ['auto']}, stages={}, exit_code=1)
-        self.assertFalse(early['deployment_eligible'])
+        self.assertFalse(early['evidence_verified'])
         self.assertEqual(early['scope'], {'requested': ['auto']})
 
 

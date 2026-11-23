@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -100,10 +101,11 @@ type updateTestAsset struct {
 	Size int64  `json:"size"`
 }
 type updateTestServer struct {
-	assets   []updateTestAsset
-	archive  []byte
-	checksum string
-	redirect string
+	assets       []updateTestAsset
+	archive      []byte
+	checksum     string
+	redirect     string
+	sumsRedirect string
 }
 type updateTestRoundTripper func(*http.Request) (*http.Response, error)
 
@@ -165,21 +167,40 @@ func newUpdateTestServer(t *testing.T) (*SystemUpdateService, *updateTestServer)
 				return
 			}
 			_, _ = w.Write(f.archive)
-		case "/redirected-archive":
-			_, _ = w.Write(f.archive)
 		case "/sums":
+			if f.sumsRedirect != "" {
+				http.Redirect(w, r, f.sumsRedirect, http.StatusFound)
+				return
+			}
 			_, _ = io.WriteString(w, f.checksum)
 		default:
 			w.WriteHeader(404)
 		}
 	}))
 	t.Cleanup(server.Close)
+	cdn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/redirected-archive":
+			_, _ = w.Write(f.archive)
+		case "/redirected-sums":
+			_, _ = io.WriteString(w, f.checksum)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(cdn.Close)
+	cdnURL, err := url.Parse(cdn.URL)
+	require.NoError(t, err)
 	local, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	transport := server.Client().Transport
 	client := &http.Client{Transport: updateTestRoundTripper(func(r *http.Request) (*http.Response, error) {
+		dest := local
+		if r.URL.Host == "release-assets.githubusercontent.com" {
+			dest = cdnURL
+		}
 		req := r.Clone(r.Context())
-		req.URL.Scheme, req.URL.Host = local.Scheme, local.Host
+		req.URL.Scheme, req.URL.Host = dest.Scheme, dest.Host
 		return transport.RoundTrip(req)
 	})}
 	s := NewSystemUpdateService(server.URL, client)
@@ -204,7 +225,6 @@ func TestSystemUpdateRejectInvalidAssets(t *testing.T) {
 		}},
 		{"HTTP", func(t *testing.T, f *updateTestServer) { f.assets[0].URL = "http://github.com/archive" }},
 		{"wrong host", func(t *testing.T, f *updateTestServer) { f.assets[1].URL = "https://untrusted.test/sums" }},
-		{"wrong redirect", func(t *testing.T, f *updateTestServer) { f.redirect = "https://untrusted.test/redirected-archive" }},
 		{"oversize", func(t *testing.T, f *updateTestServer) { f.assets[0].Size = 500*1024*1024 + 1 }},
 		{"traversal after executable", func(t *testing.T, f *updateTestServer) {
 			f.archive = updateTestArchive(t, tar.Header{Name: "ren2hub", Typeflag: tar.TypeReg}, tar.Header{Name: "../x", Typeflag: tar.TypeReg})
@@ -296,7 +316,58 @@ func TestSystemUpdateRestoreOnReplaceFailure(t *testing.T) {
 	err := replaceSystemBinary(s.executable, filepath.Join(filepath.Dir(s.executable), "absent"))
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrSystemRelease)
+	require.ErrorIs(t, err, ErrSystemReplace)
 	b, err := os.ReadFile(s.executable)
 	require.NoError(t, err)
 	require.Equal(t, "old binary", string(b))
+}
+
+func checkReleaseRedirect(t *testing.T, rollback bool) {
+	t.Helper()
+	current := "v1.0.9"
+	if rollback {
+		current = "v1.0.11"
+	}
+	updateTestBuild(t, current)
+	s, f := newUpdateTestServer(t)
+	f.assets[1].URL = "https://github.com/sums"
+	f.redirect = "https://release-assets.githubusercontent.com/redirected-archive"
+	f.sumsRedirect = "https://release-assets.githubusercontent.com/redirected-sums"
+	if rollback {
+		require.NoError(t, s.RollbackToVersion(t.Context(), "1.0.10"))
+	} else {
+		info, err := s.PerformUpdate(t.Context())
+		require.NoError(t, err)
+		require.True(t, info.HasUpdate)
+	}
+	binary, err := os.ReadFile(s.executable)
+	require.NoError(t, err)
+	require.Equal(t, "new binary", string(binary))
+	backup, err := os.ReadFile(s.executable + ".backup")
+	require.NoError(t, err)
+	require.Equal(t, "old binary", string(backup))
+}
+
+func TestSystemUpdateFollowsAssetRedirect(t *testing.T)   { checkReleaseRedirect(t, false) }
+func TestSystemRollbackFollowsAssetRedirect(t *testing.T) { checkReleaseRedirect(t, true) }
+
+func TestSystemUpdateStageErrors(t *testing.T) {
+	t.Run("deadline while unpacking", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		defer cancel()
+		archive := updateTestArchive(t, tar.Header{Name: "ren2hub", Typeflag: tar.TypeReg})
+		err := extractSystemBinary(ctx, bytes.NewReader(archive), filepath.Join(t.TempDir(), "ren2hub"))
+		require.ErrorIs(t, err, ErrSystemRelease)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+	t.Run("staging directory unavailable", func(t *testing.T) {
+		updateTestBuild(t, "v1.0.9")
+		s, _ := newUpdateTestServer(t)
+		s.executable = filepath.Join(s.executable, "ren2hub")
+		_, err := s.PerformUpdate(t.Context())
+		var pathErr *os.PathError
+		require.ErrorAs(t, err, &pathErr)
+		require.NotErrorIs(t, err, ErrSystemReplace)
+		require.NotErrorIs(t, err, ErrSystemRelease)
+	})
 }

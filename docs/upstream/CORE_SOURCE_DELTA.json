@@ -2726,7 +2726,7 @@
       "path": "controller/system_update.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "85d0126f34b0092b736bb6e431cf8d9a9344e622a0b0664abb824c1f83a2c49a",
+      "local_sha256": "d4e85d923167bf61f492c6bfbe95da0ab6ad8a7369c174253cb823b661426ae6",
       "reasons": [
         "system-update"
       ],
@@ -2739,7 +2739,7 @@
       "path": "controller/system_update_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e4977aad78e433a756a38e4e5655c4f6f1dbdf3a928eecec50f64127fe8b168a"
+      "local_sha256": "ac1dd5cbb7748c57676949c40ef8a4cd974cccbd45c98a180c413ebfd13176ad"
     },
     {
       "path": "controller/task.go",
@@ -14273,7 +14273,7 @@
       "path": "service/system_update.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a2491ffb11faf7ad64267bb47ffd08f23688b07932b43bcf844b7ad42e2a2206",
+      "local_sha256": "bdbd7c6d10081603a91749afabc1874b1bb012853e3683bfee3444219e44661c",
       "reasons": [
         "system-update"
       ],
@@ -14286,7 +14286,7 @@
       "path": "service/system_update_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a464f44ff05f369ceaa8bb521f0a389226e647e74e629b815eff6356e0f9178d"
+      "local_sha256": "35d2c7cecb663c44e2ecc46cd314d6d3b562931e29bfa521cb7f4f9ee27620b6"
     },
     {
       "path": "service/task.go",

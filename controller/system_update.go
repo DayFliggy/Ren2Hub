@@ -129,9 +129,11 @@ func writeSystemUpdateError(c *gin.Context, err error) {
 		common.ApiErrorStatus(c, http.StatusBadRequest, service.ErrSystemInvalidVersion)
 	case errors.Is(err, service.ErrSystemRollbackNotFound):
 		common.ApiErrorStatus(c, http.StatusNotFound, service.ErrSystemRollbackNotFound)
-	case errors.Is(err, service.ErrSystemRelease):
+	case errors.Is(err, service.ErrSystemRelease), errors.Is(err, context.DeadlineExceeded):
 		common.ApiErrorStatus(c, http.StatusBadGateway, service.ErrSystemRelease)
+	case errors.Is(err, service.ErrSystemReplace):
+		common.ApiErrorStatus(c, http.StatusInternalServerError, service.ErrSystemReplace)
 	default:
-		common.ApiErrorStatus(c, http.StatusInternalServerError, errors.New("failed to replace application executable"))
+		common.ApiErrorStatus(c, http.StatusInternalServerError, errors.New("system update failed"))
 	}
 }

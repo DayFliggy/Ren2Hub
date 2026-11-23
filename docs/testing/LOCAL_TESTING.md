@@ -35,7 +35,7 @@ python3 -B scripts/testing/run.py <quick|all> [候选参数]
 | browser      | 全新实例的真实登录、刷新、注销、权限、Token、邀请归属与设置交互                                       | 桌面和手机 × 明暗，每组独立数据库；核心流程直接调用真实后端，插件 UI 场景使用显式同源合同桩；只在仅有回环接口的 network/PID namespace 里运行，不接已有服务器                                     |
 | ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                                           | 自动发现全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端；除 `bonus-card.spec.ts` 的快照外不做像素比较                                                          |
 | diagnostics  | 白名单内的 Go 标签诊断、真实失败指纹和标签包 vet                                                      | 精确测试名；编译失败、超时、缺项、跳过、未知失败、意外通过均失败，本地失败不能归为上游                                                                                                           |
-| routing      | 用独立的渠道模拟器镜像执行真实路由合同和精确 Go 诊断                                                  | 需要已构建的镜像和两份 `identity.json`；始终 `deployment_eligible=false`                                                                                                                         |
+| routing      | 用独立的渠道模拟器镜像执行真实路由合同和精确 Go 诊断                                                  | 需要已构建的镜像和两份 `identity.json`，记录实际运行的路由合同                                                                                                                                   |
 | candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理与扩展、SDK 合同                                 | 全新隔离的 PostgreSQL、Redis、附件与密钥，internal 网络；精确的余额和发送次数断言。`--scope` 必填，只运行所选部分，`full` 是完整候选；范围候选不运行 routing、诊断和 race，manifest 记录 `scope` |
 | quick        | registry、unit、static、build，对应上游 NewAPI 的日常 CI                                              | 全量档位，只在明确要求时运行；任一层失败即中止，不能代替 `all`                                                                                                                                   |
 | all          | registry、unit、databases、static、build、race、browser、ui-contracts 和完整候选                      | 全量档位，只在明确要求时运行；诊断由完整候选执行一次，不单独重复                                                                                                                                 |
@@ -68,7 +68,7 @@ python3 -B scripts/testing/run.py <quick|all> [候选参数]
 
 ## 镜像与候选
 
-候选只接受带身份清单的不可变镜像。研究用的镜像由 `python3 -B scripts/testing/build_routing_image.py` 从当前工作树构建；用于发布的镜像由工作区的 `sh scripts/server/build-ren2hub-test.sh <已发布SHA> --output-dir <新的空目录>` 从内部 bare 仓库的干净检出构建。两个入口都在成功后才原子写出 schema 1 的 `identity.json`：不可变 image ID、构建前后的源码指纹、修订、二进制的路径与哈希、实际工具版本，模拟器另外声明协议版本。候选核对清单、镜像标签、实际二进制和工具版本，镜像的内容指纹必须与当前工作树一致；不能用现有发布镜像代表修改后的代码。
+源码候选使用带 `identity.json` 的应用和模拟器镜像。`scripts/testing/build_routing_image.py` 从当前工作树构建应用测试镜像，工作区的 `scripts/server/build-ren2hub-test.sh` 可从已同步的完整提交构建。候选核对镜像 ID、源码指纹、镜像内程序哈希和工具版本。正式应用安装 GitHub Release 的 linux/amd64 归档并校验 `checksums.txt`。
 
 完整候选的基础阶段是 `billing`、`ws`、`compact`、`plugin-before`、`plugin-after`、`upstream_sync`（管理与扩展）、`sdk` 和 `routing`，并执行诊断、原生恢复诊断和三组 race；`--scope` 选择其中的部分，规则见[部署候选的范围](MODULE_TESTING.md#部署候选的范围)。供应商、支付、登录、市场下载和安装上报都由本轮的本地服务承接；未知失败、缺项、跳过或外联尝试都是失败。
 
@@ -76,7 +76,7 @@ SDK 运行时通过 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`、`GATEWAY_SDK_NOD
 
 候选默认不挂载宿主文件，应用使用主监听器计数。传入 `--traffic-host-interface NAME`（`^[A-Za-z0-9_.-]{1,15}$`）后，候选应用额外得到只读的单文件挂载 `/proc/1/net/dev → /host/proc/net/dev` 和 `TRAFFIC_HOST_INTERFACE=NAME`。除本轮生成的 mock CA 证书外，这是候选唯一允许的宿主文件挂载。管理组的 `traffic_source_matches_configuration` 核对读数的 `scope`、`interface` 与参数一致；监听器模式下还要求两个方向都大于 0，宿主模式下候选在 internal 网络里，0 是有效读数。隔离报告和 `candidate-manifest.json` 记录 `traffic: {scope, interface, mounts}`。
 
-manifest 里 `candidate_success` 表示测试是否全部通过，`deployment_eligible`（也就是 `success`）表示可以用于正式更新：所选阶段通过、清理成功、源码干净、镜像修订与源码一致。完整候选有一条精确的发布豁免：未通过项与 `routing_result.py` 登记的上游缺陷及其阻断逐项一致、其余阶段全部通过时，manifest 记录 `upstream_exemption`，`candidate_success` 仍为 false；多一项、少一项、诊断变了或有本地失败都不豁免。
+`candidate-manifest.json` 的 `candidate_success` 记录执行结果，`evidence_verified` 记录完整或范围候选的证据核验结果；两项均通过时 `success` 为 true。完整候选的已知上游差异必须与冻结的诊断和原始证据精确匹配。退出码 2 时执行结果仍为 false，报告可单独记录已核验的差异。正式更新直接使用指定 Release 归档。
 
 ### 路由合同
 

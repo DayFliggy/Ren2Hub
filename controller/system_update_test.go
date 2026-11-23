@@ -103,27 +103,29 @@ func TestSystemUpdateHandlerErrors(t *testing.T) {
 	f := &fakeSystemReleases{}
 	h := &systemUpdateHandler{releases: f}
 	for _, tc := range []struct {
-		handler gin.HandlerFunc
-		status  int
-		err     error
-		body    string
+		handler       gin.HandlerFunc
+		status        int
+		err           error
+		body, message string
 	}{
-		{h.Update, 400, service.ErrSystemSourceBuild, ""},
-		{h.Rollback, 400, service.ErrSystemSourceBuild, `{"version":"1.0.0"}`},
-		{h.Rollback, 400, nil, "{"},
-		{h.Rollback, 400, service.ErrSystemInvalidVersion, `{"version":"bad"}`},
-		{h.Rollback, 404, service.ErrSystemRollbackNotFound, `{"version":"1.0.0"}`},
-		{h.CheckUpdates, 502, service.ErrSystemRelease, ""},
-		{h.RollbackVersions, 502, service.ErrSystemRelease, ""},
-		{h.Update, 502, service.ErrSystemRelease, ""},
-		{h.Rollback, 502, service.ErrSystemRelease, `{"version":"1.0.0"}`},
-		{h.Update, 500, errors.New("private executable path"), ""},
-		{h.Rollback, 500, errors.New("private executable path"), `{"version":"1.0.0"}`},
+		{h.Update, 400, service.ErrSystemSourceBuild, "", "source builds cannot install releases"},
+		{h.Rollback, 400, service.ErrSystemSourceBuild, `{"version":"1.0.0"}`, "source builds cannot install releases"},
+		{h.Rollback, 400, nil, "{", "invalid rollback request"},
+		{h.Rollback, 400, service.ErrSystemInvalidVersion, `{"version":"bad"}`, "invalid release version"},
+		{h.Rollback, 404, service.ErrSystemRollbackNotFound, `{"version":"1.0.0"}`, "version is not in the rollback list"},
+		{h.CheckUpdates, 502, service.ErrSystemRelease, "", "release retrieval or verification failed"},
+		{h.RollbackVersions, 502, service.ErrSystemRelease, "", "release retrieval or verification failed"},
+		{h.Update, 502, service.ErrSystemRelease, "", "release retrieval or verification failed"},
+		{h.Rollback, 502, service.ErrSystemRelease, `{"version":"1.0.0"}`, "release retrieval or verification failed"},
+		{h.Update, 502, context.DeadlineExceeded, "", "release retrieval or verification failed"},
+		{h.Update, 500, errors.Join(service.ErrSystemReplace, errors.New("private executable path")), "", "failed to replace application executable"},
+		{h.Update, 500, errors.New("private executable path"), "", "system update failed"},
+		{h.Rollback, 500, errors.New("private executable path"), `{"version":"1.0.0"}`, "system update failed"},
 	} {
 		f.err = tc.err
 		res := systemRequest(context.Background(), tc.handler, "POST", "/", tc.body)
 		require.Equal(t, tc.status, res.Code)
-		require.Contains(t, res.Body.String(), `"success":false`)
+		require.JSONEq(t, `{"success":false,"message":"`+tc.message+`"}`, res.Body.String())
 		require.NotContains(t, res.Body.String(), "private executable path")
 	}
 }

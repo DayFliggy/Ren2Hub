@@ -112,7 +112,7 @@ class RunnerContractTests(unittest.TestCase):
                     runner.stage = lambda name: runner.report['stages'].update(
                         {name: {'success': False, 'contracts_success': True, 'exit_code': 2}})
                     runner.cleanup = lambda: observed.append('cleanup')
-                    runner.manifest = lambda: runner.report.update(deployment_eligible=False)
+                    runner.manifest = lambda: runner.report.update(evidence_verified=False)
                     return runner
 
                 argv = ['run.py', 'all', '--output-parent', directory,
@@ -151,7 +151,7 @@ class RunnerContractTests(unittest.TestCase):
                                                          'race', 'browser', 'ui-contracts', 'candidate'])
                 self.assertEqual(report['stages']['candidate']['diagnostics'], diagnostic)
                 self.assertEqual(report['stages']['candidate']['stages']['routing']['exit_code'], 2)
-                self.assertFalse(report['stages']['candidate']['deployment_eligible'])
+                self.assertFalse(report['stages']['candidate']['evidence_verified'])
                 self.assertEqual(code, diagnostic_code)
                 self.assertEqual(report['exit_code'], diagnostic_code)
 
@@ -751,10 +751,9 @@ class AttachmentIsolationTests(unittest.TestCase):
                 require_candidate_mounts(role, {'Mounts': [volume]}, target)
 
 class ReleaseExemptionManifestTests(unittest.TestCase):
-    """完整候选只有在未通过项恰好是登记的上游缺陷时才可发布。"""
+    """完整候选分别记录已知差异的证据和测试是否通过。"""
 
     def manifest_for(self, diagnostics, routing, *, exit_code=2, billing_success=True, evidence_error=None, logger_error=None, ordinary_error=None):
-        from test_routing_result import ReleaseExemptionTests
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runner = candidate.Candidate.__new__(candidate.Candidate)
@@ -763,7 +762,6 @@ class ReleaseExemptionManifestTests(unittest.TestCase):
             runner.stages = candidate.STAGES
             identity = {'git_head': 'b' * 40, 'candidate_sha': 'b' * 40}
             runner.source = root / 'Ren2Hub'
-            runner.workspace_identity, runner.workspace_sha = identity, 'b' * 40
             runner.report = {'success': exit_code == 0, 'exit_code': exit_code, 'stages': {},
                              'source': identity, 'image': {'revision': 'a' * 40, 'id': 'sha256:image'},
                              'image_matches_clean_source': True, 'diagnostics': diagnostics,
@@ -772,9 +770,7 @@ class ReleaseExemptionManifestTests(unittest.TestCase):
                 report = routing if stage == 'routing' else {'success': billing_success, 'group': stage}
                 (root / (stage + '.json')).write_text(json.dumps(report))
                 runner.report['stages'][stage] = report
-            with patch('candidate.execute', return_value=SimpleNamespace(
-                    stdout=('160000 commit ' + 'a' * 40 + '\tRen2Hub\n').encode())), \
-                    patch('candidate.source_identity', return_value=identity), \
+            with patch('candidate.source_identity', return_value=identity), \
                     patch('native_restored.verify_report', return_value={'verified': True}, side_effect=evidence_error), \
                     patch('native_pricing_race.verify_report', return_value={'verified': True}), \
                     patch('native_logger_race.verify_report', return_value={'verified': True}, side_effect=logger_error), \
@@ -782,16 +778,16 @@ class ReleaseExemptionManifestTests(unittest.TestCase):
                 runner.manifest()
             return json.loads((root / 'candidate-manifest.json').read_text())
 
-    def test_exact_upstream_set_is_deployable_and_deviations_are_not(self):
+    def test_verified_known_differences_are_not_passing_results(self):
         from test_routing_result import ReleaseExemptionTests
         diagnostics, routing = ReleaseExemptionTests().reports()
         approved = self.manifest_for(diagnostics, routing)
-        self.assertTrue(approved['deployment_eligible'])
-        self.assertTrue(approved['success'])
+        self.assertTrue(approved['evidence_verified'])
+        self.assertFalse(approved['success'])
         self.assertFalse(approved['candidate_success'])
         self.assertIsNotNone(approved['upstream_exemption'])
         failed_billing = self.manifest_for(diagnostics, routing, billing_success=False)
-        self.assertFalse(failed_billing['deployment_eligible'])
+        self.assertFalse(failed_billing['evidence_verified'])
         from diagnostics import PROBES, summarize
         from routing_result import REQUIRED_CASES, evaluate
         cases = [{'name': probe.name, 'status': 'pass'} for probe in PROBES]
@@ -801,19 +797,19 @@ class ReleaseExemptionManifestTests(unittest.TestCase):
         clean_routing = {'cases': clean_cases, 'cleanup_errors': [], **evaluate(clean_cases, REQUIRED_CASES)}
         # 旧诊断全绿而新独立诊断仍有精确已知差异，因此总exit仍为2。
         clean = self.manifest_for(clean_diagnostics, clean_routing, exit_code=2)
-        self.assertTrue(clean['deployment_eligible'])
+        self.assertTrue(clean['evidence_verified'])
         self.assertFalse(clean['candidate_success'])
         self.assertIsNone(clean['upstream_exemption'])
         incomplete = self.manifest_for({'success': True, 'exit_code': 0, 'cases': []},
                                        {'success': True, 'exit_code': 0, 'cases': []})
-        self.assertFalse(incomplete['deployment_eligible'])
+        self.assertFalse(incomplete['evidence_verified'])
         for error in (ValueError('unknown evidence'), IndexError('malformed evidence')):
             invalid = self.manifest_for(clean_diagnostics, clean_routing, evidence_error=error)
-            self.assertFalse(invalid['deployment_eligible'])
+            self.assertFalse(invalid['evidence_verified'])
             invalid_logger = self.manifest_for(clean_diagnostics, clean_routing, logger_error=error)
-            self.assertFalse(invalid_logger['deployment_eligible'])
+            self.assertFalse(invalid_logger['evidence_verified'])
             invalid_ordinary = self.manifest_for(clean_diagnostics, clean_routing, ordinary_error=error)
-            self.assertFalse(invalid_ordinary['deployment_eligible'])
+            self.assertFalse(invalid_ordinary['evidence_verified'])
 
 
 if __name__ == '__main__':

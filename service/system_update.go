@@ -32,6 +32,7 @@ var (
 	ErrSystemInvalidVersion   = errors.New("invalid release version")
 	ErrSystemRollbackNotFound = errors.New("version is not in the rollback list")
 	ErrSystemRelease          = errors.New("release retrieval or verification failed")
+	ErrSystemReplace          = errors.New("failed to replace application executable")
 )
 
 type SystemReleaseInfo struct {
@@ -275,17 +276,8 @@ func (s *SystemUpdateService) download(ctx context.Context, asset systemAsset, o
 	if err != nil || !allowedSystemAsset(req.URL) {
 		return fmt.Errorf("%w: invalid asset URL", ErrSystemRelease)
 	}
-	client := *s.client
-	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
-		if !allowedSystemAsset(next.URL) || len(via) >= 10 {
-			return errors.New("release redirect rejected")
-		}
-		if s.client.CheckRedirect != nil {
-			return s.client.CheckRedirect(next, via)
-		}
-		return nil
-	}
-	resp, err := client.Do(req)
+	// Validate the release manifest's asset URL; GitHub redirects it to signed CDN URLs.
+	resp, err := s.client.Do(req)
 	if err != nil {
 		// net/http errors may include signed redirect URLs.
 		return fmt.Errorf("%w: cannot download %s", ErrSystemRelease, asset.Name)
@@ -388,7 +380,7 @@ func (s *SystemUpdateService) install(ctx context.Context, release *systemReleas
 		return err
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrSystemRelease, err)
 	}
 	return replaceSystemBinary(s.executable, staged)
 }
@@ -403,7 +395,7 @@ func extractSystemBinary(ctx context.Context, archive io.Reader, staged string) 
 	found := false
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrSystemRelease, err)
 		}
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -454,13 +446,13 @@ func writeSystemBinary(staged string, src io.Reader) error {
 func replaceSystemBinary(current, staged string) error {
 	backup := current + ".backup"
 	if err := os.Rename(current, backup); err != nil {
-		return fmt.Errorf("backup binary: %w", err)
+		return fmt.Errorf("%w: backup binary: %w", ErrSystemReplace, err)
 	}
 	if err := os.Rename(staged, current); err != nil {
 		if restore := os.Rename(backup, current); restore != nil {
-			return fmt.Errorf("replace and restore binary: %w", errors.Join(err, restore))
+			return fmt.Errorf("%w: replace and restore binary: %w", ErrSystemReplace, errors.Join(err, restore))
 		}
-		return fmt.Errorf("replace binary (backup restored): %w", err)
+		return fmt.Errorf("%w (backup restored): %w", ErrSystemReplace, err)
 	}
 	return nil
 }

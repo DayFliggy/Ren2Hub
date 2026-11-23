@@ -720,12 +720,13 @@ class Candidate:
                                                        self.source, self.report['source'])
         except (InvalidEvidence, ValueError, OSError, TypeError, KeyError, IndexError):
             complete = False
-        deployable = bool(not getattr(self, 'routing_only', False) and complete
+        verified = bool(not getattr(self, 'routing_only', False) and complete
                           and self.report.get('exit_code') in (0, 2) and stable
                           and not self.report.get('error_code') and not self.report.get('cleanup_errors')
                           and self.report.get('image_matches_clean_source'))
         traffic = self.report.get('isolation', {}).get('traffic')
-        manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
+        manifest = {'success': self.report['success'] and verified, 'candidate_success': self.report['success'],
+                    'evidence_verified': verified,
                     'source_sha': self.report.get('image', {}).get('revision'),
                     'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'], 'identity_verification': self.report['identity_verification'],
@@ -746,18 +747,19 @@ class Candidate:
                     'ordinary_race_acceptance': ordinary_acceptance,
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
-        self.report['deployment_eligible'] = deployable
+        self.report['evidence_verified'] = verified
 
     def scoped_manifest(self, reports, stable):
-        """按模块选择的候选：所选阶段全部通过才可部署；未运行的部分不出现在 manifest，也不计为通过。"""
+        """按模块选择的候选：核对所选阶段及其报告；未运行的部分不出现在 manifest，也不计为通过。"""
         scope = self.report.get('scope') or {}
         complete = isinstance(scope.get('parts'), list) and len(reports) == len(self.stages) and all(
             self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
-        deployable = bool(complete and self.report.get('exit_code') == 0 and stable
+        verified = bool(complete and self.report.get('exit_code') == 0 and stable
                           and not self.report.get('error_code') and self.report.get('cleanup', {}).get('success') is True
                           and self.report.get('image_matches_clean_source'))
         traffic = self.report.get('isolation', {}).get('traffic')
-        manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
+        manifest = {'success': self.report['success'] and verified, 'candidate_success': self.report['success'],
+                    'evidence_verified': verified,
                     'scope': scope, 'source_sha': self.report.get('image', {}).get('revision'),
                     'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'],
@@ -770,7 +772,7 @@ class Candidate:
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts', 'configured_interface')}
                     if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
-        self.report['deployment_eligible'] = deployable
+        self.report['evidence_verified'] = verified
 
     def cleanup(self):
         errors = []
@@ -881,8 +883,8 @@ def main():
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}
-    # success 只表示候选阶段通过；deployment_eligible 另要求源码干净且与候选镜像匹配。
-    print(json.dumps({'success': report['success'], 'deployment_eligible': report.get('deployment_eligible', False),
+    # success 记录测试结果，evidence_verified 记录完整候选或范围候选的证据核验结果。
+    print(json.dumps({'success': report['success'], 'evidence_verified': report.get('evidence_verified', False),
                       'error_code': report.get('error_code'),
                       'report': str(args.output / 'candidate.json')}, ensure_ascii=False))
     return report.get('exit_code', 0 if report['success'] else 1)
