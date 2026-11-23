@@ -1,14 +1,9 @@
-"""按改动模块确定候选范围。候选与工作区发布校验器加载同一份规则，最低要求只在这里定义。"""
-from __future__ import annotations
+"""按源码差异选择隔离候选合同。"""
 
 import re
 
 # 可单独选择的候选部分及其阶段，顺序即执行顺序。routing 与冻结诊断只属于完整候选或各自的独立档位。
-# 阶段名与 candidate.py 的 STAGES/UPGRADE_STAGES 一致（test_release_scope.py 核对）；candidate.py 会被
-# 发布校验器按文件单独加载，不能在模块顶层导入本文件。
 PART_STAGES = {
-    'upgrade': ('upgrade-baseline', 'upgrade-management', 'upgrade-before-seconds',
-                'upgrade-prepare-p', 'upgrade-resume-p', 'upgrade-after-seconds', 'upgrade-after-p'),
     'billing': ('billing',),
     'websocket': ('ws',),
     'compact': ('compact',),
@@ -18,8 +13,8 @@ PART_STAGES = {
     'routing-workload': ('routing-workload',),
 }
 PARTS = tuple(PART_STAGES)
-# plugin 阶段复用 billing 初始化的实例凭据；升级演练在 management 阶段回读旧版写入的工单附件。
-IMPLIED = {'plugin': ('billing',), 'upgrade': ('management',)}
+# plugin 阶段复用 billing 初始化的实例凭据。
+IMPLIED = {'plugin': ('billing',)}
 # 不进入服务端程序、也不改变镜像运行时的路径：前端（嵌入的静态资源）、文档、脚本、仓库元数据、
 # 根目录的 Markdown 和 Go 测试文件。只改这些时，新版本启动后读取、迁移和改写已有数据的方式不变。
 # testdata/ 和包目录里的其他文件不在其中：go:embed 会把整棵目录嵌入程序（plugins/tasks 的每个子目录
@@ -46,14 +41,9 @@ def routing_workload_inputs(files):
 
 
 def required_parts(files) -> list[str]:
-    """部署候选的最低范围；其余部分按改动模块由执行者追加，不在这里强制。
-
-    除 STARTUP_NEUTRAL 外的任何改动都必须从现行正式镜像做升级演练。启动时会迁移表结构、解析已存配置、
-    重置内置角色策略、注册 OAuth 提供方并编译已有插件，这些代码分布在 model、setting、service、oauth、
-    controller、common、types 等包；按路径逐个列举会漏，所以按“是否进入服务端程序”划分。
-    """
+    """服务端改动触发新库启动与管理合同，路由改动另加负载测试。"""
     files = list(files)
-    required = ['upgrade'] if any(not STARTUP_NEUTRAL.fullmatch(path) for path in files) else []
+    required = ['management'] if any(not STARTUP_NEUTRAL.fullmatch(path) for path in files) else []
     if routing_workload_inputs(files):
         required.append('routing-workload')
     return required
@@ -77,7 +67,7 @@ def stages(parts) -> tuple[str, ...]:
 def parse(value: str) -> list[str] | None:
     """--scope 的取值：full 为完整候选（None）；其余为逗号分隔的名称。
 
-    auto 表示按与旧镜像修订的差异补上最低要求；boot 表示不选任何阶段，只核对镜像身份并在全新实例启动。
+    auto 表示按与基线提交的差异补上最低要求；boot 表示不选任何阶段，只核对镜像身份并在全新实例启动。
     """
     names = [name.strip() for name in value.split(',') if name.strip()]
     if names == ['full']:

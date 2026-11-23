@@ -94,9 +94,8 @@ def acceptance_target():
     keys = {'app_container', 'postgres_container', 'redis_container', 'mock_container',
             'database_user', 'database_name', 'database_host', 'redis_host', 'network',
             'run_id', 'container_ids', 'network_id', 'image_id', 'revision', 'ca_path', 'network_guard',
-            'traffic_host_interface', 'attachment_volume', 'upgrade'}
-    require(isinstance(target, dict) and keys <= set(target) and set(target) <= keys | {'simulator'}
-            and isinstance(target['upgrade'], bool), 'invalid_candidate_manifest')
+            'traffic_host_interface', 'attachment_volume'}
+    require(isinstance(target, dict) and keys <= set(target) and set(target) <= keys | {'simulator'}, 'invalid_candidate_manifest')
     require(re.fullmatch(r'[0-9a-f]{24}', target['run_id']), 'invalid_candidate_run_id')
     # 空串为监听器模式；非空为宿主网卡模式。
     require(isinstance(target['traffic_host_interface'], str)
@@ -208,7 +207,7 @@ def verify_candidate_database(revision):
             and settings.get('NO_PROXY') == candidate_no_proxy(target.get('simulator', {}).get('address'))
             and target['network_guard'].get('dns_forwarding_blocked') is True,
             'candidate_external_network_guard_missing')
-    require(settings.get('TASK_POLL_MAX_FAILURES', '') == ('0' if target['upgrade'] else ''),
+    require(settings.get('TASK_POLL_MAX_FAILURES', '') == '',
             'candidate_mock_downtime_policy_mismatch')
     dsn = urllib.parse.urlsplit(settings.get('SQL_DSN', ''))
     redis = urllib.parse.urlsplit(settings.get('REDIS_CONN_STRING', ''))

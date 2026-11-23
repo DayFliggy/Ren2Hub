@@ -598,7 +598,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, interrupt)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('profile', choices=PROFILES)
-    parser.add_argument('--base', help='affected 的比较起点；默认 HEAD 与 origin/main 的分叉点')
+    parser.add_argument('--base', help='affected 的比较起点，或 candidate --scope auto 的完整基线 SHA')
     parser.add_argument('--skip', nargs='+', action='extend', default=[], choices=LAYERS, metavar='LAYER',
                         help='affected 跳过所列层（' + '、'.join(LAYERS) + '），跳过项写入报告')
     parser.add_argument('--plan', action='store_true', help='affected 只列出会选中的测试，不执行')
@@ -619,7 +619,6 @@ def main() -> int:
     parser.add_argument('--simulator-image', help='candidate/routing/all 使用的独立供应商模拟器镜像')
     parser.add_argument('--image-identity', type=Path, help='应用成功构建的版本化 identity.json')
     parser.add_argument('--simulator-identity', type=Path, help='独立模拟器成功构建的版本化 identity.json')
-    parser.add_argument('--previous-image', help='candidate/all 普通升级使用的固定旧镜像')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='candidate/all 只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
@@ -713,7 +712,7 @@ def main() -> int:
                 if not all((args.image, args.simulator_image, args.image_identity, args.simulator_identity)):
                     raise RuntimeError('candidate/routing/all 必须显式传入 --image、--simulator-image、--image-identity 和 --simulator-identity')
                 from candidate import run
-                result = run(SOURCE, stage, args.image, args.traffic_host_interface, args.previous_image, args.simulator_image, profile == 'routing',
+                result = run(SOURCE, stage, args.image, args.traffic_host_interface, args.base, args.simulator_image, profile == 'routing',
                              args.image_identity, args.simulator_identity, scope if args.profile == 'candidate' else None)
             report['stages'][profile] = result
             if not result.get('success') and result.get('exit_code') != 2:

@@ -126,6 +126,10 @@ class BuildIdentityTests(unittest.TestCase):
         for key in ('source_before','source_after'): bad[0][key]['candidate_sha']=HEAD
         with self.assertRaisesRegex(candidate.CandidateError,'invalid_candidate_revision'): self.validate(bad)
 
+    def test_candidate_accepts_version_label_independent_of_revision(self):
+        self.app[1]['Config']['Labels']['org.opencontainers.image.version'] = 'v1.0.1'
+        self.validate()
+
     def test_rejects_wrong_image_label_and_stale_manifest(self):
         mutations = [
             (lambda m,i:m.update(schema_version=0), 'versioned_build_identity'),

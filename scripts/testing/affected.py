@@ -280,9 +280,8 @@ def load_impact(path: Path) -> dict | None:
     return data
 
 
-# RenAI 工作区的发布校验器（根仓库 scripts/server/ren2hub_release.py）按文件加载下列模块；
-# 单独克隆 Ren2Hub 时没有这一层，报告为未运行。
-WORKSPACE_GATE = '工作区 infra（发布校验器加载此模块；单独克隆时报告未运行）'
+# 工作区的候选镜像构建器复用 candidate.py 的源码与二进制身份校验。
+WORKSPACE_GATE = '工作区 infra（候选镜像构建合同）'
 # 改动这些路径时 affected 不覆盖对应门槛，报告提示需要单独运行的档位。
 EXTERNAL_LAYERS = (
     ('scripts/testing/contracts/', 'routing 或 candidate（候选合同）'),
@@ -295,9 +294,8 @@ EXTERNAL_LAYERS = (
     ('scripts/testing/fixtures/known_upstream_', 'known_upstream_*'),
     ('docs/upstream/NATIVE_B388_', 'known_upstream_restored'),
     ('Dockerfile', 'candidate'),
-) + tuple((f'scripts/testing/{name}', WORKSPACE_GATE) for name in (
-    'routing_result.py', 'release_scope.py', 'candidate.py', 'native_restored.py', 'native_pricing_race.py',
-    'native_logger_race.py', 'ordinary_race.py'))
+    ('scripts/testing/candidate.py', WORKSPACE_GATE),
+)
 
 
 def frozen_inputs(source: Path) -> dict[str, str]:

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import secrets
 import time
 
-from .common import atomic_private, operation_proof, regular_file, require
+from .common import operation_proof, require
 from .client import Client
 from .extensions import business, rejected
 from .websocket import logout_verified
@@ -58,19 +58,6 @@ def check_instance_permissions(experiment, instances):
     experiment.record('request_plugin_pat_scopes_and_admin_config_redaction')
 
 
-def seed_sensitive_migration(experiment):
-    marker = 'candidate-migration-' + experiment.suffix
-    values = {'SensitiveWords': ' ' + marker + '\n ', 'CheckSensitiveEnabled': 'true',
-              'CheckSensitiveOnPromptEnabled': 'true', 'StopOnSensitiveEnabled': 'false',
-              'StreamCacheQueueLength': '7'}
-    for key, value in values.items():
-        experiment.root.api('PUT', '/api/option/', {'key': key, 'value': value})
-    path = experiment.args.upgrade_attachment_state.with_name('upgrade-sensitive.json')
-    require(not path.exists(), 'upgrade_sensitive_fixture_already_exists')
-    atomic_private(path, json.dumps({'keyword': marker}))
-    experiment.record('old_sensitive_settings_saved_for_upgrade')
-
-
 def assert_filtered(experiment, word):
     before, sends = experiment.balances(), experiment.sends
     status, raw = experiment.relay(messages=[{'role': 'user', 'content': word.upper()}])
@@ -78,20 +65,6 @@ def assert_filtered(experiment, word):
             'request_filter_did_not_reject')
     require(experiment.sends == sends, 'rejected_request_reached_provider')
     experiment.settled(before, 0)
-
-
-def verify_migrated_filter(experiment):
-    path = experiment.args.upgrade_attachment_state.with_name('upgrade-sensitive.json')
-    saved = json.loads(regular_file(path, private=True).read_text())
-    require(set(saved) == {'keyword'} and isinstance(saved['keyword'], str)
-            and saved['keyword'].startswith('candidate-migration-'), 'upgrade_sensitive_fixture_invalid')
-    instances = experiment.root.api('GET', '/api/request_plugin/instances')['instances']
-    matched = [item for item in instances if item['plugin'] == 'request-filter'
-               and item['config'].get('keywords') == saved['keyword']]
-    require(len(matched) == 1 and matched[0]['enabled'] is True and matched[0]['global'] is True,
-            'migrated_sensitive_instance_missing_or_duplicate')
-    assert_filtered(experiment, saved['keyword'])
-    experiment.record('migrated_sensitive_filter_rejects_without_send_or_charge')
 
 
 def run_request_processing(experiment):

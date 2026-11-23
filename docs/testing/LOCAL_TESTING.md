@@ -18,7 +18,7 @@ python3 -B scripts/testing/run.py <unit|databases|static|build|race|browser|ui-c
 python3 -B scripts/testing/run.py <known_upstream_restored|known_upstream_race|known_upstream_logger_race>
 python3 -B scripts/testing/run.py routing --image <应用镜像ID> --image-identity <identity.json> --simulator-image <模拟器镜像ID> --simulator-identity <identity.json>
 python3 -B scripts/testing/run.py candidate --scope <auto[,部分]|boot|full> --image <应用镜像ID> --image-identity <identity.json> \
-  --simulator-image <模拟器镜像ID> --simulator-identity <identity.json> [--previous-image ren2hub-test:<旧版完整SHA>-v1] [--traffic-host-interface eth0]
+  --simulator-image <模拟器镜像ID> --simulator-identity <identity.json> [--base <基线完整SHA>] [--traffic-host-interface eth0]
 python3 -B scripts/testing/run.py <quick|all> [候选参数]
 ```
 
@@ -36,7 +36,7 @@ python3 -B scripts/testing/run.py <quick|all> [候选参数]
 | ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                                           | 自动发现全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端；除 `bonus-card.spec.ts` 的快照外不做像素比较                                                          |
 | diagnostics  | 白名单内的 Go 标签诊断、真实失败指纹和标签包 vet                                                      | 精确测试名；编译失败、超时、缺项、跳过、未知失败、意外通过均失败，本地失败不能归为上游                                                                                                           |
 | routing      | 用独立的渠道模拟器镜像执行真实路由合同和精确 Go 诊断                                                  | 需要已构建的镜像和两份 `identity.json`；始终 `deployment_eligible=false`                                                                                                                         |
-| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理与扩展、SDK 合同；指定旧镜像时增加跨版本普通升级 | 全新隔离的 PostgreSQL、Redis、附件与密钥，internal 网络；精确的余额和发送次数断言。`--scope` 必填，只运行所选部分，`full` 是完整候选；范围候选不运行 routing、诊断和 race，manifest 记录 `scope` |
+| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理与扩展、SDK 合同                                 | 全新隔离的 PostgreSQL、Redis、附件与密钥，internal 网络；精确的余额和发送次数断言。`--scope` 必填，只运行所选部分，`full` 是完整候选；范围候选不运行 routing、诊断和 race，manifest 记录 `scope` |
 | quick        | registry、unit、static、build，对应上游 NewAPI 的日常 CI                                              | 全量档位，只在明确要求时运行；任一层失败即中止，不能代替 `all`                                                                                                                                   |
 | all          | registry、unit、databases、static、build、race、browser、ui-contracts 和完整候选                      | 全量档位，只在明确要求时运行；诊断由完整候选执行一次，不单独重复                                                                                                                                 |
 
@@ -50,7 +50,7 @@ python3 -B scripts/testing/run.py <quick|all> [候选参数]
 - Vue：`vitest related` 按导入图选用例；typecheck 在任何前端代码改动时整体运行；lint 与 Prettier 只查改动文件；`package.json`、`bun.lock`、tsconfig、Vite、Vitest、ESLint、Prettier 配置改动时对应层整体运行。改动构建输入时列出 build。
 - 视觉：spec 按 URL 打开页面，导入图关联不到 `src`。`ui-contracts` 和 `targeted --visual` 每次通过后，按 Playwright 单 worker 串行的时间窗把 Vite 返回的 `/src`、`/public` 模块归到各 spec，写入 `.local-tests/ui-impact.json`；局部运行只刷新运行过的 spec，没有影响图时从空图开始，已删除的 spec 被移除。affected 只选加载过改动模块的 spec、改动的 spec 和导入改动辅助文件的 spec；没有影响记录的 spec 和关联不到任何 spec 的前端改动不自动选中，在计划输出里单独列出，由计划按行为点名。改动全局配置时选择整层。影响图只决定迭代选择，不进入发布证据。
 - Python：改动 `scripts/testing/` 下的文件或 `scripts/refresh-core-source-delta.py` 时运行 `scripts/testing` 的 Python 单测。
-- 不覆盖的层：候选合同（`scripts/testing/contracts/`、`candidate.py`、Dockerfile）、真实后端 browser（`browser.py`、`tests/local/`）、diagnostics 和 `known_upstream_*` 的输入改动只在报告中列出应单独处置的档位，不自动启动；改动了冻结清单绑定的夹具或源码文件时同样列出对应的 `known_upstream_*` 档位。被工作区发布校验器加载的 runner 模块改动时提示工作区 infra。
+- 不覆盖的层：候选合同（`scripts/testing/contracts/`、`candidate.py`、Dockerfile）、真实后端 browser（`browser.py`、`tests/local/`）、diagnostics 和 `known_upstream_*` 的输入改动只在报告中列出应单独处置的档位，不自动启动；改动了冻结清单绑定的夹具或源码文件时同样列出对应的 `known_upstream_*` 档位。被工作区镜像构建器加载的 candidate 模块改动时提示工作区 infra。
 
 ## 隔离与证据
 
@@ -76,7 +76,7 @@ SDK 运行时通过 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`、`GATEWAY_SDK_NOD
 
 候选默认不挂载宿主文件，应用使用主监听器计数。传入 `--traffic-host-interface NAME`（`^[A-Za-z0-9_.-]{1,15}$`）后，候选应用额外得到只读的单文件挂载 `/proc/1/net/dev → /host/proc/net/dev` 和 `TRAFFIC_HOST_INTERFACE=NAME`。除本轮生成的 mock CA 证书外，这是候选唯一允许的宿主文件挂载。管理组的 `traffic_source_matches_configuration` 核对读数的 `scope`、`interface` 与参数一致；监听器模式下还要求两个方向都大于 0，宿主模式下候选在 internal 网络里，0 是有效读数。隔离报告和 `candidate-manifest.json` 记录 `traffic: {scope, interface, mounts}`。
 
-manifest 里 `candidate_success` 表示测试是否全部通过，`deployment_eligible`（也就是 `success`）表示可以用于正式更新：所选阶段通过、清理成功、源码干净、镜像修订与根仓库 gitlink 一致。完整候选有一条精确的发布豁免：未通过项与 `routing_result.py` 登记的上游缺陷及其阻断逐项一致、其余阶段全部通过时，manifest 记录 `upstream_exemption`，`candidate_success` 仍为 false；多一项、少一项、诊断变了或有本地失败都不豁免。工作区的发布校验器加载同一份规则复核。
+manifest 里 `candidate_success` 表示测试是否全部通过，`deployment_eligible`（也就是 `success`）表示可以用于正式更新：所选阶段通过、清理成功、源码干净、镜像修订与源码一致。完整候选有一条精确的发布豁免：未通过项与 `routing_result.py` 登记的上游缺陷及其阻断逐项一致、其余阶段全部通过时，manifest 记录 `upstream_exemption`，`candidate_success` 仍为 false；多一项、少一项、诊断变了或有本地失败都不豁免。
 
 ### 路由合同
 
@@ -84,17 +84,9 @@ manifest 里 `candidate_success` 表示测试是否全部通过，`deployment_el
 
 证据由 HTTP 请求 ID、供应商实际命中、重试轨迹、状态、预期与实际扣费、并发释放共同构成。供应商到达序号不是状态更新游标；不靠固定 sleep 猜测并发交错；取不到请求 ID 的取消和被拒绝的 WebSocket 请求明确记录缺失，保留供应商和余额证据。
 
-### 普通升级
-
-差异只要含前端、文档、脚本和 Go 测试文件以外的改动（`release_scope.py` 的 `STARTUP_NEUTRAL` 之外），普通更新就必须用 `--previous-image` 做升级演练，更新执行器按同一规则复算；全新库的结果不能替代它。演练传入不同修订的不可变旧镜像，按 `upgrade-baseline → upgrade-management → upgrade-before-seconds → upgrade-prepare-p → upgrade-resume-p → upgrade-after-seconds → upgrade-after-p` 执行：旧镜像生成合成配置、余额、充值、工单附件和在途任务，随后只替换应用容器，保留同一 PostgreSQL、Redis、网络、密钥和带本轮 label 的附件卷。
-
-切换前后按 `upgrade_contract.py` 比较配置、用户、Token、渠道、充值、路由、工单记录和附件的指纹，登记在案的迁移（配置键迁移、新增列）之外逐表逐键一致，再重复启动一次验证迁移幂等。在途任务单独断言恢复后只结算或退款一次、没有重复的供应商提交，旧版签发的产物链接仍可读取；`seconds` 与 `p` 两种计量分别验证。演练期间模拟供应商会按计划停服，所以新旧容器都显式设置并核验 `TASK_POLL_MAX_FAILURES=0`，这个设置只记录在候选报告里，不改生产默认值。
-
-演练只能证明种子覆盖到的数据，也不让旧程序改写已经迁移的新库；生产回退仍须连同对应的数据库、Redis 和附件整体切回。
-
 ## 已接受的原生差异
 
-后端按[同步账本](../upstream/SYNC_LEDGER.md)记录的冻结目标对齐上游后，与上游相同的已知缺陷不在本地修复，而是冻结成诊断，防止它们被悄悄扩大或被误报为通过。这些档位的退出码 2 和 `success=false` 只表示“与冻结的原生差异逐项一致”，不表示测试通过；完整候选里它们仍使 `candidate_success=false`。候选与工作区的发布校验器各自读取冻结清单和原始日志重算结果。行为退步和证据边界见[披露](../upstream/NATIVE_B388_DISCLOSURES.md)，历史断言的逐项去向见 `docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json`。
+后端按[同步账本](../upstream/SYNC_LEDGER.md)记录的冻结目标对齐上游后，与上游相同的已知缺陷不在本地修复，而是冻结成诊断，防止它们被悄悄扩大或被误报为通过。这些档位的退出码 2 和 `success=false` 只表示“与冻结的原生差异逐项一致”，不表示测试通过；完整候选里它们仍使 `candidate_success=false`。完整候选读取冻结清单和原始日志重算结果。行为退步和证据边界见[披露](../upstream/NATIVE_B388_DISCLOSURES.md)，历史断言的逐项去向见 `docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json`。
 
 | 档位                         | 冻结清单                                             | 内容                                                                                                                                                                                      |
 | ---------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -108,4 +100,4 @@ manifest 里 `candidate_success` 表示测试是否全部通过，`deployment_el
 
 ## 发布边界
 
-本地报告、已发布源码、镜像候选和正式部署分别记录。runner 不部署、不改正式环境；应用部署走工作区的更新流程，正式入口只用工作区的 `verify-ren2hub-app.sh` 与 `verify-ren2hub-https.py` 做只读核验。
+本地报告、已发布源码、镜像候选和正式部署分别记录。runner 不部署、不改正式环境；应用部署走工作区的更新流程，正式入口使用工作区的 `ren2hub-app.py status` 和 `verify-ren2hub-https.py` 核验。

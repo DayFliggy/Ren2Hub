@@ -277,22 +277,18 @@ def run_gmpay(experiment, server):
         require(user.request("POST", NOTIFY_PATH, notification(server.orders[trade_no], server.key)) == (200, b"success"), "gmpay_unknown_callback_failed")
         check_settled(experiment, trade_no, before, count, int(value["expected_quota"]))
         experiment.record("gmpay_unknown_outcome_no_retry_late_callback_settles")
-        orders = 3
         # 付款人在托管收银台改换币种或网络后，网关用父订单发回调，链上交易号为空。
-        # 升级演练里的旧镜像可能早于这项合同，那一阶段不运行。
-        if getattr(experiment.args, "upgrade_attachment_phase", None) != "capture":
-            before, count = wallet(experiment), topup_logs(experiment)
-            data = create()
-            order = server.orders[data["trade_no"]]
-            switched = notification(order, server.key, "")
-            require(user.request("POST", NOTIFY_PATH, switched) == (200, b"success"), "gmpay_switched_callback_rejected")
-            require(user.request("POST", NOTIFY_PATH, switched) == (200, b"success"), "gmpay_switched_replay_rejected")
-            require(user.request("POST", NOTIFY_PATH, notification(order, server.key)) == (200, b"fail"),
-                    "gmpay_switched_receipt_replaced")
-            check_settled(experiment, data["trade_no"], before, count, data["expected_quota"])
-            experiment.record("gmpay_switched_cashier_parent_callback_settles_once")
-            orders = 4
-        require(not server.failures and len(server.orders) == orders, "gmpay_mock_contract_or_retry_failure")
+        before, count = wallet(experiment), topup_logs(experiment)
+        data = create()
+        order = server.orders[data["trade_no"]]
+        switched = notification(order, server.key, "")
+        require(user.request("POST", NOTIFY_PATH, switched) == (200, b"success"), "gmpay_switched_callback_rejected")
+        require(user.request("POST", NOTIFY_PATH, switched) == (200, b"success"), "gmpay_switched_replay_rejected")
+        require(user.request("POST", NOTIFY_PATH, notification(order, server.key)) == (200, b"fail"),
+                "gmpay_switched_receipt_replaced")
+        check_settled(experiment, data["trade_no"], before, count, data["expected_quota"])
+        experiment.record("gmpay_switched_cashier_parent_callback_settles_once")
+        require(not server.failures and len(server.orders) == 4, "gmpay_mock_contract_or_retry_failure")
     finally:
         config["enabled"] = False
         config["secret_key"] = ""
@@ -421,7 +417,7 @@ def run_routing_pat(experiment, token_id, foreign_id, channel_id):
     try:
         view = business(user.request("GET", path, bearer=pat), "routing_pat_read")
         require(user.request("GET", foreign_path, bearer=pat)[0] == 404, "routing_pat_foreign_owner_read")
-        body = {**experiment.ordered_route_fields(view), "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
+        body = {"mode": "ordered", "selected_only": True, "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
         require(user.request("PUT", path, body, bearer=pat)[0] == 403, "routing_read_pat_wrote")
         update = {"name": "routing-" + experiment.suffix, "scopes": ["routing:write"]}
         require(user.request("PATCH", f"/api/user/access_tokens/{identifier}", update)[0] == 403, "routing_pat_update_without_step_up")
@@ -453,7 +449,7 @@ def run_routing_candidates(experiment):
         require({item["id"] for item in candidates} == {channel_id}, "routing_model_candidate_intersection")
         require(candidates[0]["models"] == [concrete], "routing_candidates_widened_model_names")
         view = experiment.user.api("GET", path)
-        body = {**experiment.ordered_route_fields(view), "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
+        body = {"mode": "ordered", "selected_only": True, "version": view["version"], "entries": [{"channel_id": channel_id, "enabled": True}]}
         view = experiment.user.api("PUT", path, body)
         query = urllib.parse.urlencode({"model": concrete, "path": "/v1/chat/completions"})
         preview = experiment.user.api("GET", path + "/preview?" + query)
@@ -496,7 +492,7 @@ def run_routing_pinned_websocket(experiment):
         key = admin.api("POST", f"/api/token/{token_id}/key")["key"]
         path = f"/api/token/{token_id}/routing"
         view = admin.api("GET", path)
-        admin.api("PUT", path, {**experiment.ordered_route_fields(view), "version": view["version"],
+        admin.api("PUT", path, {"mode": "ordered", "selected_only": True, "version": view["version"],
             "entries": [{"channel_id": experiment.channel_id, "enabled": True}]})
         original = root.api("GET", f"/api/channel/{experiment.channel_id}")
         config = {name: original[name] for name in ("id", "name", "type", "models", "channel_ratio", "max_concurrency", "priority", "weight", "base_url", "setting")}

@@ -23,8 +23,10 @@ import traceback
 
 LABEL = 'renai.local-test.run'
 STAGES = ('billing', 'ws', 'compact', 'plugin-before', 'plugin-after', 'upstream_sync', 'sdk', 'routing')
-UPGRADE_STAGES = ('upgrade-baseline', 'upgrade-management', 'upgrade-before-seconds',
-                  'upgrade-prepare-p', 'upgrade-resume-p', 'upgrade-after-seconds', 'upgrade-after-p')
+DEPENDENCY_IMAGES = {
+    'postgres': 'postgres:15-bookworm@sha256:e8db9bd3e9e1751eb639fb17be53cc6d1b62a322adf75b99e791767a7a16ce69',
+    'redis': 'redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73',
+}
 HOST_INTERFACE = r'[A-Za-z0-9_.-]{1,15}'
 # 除本轮生成的 mock CA 证书外，宿主网卡计数文件是候选唯一允许挂载的宿主文件；它不是数据路径，只读单文件。
 COUNTER_SOURCE, COUNTER_TARGET = '/proc/1/net/dev', '/host/proc/net/dev'
@@ -37,15 +39,6 @@ class CandidateError(RuntimeError):
 def require(condition, code):
     if not condition:
         raise CandidateError(code)
-
-
-def contract(check, *args):
-    """Run an upgrade contract check and keep its diagnostic code in the report."""
-    from contracts.common import RequirementError
-    try:
-        return check(*args)
-    except RequirementError as error:
-        raise CandidateError(str(error)) from None
 
 
 def private_write(path: Path, value):
@@ -186,7 +179,6 @@ def validate_build_identity(manifest, image, artifact, current_source=None, payl
     require(labels.get(prefix + '.source-sha256') == before['working_tree_sha256']
             and labels.get('org.opencontainers.image.revision') == revision, 'build_identity_label_mismatch')
     if artifact == 'ren2hub':
-        require(labels.get('org.opencontainers.image.version') == revision, 'build_identity_label_mismatch')
         require(current_source is not None and before == current_source, 'build_identity_stale_worktree')
     else:
         require(type(manifest.get('protocol_version')) is int and manifest['protocol_version'] == 1
@@ -225,7 +217,7 @@ def stage_accepted(stage, returncode, report):
 
 
 class Candidate:
-    def __init__(self, source, output, image, traffic_interface=None, previous_image=None, simulator_image=None, routing_only=False,
+    def __init__(self, source, output, image, traffic_interface=None, base_revision=None, simulator_image=None, routing_only=False,
                  image_identity=None, simulator_identity=None, scope=None):
         require(traffic_interface is None or re.fullmatch(HOST_INTERFACE, traffic_interface),
                 'invalid_traffic_host_interface')
@@ -248,23 +240,19 @@ class Candidate:
         self.containers = {}
         self.network_id = None
         self.image = image
-        self.previous_image = previous_image
+        self.base_revision = base_revision
         self.simulator_image = simulator_image
         self.image_identity_path = image_identity
         self.simulator_identity_path = simulator_identity
         self.routing_only = routing_only
-        # scope 为 None 时是完整候选；否则只运行按改动模块选出的部分，阶段在 prepare 读到旧镜像修订后确定。
+        # scope 为 None 时是完整候选；否则只运行按改动模块选出的部分，阶段在 prepare 读到基线提交后确定。
         self.scope = scope
-        require(not routing_only or previous_image is None, "routing_does_not_run_upgrade")
         require(not routing_only or scope is None, 'routing_has_no_scope')
         require(bool(simulator_image), "explicit_simulator_image_required")
         self.attachment_volume = None
-        self.stages = ('routing',) if routing_only else () if scope is not None else (
-            (*UPGRADE_STAGES, *STAGES) if previous_image else STAGES)
-        self.workspace_identity = source_identity(self.source.parent)
-        self.workspace_sha = self.workspace_identity['git_head']
+        self.stages = ('routing',) if routing_only else () if scope is not None else STAGES
         self.report = {'success': False, 'layer': 'routing' if routing_only else 'candidate', 'run_id': self.run_id,
-                       'source': source_identity(self.source), 'workspace': self.workspace_identity, 'stages': {}, 'cleanup': {},
+                       'source': source_identity(self.source), 'stages': {}, 'cleanup': {},
                        'external_requests': None, 'database_lifecycle': 'fresh_tmpfs',
                        'limits': ['本地模拟供应商和支付；不验证真实供应商、真实支付或生产部署。']}
         self.report['exit_code'] = 1
@@ -370,25 +358,21 @@ class Candidate:
         return verified
 
     def select_scope(self):
-        """按请求和与旧镜像修订的差异确定本轮部分；不做升级演练时不启动旧镜像。"""
+        """按请求和与基线提交的差异确定本轮验收范围。"""
         from release_scope import expand, required_parts, stages
         requested = set(self.scope)
         base, required = None, None
-        if self.previous_image:
-            labels = json.loads(self.docker('image', 'inspect', self.previous_image).stdout)[0]['Config'].get('Labels') or {}
-            base = labels.get('org.opencontainers.image.revision', '')
-            require(re.fullmatch(r'[0-9a-f]{40}', base), 'distinct_immutable_previous_image_required')
+        if self.base_revision:
+            base = self.base_revision
+            require(re.fullmatch(r'[0-9a-f]{40}', base), 'complete_base_revision_required')
             # --no-renames：重命名按删除加新增列出，移走的文件不会被目标路径掩盖。
             changed = execute(['git', '-C', str(self.source), 'diff', '--name-only', '--no-renames', '-z',
                                base, 'HEAD', '--'], check=False)
             require(changed.returncode == 0, 'previous_revision_missing_in_source')
             required = required_parts(name for name in changed.stdout.decode().split('\0') if name)
-        require('auto' not in requested or required is not None, 'auto_scope_requires_previous_image')
+        require('auto' not in requested or required is not None, 'auto_scope_requires_base_revision')
         parts = expand((requested - {'auto', 'boot'}) | set(required if 'auto' in requested else ()))
         require(required is None or set(required) <= set(parts), 'candidate_scope_missing_required_parts')
-        require('upgrade' not in parts or self.previous_image, 'upgrade_scope_requires_previous_image')
-        if 'upgrade' not in parts:
-            self.previous_image = None
         self.stages = stages(parts)
         self.report['scope'] = {'requested': sorted(requested), 'parts': parts, 'required': required,
                                 'base_revision': base}
@@ -404,7 +388,7 @@ class Candidate:
         image = json.loads(self.docker('image', 'inspect', self.image).stdout)[0]
         labels = image['Config'].get('Labels') or {}
         revision = labels.get('org.opencontainers.image.revision', '')
-        require(re.fullmatch(r'[0-9a-f]{40}', revision) and labels.get('org.opencontainers.image.version') == revision,
+        require(re.fullmatch(r'[0-9a-f]{40}', revision),
                 'immutable_application_revision_labels_required')
         self.image_id, self.revision = image['Id'], revision
         self.report['image'] = {'reference': self.image, 'id': self.image_id, 'revision': revision}
@@ -412,30 +396,12 @@ class Candidate:
         self.report['image_matches_clean_source'] = image_matches_source(
             labels, self.report['source'], getattr(self, 'routing_only', False))
         self.report['image']['working_tree_sha256'] = labels.get('io.ren2hub.source-sha256')
-        self.active_image_id, self.active_revision = self.image_id, self.revision
-        if getattr(self, 'previous_image', None):
-            previous = json.loads(self.docker('image', 'inspect', self.previous_image).stdout)[0]
-            previous_labels = previous['Config'].get('Labels') or {}
-            previous_revision = previous_labels.get('org.opencontainers.image.revision', '')
-            require(re.fullmatch(r'[0-9a-f]{40}', previous_revision)
-                    and previous_labels.get('org.opencontainers.image.version') == previous_revision
-                    and previous_revision != revision, 'distinct_immutable_previous_image_required')
-            self.active_image_id, self.active_revision = previous['Id'], previous_revision
-            self.report['upgrade'] = {'previous_image': {'reference': self.previous_image,
-                                      'id': previous['Id'], 'revision': previous_revision}}
-            self.report['upgrade']['mock_downtime_policy'] = {
-                'TASK_POLL_MAX_FAILURES': 0,
-                'reason': '阶段间模拟供应商计划停服，不把连接失败阈值作为本升级合同；原生任务超时仍生效。'}
-        compose = self.source.parent / 'deploy/ren2hub/docker-compose.preview.yml'
-        references = {}
         dependencies = {}
-        for role in ('postgres', 'redis'):
-            matches = re.findall(r'^    image: (' + role + r':[^\s]+@sha256:[0-9a-f]{64})$', compose.read_text(), re.M)
-            require(len(matches) == 1, 'pinned_dependency_image_required_' + role)
-            references[role] = matches[0]
-            dependencies[role] = json.loads(self.docker('image', 'inspect', matches[0]).stdout)[0]['Id']
-        self.report['dependency_images'] = {role: {'reference': references[role], 'id': dependencies[role]} for role in dependencies}
-        self.report['dependency_compose_sha256'] = hashlib.sha256(compose.read_bytes()).hexdigest()
+        for role, reference in DEPENDENCY_IMAGES.items():
+            dependencies[role] = json.loads(self.docker('image', 'inspect', reference).stdout)[0]['Id']
+        self.report['dependency_images'] = {
+            role: {'reference': DEPENDENCY_IMAGES[role], 'id': image_id} for role, image_id in dependencies.items()
+        }
         certificate = self.tls()
         self.network = self.prefix + '-network'
         self.network_id = self.docker('network', 'create', '--internal', '--label', LABEL + '=' + self.run_id,
@@ -484,7 +450,6 @@ class Candidate:
             'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC',
             'HTTP_PROXY': 'http://127.0.0.1:41749', 'HTTPS_PROXY': 'http://127.0.0.1:41749',
             'NO_PROXY': candidate_no_proxy(simulator_address),
-            **({'TASK_POLL_MAX_FAILURES': '0'} if getattr(self, 'previous_image', None) else {}),
             **({'TRAFFIC_HOST_INTERFACE': self.traffic_interface} if self.traffic_interface else {})})
         # 默认不挂载也不设网卡名，应用使用主监听器计数；--mount 的源缺失时容器创建直接失败。
         counter = ('--mount', 'type=bind,src=' + COUNTER_SOURCE + ',dst=' + COUNTER_TARGET + ',readonly') if self.traffic_interface else ()
@@ -506,9 +471,8 @@ class Candidate:
         target = {role + '_container': self.prefix + '-' + role for role in self.containers if role != 'simulator'}
         target.update(database_user='ren2hub', database_name='ren2hub_candidate', database_host='postgres:5432',
                       redis_host='redis:6379', network=self.network, network_id=self.network_id, run_id=self.run_id,
-                      container_ids=dict(self.containers), image_id=self.active_image_id, revision=self.active_revision, ca_path=str(certificate), network_guard=self.network_guard,
-                      traffic_host_interface=self.traffic_interface)
-        target.update(attachment_volume=self.attachment_volume, upgrade=bool(getattr(self, 'previous_image', None)))
+                      container_ids=dict(self.containers), image_id=self.image_id, revision=self.revision, ca_path=str(certificate), network_guard=self.network_guard,
+                      traffic_host_interface=self.traffic_interface, attachment_volume=self.attachment_volume)
         if getattr(self, 'simulator_image', None):
             from simulator_support import target as simulator_target
             target['simulator'] = simulator_target(self)
@@ -530,197 +494,11 @@ class Candidate:
         # Avoid Docker's loopback DNS forwarder: every permitted hostname has
         # an exact entry, and all DNS traffic is blocked in this namespace.
         hosts = '\n'.join(address + ' ' + role for role, address in self.network_guard['addresses'].items())
-        self.start('app', self.active_image_id, (*self.app_options,
+        self.start('app', self.image_id, (*self.app_options,
                    '--entrypoint', '/bin/sh',
-                   '--label', 'org.opencontainers.image.revision=' + self.active_revision,
-                   '--label', 'org.opencontainers.image.version=' + self.active_revision),
+                   '--label', 'org.opencontainers.image.revision=' + self.revision),
                    ('-c', 'printf "%s\\n" "$1" >> /etc/hosts; shift; exec /new-api "$@"',
                     'candidate-start', hosts, '--log-dir', '/tmp/ren2hub-local-logs'))
-
-    def upgrade_snapshot(self, include_options=False):
-        """只记录本轮合成数据的指纹；轮询中的任务和日志另由行为合同验证。"""
-        self.owned('postgres')
-        tables = ('options', 'users', 'tokens', 'channels', 'top_ups', 'gmpay_orders', 'redemptions',
-                  'admin_quota_operations', 'token_route_profiles', 'token_route_entries',
-                  'tickets', 'ticket_messages', 'ticket_attachments')
-        from upgrade_contract import ADDED_COLUMN_SUFFIX, option_values, split_added_column
-        result, options = {}, None
-        for table in tables:
-            rows, added = contract(split_added_column, table, self.table_rows(table))
-            result[table] = hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
-            if added is not None:
-                result[table + ADDED_COLUMN_SUFFIX] = added
-            if table == 'options' and include_options:
-                options = contract(option_values, rows)
-        self.owned('app')
-        files = self.docker('exec', self.containers['app'], 'sh', '-c',
-                            'find /app/ticket-attachments -type f -exec sha256sum {} \\; | sort').stdout
-        result['attachments'] = hashlib.sha256(files).hexdigest()
-        return (result, options) if include_options else result
-
-    def psql_json(self, query):
-        raw = self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-t', '-A',
-                          '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode()).stdout
-        return json.loads(raw)
-
-    def table_rows(self, table):
-        return self.psql_json('BEGIN READ ONLY; SELECT COALESCE(json_agg(value ORDER BY value::text),\'[]\'::json) '
-                              'FROM (SELECT row_to_json(t) AS value FROM ' + table + ' t) s; COMMIT;')
-
-    def topup_bonus_state(self):
-        """折扣与加赠表的完整内容，只在内存比较。"""
-        from upgrade_contract import BONUS_ROW_TABLES, BONUS_TABLES, LEGACY_DISCOUNT_TABLES
-        self.owned('postgres')
-        names = ','.join("'" + table + "'" for table in (*LEGACY_DISCOUNT_TABLES, *BONUS_TABLES))
-        tables = self.psql_json('BEGIN READ ONLY; SELECT COALESCE(json_agg(t ORDER BY t),\'[]\'::json) FROM unnest(ARRAY['
-                                + names + ']) t WHERE to_regclass(\'public.\' || t) IS NOT NULL; COMMIT;')
-        state = {'tables': tables}
-        for table in tables:
-            if table in BONUS_ROW_TABLES:
-                state[table] = self.table_rows(table)
-        return state
-
-    def seed_legacy_topup_discount(self):
-        """折扣版本的升级源写入两版配置、两条小时用量和已用/未用两个兑换码，让首次升级迁移真实旧表，
-        并核对兑换码在新增 bonus_quota 列后保持不变。"""
-        from upgrade_contract import LEGACY_DISCOUNT_SEED_CONFIGS, LEGACY_DISCOUNT_SEED_USER
-        state = self.topup_bonus_state()
-        if not {'topup_discount_configs', 'topup_discount_usage_hourly'} <= set(state['tables']):
-            return False
-        first, latest = LEGACY_DISCOUNT_SEED_CONFIGS
-        require('$$' not in first + latest, 'upgrade_seed_config_invalid')
-        query = ('BEGIN; WITH base AS (SELECT COALESCE(MAX(version), 0) AS version FROM topup_discount_configs) '
-                 'INSERT INTO topup_discount_configs (version, config, created_by, created_at) '
-                 'SELECT base.version + seed.step, seed.config, 1, seed.created_at FROM base, '
-                 '(VALUES (1, $$' + first + '$$, 1793289600), (2, $$' + latest + '$$, 1793293200)) AS seed(step, config, created_at); '
-                 'INSERT INTO topup_discount_usage_hourly (user_id, hour_utc, quota) '
-                 'SELECT ' + str(LEGACY_DISCOUNT_SEED_USER) + ', EXTRACT(EPOCH FROM date_trunc(\'hour\', now()))::bigint - seed.hours * 3600, seed.quota '
-                 'FROM (VALUES (1, 1200), (25, 3400)) AS seed(hours, quota); '
-                 'INSERT INTO redemptions (user_id, "key", status, name, quota, created_time, redeemed_time, used_user_id, expired_time) '
-                 "VALUES (1, 'upgrade-contract-redemption-used', 3, 'upgrade contract', 500000, 1793289600, 1793293200, "
-                 + str(LEGACY_DISCOUNT_SEED_USER) + ", 0), "
-                 "(1, 'upgrade-contract-redemption-open', 1, 'upgrade contract', 700000, 1793289600, 0, 0, 0); COMMIT;")
-        self.owned('postgres')
-        self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1',
-                    '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode())
-        return True
-
-    def upgrade(self):
-        require(all(self.report['stages'].get(stage, {}).get('success') is True
-                    for stage in UPGRADE_STAGES[:4]), 'upgrade_preparation_must_pass')
-        previous_target = dict(self.target)
-        previous_target['container_ids'] = dict(self.target['container_ids'])
-        private_write(self.private / 'upgrade-source-target.json', previous_target)
-        seeded = self.seed_legacy_topup_discount()
-        before, options_before = self.upgrade_snapshot(include_options=True)
-        bonus_before = self.topup_bonus_state()
-        schema_before = self.schema_fingerprint()
-        old = self.owned('app')
-        self.docker('stop', '--time', '130', old['Id'], timeout=180)
-        require(self.owned('app')['State']['ExitCode'] == 0, 'upgrade_previous_app_did_not_exit_cleanly')
-        self.docker('rm', old['Id'])
-        del self.containers['app']
-        self.active_image_id, self.active_revision = self.image_id, self.revision
-        self.start_app()
-        self.wait_healthy('app')
-        after, options_after = self.upgrade_snapshot(include_options=True)
-        bonus_after = self.topup_bonus_state()
-        self.report['upgrade'].update(data_before=before, data_after=after, data_preserved=False,
-                                      schema_before=schema_before, schema_after=self.schema_fingerprint())
-        from upgrade_contract import verify_options_migration, verify_persisted_data, verify_topup_bonus_migration
-        added_columns = contract(verify_persisted_data, before, after)
-        bonus_migration = contract(verify_topup_bonus_migration, bonus_before, bonus_after)
-        migration = contract(verify_options_migration, options_before, options_after)
-        self.report['upgrade'].update(data_preserved=True, sensitive_word_migration=migration,
-                                     added_columns=added_columns,
-                                     topup_bonus_migration={**bonus_migration, 'legacy_seeded': seeded},
-                                     rollback_limit='old_image_does_not_restore_retired_sensitive_options_or_discount_config')
-        self.target.update(container_ids=dict(self.containers), image_id=self.image_id, revision=self.revision)
-        private_write(self.private / 'target.json', self.target)
-        self.report['isolation']['container_ids'] = dict(self.containers)
-        schema = self.schema_fingerprint()
-        self.docker('restart', '--time', '130', self.containers['app'], timeout=180)
-        self.wait_healthy('app')
-        require(schema == self.schema_fingerprint() and after == self.upgrade_snapshot()
-                and bonus_after == self.topup_bonus_state(), 'upgrade_repeated_start_changed_persisted_data')
-        self.report['upgrade']['repeated_start_preserved_data'] = True
-        self.verify_rollback_copy()
-
-    def verify_rollback_copy(self):
-        """旧镜像只启动于本轮数据库副本和独立网络命名空间。"""
-        self.report['upgrade']['rollback_copy'] = {'success': False}
-        candidate_before = self.upgrade_snapshot()
-        postgres = self.containers['postgres']
-        self.owned('postgres')
-        dump = self.docker('exec', postgres, 'pg_dump', '-U', 'ren2hub', '-d', 'ren2hub_candidate',
-                           '--no-owner', '--no-privileges', timeout=120).stdout
-        self.docker('exec', postgres, 'createdb', '-U', 'ren2hub', 'ren2hub_rollback')
-        self.docker('exec', '-i', postgres, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub',
-                    '-d', 'ren2hub_rollback', stdin=dump, timeout=120)
-        del dump
-        app = self.owned('app')
-        settings = dict(item.split('=', 1) for item in app['Config']['Env'])
-        # Reuse the local PostgreSQL role, but never the candidate database,
-        # Redis database, keys, attachment volume, or listener namespace.
-        settings = {key: value for key, value in settings.items() if key in {
-            'SQL_DSN', 'REDIS_CONN_STRING', 'SSL_CERT_FILE', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'}}
-        settings['SQL_DSN'] = settings['SQL_DSN'].replace('/ren2hub_candidate', '/ren2hub_rollback')
-        settings['REDIS_CONN_STRING'] = settings['REDIS_CONN_STRING'].split('/0')[0] + '/15'
-        settings.update(SESSION_SECRET=secrets.token_hex(32), CRYPTO_SECRET=secrets.token_hex(32),
-                        LOG_SQL_DSN='', SQLITE_PATH='', TASK_POLL_MAX_FAILURES='0',
-                        TICKET_UPLOAD_DIR='/app/ticket-attachments', NODE_TYPE='master', TZ='UTC')
-        env = self.env_file('rollback.env', settings)
-        dependency = self.report['dependency_images']['redis']['id']
-        self.start('rollback_mock', dependency, ('--network', self.network, '--entrypoint', '/bin/sh',
-                   '--read-only', '--tmpfs', '/data:rw,size=1m'), ('-c', 'exec sleep infinity'))
-        self.namespace('rollback_mock', '/usr/bin/ip', 'route', 'flush', 'default')
-        for binary in ('/usr/sbin/iptables', '/usr/sbin/ip6tables'):
-            self.namespace('rollback_mock', binary, '-w', '5', '-P', 'OUTPUT', 'DROP')
-            if binary.endswith('/iptables'):
-                self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT',
-                               '-d', '127.0.0.11/32', '-j', 'REJECT')
-            for protocol in ('udp', 'tcp'):
-                self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-p', protocol,
-                               '--dport', '53', '-j', 'REJECT')
-            self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-o', 'lo', '-j', 'ACCEPT')
-            if binary.endswith('/iptables'):
-                for role in ('postgres', 'redis'):
-                    self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-d',
-                                   self.network_guard['addresses'][role] + '/32', '-j', 'ACCEPT')
-            self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-j', 'REJECT')
-        hosts = '\n'.join(self.network_guard['addresses'][role] + ' ' + role for role in ('postgres', 'redis'))
-        old = self.report['upgrade']['previous_image']
-        self.start('rollback_app', old['id'], ('--network', 'container:' + self.containers['rollback_mock'],
-                   '--entrypoint', '/bin/sh', '--env-file', str(env),
-                   '--tmpfs', '/app/ticket-attachments:rw,size=128m', '--tmpfs', '/tmp:rw,size=128m',
-                   '--health-cmd', 'wget -q -T 3 -O /dev/null http://127.0.0.1:3000/api/status',
-                   '--health-interval', '2s', '--health-timeout', '3s', '--health-retries', '50'),
-                   ('-c', 'printf "%s\\n" "$1" >> /etc/hosts; shift; exec /new-api "$@"',
-                    'candidate-rollback', hosts, '--log-dir', '/tmp/ren2hub-local-logs'))
-        self.wait_healthy('rollback_app')
-        from upgrade_contract import INSTANCES_KEY, SENSITIVE_KEYS
-        keys = sorted((*SENSITIVE_KEYS, INSTANCES_KEY))
-        query = ('BEGIN READ ONLY; SELECT COALESCE(json_agg(t),\'[]\'::json) FROM '
-                 '(SELECT key,value FROM options WHERE key IN (' + ','.join("'" + key + "'" for key in keys) + ')) t; COMMIT;')
-        raw = self.docker('exec', '-i', postgres, 'psql', '-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1',
-                          '-U', 'ren2hub', '-d', 'ren2hub_rollback', stdin=query.encode()).stdout
-        rows = json.loads(raw)
-        require(not ({row['key'] for row in rows} & SENSITIVE_KEYS),
-                'rollback_unexpectedly_restored_retired_sensitive_options')
-        require(INSTANCES_KEY in {row['key'] for row in rows}, 'rollback_removed_migrated_filter')
-        self.report['upgrade']['rollback_copy'] = {
-            'success': False, 'old_image_id': old['id'], 'old_revision': old['revision'],
-            'database': 'ren2hub_rollback', 'redis_database': 15,
-            'isolated_network_namespace': True, 'retired_options_restored': False,
-            'migrated_filter_remains': True,
-            'rejected_packets': self.network_rejections(('rollback_mock',)),
-        }
-        for role in ('rollback_app', 'rollback_mock'):
-            self.docker('rm', '-f', self.owned(role)['Id'])
-            del self.containers[role]
-        self.docker('exec', postgres, 'dropdb', '-U', 'ren2hub', 'ren2hub_rollback')
-        require(candidate_before == self.upgrade_snapshot(), 'rollback_copy_changed_candidate_data')
-        self.report['upgrade']['rollback_copy'].update(success=True, candidate_data_unchanged=True)
 
     def namespace(self, role, *command):
         item = self.owned(role)
@@ -837,7 +615,7 @@ class Candidate:
             return
         require(source_identity(self.source) == self.report['source'], 'source_changed_before_http_stage')
         app = self.owned('app')
-        require(app['State']['Running'] and app['Image'] == self.active_image_id, 'candidate_image_or_state_changed')
+        require(app['State']['Running'] and app['Image'] == self.image_id, 'candidate_image_or_state_changed')
         if stage == 'plugin-after':
             before = json.loads((self.output / 'plugin-before.json').read_text())
             require(before.get('success') is True, 'plugin_before_restart_must_pass')
@@ -848,7 +626,7 @@ class Candidate:
             self.report['restart_schema'] = {'before': schema_before, 'after': schema_after, 'unchanged': schema_before == schema_after}
             require(schema_before == schema_after, 'candidate_restart_changed_schema')
         mock = self.owned('mock')
-        configuration = {'private': str(self.private), 'output': str(self.output), 'stage': stage, 'revision': self.active_revision}
+        configuration = {'private': str(self.private), 'output': str(self.output), 'stage': stage, 'revision': self.revision}
         environment = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'PYTHONDONTWRITEBYTECODE': '1',
                        'PYTHONPATH': str(Path(__file__).parent), 'LANG': 'C.UTF-8'}
         environment.update(self.sdk_environment)
@@ -890,18 +668,14 @@ class Candidate:
                 group = {'ws': 'websocket', 'upstream_sync': 'management'}.get(stage, stage)
                 reports[group] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
         source_end = source_identity(self.source)
-        workspace_end = source_identity(self.source.parent)
-        stable = source_end == self.report['source'] and workspace_end == self.workspace_identity
-        self.report['identity_verification'] = {'stable': stable, 'source_end': source_end, 'workspace_end': workspace_end}
+        stable = source_end == self.report['source']
+        self.report['identity_verification'] = {'stable': stable, 'source_end': source_end}
         if not stable:
             self.report['success'] = False
             self.report['exit_code'] = 1
-            self.report['error_code'] = 'source_or_workspace_changed_during_candidate'
-        workspace_clean = workspace_end['candidate_sha'] == self.workspace_sha
-        gitlink = execute(['git', '-C', str(self.source.parent), 'ls-tree', 'HEAD', 'Ren2Hub']).stdout.decode().split()
-        linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
+            self.report['error_code'] = 'source_changed_during_candidate'
         if getattr(self, 'scope', None) is not None:
-            return self.scoped_manifest(reports, stable, workspace_clean and linked)
+            return self.scoped_manifest(reports, stable)
         from routing_result import release_exemption, diagnostics_complete, routing_complete
         exemption = release_exemption(self.report.get('diagnostics'), self.report['stages'].get('routing'))
         exempted = exemption is not None
@@ -949,14 +723,14 @@ class Candidate:
         deployable = bool(not getattr(self, 'routing_only', False) and complete
                           and self.report.get('exit_code') in (0, 2) and stable
                           and not self.report.get('error_code') and not self.report.get('cleanup_errors')
-                          and self.report.get('image_matches_clean_source') and workspace_clean and linked)
+                          and self.report.get('image_matches_clean_source'))
         traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
                     'source_sha': self.report.get('image', {}).get('revision'),
-                    'workspace_sha': self.workspace_sha, 'image_id': self.report.get('image', {}).get('id'),
+                    'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'], 'identity_verification': self.report['identity_verification'],
                     'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
-                    'upgrade': self.report.get('upgrade'), 'simulator': self.report.get('simulator'),
+                    'simulator': self.report.get('simulator'),
                     'build_identities': self.report.get('build_identities'),
                     'diagnostics': {key:self.report.get('diagnostics', {}).get(key)
                                     for key in ('exit_code','counts','report_path','report_sha256')},
@@ -974,22 +748,22 @@ class Candidate:
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
 
-    def scoped_manifest(self, reports, stable, published):
+    def scoped_manifest(self, reports, stable):
         """按模块选择的候选：所选阶段全部通过才可部署；未运行的部分不出现在 manifest，也不计为通过。"""
         scope = self.report.get('scope') or {}
         complete = isinstance(scope.get('parts'), list) and len(reports) == len(self.stages) and all(
             self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
         deployable = bool(complete and self.report.get('exit_code') == 0 and stable
                           and not self.report.get('error_code') and self.report.get('cleanup', {}).get('success') is True
-                          and self.report.get('image_matches_clean_source') and published)
+                          and self.report.get('image_matches_clean_source'))
         traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
                     'scope': scope, 'source_sha': self.report.get('image', {}).get('revision'),
-                    'workspace_sha': self.workspace_sha, 'image_id': self.report.get('image', {}).get('id'),
+                    'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'],
                     'identity_verification': self.report['identity_verification'],
                     'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
-                    'upgrade': self.report.get('upgrade'), 'simulator': self.report.get('simulator'),
+                    'simulator': self.report.get('simulator'),
                     'build_identities': self.report.get('build_identities'),
                     # scope/interface 是 management 阶段的实测值，未选它时为 None；
                     # configured_interface 是候选容器实际使用的配置，发布校验器用它对照正式 compose。
@@ -1039,7 +813,7 @@ def interrupted(_signum, _frame):
 
 
 def run(source: Path, output: Path, image: str, traffic_interface: str | None = None,
-        previous_image: str | None = None, simulator_image: str | None = None, routing_only: bool = False,
+        base_revision: str | None = None, simulator_image: str | None = None, routing_only: bool = False,
         image_identity: Path | None = None, simulator_identity: Path | None = None,
         scope: list[str] | None = None) -> dict:
     previous_umask = os.umask(0o077)
@@ -1049,15 +823,13 @@ def run(source: Path, output: Path, image: str, traffic_interface: str | None = 
         for signum in (signal.SIGINT, signal.SIGTERM):
             old_handlers[signum] = signal.signal(signum, interrupted)
     try:
-        candidate = Candidate(source, output, image, traffic_interface, previous_image, simulator_image, routing_only,
+        candidate = Candidate(source, output, image, traffic_interface, base_revision, simulator_image, routing_only,
                               image_identity, simulator_identity, scope)
         # 冻结诊断与 race 是源码级检查，只随完整候选运行；按模块选择时使用各自的独立档位。
         if scope is None:
             candidate.diagnostics()
         candidate.prepare()
         for stage in candidate.stages:
-            if stage == 'upgrade-resume-p':
-                candidate.upgrade()
             candidate.stage(stage)
         from routing_result import combined_exit_code
         results = list(candidate.report['stages'].values())
@@ -1096,7 +868,7 @@ def main():
     parser.add_argument('--image-identity', required=True, type=Path)
     parser.add_argument('--simulator-identity', required=True, type=Path)
     parser.add_argument('--routing-only', action='store_true')
-    parser.add_argument('--previous-image', help='普通升级合同使用的固定旧镜像；必须与新镜像修订不同')
+    parser.add_argument('--base', dest='base_revision', help='auto 范围的基线提交（完整 SHA）')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     parser.add_argument('--scope', required=True,
@@ -1104,7 +876,7 @@ def main():
     args = parser.parse_args()
     try:
         from release_scope import parse
-        report = run(args.source, args.output, args.image, args.traffic_host_interface, args.previous_image, args.simulator_image, args.routing_only,
+        report = run(args.source, args.output, args.image, args.traffic_host_interface, args.base_revision, args.simulator_image, args.routing_only,
                      args.image_identity, args.simulator_identity, parse(args.scope))
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,

@@ -78,7 +78,7 @@ class SimulatorIsolationTests(unittest.TestCase):
                           container_ids={role:'b'*64 for role in ('app','postgres','redis','mock','simulator')},
                           image_id='sha256:'+'c'*64, revision='d'*40, ca_path=str(root/'server.crt'),
                           network_guard={}, traffic_host_interface='', attachment_volume=prefix+'-attachments',
-                          upgrade=False, simulator={
+                          simulator={
                               'container':prefix+'-simulator','configuration_path':str(config),
                               'configuration_sha256':hashlib.sha256(config.read_bytes()).hexdigest()})
             manifest = root/'target.json'

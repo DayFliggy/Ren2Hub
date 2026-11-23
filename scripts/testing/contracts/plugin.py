@@ -84,13 +84,12 @@ class Client(AcceptanceClient):
         return urllib.parse.urlunsplit(("", "", parsed.path, parsed.query, ""))
 
 
-def plugin_source(key, model, version, quantity="seconds"):
-    require(quantity in ("seconds", "p"), "unsupported_usage_quantity")
+def plugin_source(key, model, version):
     require(version in ("1.0.0", "2.0.0"), "unsupported_fixture_plugin_version")
     meta = {"apiVersion": 1, "key": key, "name": "Ren2Hub local acceptance",
         "version": version, "author": {"name": "Ren2Hub acceptance"},
         "models": [model], "fetchMode": "per_task",
-        "usageSchema": {quantity: {"type": "number", "unit": "second"},
+        "usageSchema": {"seconds": {"type": "number", "unit": "second"},
                         "resolution": {"enum": ["720p", "1080p"]}}}
     route = "/v1" if version == "1.0.0" else "/v2"
     return "export const meta = " + json.dumps(meta, separators=(",", ":")) + ";\n" + r'''
@@ -102,7 +101,7 @@ export function buildSubmitRequest(ctx) {
 export function parseSubmitResponse(ctx, response) {
   return {taskId: response.body.id, taskData: response.body};
 }
-export function extractUsage() { return {__QUANTITY__: 30, resolution: "1080p"}; }
+export function extractUsage() { return {seconds: 30, resolution: "1080p"}; }
 export function buildQueryRequest(ctx) {
   return {url: ctx.baseUrl + "__ROUTE__/jobs/" + ctx.taskId, method: "GET",
     headers: {"Authorization": "Bearer " + ctx.apiKey}};
@@ -112,7 +111,7 @@ export function parseTaskResult(ctx, body) {
     finishTime: body.finish_time || 0};
 }
 export function extractUsageOnComplete(ctx, result, body) {
-  return typeof body.seconds === "number" ? {__QUANTITY__: body.seconds} : null;
+  return typeof body.seconds === "number" ? {seconds: body.seconds} : null;
 }
 export function listArtifacts(task) {
   return task.status === "SUCCESS" ? [{key: "output", type: "file", mimeType: "text/plain"}] : [];
@@ -124,13 +123,12 @@ export function buildContentRequest(ctx) {
     method: ctx.clientRequest.method, headers: {"Authorization": "Bearer " + ctx.apiKey,
       "X-Acceptance-Plugin-Version": "__VERSION__", "X-Acceptance-Producer-Version": ctx.producerVersion}};
 }
-'''.replace("__ROUTE__", route).replace("__QUANTITY__", quantity).replace("__VERSION__", version).replace(
+'''.replace("__ROUTE__", route).replace("__VERSION__", version).replace(
         "__ARTIFACT_ROUTE__", '"/v1"' if version == "1.0.0" else '(ctx.producerVersion === "1.0.0" ? "/v1" : "/v2")')
 
 
-def task_price(model, rate="0.4", quantity="seconds"):
-    require(quantity in ("seconds", "p"), "unsupported_usage_quantity")
-    return expression_pricing('tier("1080p", u("' + quantity + '") * ' + rate + ')')
+def task_price(rate="0.4"):
+    return expression_pricing('tier("1080p", u("seconds") * ' + rate + ')')
 
 class Mock(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_args):
@@ -245,29 +243,15 @@ class Snapshot:
 class Experiment:
     def __init__(self, args, report):
         self.args, self.report = args, report
-        resumed = getattr(args, 'resume_state', False)
-        self.state = {} if args.phase == "before-restart" and not resumed else private_json(args.state)
-        self.fixture_controls_active = True
-        if args.phase == "after-restart" or resumed:
+        self.state = {} if args.phase == "before-restart" else private_json(args.state)
+        if args.phase == "after-restart":
             # Reject foreign state before login or cleanup can act on its IDs.
             target = acceptance_target()
-            previous = getattr(args, 'previous_target', None)
-            if previous:
-                previous = private_json(previous)
-                expected = dict(target)
-                expected.update(revision=previous['revision'], image_id=previous['image_id'],
-                                container_ids={**target['container_ids'], 'app': previous['container_ids']['app']})
-                require(previous == expected and previous['revision'] != args.revision,
-                        'upgrade_state_target_mismatch')
-                target = previous
             require(self.state.get("format") == 4 and self.state.get("acceptance_target") == target
-                    and self.state.get("phase") == ("preparing" if resumed else "before-restart-complete")
+                    and self.state.get("phase") == "before-restart-complete"
                     and self.state.get("base") == args.base
                     and self.state.get("revision") == target['revision'],
                     "before_restart_state_mismatch")
-            if resumed:
-                require(self.state.get('resume_ready') is True and set(self.state.get('tasks', {})) == {'complete', 'missing'},
-                        'preparing_state_has_no_confirmed_submissions')
         self.root, self.user = Client(args.base), Client(args.base)
         self.snapshot = Snapshot(args.revision) if args.snapshot else None
         self.server = None
@@ -315,7 +299,6 @@ class Experiment:
                 "native_task_charge_mismatch")
         logs = {self.state["tasks"][case]: [] for case in expected}
         expr = self.state["original_pricing"]["billing_setting.billing_expr"]
-        quantity = self.state.get("usage_quantity", "seconds")
         for row in saved["logs"]:
             require(row["type"] in (2, 6), "unexpected_native_task_log")
             other = json.loads(row["other"]) if isinstance(row["other"], str) else row["other"]
@@ -324,7 +307,7 @@ class Experiment:
                     and other.get("expr_b64") == base64.b64encode(expr.encode()).decode(),
                     "native_task_price_snapshot_changed")
             facts = other.get("usage_facts", {})
-            require(facts.get(quantity) == (10 if row["type"] == 6 else 30)
+            require(facts.get("seconds") == (10 if row["type"] == 6 else 30)
                     and facts.get("resolution") == "1080p", "native_task_usage_basis_mismatch")
             logs[other["task_id"]].append((row["type"], int(row["quota"])))
             if row["type"] == 6:
@@ -354,7 +337,6 @@ class Experiment:
                 "plugin_active_version_mismatch")
         provenance, prices, completed = {}, {}, 0
         terminal_times = dict(self.state.get("terminal_times", {}))
-        quantity = self.state.get("usage_quantity", "seconds")
         expr = self.state["original_pricing"]["billing_setting.billing_expr"]
         for row in data["tasks"]:
             private = json.loads(row["private_data"]) if isinstance(row["private_data"], str) else row["private_data"]
@@ -381,7 +363,7 @@ class Experiment:
                 completed += 1
             # Native persistence retains the submitted facts; the completion
             # adjustment log carries merged actual facts (verified separately).
-            require(snapshot.get("usage_facts") == {quantity: 30, "resolution": "1080p"},
+            require(snapshot.get("usage_facts") == {"seconds": 30, "resolution": "1080p"},
                     "native_task_usage_snapshot_mismatch")
             provenance[row["task_id"]] = execution
             prices[row["task_id"]] = snapshot
@@ -401,7 +383,7 @@ class Experiment:
     def activate_compatible_v2(self):
         # Native NewAPI executes the active plugin. Activate only after both
         # tasks settle, then explicitly exercise its historical artifact branch.
-        source = plugin_source(self.state["plugin"], self.state["model"], "2.0.0", self.state.get("usage_quantity", "seconds"))
+        source = plugin_source(self.state["plugin"], self.state["model"], "2.0.0")
         self.state["v2_hash"] = hashlib.sha256(source.encode()).hexdigest()
         self.save()
         self.root.api("POST", "/api/plugin/task", {"source": source, "enabled": True,
@@ -491,32 +473,24 @@ class Experiment:
             self.after()
 
     def before(self):
-        if getattr(self.args, 'resume_state', False):
-            self.start_mock()
-            self.user.login(self.state['username'], self.state['password'])
-            self.token_status(1)
-            self.channel_status(1)
-            self.finish_before()
-            self.check('preparing_state_resumed_without_resubmission')
-            return
         suffix = secrets.token_hex(5)
         self.state = {"format": 4, "acceptance_target": acceptance_target(), "phase": "preparing", "base": self.args.base,
             "revision": self.args.revision, "plugin": "core-" + suffix,
             "model": "core-task-" + suffix, "username": "plug" + suffix,
             "password": secrets.token_urlsafe(24), "mock_key": secrets.token_hex(24),
-            "finished_at": int(time.time()), "tasks": {}, "usage_quantity": getattr(self.args, 'usage_quantity', 'seconds')}
+            "finished_at": int(time.time()), "tasks": {}}
         self.save()
         self.start_mock()
         self.state["started_at_before"] = self.root.api("GET", "/api/status").get("start_time")
         require(isinstance(self.state["started_at_before"], int) and self.state["started_at_before"] > 0,
                 "running_instance_identity_unavailable")
-        source = plugin_source(self.state["plugin"], self.state["model"], "1.0.0", self.state.get("usage_quantity", "seconds"))
+        source = plugin_source(self.state["plugin"], self.state["model"], "1.0.0")
         self.state["v1_hash"] = hashlib.sha256(source.encode()).hexdigest()
         self.root.api("POST", "/api/plugin/task", {"source": source, "enabled": True,
             "sourceSha256": self.state["v1_hash"], "remark": "isolated two-phase acceptance"})
         self.state["plugin_created"] = True
         self.save()
-        self.state["original_pricing"] = task_price(self.state["model"], quantity=self.state.get("usage_quantity", "seconds"))
+        self.state["original_pricing"] = task_price()
         price = save_model_pricing(self.root, self.state["model"], self.state["original_pricing"])
         self.state["pricing_config_version"] = price["version"]
         self.root.api("POST", "/api/user/", {"username": self.state["username"],
@@ -562,14 +536,6 @@ class Experiment:
             require(status == 200, "plugin_task_submit_failed")
             self.state["tasks"][case] = json.loads(raw)["task_id"]
             self.save()
-        if getattr(self.args, 'prepare_only', False):
-            self.state['resume_ready'] = True
-            self.save()
-            self.check('confirmed_submissions_saved_in_preparing_state')
-        else:
-            self.finish_before()
-
-    def finish_before(self):
         self.wait(lambda: self.task("missing")["status"] == "SUCCESS", "missing_usage_task_not_terminal")
         require(self.task("complete")["status"] in ("SUBMITTED", "IN_PROGRESS"), "pending_task_not_preserved")
         # Native submission has already charged both estimates. The missing
@@ -581,7 +547,7 @@ class Experiment:
         self.check("native_submit_charges_both_estimates_and_missing_usage_retains_submit_facts",
                    charged_usd="24", missing_final_usd="12", terminal_count=1)
         save_model_pricing(self.root, self.state["model"],
-            task_price(self.state["model"], "0.9", self.state.get("usage_quantity", "seconds")),
+            task_price("0.9"),
             self.state["pricing_config_version"])
         require(self.db_check(1), "native_submission_snapshot_changed_on_reprice")
         self.check("registered_v1_source_and_submission_price_snapshot_recorded", source_sha256=self.state["v1_hash"])
@@ -611,7 +577,7 @@ class Experiment:
         require(self.db_check(2), "native_terminal_snapshot_changed_on_requery")
         self.verify_task_settlements()
         self.check("native_v1_registry_and_provenance_survive_restart_with_original_price",
-                   source_sha256=self.state["v1_hash"], usage_quantity=self.state.get("usage_quantity", "seconds"),
+                   source_sha256=self.state["v1_hash"], usage_quantity="seconds",
                    actual_seconds=10, unit_usd="0.4", completed_final_usd="4")
         self.check("native_submit_and_completion_adjustment_are_not_repeated", total_usd=str(settled_usd),
                    submit_logs=2, completion_refund_logs=1, request_count=2)
@@ -638,21 +604,19 @@ class Experiment:
                 self.save()
             except Exception:
                 errors.append("fetch_configuration_restore_failed")
-        controls = getattr(self, "fixture_controls_active", True)
-        if controls and self.user.bearer and self.state.get("token_id"):
+        if self.user.bearer and self.state.get("token_id"):
             try:
                 self.token_status(2)
                 require(self.user.request("GET", "/v1/models", bearer=self.state["token_key"])[0] in (401, 403), "revoked_token_accepted")
             except Exception:
                 errors.append("token_cleanup_failed")
-        if controls and self.root.bearer and self.state.get("channel_id"):
+        if self.root.bearer and self.state.get("channel_id"):
             try:
                 self.channel_status(2)
             except Exception:
                 errors.append("channel_cleanup_failed")
-        recoverable = self.state.get('phase') == 'before-restart-complete' or (
-            self.state.get('phase') == 'preparing' and self.state.get('resume_ready') is True)
-        if controls and self.root.bearer and self.state.get("plugin_created") and (self.args.phase == "after-restart" or not recoverable):
+        recoverable = self.state.get('phase') == 'before-restart-complete'
+        if self.root.bearer and self.state.get("plugin_created") and (self.args.phase == "after-restart" or not recoverable):
             try:
                 self.root.api("POST", "/api/plugin/task/" + self.state["plugin"] + "/status?cascade=true&force=true", {"enabled": False})
             except Exception:
@@ -681,7 +645,7 @@ class Experiment:
             self.server.shutdown()
             self.server.server_close()
             self.report["mock_counts"] = self.server.counts
-            expected = 2 if self.args.phase == "before-restart" and not getattr(self.args, 'resume_state', False) else 0
+            expected = 2 if self.args.phase == "before-restart" else 0
             if self.server.counts["submits"] != expected or self.server.counts["replays"] or self.server.counts["wrong_version"]:
                 errors.append("mock_send_or_version_count_failed")
         self.report["cleanup_errors"] = errors
@@ -697,7 +661,7 @@ def run_plugin(args):
         require(not args.report.exists() and not args.report.is_symlink(), "new_report_path_required")
         require(args.report.resolve() != args.state.resolve() and args.state.resolve() != args.credentials.resolve(),
                 "state_and_credentials_paths_must_differ")
-        if args.phase == "before-restart" and not getattr(args, 'resume_state', False):
+        if args.phase == "before-restart":
             require(not args.state.exists() and not args.state.is_symlink(), "new_state_path_required")
         require(args.snapshot, "native_snapshot_required")
         experiment = Experiment(args, report)

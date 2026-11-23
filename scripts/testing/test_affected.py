@@ -188,8 +188,8 @@ class FrontendSelectionTests(unittest.TestCase):
         self.assertEqual(plan['unclassified'], ['.github/workflows/ci.yml', 'docs/upstream/CORE_SOURCE_DELTA.json',
                                                 'scripts/generate-licenses.py'])
         self.assertTrue(plan['python'])
-        # 根仓库的发布校验器按文件加载 release_scope.py：改它要提示工作区 infra。
-        self.assertIn(affected.WORKSPACE_GATE, plan['not_covered'])
+        # release_scope 只由应用候选使用。
+        self.assertNotIn(affected.WORKSPACE_GATE, plan['not_covered'])
         self.assertIn('未触发任何层：3 个文件', plan['not_covered'])
         # Vitest 用例和它的辅助文件不由页面加载，不算视觉关联缺口。
         self.assertEqual(plan['visual']['unlinked'], [])

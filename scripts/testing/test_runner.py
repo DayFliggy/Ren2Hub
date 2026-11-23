@@ -507,15 +507,11 @@ class RunnerContractTests(unittest.TestCase):
 class HostTrafficCandidateTests(unittest.TestCase):
     def prepared(self, root, interface, simulator_address=None, guard_address=None):
         """用记录参数的假 docker 跑一次 prepare；app 的 Mounts 由实际传入的 --mount 推导。"""
-        (root / 'deploy/ren2hub').mkdir(parents=True, exist_ok=True)
-        (root / 'deploy/ren2hub/docker-compose.preview.yml').write_text(
-            '    image: postgres:15@sha256:' + '1' * 64 + '\n    image: redis:7@sha256:' + '2' * 64 + '\n')
         (root / 'private').mkdir(mode=0o700, exist_ok=True)
         runner = candidate.Candidate.__new__(candidate.Candidate)
         runner.source, runner.private, runner.run_id = root / 'Ren2Hub', root / 'private', 'f' * 24
         runner.prefix = 'ren2hub-candidate-local-' + runner.run_id
         runner.containers, runner.image, runner.traffic_interface = {}, 'ren2hub-test:local', interface or ''
-        runner.previous_image = None
         runner.simulator_image = 'simulator-image' if simulator_address else None
         runner.report = {'source': {'candidate_sha': 'a' * 40, 'working_tree_sha256': 'b' * 64}}
         runner.verify_build_identities = lambda: None
@@ -568,9 +564,8 @@ class HostTrafficCandidateTests(unittest.TestCase):
         env = dict(line.split('=', 1) for line in (root / 'private/app.env').read_text().splitlines())
         with patch.dict('os.environ', {'REN2HUB_ACCEPTANCE_TARGET': str(root / 'private/target.json')}):
             target = acceptance_target()
-        # Without an upgrade source the app still gets the run-owned attachment volume, never tmpfs.
         self.assertEqual(volumes, [runner.prefix + '-attachments'])
-        self.assertEqual((target['attachment_volume'], target['upgrade']), (volumes[0], False))
+        self.assertEqual(target['attachment_volume'], volumes[0])
         require_candidate_mounts('app', owned('app'), target)
         self.assertFalse(any(value.startswith('/app/ticket-attachments') for value in started['app']))
         return started['app'], env, target, runner.report['isolation']['traffic']
@@ -676,7 +671,6 @@ class HostTrafficCandidateTests(unittest.TestCase):
                 runner = candidate.Candidate.__new__(candidate.Candidate)
                 runner.output, runner.private, runner.revision = root, root / 'private', 'a' * 40
                 runner.image_id, runner.sdk_environment, runner.containers = 'sha256:image', {}, {'app': 'a' * 64}
-                runner.active_image_id, runner.active_revision = runner.image_id, runner.revision
                 runner.stages = candidate.STAGES
                 identity = {'git_head': 'b' * 40, 'candidate_sha': 'b' * 40}
                 runner.source, runner.workspace_identity, runner.workspace_sha = root / 'Ren2Hub', identity, 'b' * 40
@@ -742,161 +736,8 @@ class HostTrafficCandidateTests(unittest.TestCase):
             check('eth0', [stats(inbound=None, outbound=None)], timeout=0)
 
 
-class UpgradeCandidateTests(unittest.TestCase):
-    def ticket_detail(self):
-        # User-facing ticketDTO deliberately omits the database owner ID.
-        return {'ticket': {'id': 12, 'title': 'Candidate ticket', 'category': 'api',
-                          'priority': 'normal', 'status': 'open', 'reply_count': 1,
-                          'message_count': 1, 'last_reply_role': 'user', 'created': 1, 'updated': 1},
-                'messages': [{'id': 21, 'role': 'user', 'content': 'Local acceptance request',
-                              'images': ['/api/tickets/attachments/31'], 'created': 1}]}
-
-    def attachment_fixture(self, directory):
-        from contracts.extensions import PNG
-        current = {'revision': 'b' * 40, 'image_id': 'new-image', 'run_id': 'same-run',
-                   'attachment_volume': 'owned-volume', 'container_ids': {'app': 'new-app', 'postgres': 'same-db'}}
-        previous = {**current, 'revision': 'a' * 40, 'image_id': 'old-image',
-                    'container_ids': {**current['container_ids'], 'app': 'old-app'}}
-        state = {'format': 1, 'acceptance_target': previous, 'ticket_id': 12,
-                 'attachment_path': '/api/tickets/attachments/31', 'sha256': gateway.hashlib.sha256(PNG).hexdigest(),
-                 'owner': {'id': 8, 'username': 'old-owner', 'password': 'owner-secret'},
-                 'foreign': {'id': 9, 'username': 'old-foreign', 'password': 'foreign-secret'}}
-        args = SimpleNamespace(revision=current['revision'], upgrade_attachment_phase='verify',
-                               upgrade_attachment_state=Path(directory) / 'attachment.json',
-                               previous_target=Path(directory) / 'previous-target.json')
-        gateway.atomic_private(args.previous_target, json.dumps(previous))
-        gateway.atomic_private(args.upgrade_attachment_state, json.dumps(state))
-        return args, current, state
-
-    def test_old_attachment_capture_keeps_credentials_private_and_reports_no_secrets(self):
-        from contracts.extensions import PNG
-        with tempfile.TemporaryDirectory() as directory:
-            experiment = gateway.Experiment.__new__(gateway.Experiment)
-            experiment.args = SimpleNamespace(upgrade_attachment_state=Path(directory) / 'attachment.json')
-            experiment.user_id, experiment.user_name, experiment.user_password = 8, 'old-owner', 'owner-secret'
-            experiment.other_id, experiment.other_name, experiment.other_password = 9, 'old-foreign', 'foreign-secret'
-            experiment.checks = []
-            experiment.rows = Mock(return_value=[{'id': 12}])
-            experiment.user = SimpleNamespace(api=Mock(return_value=self.ticket_detail()),
-                                              request=Mock(return_value=(200, PNG)))
-            with patch('contracts.gateway.acceptance_target', return_value={'run_id': 'same-run'}):
-                experiment.capture_upgrade_attachment()
-            path = experiment.args.upgrade_attachment_state
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-            saved = json.loads(path.read_text())
-            self.assertEqual(saved['owner']['password'], 'owner-secret')
-            self.assertEqual(saved['foreign']['password'], 'foreign-secret')
-            self.assertEqual(saved['sha256'], gateway.hashlib.sha256(PNG).hexdigest())
-            self.assertEqual(saved['attachment_path'], '/api/tickets/attachments/31')
-            self.assertEqual(experiment.checks, ['old_ticket_attachment_saved_for_upgrade'])
-            with self.assertRaisesRegex(RequirementError, 'new_upgrade_attachment_state_required'):
-                experiment.capture_upgrade_attachment()
-
-    def test_upgrade_attachment_rejects_missing_foreign_or_external_state_before_login(self):
-        for problem, code in (('missing', 'upgrade_attachment_state_required'),
-                              ('foreign', 'upgrade_attachment_target_mismatch'),
-                              ('wrong_database', 'upgrade_attachment_target_mismatch'),
-                              ('external_route', 'upgrade_attachment_record_invalid')):
-            with self.subTest(problem=problem), tempfile.TemporaryDirectory() as directory:
-                args, current, state = self.attachment_fixture(directory)
-                if problem == 'missing':
-                    args.upgrade_attachment_state.unlink()
-                else:
-                    if problem == 'foreign':
-                        state['acceptance_target']['run_id'] = 'foreign-run'
-                    elif problem == 'wrong_database':
-                        state['acceptance_target']['container_ids']['postgres'] = 'foreign-db'
-                        gateway.atomic_private(args.previous_target, json.dumps(state['acceptance_target']))
-                    else:
-                        state['attachment_path'] = 'https://example.com/attachment'
-                    gateway.atomic_private(args.upgrade_attachment_state, json.dumps(state))
-                with patch('contracts.gateway.verify_candidate_database'), \
-                        patch('contracts.gateway.acceptance_target', return_value=current), \
-                        patch('contracts.gateway.Client') as client, self.assertRaisesRegex(RequirementError, code):
-                    gateway.Experiment(args)
-                client.assert_not_called()
-
-    def test_upgrade_reads_original_attachment_and_rejects_changed_content_or_owner_boundary(self):
-        from contracts.extensions import PNG
-        rejected = (200, json.dumps({'success': False, 'code': 'NOT_FOUND'}).encode())
-        for problem, code in ((None, None), ('content', 'upgrade_attachment_content_changed'),
-                              ('identity', 'upgrade_attachment_account_identity_changed'),
-                              ('foreign', 'upgrade_attachment_cross_user_read')):
-            with self.subTest(problem=problem), tempfile.TemporaryDirectory() as directory:
-                args, current, _ = self.attachment_fixture(directory)
-                with patch('contracts.gateway.acceptance_target', return_value=current):
-                    saved = gateway.upgrade_attachment_state(args)
-                experiment = gateway.Experiment.__new__(gateway.Experiment)
-                experiment.saved_attachment, experiment.base = saved, 'http://127.0.0.1:3000'
-                experiment.upgrade_clients, experiment.checks = [], []
-                experiment.rows = Mock(return_value=[{'user_id': 8}])
-                owner = SimpleNamespace(bearer='old-owner-session', login=Mock(return_value={'id': 18 if problem == 'identity' else 8}),
-                    api=Mock(return_value=self.ticket_detail()),
-                    request=Mock(return_value=(200, b'changed' if problem == 'content' else PNG)))
-                foreign = SimpleNamespace(bearer='old-foreign-session', login=Mock(return_value={'id': 9}),
-                    request=Mock(side_effect=[rejected, (200, b'{"success":true}') if problem == 'foreign' else rejected]))
-                with patch('contracts.gateway.Client', side_effect=[owner, foreign]):
-                    if code:
-                        with self.assertRaisesRegex(RequirementError, code):
-                            experiment.verify_upgrade_attachment()
-                    else:
-                        experiment.verify_upgrade_attachment()
-                        owner.login.assert_called_once_with('old-owner', 'owner-secret')
-                        foreign.login.assert_called_once_with('old-foreign', 'foreign-secret')
-                        owner.request.assert_called_once_with('GET', '/api/tickets/attachments/31')
-                        self.assertEqual([call.args for call in foreign.request.call_args_list],
-                                         [('GET', '/api/tickets/12'), ('GET', '/api/tickets/attachments/31')])
-                        self.assertEqual(experiment.checks, ['old_ticket_attachment_content_and_owner_boundary_survive_upgrade'])
-                self.assertEqual(experiment.upgrade_clients, [owner, foreign])
-                experiment.tokens = []
-                experiment.root = experiment.user = experiment.other = SimpleNamespace(bearer='')
-                with patch('contracts.gateway.logout_verified') as logout:
-                    self.assertEqual(experiment.cleanup(), [])
-                self.assertEqual([call.args[0] for call in logout.call_args_list], [owner, foreign])
-
-    def test_upgrade_attachment_rejects_missing_ticket_or_changed_database_owner(self):
-        for rows, code in (([], 'upgrade_attachment_ticket_missing'),
-                            ([{'user_id': 9}], 'upgrade_attachment_owner_changed')):
-            with self.subTest(rows=rows), tempfile.TemporaryDirectory() as directory:
-                args, current, _ = self.attachment_fixture(directory)
-                with patch('contracts.gateway.acceptance_target', return_value=current):
-                    state = gateway.upgrade_attachment_state(args)
-                experiment = gateway.Experiment.__new__(gateway.Experiment)
-                experiment.saved_attachment = state
-                with patch('contracts.gateway.candidate_query', return_value=rows) as query, \
-                        patch('contracts.gateway.Client') as client, self.assertRaisesRegex(RequirementError, code):
-                    experiment.verify_upgrade_attachment()
-                query.assert_called_once_with('SELECT user_id FROM tickets WHERE id=12 AND deleted_at IS NULL')
-                client.assert_not_called()
-
-    def test_worker_requires_upgrade_attachment_state_without_affecting_plugin_resume(self):
-        for stage, upgrade, phase in (('upgrade-management', True, 'capture'),
-                                       ('upstream_sync', True, 'verify'),
-                                       ('upstream_sync', False, None),
-                                       ('upgrade-resume-p', True, None)):
-            with self.subTest(stage=stage, upgrade=upgrade), tempfile.TemporaryDirectory() as directory:
-                configuration = {'private': directory, 'output': directory, 'stage': stage, 'revision': 'b' * 40}
-                if upgrade:
-                    (Path(directory) / 'upgrade-source-target.json').write_text('{}')
-                with patch('contracts.worker.sys.stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(configuration).encode()))), \
-                        patch('contracts.worker.configure_target'), \
-                        patch('contracts.gateway.run_group', return_value={'success': True}) as group, \
-                        patch('contracts.plugin.run_plugin', return_value={'success': True}) as plugin, \
-                        self.assertRaises(SystemExit) as exited:
-                    worker.execute()
-                self.assertEqual(exited.exception.code, 0)
-                args = plugin.call_args.args[0] if stage == 'upgrade-resume-p' else group.call_args.args[1]
-                self.assertEqual(args.upgrade_attachment_phase, phase)
-                self.assertEqual(args.upgrade_attachment_state,
-                                 Path(directory) / 'upgrade-attachment.json' if phase else None)
-                expected_previous = Path(directory) / 'upgrade-source-target.json' if phase == 'verify' or stage == 'upgrade-resume-p' else None
-                self.assertEqual(args.previous_target, expected_previous)
-                if stage == 'upgrade-resume-p':
-                    self.assertTrue(args.resume_state)
-                    self.assertEqual(args.state.name, 'upgrade-plugin-p.json')
-
+class AttachmentIsolationTests(unittest.TestCase):
     def test_app_accepts_only_its_one_attachment_volume(self):
-        # Every candidate, with or without an upgrade source, stores uploads on its own volume.
         target = {'ca_path': CA_MOUNT['Source'], 'traffic_host_interface': '', 'attachment_volume': ATTACHMENTS}
         volume = ATTACHMENT_MOUNT
         require_candidate_mounts('app', {'Mounts': [CA_MOUNT, volume]}, target)
@@ -908,49 +749,6 @@ class UpgradeCandidateTests(unittest.TestCase):
         for role in ('postgres', 'redis', 'mock'):
             with self.subTest(role=role), self.assertRaises(RequirementError):
                 require_candidate_mounts(role, {'Mounts': [volume]}, target)
-
-    def test_failed_or_missing_preparation_never_stops_old_application(self):
-        for missing in candidate.UPGRADE_STAGES[:4]:
-            runner = candidate.Candidate.__new__(candidate.Candidate)
-            runner.report = {'stages': {stage: {'success': stage != missing}
-                                       for stage in candidate.UPGRADE_STAGES[:4]}}
-            runner.docker = lambda *args, **kwargs: self.fail('Docker mutated before preparation passed')
-            with self.subTest(stage=missing), self.assertRaisesRegex(candidate.CandidateError, 'upgrade_preparation_must_pass'):
-                runner.upgrade()
-
-    def test_preparing_state_is_resumed_by_new_application(self):
-        observed = []
-        with tempfile.TemporaryDirectory() as directory:
-            runner = SimpleNamespace(output=Path(directory),
-                                     stages=(*candidate.UPGRADE_STAGES, *candidate.STAGES),
-                                     report={'success': False, 'stages': {}}, revision='old')
-            runner.prepare = lambda: None
-            runner.diagnostics = lambda: runner.report.update(
-                diagnostics={'success':True,'exit_code':0},
-                known_upstream_restored={'success':True,'exit_code':0},
-                known_upstream_race={'success':True,'exit_code':0},
-                known_upstream_logger_race={'success':True,'exit_code':0},
-                ordinary_race={'success':True,'exit_code':0})
-            runner.cleanup = lambda: None
-            runner.manifest = lambda: None
-
-            def upgrade():
-                self.assertEqual([stage for stage, _ in observed], list(candidate.UPGRADE_STAGES[:4]))
-                runner.revision = 'new'
-
-            runner.upgrade = upgrade
-            def stage(name):
-                observed.append((name, runner.revision))
-                runner.report['stages'][name] = {'success': True}
-            runner.stage = stage
-            with patch('candidate.Candidate', return_value=runner):
-                report = candidate.run(Path(directory), Path(directory), 'new-image', previous_image='old-image')
-            self.assertTrue(report['success'])
-            self.assertEqual(dict(observed)['upgrade-prepare-p'], 'old')
-            self.assertEqual(dict(observed)['upgrade-resume-p'], 'new')
-            self.assertTrue(all(revision == 'new' for stage, revision in observed[4:]))
-
-
 
 class ReleaseExemptionManifestTests(unittest.TestCase):
     """完整候选只有在未通过项恰好是登记的上游缺陷时才可发布。"""
