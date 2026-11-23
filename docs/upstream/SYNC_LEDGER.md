@@ -147,7 +147,7 @@ B2 已批准的权限与输出边界：
 
 ## 最近一次正式发布
 
-当前没有正式发布。生产实例、数据、备份和镜像已于 2026-11-21 全部删除，没有回退目标；下一次部署按首次安装执行。运行状态与恢复边界以工作区 `docs/server/SERVER_PROFILE.md` 为准。
+2026-11-23 首次安装 Ren2Hub `4de3817f1771945b7bd1d4af1a9dc7bd9043f88d`，部署根提交 `0768a973b7bd6def2875206ca7713d85bfbc9afe`，镜像 `sha256:93bb8cfbde25cddfaba6b5c57ac9654897ddc33631da8541c3cbedfc731bf72c`。完整候选 `run-uwcbc73o` 的七组业务检查、七步隔离升级演练及常规 race 通过。路由 33 项通过、1 项已知上游差异、6 项按登记阻断；冻结诊断符合预期，退出 2，`deployment_eligible=true`。正式 HTTPS 的版本、前端资源和两个日志导出接口均已核验；真实供应商、支付和 OAuth 未调用。当前无前一版正式回退目标。运行身份、证据与恢复边界见工作区 `docs/server/SERVER_PROFILE.md`。
 
 ## 记录规则
 
