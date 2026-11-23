@@ -40,9 +40,13 @@ afterEach(() => {
   wrapper = undefined
 })
 
+const readmeText =
+  '# Fixture guide\n\nRead the [setup notes](docs/setup.md) and **restart** after install.\n'
+
 function target(
   sha256: string,
-  installState: InstallState
+  installState: InstallState,
+  readme = false
 ): MarketplaceInstallTarget {
   return {
     source: {
@@ -53,7 +57,14 @@ function target(
       key: 'fixture',
       name: 'Fixture',
       latest: '2.0.0',
-      versions: [{ version: '2.0.0', path: 'fixture/2.0.0/plugin.js', sha256 }],
+      versions: [
+        {
+          version: '2.0.0',
+          path: 'fixture/2.0.0/plugin.js',
+          sha256,
+          ...(readme ? { readme: { path: 'fixture/2.0.0/README.md' } } : {}),
+        },
+      ],
     },
     version: '2.0.0',
     installState,
@@ -67,10 +78,13 @@ async function open(
     key: 'fixture',
     version: '2.0.0',
     models: ['m1'],
-  }
+  },
+  readme = false
 ) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(
-    async () => new Response(source)
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+    String(input).endsWith('/README.md')
+      ? new Response(readmeText)
+      : new Response(source)
   )
   vi.mocked(pluginApi.previewTaskPlugin).mockResolvedValue({
     meta: previewMeta,
@@ -101,7 +115,7 @@ async function open(
     layer: 'override',
   })
   wrapper = mount(MarketplaceInstallDialog, {
-    props: { target: target(sha256, installState) },
+    props: { target: target(sha256, installState, readme) },
     global: { plugins: [i18n], stubs: { Teleport: true } },
   })
   // The streamed body takes several macrotasks to drain.
@@ -171,6 +185,27 @@ describe('marketplace install dialog', () => {
       .trigger('click')
     await flushPromises()
     expect(pluginApi.installMarketplacePlugin).toHaveBeenCalledOnce()
+  })
+
+  it('renders the listed usage guide with links resolved against its page', async () => {
+    await open(digest, { status: 'not_installed' }, undefined, true)
+    await wrapper!
+      .findAll('[role="tab"]')
+      .find((item) => item.text() === 'Documentation')!
+      .trigger('click')
+    const panel = () => wrapper!.get('#marketplace-install-panel')
+    await vi.waitFor(() => expect(panel().find('h2').exists()).toBe(true))
+    expect(panel().get('h2').text()).toBe('Fixture guide')
+    expect(panel().get('strong').text()).toBe('restart')
+    const link = panel().get('a')
+    expect(link.text()).toBe('setup notes')
+    expect(link.attributes('href')).toBe(
+      'https://plugins.example/fixture/2.0.0/docs/setup.md'
+    )
+    expect(fetch).toHaveBeenCalledWith(
+      'https://plugins.example/fixture/2.0.0/README.md',
+      expect.anything()
+    )
   })
 
   it('blocks a verified source when its metadata identity differs from the index', async () => {
