@@ -25,8 +25,10 @@ type systemUpdateHandler struct {
 	operation sync.Mutex
 }
 
+const systemOperationTimeout = 5 * time.Minute
+
 var SystemUpdates = &systemUpdateHandler{
-	releases: service.NewSystemUpdateService(service.SystemReleaseAPI, &http.Client{Timeout: 15 * time.Minute}),
+	releases: service.NewSystemUpdateService(service.SystemReleaseAPI, &http.Client{Timeout: systemOperationTimeout}),
 	restart:  service.RestartSystemProcess,
 }
 
@@ -61,7 +63,7 @@ func (h *systemUpdateHandler) beginOperation(c *gin.Context) bool {
 }
 
 func systemOperationContext(c *gin.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(c.Request.Context()), 15*time.Minute)
+	return context.WithTimeout(context.WithoutCancel(c.Request.Context()), systemOperationTimeout)
 }
 
 func (h *systemUpdateHandler) Update(c *gin.Context) {

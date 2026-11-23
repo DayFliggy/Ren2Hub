@@ -69,7 +69,7 @@ func TestSystemUpdateHandlerContracts(t *testing.T) {
 		require.NoError(t, ctx.Err())
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
-		require.WithinDuration(t, time.Now().Add(15*time.Minute), deadline, time.Second)
+		require.WithinDuration(t, time.Now().Add(5*time.Minute), deadline, time.Second)
 	}
 	f.update = checkDeadline
 	f.rollback = func(ctx context.Context, version string) {
