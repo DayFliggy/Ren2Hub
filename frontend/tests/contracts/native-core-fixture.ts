@@ -715,6 +715,9 @@ export async function nativeCoreFixture(
       return ok({ items: [], start_time: now - 2592000, end_time: now })
     if (path === '/api/system-task/list')
       return route.fulfill({ json: { success: true, data: [], total: 0 } })
+    // A source build only reads its version; update checks need a release.
+    if (path === '/api/admin/system/version' && method === 'GET')
+      return ok({ version: 'native-test', build_type: 'source' })
     if (path === '/api/option/')
       return ok([
         { key: 'SystemName', value: 'Ren2Hub' },
