@@ -95,10 +95,10 @@ async function checkPlacement(page: Page, layout: Layout) {
   await expect(page.locator(`${home} [data-version-badge]`)).toBeVisible()
   await expect(page.locator('a [data-version-badge]')).toHaveCount(0)
 
-  const mark = page.locator(
-    `${brand} ${layout === 'expanded' ? 'span' : 'img'}`
-  )
-  const corner = (await mark.boundingBox())!
+  // The top bar shows the name from 640px; the collapsed sidebar never does.
+  const named = await page.locator(`${brand} span`).isVisible()
+  const parts = named ? ['img', 'span'] : ['img']
+  const corner = (await page.locator(`${brand} ${parts.at(-1)}`).boundingBox())!
   const dot = (await badge(page).locator('.version-badge-dot').boundingBox())!
   expect(
     Math.abs(dot.x + dot.width / 2 - (corner.x + corner.width))
@@ -115,7 +115,7 @@ async function checkPlacement(page: Page, layout: Layout) {
   const target = (await badge(page).boundingBox())!
   const size = layout === 'collapsed' ? 24 : 44
   expect(Math.min(target.width, target.height)).toBeGreaterThanOrEqual(size)
-  for (const part of layout === 'expanded' ? ['img', 'span'] : ['img']) {
+  for (const part of parts) {
     const box = (await page.locator(`${brand} ${part}`).boundingBox())!
     const hit = await page.evaluate(
       ({ x, y, selector }) =>
@@ -373,6 +373,54 @@ test('one badge keeps its state across the lg breakpoint', async ({ page }) => {
   )
   expect(checks).toBe(before)
   await checkPanel(page, true)
+})
+
+/** The open panel hangs 4px under the badge, lined up with its left edge
+ *  unless the viewport margin pushes it in. */
+async function checkAnchored(page: Page) {
+  await expect
+    .poll(async () => {
+      const trigger = (await badge(page).boundingBox())!
+      const box = (await panel(page).boundingBox())!
+      const width = page.viewportSize()!.width
+      const left = Math.max(8, Math.min(trigger.x, width - box.width - 8))
+      return [
+        Math.round(box.y - (trigger.y + trigger.height)),
+        Math.round(box.x - left),
+      ]
+    })
+    .toEqual([4, 0])
+}
+
+test('an open panel follows the badge across the lg breakpoint', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await configureStablePage(page, { theme: 'light' })
+  // Up to date, so the panel keeps its size across the breakpoint and no
+  // resize of its own places it again; only the badge moves.
+  await mockRelease(page, { latest_version: 'v1.0.1', has_update: false })
+  let checks = 0
+  page.on('request', (request) => {
+    if (request.url().includes('/api/admin/system/check-updates')) checks++
+  })
+  await gotoDashboard(page)
+  await badge(page).click()
+  await expect(panel(page)).toHaveAttribute('data-version-state', 'current')
+  await checkAnchored(page)
+  const before = checks
+  for (const viewport of [
+    { width: 1000, height: 900 },
+    { width: 1100, height: 900 },
+    { width: 390, height: 844 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await checkAnchored(page)
+    await expect(panel(page)).toHaveAttribute('data-version-state', 'current')
+    await checkPlacement(page, viewport.width < 1024 ? 'mobile' : 'expanded')
+  }
+  expect(checks).toBe(before)
 })
 
 test('version badge source build', async ({ page }, testInfo) => {

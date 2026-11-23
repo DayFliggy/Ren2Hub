@@ -123,7 +123,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
               to="[data-sidebar-version-slot]"
               :disabled="!isDesktop"
             >
-              <VersionBadge v-if="auth.isRoot" :key="auth.user?.id" />
+              <VersionBadge
+                v-if="auth.isRoot"
+                :key="auth.user?.id"
+                :in-sidebar="isDesktop"
+              />
             </Teleport>
           </div>
         </div>

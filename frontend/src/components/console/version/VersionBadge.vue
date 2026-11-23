@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import {
@@ -44,6 +44,11 @@ import './version.css'
  * or another account unmounts it and ends everything the old one started.
  * The panel is teleported to <body>: the sidebar clips its own overflow.
  */
+const props = defineProps<{
+  /** Whether the top bar's Teleport has put the badge in the sidebar. */
+  inSidebar: boolean
+}>()
+
 const { t, locale } = useI18n({
   useScope: 'local',
   messages: systemUpdateMessages,
@@ -139,11 +144,19 @@ function message(cause: unknown, context: ErrorContext) {
 
 void releases.check(false)
 
-const { style: floatingStyle, scope: panelScope } = useFloatingPanel(
-  trigger,
-  panel,
-  open,
-  { gap: 4 }
+const {
+  style: floatingStyle,
+  scope: panelScope,
+  update: placePanel,
+} = useFloatingPanel(trigger, panel, open, { gap: 4 })
+// The top bar moves this badge between its own brand and the sidebar's at
+// the lg breakpoint. The window resize that crosses it places the panel
+// before the move, against a hidden badge; place it again once the badge
+// has moved. A post-flush watcher runs after the parent's Teleport patch.
+watch(
+  () => props.inSidebar,
+  () => placePanel(),
+  { flush: 'post' }
 )
 // Just above the bar the badge hangs from and below every modal layer, so
 // a confirmation opened from the panel covers it.
