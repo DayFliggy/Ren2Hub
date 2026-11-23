@@ -316,3 +316,32 @@
   padding-block: 0.25rem;
   border-top: 1px solid var(--border-subtle);
 }
+.version-panel-foot-confirm {
+  padding: 0.5rem 1rem 0.75rem;
+}
+
+/* The second step of an update or restart, in place of its button. */
+.version-confirm {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  background: var(--surface-muted);
+}
+.version-success .version-confirm p.version-confirm-title {
+  color: var(--text-primary);
+}
+.version-success .version-confirm p.version-note {
+  color: var(--text-secondary);
+}
+.version-confirm-title {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.version-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}

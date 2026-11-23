@@ -197,10 +197,18 @@ for (const [theme, mobile] of [
     })
 
     await panel(page).locator('[data-version-update-now]').click()
-    await page
-      .getByRole('dialog', { name: '更新到 v1.0.2？' })
-      .getByRole('button', { name: '更新', exact: true })
-      .click()
+    // The second step replaces the button inside the panel; no dialog opens.
+    const step = panel(page).getByRole('group', { name: '更新到 v1.0.2？' })
+    await expect(step).toContainText('完成后需要重启才会生效')
+    await expect(page.locator('[aria-modal="true"]')).toHaveCount(0)
+    await expect(
+      step.getByRole('button', { name: '取消', exact: true })
+    ).toBeFocused()
+    await checkPanel(page, mobile)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`update-confirm-${theme}-${viewport}.png`),
+    })
+    await step.getByRole('button', { name: '确认更新', exact: true }).click()
     await expect(panel(page)).toHaveAttribute(
       'data-version-state',
       'restart-needed'
@@ -262,6 +270,25 @@ for (const [theme, mobile] of [
     await captureEvidence(page, {
       path: testInfo.outputPath(`update-rollback-${theme}-${viewport}.png`),
     })
+
+    // Restarting from the footer is confirmed in the footer itself.
+    await panel(page).locator('[data-version-restart-service]').click()
+    const step = panel(page).getByRole('group', { name: '重启服务器？' })
+    await expect(step).toContainText('进行中的请求会被中断')
+    await expect(page.locator('[aria-modal="true"]')).toHaveCount(0)
+    await expect(
+      step.getByRole('button', { name: '取消', exact: true })
+    ).toBeFocused()
+    await checkPanel(page, mobile)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(
+        `update-restart-confirm-${theme}-${viewport}.png`
+      ),
+    })
+    await step.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(
+      panel(page).locator('[data-version-restart-service]')
+    ).toBeFocused()
   })
 }
 
@@ -351,9 +378,9 @@ test('one badge keeps its state across the lg breakpoint', async ({ page }) => {
   await gotoDashboard(page)
   await badge(page).click()
   await panel(page).locator('[data-version-update-now]').click()
-  await page
-    .getByRole('dialog', { name: '更新到 v1.0.2？' })
-    .getByRole('button', { name: '更新', exact: true })
+  await panel(page)
+    .getByRole('group', { name: '更新到 v1.0.2？' })
+    .getByRole('button', { name: '确认更新', exact: true })
     .click()
   await expect(panel(page)).toHaveAttribute(
     'data-version-state',

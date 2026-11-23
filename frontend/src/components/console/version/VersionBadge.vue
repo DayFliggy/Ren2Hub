@@ -22,7 +22,6 @@ import {
   tabLeavesPanel,
   useFloatingPanel,
 } from '@/composables/useFloatingPanel'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import MarkdownDocument from '@/components/common/MarkdownDocument.vue'
 import { systemUpdateMessages } from '@/i18n/systemUpdate'
@@ -31,6 +30,7 @@ import { useSystemUpdateStore } from '@/stores/systemUpdate'
 import { hasOpenModalDialog } from '@/utils/modalStack'
 import { updateErrorMessage, type ErrorContext } from './errorMessage'
 import { displayVersion, publishedDate } from './format'
+import VersionConfirm from './VersionConfirm.vue'
 import VersionRollback from './VersionRollback.vue'
 import './version.css'
 
@@ -71,8 +71,8 @@ const restartNeeded = ref<{
   expectation: RestartExpectation
 } | null>(null)
 const restartState = ref<'waiting' | 'unknown' | null>(null)
-const confirmUpdate = ref(false)
-const confirmRestart = ref(false)
+/** The operation waiting for its second click in the panel. */
+const confirming = ref<'update' | 'restart' | null>(null)
 const rollbackOpen = ref(false)
 const notesOpen = ref(false)
 
@@ -109,6 +109,14 @@ const state = computed(() => {
   if (info.value.has_update) return isRelease.value ? 'update' : 'source-update'
   return 'current'
 })
+
+const restartConfirm = computed(() => ({
+  title: t('confirmRestart'),
+  message: t('confirmRestartMessage'),
+  action: t('confirmRestartAction'),
+  variant: 'danger' as const,
+  running: operation.value === 'restart',
+}))
 
 /** The dot's colour: neutral while current or loading, warning while
  *  something waits for the admin, danger after a failure. */
@@ -159,7 +167,7 @@ watch(
   { flush: 'post' }
 )
 // Just above the bar the badge hangs from and below every modal layer, so
-// a confirmation opened from the panel covers it.
+// search or a drawer opened over the panel covers it.
 const panelStyle = computed(() => ({
   ...floatingStyle.value,
   zIndex: 'calc(var(--z-topbar) + 1)',
@@ -175,24 +183,50 @@ async function toggle() {
 
 function close() {
   open.value = false
+  confirming.value = null
 }
+
+/** Origins of each second step, focused again when it is cancelled. */
+const CONFIRM_ORIGIN = {
+  update: '[data-version-update-now]',
+  restart: '[data-version-restart], [data-version-restart-service]',
+} as const
+
+function cancelConfirm() {
+  const origin = confirming.value
+  confirming.value = null
+  if (!origin) return
+  void nextTick(() =>
+    panel.value?.querySelector<HTMLElement>(CONFIRM_ORIGIN[origin])?.focus()
+  )
+}
+
+// A step armed for one state does not carry over to the next.
+watch(
+  () => state.value,
+  () => {
+    if (!operation.value) confirming.value = null
+  }
+)
 
 function closeToBadge() {
   close()
   void nextTick(() => trigger.value?.focus())
 }
 
-// Clicks inside a confirmation dialog opened from the panel stay inside.
+// Clicks inside a modal opened over the panel (search, a drawer) stay inside.
 onClickOutside(root, close, { ignore: [panel, '[aria-modal="true"]'] })
 
 // Escape closes the panel wherever focus is, as in UserMenu. Any open modal
-// (a confirmation from this panel, search, a drawer) sits above the panel and
-// handles its own Escape first. The modal stack, not the DOM, says which are
-// open: a closing dialog keeps its node through the leave transition.
+// (search, a drawer) sits above the panel and handles its own Escape first.
+// The modal stack, not the DOM, says which are open: a closing dialog keeps
+// its node through the leave transition. Inside the panel, Escape first
+// cancels a second step that has not started.
 useEventListener(document, 'keydown', (event: KeyboardEvent) => {
   if (event.key !== 'Escape' || !open.value || event.defaultPrevented) return
   if (hasOpenModalDialog()) return
   event.preventDefault()
+  if (confirming.value) return cancelConfirm()
   closeToBadge()
 })
 
@@ -211,11 +245,13 @@ function onPanelKeydown(event: KeyboardEvent) {
 function refresh() {
   if (busy.value) return
   actionError.value = ''
+  confirming.value = null
   void releases.check(true)
 }
 
 function startAction(kind: Operation) {
   operation.value = kind
+  confirming.value = null
   actionError.value = ''
 }
 
@@ -225,7 +261,6 @@ async function update() {
   try {
     const outcome = await systemUpdateApi.update()
     if (disposed) return
-    confirmUpdate.value = false
     releases.clear()
     if (outcome.kind === 'restart') {
       // The answer does not name the installed release: GitHub may have
@@ -240,7 +275,6 @@ async function update() {
     await releases.check(true)
   } catch (cause) {
     if (disposed) return
-    confirmUpdate.value = false
     actionError.value = message(cause, 'action')
   } finally {
     if (!disposed && operation.value === 'update') operation.value = null
@@ -273,7 +307,6 @@ function refusedRestart(cause: unknown) {
 }
 
 async function restart() {
-  confirmRestart.value = false
   if (operation.value) return
   startAction('restart')
   restartController?.abort()
@@ -475,18 +508,32 @@ onBeforeUnmount(() => {
               }}</span
             >
           </p>
-          <p v-if="operation === 'update'" class="version-note" role="status">
-            {{ t('updating') }}
-          </p>
+          <VersionConfirm
+            v-if="confirming === 'update' || operation === 'update'"
+            :title="
+              t('confirmUpdate', {
+                version: displayVersion(info.latest_version),
+              })
+            "
+            :message="t('confirmUpdateMessage')"
+            :action="t('confirmUpdateAction')"
+            variant="primary"
+            :running="operation === 'update'"
+            @confirm="update"
+            @cancel="cancelConfirm"
+          />
           <ConsoleButton
+            v-else
             size="sm"
             class="w-full"
             :disabled="busy"
-            :loading="operation === 'update'"
             data-version-update-now
-            @click="confirmUpdate = true"
+            @click="confirming = 'update'"
             >{{ t('updateNow') }}</ConsoleButton
           >
+          <p v-if="operation === 'update'" class="version-note" role="status">
+            {{ t('updating') }}
+          </p>
           <template v-if="release">
             <div class="version-row">
               <a
@@ -577,11 +624,18 @@ onBeforeUnmount(() => {
           data-version-restart-needed
         >
           <p>{{ restartNeeded.message }}</p>
+          <VersionConfirm
+            v-if="confirming === 'restart' || operation === 'restart'"
+            v-bind="restartConfirm"
+            @confirm="restart"
+            @cancel="cancelConfirm"
+          />
           <ConsoleButton
+            v-else
             size="sm"
             :disabled="busy"
             data-version-restart
-            @click="confirmRestart = true"
+            @click="confirming = 'restart'"
             >{{ t('restart') }}</ConsoleButton
           >
         </div>
@@ -590,42 +644,28 @@ onBeforeUnmount(() => {
           v-if="isRelease && !restartNeeded && !restartState"
           class="version-panel-foot"
         >
+          <div
+            v-if="confirming === 'restart' || operation === 'restart'"
+            class="version-panel-foot-confirm"
+          >
+            <VersionConfirm
+              v-bind="restartConfirm"
+              @confirm="restart"
+              @cancel="cancelConfirm"
+            />
+          </div>
           <button
+            v-else
             type="button"
             class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="busy"
             data-version-restart-service
-            @click="confirmRestart = true"
+            @click="confirming = 'restart'"
           >
             {{ t('restartService') }}
           </button>
         </footer>
       </div>
     </Teleport>
-
-    <ConfirmDialog
-      :open="confirmUpdate"
-      :title="
-        t('confirmUpdate', {
-          version: displayVersion(info?.latest_version ?? ''),
-        })
-      "
-      :message="t('confirmUpdateMessage')"
-      :confirm-text="t('confirmUpdateAction')"
-      :loading="operation === 'update'"
-      @confirm="update"
-      @cancel="confirmUpdate = false"
-      ><p v-if="operation === 'update'" class="version-note mt-3">
-        {{ t('updating') }}
-      </p></ConfirmDialog
-    >
-    <ConfirmDialog
-      :open="confirmRestart"
-      :title="t('confirmRestart')"
-      :message="t('confirmRestartMessage')"
-      :confirm-text="t('restart')"
-      @confirm="restart"
-      @cancel="confirmRestart = false"
-    />
   </div>
 </template>

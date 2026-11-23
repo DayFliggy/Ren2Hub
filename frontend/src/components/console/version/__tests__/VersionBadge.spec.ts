@@ -9,7 +9,6 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/types'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import CommandPaletteModal from '@/components/console/CommandPaletteModal.vue'
 import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -128,10 +127,10 @@ const tone = () =>
   page.get('[data-version-badge]').attributes('data-version-tone')
 const badgeLabel = () =>
   page.get('[data-version-badge]').attributes('aria-label')
-const openDialog = () =>
-  wrapper!.findAllComponents(ConfirmDialog).find((d) => d.props('open'))!
+/** The second click, inside the panel where the first one was. */
+const accept = () => page.get('[data-version-confirm-accept]').trigger('click')
 async function confirm() {
-  openDialog().vm.$emit('confirm')
+  await accept()
   await flushPromises()
 }
 const errorText = () => page.get('[data-version-error]').text()
@@ -439,10 +438,18 @@ describe('version badge', () => {
       new Promise((resolve) => (finish = resolve))
     const view = await setup()
     await startUpdate()
+    // The second step stays while the update runs, with its buttons off.
+    expect(view.find('[data-version-update-now]').exists()).toBe(false)
     expect(
-      view.get('[data-version-update-now]').attributes('disabled')
+      view.get('[data-version-confirm-accept]').attributes('disabled')
     ).toBeDefined()
-    openDialog().vm.$emit('confirm')
+    expect(
+      view.get('[data-version-confirm-cancel]').attributes('disabled')
+    ).toBeDefined()
+    expect(view.get('[data-version-panel]').text()).toContain(
+      'Downloading, verifying and replacing the program'
+    )
+    await accept()
     await flushPromises()
     expect(mocks.post).toHaveBeenCalledTimes(1)
     finish({ need_restart: true })
@@ -619,7 +626,7 @@ describe('version badge', () => {
       .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 150 })
       .mockResolvedValue({ version: 'v1.0.3', start_time: 200 })
     await view.get('[data-version-restart]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await vi.advanceTimersByTimeAsync(0)
     expect(mocks.post).toHaveBeenLastCalledWith(
       '/api/admin/system/restart',
@@ -652,7 +659,7 @@ describe('version badge', () => {
       .mockResolvedValueOnce({ version: 'v1.0.2', start_time: 150 })
       .mockResolvedValue({ version: 'v1.0.0', start_time: 200 })
     await view.get('[data-version-restart]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await vi.advanceTimersByTimeAsync(2_500)
     expect(reload).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(2_000)
@@ -670,7 +677,7 @@ describe('version badge', () => {
       .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
       .mockResolvedValue({ version: 'v1.0.1', start_time: 300 })
     await view.get('[data-version-restart-service]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await vi.advanceTimersByTimeAsync(0)
     expect(view.find('[data-version-error]').exists()).toBe(false)
     expect(panelState()).toBe('restarting')
@@ -700,7 +707,7 @@ describe('version badge', () => {
     await openPanel()
     vi.useFakeTimers()
     await view.get('[data-version-restart-service]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await vi.advanceTimersByTimeAsync(125_000)
     expect(view.get('[data-version-restart-unknown]').text()).toContain(
       'could not be confirmed within 120 seconds'
@@ -721,7 +728,7 @@ describe('version badge', () => {
       () => new Promise((resolve) => (answer = resolve))
     )
     await view.get('[data-version-restart-service]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await flushPromises()
     view.unmount()
     wrapper = undefined
@@ -742,7 +749,7 @@ describe('version badge', () => {
         () => new Promise((resolve) => (answer = resolve))
       )
     await view.get('[data-version-restart-service]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await vi.advanceTimersByTimeAsync(2_000)
     expect(mocks.status).toHaveBeenCalledTimes(2)
     view.unmount()
@@ -770,22 +777,61 @@ describe('version badge', () => {
     warn.mockRestore()
   })
 
-  it('keeps the panel open when Escape closes a confirmation dialog', async () => {
-    const view = await setup(100, { realModals: true })
+  it('confirms an update in the panel, not in a dialog', async () => {
+    const view = await setup()
     await openPanel()
     await view.get('[data-version-update-now]').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull()
+    const step = view.get('[data-version-panel] [data-version-confirm]')
+    expect(step.text()).toContain('Update to v1.0.2?')
+    expect(step.text()).toContain('A restart is needed to apply it.')
+    expect(view.find('[data-version-update-now]').exists()).toBe(false)
+    // Focus starts on Cancel, so a repeated Enter does not update.
+    expect(document.activeElement).toBe(
+      view.get('[data-version-confirm-cancel]').element
+    )
+    await view.get('[data-version-confirm-cancel]').trigger('click')
+    await flushPromises()
+    expect(mocks.post).not.toHaveBeenCalled()
+    expect(view.find('[data-version-confirm]').exists()).toBe(false)
+    expect(document.activeElement).toBe(
+      view.get('[data-version-update-now]').element
+    )
+  })
+
+  it('cancels the second step on Escape before closing the panel', async () => {
+    const view = await setup(100, { realModals: true })
+    await openPanel()
+    await view.get('[data-version-restart-service]').trigger('click')
+    await flushPromises()
+    expect(view.find('[data-version-confirm]').exists()).toBe(true)
     document.body.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
     )
     await flushPromises()
-    expect(openDialog()).toBeUndefined()
     expect(view.find('[data-version-panel]').exists()).toBe(true)
-    // The dialog's node may still be leaving; the next Escape is the panel's.
+    expect(view.find('[data-version-confirm]').exists()).toBe(false)
+    expect(document.activeElement).toBe(
+      view.get('[data-version-restart-service]').element
+    )
     document.body.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
     )
     await flushPromises()
     expect(view.find('[data-version-panel]').exists()).toBe(false)
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it('drops an unconfirmed step when the panel closes', async () => {
+    const view = await setup()
+    await openPanel()
+    await view.get('[data-version-update-now]').trigger('click')
+    await flushPromises()
+    await view.get('[data-version-badge]').trigger('click')
+    await openPanel()
+    expect(view.find('[data-version-confirm]').exists()).toBe(false)
+    expect(view.find('[data-version-update-now]').exists()).toBe(true)
   })
 
   it('leaves Escape to a search dialog opened over the panel', async () => {
@@ -851,7 +897,7 @@ describe('version badge account boundary', () => {
       () => new Promise((resolve) => (answer = resolve))
     )
     await view.get('[data-version-restart-service]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await flushPromises()
     useAuthStore().persist({ id: 1, role: 1 } as never)
     await flushPromises()
@@ -873,7 +919,7 @@ describe('version badge account boundary', () => {
         () => new Promise((resolve) => (answer = resolve))
       )
     await view.get('[data-version-restart-service]').trigger('click')
-    openDialog().vm.$emit('confirm')
+    await accept()
     await vi.advanceTimersByTimeAsync(2_000)
     expect(mocks.status).toHaveBeenCalledTimes(2)
     useAuthStore().persist({ id: 2, role: 100 } as never)

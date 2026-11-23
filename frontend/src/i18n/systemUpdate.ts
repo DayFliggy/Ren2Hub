@@ -28,7 +28,8 @@ const zh = {
   updating: '正在下载、校验并替换程序，可能需要几分钟，请勿关闭页面。',
   rollingBack: '正在回滚，可能需要几分钟，请勿关闭页面。',
   confirmUpdate: '更新到 {version}？',
-  confirmUpdateAction: '更新',
+  confirmUpdateAction: '确认更新',
+  cancel: '取消',
   confirmUpdateMessage:
     '服务器会下载并校验发布包后替换程序，完成后需要重启才会生效。',
   rollback: '回滚到旧版本',
@@ -46,6 +47,7 @@ const zh = {
   restart: '重启',
   restartService: '重启服务',
   confirmRestart: '重启服务器？',
+  confirmRestartAction: '确认重启',
   confirmRestartMessage: '进行中的请求会被中断。服务器恢复后页面会自动刷新。',
   updated: '程序已替换，重启后生效。',
   rolledBack: '已回滚到 {version}，重启后生效。',
@@ -100,7 +102,8 @@ const en: typeof zh = {
   rollingBack:
     'Rolling back. This can take several minutes; keep this page open.',
   confirmUpdate: 'Update to {version}?',
-  confirmUpdateAction: 'Update',
+  confirmUpdateAction: 'Confirm update',
+  cancel: 'Cancel',
   confirmUpdateMessage:
     'The server downloads and verifies the release, then replaces the program. A restart is needed to apply it.',
   rollback: 'Roll back to an earlier version',
@@ -119,6 +122,7 @@ const en: typeof zh = {
   restart: 'Restart',
   restartService: 'Restart service',
   confirmRestart: 'Restart the server?',
+  confirmRestartAction: 'Confirm restart',
   confirmRestartMessage:
     'Requests in progress are interrupted. The page reloads once the server is back.',
   updated: 'The program was replaced. Restart to apply it.',
