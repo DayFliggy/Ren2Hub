@@ -25,7 +25,6 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import OrderDetailModal from '@/components/console/orders/OrderDetailModal.vue'
 import {
   getOrderExportValues,
@@ -273,61 +272,55 @@ onBeforeUnmount(() => exportController?.abort())
 
 <template>
   <div>
-    <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('orders.title')]">
-      <template #action>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            class="hidden text-xs tabular-nums text-[var(--text-tertiary)] sm:inline"
-            aria-live="polite"
-          >
-            {{
-              activeTab === 'list'
-                ? t('orders.orderCount', { count: total })
-                : t('orders.rangeDays', { days: range })
-            }}
-          </span>
-          <div class="flex items-center gap-2">
-            <!-- Export follows the list's filters, so it is only offered there. -->
-            <ConsoleButton
-              v-if="activeTab === 'list'"
-              variant="secondary"
-              size="sm"
-              :disabled="loading || total === 0"
-              @click="exportOpen = true"
-            >
-              <Download :size="14" />
-              {{ t('orders.export') }}
-            </ConsoleButton>
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :loading="refreshing || statsRefreshing"
-              @click="refreshAll"
-            >
-              <RefreshCw v-if="!refreshing && !statsRefreshing" :size="14" />
-              {{ t('orders.refresh') }}
-            </ConsoleButton>
-          </div>
-        </div>
-      </template>
-    </PageBreadcrumb>
-
-    <!-- 7/30/90-day range toggle — right-aligned, between header and tabs -->
-    <div class="mb-0 flex justify-end">
-      <SegmentedToggle
-        v-model="rangeModel"
-        :options="rangeOptions"
-        :label="t('orders.rangeLabel')"
-        size="sm"
+    <!-- Tabs lead the page; range, count and list actions share their row. -->
+    <div
+      class="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+      data-orders-toolbar
+    >
+      <ConsoleTabs
+        v-model="activeTab"
+        :items="tabs"
+        :panel-id="ordersPanelId"
       />
+      <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+        <span
+          class="mr-auto text-xs tabular-nums text-[var(--text-tertiary)] lg:mr-1"
+          aria-live="polite"
+        >
+          {{
+            activeTab === 'list'
+              ? t('orders.orderCount', { count: total })
+              : t('orders.rangeDays', { days: range })
+          }}
+        </span>
+        <SegmentedToggle
+          v-model="rangeModel"
+          :options="rangeOptions"
+          :label="t('orders.rangeLabel')"
+          size="sm"
+        />
+        <!-- Export follows the list's filters, so it is only offered there. -->
+        <ConsoleButton
+          v-if="activeTab === 'list'"
+          variant="secondary"
+          size="sm"
+          :disabled="loading || total === 0"
+          @click="exportOpen = true"
+        >
+          <Download :size="14" />
+          {{ t('orders.export') }}
+        </ConsoleButton>
+        <ConsoleButton
+          variant="secondary"
+          size="sm"
+          :loading="refreshing || statsRefreshing"
+          @click="refreshAll"
+        >
+          <RefreshCw v-if="!refreshing && !statsRefreshing" :size="14" />
+          {{ t('orders.refresh') }}
+        </ConsoleButton>
+      </div>
     </div>
-
-    <ConsoleTabs
-      v-model="activeTab"
-      :items="tabs"
-      :panel-id="ordersPanelId"
-      class="-mt-3 mb-6"
-    />
 
     <div
       :id="ordersPanelId"

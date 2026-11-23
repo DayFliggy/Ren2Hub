@@ -14,7 +14,6 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import { useToast } from '@/composables/useToast'
 import { localizedText } from '@/utils/localizedText'
 import {
@@ -193,11 +192,16 @@ void loadModels()
 
 <template>
   <div class="min-w-0" data-request-processing>
-    <PageBreadcrumb
-      :crumbs="[t('nav.groupAdmin'), t('pluginExtensions.rp.title')]"
-    >
-      <template #action>
-        <div class="flex flex-wrap items-center gap-2">
+    <div class="sibling-space-y-4">
+      <!-- The order note and the list actions share the first row. -->
+      <div
+        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        data-request-processing-toolbar
+      >
+        <p class="min-w-0 text-sm text-[var(--text-secondary)]">
+          {{ t('pluginExtensions.rp.orderNote') }}
+        </p>
+        <div class="flex shrink-0 flex-wrap items-center gap-2">
           <ConsoleButton
             variant="secondary"
             :disabled="!ready"
@@ -211,12 +215,7 @@ void loadModels()
             {{ t('pluginExtensions.rp.add') }}
           </ConsoleButton>
         </div>
-      </template>
-    </PageBreadcrumb>
-    <div class="sibling-space-y-4">
-      <p class="text-sm text-[var(--text-secondary)]">
-        {{ t('pluginExtensions.rp.orderNote') }}
-      </p>
+      </div>
       <div
         v-if="loading"
         class="sibling-space-y-2"

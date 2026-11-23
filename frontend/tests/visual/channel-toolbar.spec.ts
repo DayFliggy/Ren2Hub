@@ -127,29 +127,28 @@ for (const theme of [
 
     const toolbar = await controlBoxes(page, '[data-channel-toolbar]')
     expect(toolbar.map((control) => control.name)).toEqual([
+      '搜索范围 渠道',
       '搜索名称、ID、密钥或上游地址',
-      '按模型搜索',
       '渠道状态',
       '渠道类型',
       '渠道厂商',
       '更新全部渠道余额',
       '刷新列表',
       '字段设置',
+      '排序字段 ID',
+      '降序排列',
+      '新建渠道',
     ])
+    // The page has no header row: sort and create close the toolbar row.
     expect(new Set(toolbar.map((control) => control.top)).size).toBe(1)
     expect(new Set(toolbar.map((control) => control.height))).toEqual(
       new Set([32])
     )
 
-    const header = await controlBoxes(page, '[data-channel-header-actions]')
-    expect(header.map((control) => control.name)).toEqual([
-      '排序字段 ID',
-      '降序排列',
-      '新建渠道',
-    ])
-    expect(new Set(header.map((control) => control.height))).toEqual(
-      new Set([32])
-    )
+    await expect(page.locator('[data-page-header]')).toHaveCount(0)
+    await expect(
+      page.getByRole('navigation', { name: '面包屑导航' })
+    ).toHaveCount(0)
 
     // The ledger keeps dashed facets; Studio uses a solid semantic outline.
     const status = page.getByRole('combobox', { name: '渠道状态' })
@@ -173,7 +172,8 @@ for (const theme of [
     await openChannels(page, theme, { width: 390, height: 844 })
 
     const toolbar = await controlBoxes(page, '[data-channel-toolbar]')
-    // Two searches, the chip row, then the batch sync and icon actions.
+    // The merged search, the chip row, the batch sync and icon actions, then
+    // the result count with sort and create.
     expect(new Set(toolbar.map((control) => control.top)).size).toBe(4)
     for (const control of toolbar)
       expect(control.height, control.name).toBeGreaterThanOrEqual(44)
@@ -186,6 +186,38 @@ for (const theme of [
     expect(panel.right).toBeLessThanOrEqual(390)
     await expect(page.getByRole('option', { name: /未识别厂商/ })).toBeVisible()
     await page.keyboard.press('Escape')
+    await assertNoHorizontalOverflow(page)
+  })
+}
+
+for (const theme of [
+  'light',
+  'dark',
+] as const satisfies readonly VisualTheme[]) {
+  test(`${theme} mobile bulk bar stays pinned while the list scrolls`, async ({
+    page,
+  }) => {
+    await openChannels(page, theme, { width: 390, height: 500 })
+    await page.getByRole('checkbox', { name: '选择当前页渠道' }).check()
+    const bar = page.locator('[data-channel-bulk-actions]')
+    await expect(bar).toBeVisible()
+    const zone = page.locator('[data-console-scroll-zone]')
+    await zone.evaluate((element) => element.scrollTo({ top: 10_000 }))
+    await expect
+      .poll(() => zone.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(200)
+    const [barBox, zoneBox] = await Promise.all([
+      bar.boundingBox(),
+      zone.boundingBox(),
+    ])
+    expect(barBox).not.toBeNull()
+    expect(zoneBox).not.toBeNull()
+    // Pinned to the scroll zone's top edge, on an opaque surface.
+    expect(Math.abs(barBox!.y - zoneBox!.y)).toBeLessThanOrEqual(1)
+    const background = await bar.evaluate(
+      (element) => getComputedStyle(element).backgroundImage
+    )
+    expect(background).toContain('linear-gradient')
     await assertNoHorizontalOverflow(page)
   })
 }
@@ -206,9 +238,25 @@ test('channel filter chips query the native list and reset together', async ({
     .poll(() => requests.at(-1)?.searchParams.get('status'))
     .toBe('disabled')
 
-  await page.getByRole('searchbox', { name: '按模型搜索' }).fill('claude')
-  await expect.poll(() => requests.at(-1)?.pathname).toBe('/api/channel/search')
-  expect(requests.at(-1)?.searchParams.get('model')).toBe('claude')
+  // One box serves both native search parameters; the scope picks which.
+  const search = page.getByRole('searchbox', {
+    name: '搜索名称、ID、密钥或上游地址',
+  })
+  await search.fill('claude')
+  await expect
+    .poll(() => requests.at(-1)?.searchParams.get('keyword'))
+    .toBe('claude')
+  expect(requests.at(-1)?.pathname).toBe('/api/channel/search')
+  expect(requests.at(-1)?.searchParams.has('model')).toBe(false)
+  await page.getByRole('combobox', { name: /^搜索范围/ }).click()
+  await page.getByRole('option', { name: '模型', exact: true }).click()
+  await expect
+    .poll(() => requests.at(-1)?.searchParams.get('model'))
+    .toBe('claude')
+  expect(requests.at(-1)?.searchParams.has('keyword')).toBe(false)
+  await expect(
+    page.getByRole('searchbox', { name: '搜索模型名称' })
+  ).toHaveValue('claude')
 
   await page.getByRole('button', { name: '重置', exact: true }).click()
   await expect(status.locator('[data-facet-value]')).toHaveCount(0)

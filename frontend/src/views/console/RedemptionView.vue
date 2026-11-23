@@ -31,7 +31,6 @@ import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import RedemptionCodeCell from '@/components/console/redemption/RedemptionCodeCell.vue'
 import RedemptionGenerateModal from '@/components/console/redemption/RedemptionGenerateModal.vue'
 import RedemptionSuccessModal from '@/components/console/redemption/RedemptionSuccessModal.vue'
@@ -364,52 +363,6 @@ onBeforeUnmount(() => exportController?.abort())
 
 <template>
   <div>
-    <!-- Page header -->
-    <PageBreadcrumb
-      :crumbs="[t('nav.groupAdmin'), t('nav.redemptionManagement')]"
-    >
-      <template #action>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            class="hidden text-xs tabular-nums text-[var(--text-tertiary)] sm:inline"
-            aria-live="polite"
-          >
-            {{ t('redemption.resultCount', { count: total }) }}
-          </span>
-          <div class="flex items-center gap-2">
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :loading="refreshing"
-              :disabled="isCrudBusy || isBulkBusy"
-              @click="load({ background: true })"
-            >
-              <RefreshCw v-if="!refreshing" :size="14" aria-hidden="true" />
-              {{ t('redemption.refreshList') }}
-            </ConsoleButton>
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :loading="exporting"
-              :disabled="rows.length === 0"
-              @click="exportCsv"
-            >
-              <Download :size="14" aria-hidden="true" />
-              {{ t('redemption.exportCsv') }}
-            </ConsoleButton>
-            <ConsoleButton
-              size="sm"
-              :disabled="!canManage"
-              @click="openGenerate"
-            >
-              <Plus :size="14" aria-hidden="true" />
-              {{ t('redemption.generateCodes') }}
-            </ConsoleButton>
-          </div>
-        </div>
-      </template>
-    </PageBreadcrumb>
-
     <ConsoleCard :padded="false">
       <!-- Toolbar -->
       <div
@@ -458,12 +411,47 @@ onBeforeUnmount(() => exportController?.abort())
             />
           </div>
         </div>
+        <div
+          class="order-first flex flex-wrap items-center gap-2 xl:order-none xl:shrink-0"
+          data-redemption-toolbar-actions
+        >
+          <span
+            class="mr-auto text-xs tabular-nums text-[var(--text-tertiary)] xl:mr-1"
+            aria-live="polite"
+          >
+            {{ t('redemption.resultCount', { count: total }) }}
+          </span>
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :loading="refreshing"
+            :disabled="isCrudBusy || isBulkBusy"
+            @click="load({ background: true })"
+          >
+            <RefreshCw v-if="!refreshing" :size="14" aria-hidden="true" />
+            {{ t('redemption.refreshList') }}
+          </ConsoleButton>
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :loading="exporting"
+            :disabled="rows.length === 0"
+            @click="exportCsv"
+          >
+            <Download :size="14" aria-hidden="true" />
+            {{ t('redemption.exportCsv') }}
+          </ConsoleButton>
+          <ConsoleButton size="sm" :disabled="!canManage" @click="openGenerate">
+            <Plus :size="14" aria-hidden="true" />
+            {{ t('redemption.generateCodes') }}
+          </ConsoleButton>
+        </div>
       </div>
 
       <!-- Bulk action bar -->
       <div
         v-if="selectedIds.length > 0"
-        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
       >
         <span
           class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"

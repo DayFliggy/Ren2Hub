@@ -881,7 +881,6 @@ export default {
       typeError: '仅支持 PNG、JPG、WEBP、GIF 格式',
     },
     admin: {
-      title: '工单管理',
       queue: '工单队列',
       workspace: '工单处理区',
       queueOpen: '待处理',
@@ -1252,7 +1251,10 @@ export default {
     createChannel: '新建渠道',
     createShort: '新建',
     searchPlaceholder: '搜索名称、ID、密钥或上游地址',
-    modelSearchPlaceholder: '按模型搜索',
+    modelSearchPlaceholder: '搜索模型名称',
+    searchScope: '搜索范围',
+    searchScopeChannel: '渠道',
+    searchScopeModel: '模型',
     typeFilter: '渠道类型',
     statusFilter: '渠道状态',
     sortLabel: '排序字段',
@@ -1836,7 +1838,6 @@ export default {
     summaryUnavailable: '聚合数据暂不可用',
     summaryUnavailableHint: '当前服务暂未提供该项统计。',
     currency: '币种',
-    title: '充值订单',
     affiliate: {
       title: '邀请返利',
       reward: '邀请人 #{id} 获得 {amount}',
@@ -3567,7 +3568,6 @@ export default {
       retryLoad: '重新读取网关配置',
     },
     title: '系统设置',
-    breadcrumb: ['管理员', '系统设置'],
     saved: '已保存',
     partialSaveFailed:
       '已保存 {count} 项设置，随后发生错误：{error}。剩余更改已保留，可重试；已保存的设置没有回滚。',

@@ -309,7 +309,7 @@ describe('native channel management', () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(null)
     const state = await setup()
     expect(get.mock.calls[0]?.[0]).toBe('/api/channel/')
-    state.keyword.value = 'Native'
+    state.searchText.value = 'Native'
     await state.load()
     expect(get).toHaveBeenCalledWith(
       '/api/channel/search',
@@ -383,12 +383,26 @@ describe('native channel management', () => {
     get.mockClear()
     vi.useFakeTimers()
     try {
-      state.modelKeyword.value = ' gpt-5 '
+      state.searchScope.value = 'model'
+      await nextTick()
+      // An empty box does not re-query when only the scope changes.
+      expect(get).not.toHaveBeenCalled()
+      state.searchText.value = ' gpt-5 '
       await nextTick()
       await vi.advanceTimersByTimeAsync(300)
       expect(get).toHaveBeenCalledWith(
         '/api/channel/search',
         expect.objectContaining({ model: 'gpt-5', keyword: undefined }),
+        expect.any(Object)
+      )
+      // The same text moves to the channel keyword when the scope flips.
+      get.mockClear()
+      state.searchScope.value = 'channel'
+      await nextTick()
+      await flushPromises()
+      expect(get).toHaveBeenCalledWith(
+        '/api/channel/search',
+        expect.objectContaining({ keyword: 'gpt-5', model: undefined }),
         expect.any(Object)
       )
     } finally {
@@ -399,8 +413,8 @@ describe('native channel management', () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue(page)
     const state = await setup()
     state.sortBy.value = 'name'
-    state.keyword.value = 'Native'
-    state.modelKeyword.value = 'gpt-5'
+    state.searchScope.value = 'model'
+    state.searchText.value = 'gpt-5'
     state.type.value = '1'
     state.lab.value = 'openai'
     state.status.value = 'enabled'

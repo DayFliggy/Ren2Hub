@@ -120,8 +120,9 @@ function isCanvasInteractionBoundary(target: EventTarget | null) {
 
 /* ===== 移动端触摸横滑转动地图（常态仅下方空白区；沉浸态扩至全屏） =====
    起点落在热区且非交互元素时才进入待定；|dx|>|dy|×1.5 认领手势。
-   舞台条容器声明 touch-action: pan-x，竖向手势一律交还浏览器由进入/退出
-   沉浸态的触控逻辑处理，双方靠方向比 1.5 互斥，不互相劫持。 */
+   舞台条容器声明 touch-action: pan-y，浏览器只接管竖向滚动，横向位移照常
+   派发到这里；竖向手势交给页面滚动及进入/退出沉浸态的触控逻辑，双方靠
+   方向比 1.5 互斥，不互相劫持。 */
 const DRAG_ZONE_Y_RATIO = 0.52 // 常态热区起点（画布高占比；沉浸态为 0 全屏）
 const DRAG_CLAIM_PX = 8 // 手势方向判定阈值
 const DRAG_DIRECTION_RATIO = 1.5 // |dx| 须超过 |dy|×1.5 才算横向

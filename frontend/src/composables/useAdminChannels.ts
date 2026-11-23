@@ -47,6 +47,12 @@ interface ChannelBatchProgress {
   failed: number
 }
 
+/**
+ * Native SearchChannels ANDs `keyword` (ID, name, key or upstream URL) with
+ * `model`; the merged box sends its text as one of them.
+ */
+export type ChannelSearchScope = 'channel' | 'model'
+
 export interface ChannelModelTestOptions {
   endpointType?: string
   stream?: boolean
@@ -120,8 +126,9 @@ export function useAdminChannels() {
   const typeCounts = ref<Record<string, number>>({})
   const page = ref(1)
   const pageSize = ref(20)
-  const keyword = ref('')
-  const modelKeyword = ref('')
+  /** One search box; the scope picks the native SearchChannels parameter. */
+  const searchText = ref('')
+  const searchScope = ref<ChannelSearchScope>('channel')
   const type = ref('')
   const lab = ref('')
   const labs = ref<
@@ -219,21 +226,23 @@ export function useAdminChannels() {
       status: status.value || undefined,
       sort_by: sortBy.value,
       sort_order: sortOrder.value,
-      keyword: keyword.value.trim() || undefined,
-      model: modelKeyword.value.trim() || undefined,
+      keyword: searchParam('channel'),
+      model: searchParam('model'),
     }
   }
 
+  function searchParam(scope: ChannelSearchScope): string | undefined {
+    if (searchScope.value !== scope) return undefined
+    return searchText.value.trim() || undefined
+  }
+
   const hasFilters = computed(() =>
-    [keyword, modelKeyword, type, lab, status].some((filter) =>
-      filter.value.trim()
-    )
+    [searchText, type, lab, status].some((filter) => filter.value.trim())
   )
 
   /** Clears every list filter; sorting is a view preference and stays. */
   function resetFilters() {
-    keyword.value = ''
-    modelKeyword.value = ''
+    searchText.value = ''
     type.value = ''
     lab.value = ''
     status.value = ''
@@ -255,10 +264,9 @@ export function useAdminChannels() {
     if (rows.value.length === 0) initialError.value = ''
 
     // Native GetAllChannels ignores model; only SearchChannels filters it.
-    const endpoint =
-      keyword.value.trim() || modelKeyword.value.trim()
-        ? '/api/channel/search'
-        : '/api/channel/'
+    const endpoint = searchText.value.trim()
+      ? '/api/channel/search'
+      : '/api/channel/'
     const result = await listRequest.run(async (signal) => {
       const response = await api.get<unknown>(endpoint, currentParams(), {
         signal,
@@ -294,9 +302,13 @@ export function useAdminChannels() {
     else page.value = 1
   }
 
-  watch([keyword, modelKeyword], () => {
+  watch(searchText, () => {
     window.clearTimeout(searchTimer)
     searchTimer = window.setTimeout(reloadFromFirstPage, 300)
+  })
+  // Switching scope re-reads only when there is text to apply it to.
+  watch(searchScope, () => {
+    if (searchText.value.trim()) reloadFromFirstPage()
   })
   watch([type, lab, status, sortBy, sortOrder], reloadFromFirstPage)
   watch(pageSize, reloadFromFirstPage)
@@ -907,8 +919,8 @@ export function useAdminChannels() {
     typeCounts,
     page,
     pageSize,
-    keyword,
-    modelKeyword,
+    searchText,
+    searchScope,
     type,
     lab,
     labs,

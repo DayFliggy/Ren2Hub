@@ -34,9 +34,7 @@ function mountView() {
   return shallowMount(RedemptionView, {
     global: {
       renderStubDefaultSlot: true,
-      // The page actions, including export, render in the breadcrumb slot.
       stubs: {
-        PageBreadcrumb: { template: '<div><slot name="action" /></div>' },
         IconButton: false,
       },
       plugins: [

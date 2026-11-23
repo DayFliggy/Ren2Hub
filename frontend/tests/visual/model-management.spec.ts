@@ -193,9 +193,11 @@ for (const [language, theme, mobile] of [
         page.locator('[data-console-mobile-navigation]')
       ).toHaveCount(0)
     }
+    // Admin pages have no breadcrumb row; the section tabs lead the page.
+    await expect(page.locator('[data-page-header]')).toHaveCount(0)
     await expect(
-      visible(page, zh ? '模型管理' : 'Model management')
-    ).toBeVisible()
+      page.getByRole('tab', { name: zh ? '模型' : 'Models', exact: true })
+    ).toHaveAttribute('aria-selected', 'true')
     await expect(
       page.getByRole('tab', {
         name: zh ? '供应商' : 'Vendors',

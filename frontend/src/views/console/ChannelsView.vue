@@ -38,7 +38,6 @@ import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
 import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSyncDialog.vue'
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
@@ -126,8 +125,8 @@ const {
   typeCounts,
   page,
   pageSize,
-  keyword,
-  modelKeyword,
+  searchText,
+  searchScope,
   type,
   lab,
   labs,
@@ -428,6 +427,22 @@ const statusOptions = computed(() => [
     tone: 'danger' as const,
   },
 ])
+
+const searchScopeOptions = computed(() => [
+  { value: 'channel', label: t('channels.searchScopeChannel') },
+  { value: 'model', label: t('channels.searchScopeModel') },
+])
+const searchScopeModel = computed({
+  get: () => searchScope.value,
+  set: (value: string) => {
+    searchScope.value = value === 'model' ? 'model' : 'channel'
+  },
+})
+const searchPlaceholder = computed(() =>
+  searchScope.value === 'model'
+    ? t('channels.modelSearchPlaceholder')
+    : t('channels.searchPlaceholder')
+)
 
 const sortOptions = computed(() =>
   ADMIN_CHANNEL_SORT_FIELDS.map((field) => ({
@@ -755,79 +770,34 @@ function routeQualitySummary(row: AdminChannelTableRow) {
 
 <template>
   <div>
-    <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('nav.channelManagement')]">
-      <template #action>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            class="hidden text-xs tabular-nums text-[var(--text-tertiary)] sm:inline"
-            aria-live="polite"
-          >
-            {{ t('channels.resultCount', { count: total }) }}
-          </span>
-          <div class="flex items-center gap-2" data-channel-header-actions>
-            <!-- Sort sits beside create as in NewAPI's channel header. -->
-            <FilterSelect
-              v-model="sortModel"
-              :options="sortOptions"
-              :label="t('channels.sortLabel')"
-              :prefix-label="t('channels.sortPrefix')"
-              size="compact"
-              class="w-36 sm:w-40"
-            />
-            <IconButton
-              :label="
-                sortOrder === 'asc'
-                  ? t('channels.sortAscending')
-                  : t('channels.sortDescending')
-              "
-              class="pencil-control shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
-              data-handdrawn="control"
-              @click="toggleSortOrder"
-            >
-              <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="16" />
-              <ArrowDownNarrowWide v-else :size="16" />
-            </IconButton>
-            <ConsoleButton
-              v-if="canSensitiveWrite"
-              size="sm"
-              :aria-label="t('channels.createChannel')"
-              :disabled="!canMutate"
-              @click="openCreate"
-            >
-              <Plus :size="14" />
-              <span class="sm:hidden">{{ t('channels.createShort') }}</span>
-              <span class="hidden sm:inline">{{
-                t('channels.createChannel')
-              }}</span>
-            </ConsoleButton>
-          </div>
-        </div>
-      </template>
-    </PageBreadcrumb>
-
     <ConsoleCard :padded="false">
       <!-- Toolbar row as in NewAPI: searches and filter chips on the left,
         list actions on the right. -->
       <div
-        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] p-4 sm:gap-3"
+        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] p-4"
         data-channel-toolbar
       >
-        <SearchInput
-          v-model="keyword"
-          :placeholder="t('channels.searchPlaceholder')"
-          :aria-label="t('channels.searchPlaceholder')"
-          name="admin-channel-search"
-          size="compact"
-          class="w-full sm:w-auto sm:max-w-80 sm:grow sm:basis-60"
-        />
-        <SearchInput
-          v-model="modelKeyword"
-          :placeholder="t('channels.modelSearchPlaceholder')"
-          :aria-label="t('channels.modelSearchPlaceholder')"
-          name="admin-channel-model-search"
-          size="compact"
-          class="w-full sm:w-auto sm:max-w-56 sm:grow sm:basis-40"
-        />
+        <!-- One search box; the scope picks what the native search matches. -->
+        <div
+          class="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:max-w-[28rem] sm:grow sm:basis-72"
+          data-channel-search
+        >
+          <FilterSelect
+            v-model="searchScopeModel"
+            :options="searchScopeOptions"
+            :label="t('channels.searchScope')"
+            size="compact"
+            class="w-24 shrink-0"
+          />
+          <SearchInput
+            v-model="searchText"
+            :placeholder="searchPlaceholder"
+            :aria-label="searchPlaceholder"
+            name="admin-channel-search"
+            size="compact"
+            class="min-w-0 grow"
+          />
+        </div>
         <div class="flex flex-wrap items-center gap-2" data-channel-facets>
           <FilterSelect
             v-model="status"
@@ -913,12 +883,58 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             :reset-label="t('channels.resetFields')"
           />
         </div>
+        <div
+          class="flex w-full items-center gap-2 md:w-auto"
+          data-channel-header-actions
+        >
+          <span
+            class="mr-auto whitespace-nowrap text-xs tabular-nums text-[var(--text-tertiary)] md:hidden 2xl:mr-1 2xl:inline"
+            aria-live="polite"
+          >
+            {{ t('channels.resultCount', { count: total }) }}
+          </span>
+          <!-- Sort sits beside create as in NewAPI's channel header. -->
+          <FilterSelect
+            v-model="sortModel"
+            :options="sortOptions"
+            :label="t('channels.sortLabel')"
+            :prefix-label="t('channels.sortPrefix')"
+            size="compact"
+            class="w-36"
+          />
+          <IconButton
+            :label="
+              sortOrder === 'asc'
+                ? t('channels.sortAscending')
+                : t('channels.sortDescending')
+            "
+            class="pencil-control shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
+            data-handdrawn="control"
+            @click="toggleSortOrder"
+          >
+            <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="16" />
+            <ArrowDownNarrowWide v-else :size="16" />
+          </IconButton>
+          <ConsoleButton
+            v-if="canSensitiveWrite"
+            size="sm"
+            :aria-label="t('channels.createChannel')"
+            :disabled="!canMutate"
+            @click="openCreate"
+          >
+            <Plus :size="14" />
+            <span class="2xl:hidden">{{ t('channels.createShort') }}</span>
+            <span class="hidden 2xl:inline">{{
+              t('channels.createChannel')
+            }}</span>
+          </ConsoleButton>
+        </div>
       </div>
 
       <div
         v-if="selectedIds.length > 0"
         data-channel-bulk-actions
-        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
       >
         <span
           class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"

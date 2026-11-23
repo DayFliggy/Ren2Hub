@@ -58,9 +58,10 @@
           aria-hidden="true"
         />
         <!-- 移动舞台：弹性填充把多余高度还给地图，内容自然沉底（各高度观感一致）；
-             下滑手势区（进入全屏沉浸），引导胶囊置顶；矮屏保底舞台条高度 -->
+             pan-y 让上滑照常滚动页面，页面在顶部时下滑进入全屏沉浸，横滑由地图转动；
+             引导胶囊置顶；矮屏保底舞台条高度 -->
         <div
-          class="hero-map-stage order-1 flex items-start justify-center pt-1 [touch-action:pan-x] lg:hidden"
+          class="hero-map-stage order-1 flex items-start justify-center pt-1 [touch-action:pan-y] lg:hidden"
           data-hero-map-focus
           @touchstart="onStageTouchStart"
           @touchmove="onStageTouchMove"

@@ -1840,7 +1840,7 @@ async function submit() {
   margin-top: 0.1rem;
 }
 /* Per-section accent tints reuse semantic status tokens so both the Desert
-   Ledger (day) and One Night (dark) palettes stay coherent automatically. */
+   Ledger (day) and B1 Studio (dark) palettes stay coherent automatically. */
 .channel-form-section--basic .channel-form-section-icon {
   background: var(--accent-soft);
   border-color: transparent;

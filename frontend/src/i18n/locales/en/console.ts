@@ -918,7 +918,6 @@ export default {
       typeError: 'Only PNG, JPG, WEBP, GIF formats supported',
     },
     admin: {
-      title: 'Ticket management',
       queue: 'Ticket queue',
       workspace: 'Ticket workspace',
       queueOpen: 'Pending',
@@ -1295,7 +1294,10 @@ export default {
     createChannel: 'New channel',
     createShort: 'New',
     searchPlaceholder: 'Search name, ID, key or upstream URL',
-    modelSearchPlaceholder: 'Search by model',
+    modelSearchPlaceholder: 'Search model name',
+    searchScope: 'Search scope',
+    searchScopeChannel: 'Channel',
+    searchScopeModel: 'Model',
     typeFilter: 'Channel type',
     statusFilter: 'Channel status',
     sortLabel: 'Sort by',
@@ -1913,7 +1915,6 @@ export default {
     summaryUnavailable: 'Summary unavailable',
     summaryUnavailableHint: 'This statistic is currently unavailable.',
     currency: 'Currency',
-    title: 'Top-up orders',
     affiliate: {
       title: 'Referral reward',
       reward: 'Inviter #{id} received {amount}',
@@ -3718,7 +3719,6 @@ export default {
       retryLoad: 'Reload gateway configuration',
     },
     title: 'System Settings',
-    breadcrumb: ['Admin', 'System Settings'],
     saved: 'Saved',
     partialSaveFailed:
       '{count} settings were saved before an error: {error}. The remaining changes are kept for retry; saved settings were not rolled back.',

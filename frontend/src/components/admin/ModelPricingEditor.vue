@@ -811,7 +811,7 @@ h3 {
   background: var(--surface-solid);
   color: var(--text-primary);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--elevation-1);
 }
 .pricing-task-condition {
   display: flex;

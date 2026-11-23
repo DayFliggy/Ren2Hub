@@ -3,12 +3,10 @@
 export const modelMetadataMessages = {
   'zh-CN': {
     modelManagement: '模型管理',
-    vendorManagement: '供应商管理',
     sections: '模型管理分区',
     models: '模型',
     vendors: '供应商',
     pricing: '定价',
-    pricingManagement: '模型定价',
     syncMetadata: '同步资料',
     addModel: '添加模型',
     addVendor: '添加供应商',
@@ -140,12 +138,10 @@ export const modelMetadataMessages = {
   },
   en: {
     modelManagement: 'Model management',
-    vendorManagement: 'Vendor management',
     sections: 'Model management sections',
     models: 'Models',
     vendors: 'Vendors',
     pricing: 'Pricing',
-    pricingManagement: 'Model pricing',
     syncMetadata: 'Sync metadata',
     addModel: 'Add Model',
     addVendor: 'Add Vendor',
