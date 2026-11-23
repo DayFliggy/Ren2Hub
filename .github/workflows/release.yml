@@ -47,6 +47,8 @@ jobs:
           go-version-file: go.mod
       - name: Build and package linux/amd64
         run: |
+          # The PGO profile path comes from the module cache, which is empty on a fresh runner.
+          go mod download
           go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" \
             -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$VERSION' -X 'github.com/QuantumNous/new-api/common.BuildType=release'" -o ren2hub .
           archive="ren2hub_${VERSION#v}_linux_amd64.tar.gz"
