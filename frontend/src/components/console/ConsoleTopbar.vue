@@ -12,6 +12,7 @@ import CommandPaletteModal from './CommandPaletteModal.vue'
 import ConsoleMobileNavDrawer from './ConsoleMobileNavDrawer.vue'
 import TopNavMenu from './TopNavMenu.vue'
 import UserMenu from './UserMenu.vue'
+import VersionBadge from './version/VersionBadge.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -154,6 +155,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
           class="topbar-language hidden lg:block"
         />
         <ThemeSwitcher variant="console" />
+        <VersionBadge />
         <div
           class="topbar-divider hidden h-6 w-px bg-[var(--border-default)] sm:mx-1 sm:block"
         />

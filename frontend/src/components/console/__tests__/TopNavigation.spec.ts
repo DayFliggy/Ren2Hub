@@ -170,6 +170,7 @@ describe('top navigation', () => {
         stubs: {
           TopNavMenu: true,
           UserMenu: true,
+          VersionBadge: true,
           CommandPaletteModal: true,
           LanguageSelector: true,
           ThemeSwitcher: true,

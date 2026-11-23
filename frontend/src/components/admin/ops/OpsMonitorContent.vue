@@ -18,7 +18,6 @@ import OpsResourcesCard from '@/components/admin/ops/OpsResourcesCard.vue'
 import OpsStatusHeader from '@/components/admin/ops/OpsStatusHeader.vue'
 import OpsStorageCards from '@/components/admin/ops/OpsStorageCards.vue'
 import OpsSystemTasksCard from '@/components/admin/ops/OpsSystemTasksCard.vue'
-import OpsUpdateCard from '@/components/admin/ops/OpsUpdateCard.vue'
 import OpsUpstreamCard from '@/components/admin/ops/OpsUpstreamCard.vue'
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
@@ -205,9 +204,6 @@ const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
     />
     <div v-if="auth.isRoot" class="ops-area ops-area--full">
       <OpsSystemTasksCard />
-    </div>
-    <div v-if="auth.isRoot" class="ops-area ops-area--full">
-      <OpsUpdateCard />
     </div>
   </div>
 </template>
