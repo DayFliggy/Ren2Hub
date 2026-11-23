@@ -96,7 +96,7 @@ def source_identity(source):
         else:
             digest.update(b'deleted\0')
         count += 1
-    # 只读核对：不让 status 刷新索引，否则以 root 运行的发布校验器会把索引改成 root 所有。
+    # 只读核对：不让 status 刷新索引，避免在只读核验期间改变索引属主。
     status = execute(['git', '-C', str(source), '--no-optional-locks', 'status', '--porcelain']).stdout
     return {'git_head': head, 'candidate_sha': None if status else head,
             'working_tree_sha256': digest.hexdigest(), 'files': count, 'dirty': bool(status)}
@@ -766,7 +766,7 @@ class Candidate:
                     'simulator': self.report.get('simulator'),
                     'build_identities': self.report.get('build_identities'),
                     # scope/interface 是 management 阶段的实测值，未选它时为 None；
-                    # configured_interface 是候选容器实际使用的配置，发布校验器用它对照正式 compose。
+                    # configured_interface 是候选容器实际使用的配置。
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts', 'configured_interface')}
                     if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
@@ -881,7 +881,7 @@ def main():
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}
-    # success 只表示候选阶段通过；正式更新另需 deployment_eligible（干净源码、匹配镜像与 gitlink）。
+    # success 只表示候选阶段通过；deployment_eligible 另要求源码干净且与候选镜像匹配。
     print(json.dumps({'success': report['success'], 'deployment_eligible': report.get('deployment_eligible', False),
                       'error_code': report.get('error_code'),
                       'report': str(args.output / 'candidate.json')}, ensure_ascii=False))
