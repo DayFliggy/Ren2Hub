@@ -344,7 +344,7 @@ export const opsMonitorMessages = {
       confirmRestart: '重启服务器？',
       confirmRestartMessage:
         '进行中的请求会被中断。服务器恢复后页面会自动刷新。',
-      updated: '已更新到 {version}，重启后生效。',
+      updated: '程序已替换，重启后生效。',
       rolledBack: '已回滚到 {version}，重启后生效。',
       alreadyLatest: '服务器已是最新版本 {version}。',
       restarting: '正在重启，等待服务器恢复…',
@@ -353,14 +353,16 @@ export const opsMonitorMessages = {
       errors: {
         github: '无法从 GitHub 获取版本信息。',
         download: '下载或校验发布包失败。',
-        replace: '替换程序失败，已还原原程序。',
+        server: '服务器处理失败，请查看服务日志，并刷新版本信息确认当前程序。',
         busy: '已有更新、回滚或重启正在进行。',
         rejected: '服务器拒绝了请求：源码构建不能更新，或版本无效。',
         notInList: '该版本不在回滚列表中。',
-        noResponse: '没有收到响应，操作可能仍在进行，请稍后检查。',
+        noResponse:
+          '没有收到响应，操作可能仍在进行。请等几分钟后刷新版本信息，不要再次点击更新。',
         unreachable: '无法连接服务器。',
         invalid: '服务器返回的数据格式无效。',
         status: '请求失败（HTTP {status}）。',
+        sessionChanged: '登录状态已变化，请刷新页面后重试。',
         generic: '请求失败。',
       },
     },
@@ -728,7 +730,7 @@ export const opsMonitorMessages = {
       confirmRestart: 'Restart the server?',
       confirmRestartMessage:
         'Requests in progress are interrupted. The page reloads once the server is back.',
-      updated: 'Updated to {version}. Restart to apply it.',
+      updated: 'The program was replaced. Restart to apply it.',
       rolledBack: 'Rolled back to {version}. Restart to apply it.',
       alreadyLatest: 'The server is already on the latest version {version}.',
       restarting: 'Restarting; waiting for the server to come back…',
@@ -738,17 +740,18 @@ export const opsMonitorMessages = {
       errors: {
         github: 'Could not reach GitHub for release information.',
         download: 'Downloading or verifying the release package failed.',
-        replace:
-          'Replacing the program failed; the original program was restored.',
+        server:
+          'The server could not complete the operation. Check the service log, then refresh the version information to see which program is running.',
         busy: 'Another update, rollback or restart is in progress.',
         rejected:
           'The server refused the request: source builds cannot be updated, or the version is invalid.',
         notInList: 'This version is not in the rollback list.',
         noResponse:
-          'No response was received. The operation may still be running; check again later.',
+          'No response was received and the operation may still be running. Wait a few minutes, then refresh the version information; do not click Update again.',
         unreachable: 'The server could not be reached.',
         invalid: 'The server returned an invalid response.',
         status: 'The request failed (HTTP {status}).',
+        sessionChanged: 'Your sign-in changed. Refresh the page and try again.',
         generic: 'The request failed.',
       },
     },

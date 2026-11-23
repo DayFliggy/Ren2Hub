@@ -4,8 +4,10 @@ import { publicApi } from '../public'
 import { ApiError } from '../types'
 import {
   LONG_OPERATION_TIMEOUT_MS,
+  RESTART_DEADLINE_MS,
   systemUpdateApi,
   watchServerRestart,
+  type RestartExpectation,
 } from '../systemUpdate'
 
 afterEach(() => {
@@ -66,8 +68,9 @@ describe('system update API contract', () => {
       ],
       ['/api/admin/system/restart', undefined, undefined],
     ])
-    // The backend may spend up to 15 minutes downloading and replacing.
-    expect(LONG_OPERATION_TIMEOUT_MS).toBeGreaterThan(15 * 60_000)
+    // The backend gives up after 5 minutes and Nginx after 360 seconds; the
+    // browser waits for the backend answer but not past the proxy.
+    expect(LONG_OPERATION_TIMEOUT_MS).toBe(330_000)
   })
 
   it('parses version, check, rollback list and action results', async () => {
@@ -190,37 +193,56 @@ describe('system update API contract', () => {
 
 describe('server restart watch', () => {
   const baseline = { version: 'v1.0.1', start_time: 100 }
+  const old = { version: 'v1.0.1', start_time: 100 }
+  const watch = (
+    expectation: RestartExpectation,
+    signal = new AbortController().signal
+  ) =>
+    watchServerRestart(
+      baseline,
+      expectation,
+      Date.now() + RESTART_DEADLINE_MS,
+      signal
+    )
 
-  it('succeeds once the target version answers', async () => {
+  it('after an update, succeeds on any version other than the one before the restart', async () => {
     vi.useFakeTimers()
+    // A release newer than the one the check reported was installed.
     const status = vi
       .spyOn(publicApi, 'status')
-      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
+      .mockResolvedValueOnce(old)
       .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 160 })
-      .mockResolvedValueOnce({ version: 'v1.0.2', start_time: 170 })
-    const outcome = watchServerRestart(
-      baseline,
-      '1.0.2',
-      new AbortController().signal
-    )
+      .mockResolvedValueOnce({ version: 'v1.0.3', start_time: 170 })
+    const outcome = watch({ kind: 'new-version' })
     await vi.advanceTimersByTimeAsync(10_000)
     await expect(outcome).resolves.toBe('restarted')
-    // A new process with the old binary is not the release that was asked for.
+    // A new process still running the old binary is not success.
     expect(status).toHaveBeenCalledTimes(3)
   })
 
-  it('succeeds on a new start time when no target version is expected', async () => {
+  it('after a rollback, succeeds only on the rollback target', async () => {
     vi.useFakeTimers()
-    vi.spyOn(publicApi, 'status')
-      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
-      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 180 })
-    const outcome = watchServerRestart(
-      baseline,
-      null,
-      new AbortController().signal
-    )
+    const status = vi
+      .spyOn(publicApi, 'status')
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 160 })
+      .mockResolvedValueOnce({ version: 'v1.0.2', start_time: 170 })
+      .mockResolvedValueOnce({ version: 'v1.0.0', start_time: 180 })
+    const outcome = watch({ kind: 'version', version: '1.0.0' })
     await vi.advanceTimersByTimeAsync(10_000)
     await expect(outcome).resolves.toBe('restarted')
+    expect(status).toHaveBeenCalledTimes(3)
+  })
+
+  it('without a pending replacement, succeeds on a new start time', async () => {
+    vi.useFakeTimers()
+    const status = vi
+      .spyOn(publicApi, 'status')
+      .mockResolvedValueOnce(old)
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 180 })
+    const outcome = watch({ kind: 'new-process' })
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(outcome).resolves.toBe('restarted')
+    expect(status).toHaveBeenCalledTimes(2)
   })
 
   it('keeps polling through failed reads and reports unknown after 120 seconds', async () => {
@@ -229,28 +251,66 @@ describe('server restart watch', () => {
       .spyOn(publicApi, 'status')
       .mockRejectedValueOnce(new ApiError('Bad Gateway', { status: 502 }))
       .mockRejectedValueOnce(new Error('Network Error'))
-      .mockResolvedValue({ version: 'v1.0.1', start_time: 100 })
+      .mockResolvedValue(old)
     let settled = ''
-    const outcome = watchServerRestart(
-      baseline,
-      'v1.0.2',
-      new AbortController().signal
-    ).then((value) => (settled = value))
+    const outcome = watch({ kind: 'new-version' }).then(
+      (value) => (settled = value)
+    )
     await vi.advanceTimersByTimeAsync(119_000)
     expect(settled).toBe('')
     expect(status.mock.calls.length).toBeGreaterThan(3)
-    await vi.advanceTimersByTimeAsync(5_000)
+    await vi.advanceTimersByTimeAsync(1_000)
     await outcome
     expect(settled).toBe('unknown')
   })
 
+  it('reports unknown when a read sent before the deadline answers success after it', async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    vi.spyOn(publicApi, 'status').mockImplementation(() =>
+      Date.now() - start < 118_000
+        ? Promise.resolve(old)
+        : new Promise((resolve) =>
+            setTimeout(
+              () => resolve({ version: 'v1.0.2', start_time: 200 }),
+              5_000
+            )
+          )
+    )
+    const outcome = watch({ kind: 'new-version' })
+    await vi.advanceTimersByTimeAsync(130_000)
+    await expect(outcome).resolves.toBe('unknown')
+  })
+
+  it('limits each read to the time left before the deadline', async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    const signals: AbortSignal[] = []
+    vi.spyOn(publicApi, 'status').mockImplementation((signal) => {
+      signals.push(signal!)
+      if (Date.now() - start < 118_000) return Promise.resolve(old)
+      return new Promise((_resolve, reject) =>
+        signal!.addEventListener('abort', () => reject(new Error('aborted')))
+      )
+    })
+    let settled = ''
+    const outcome = watch({ kind: 'new-version' }).then(
+      (value) => (settled = value)
+    )
+    await vi.advanceTimersByTimeAsync(119_500)
+    expect(signals.at(-1)!.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(500)
+    await outcome
+    expect(signals.at(-1)!.aborted).toBe(true)
+    expect(settled).toBe('unknown')
+    expect(Date.now() - start).toBe(120_000)
+  })
+
   it('stops when aborted', async () => {
     vi.useFakeTimers()
-    const status = vi
-      .spyOn(publicApi, 'status')
-      .mockResolvedValue({ version: 'v1.0.1', start_time: 100 })
+    const status = vi.spyOn(publicApi, 'status').mockResolvedValue(old)
     const controller = new AbortController()
-    const outcome = watchServerRestart(baseline, null, controller.signal)
+    const outcome = watch({ kind: 'new-process' }, controller.signal)
     const rejected = expect(outcome).rejects.toMatchObject({
       name: 'AbortError',
     })
@@ -260,5 +320,24 @@ describe('server restart watch', () => {
     await rejected
     await vi.advanceTimersByTimeAsync(30_000)
     expect(status).toHaveBeenCalledTimes(calls)
+  })
+
+  it('ignores a success that arrives after the watch is aborted', async () => {
+    vi.useFakeTimers()
+    type Status = Awaited<ReturnType<typeof publicApi.status>>
+    let answer: (value: Status) => void = () => {}
+    vi.spyOn(publicApi, 'status').mockImplementation(
+      () => new Promise((resolve) => (answer = resolve))
+    )
+    const controller = new AbortController()
+    const outcome = watch({ kind: 'new-version' }, controller.signal)
+    const rejected = expect(outcome).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+    controller.abort()
+    // A transport that already finished hands the answer over regardless.
+    answer({ version: 'v1.0.2', start_time: 200 })
+    await rejected
   })
 })

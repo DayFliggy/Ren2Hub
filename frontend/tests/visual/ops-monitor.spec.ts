@@ -755,7 +755,7 @@ for (const [theme, mobile] of [
       .getByRole('button', { name: '更新', exact: true })
       .click()
     await expect(card.locator('[data-update-restart-needed]')).toContainText(
-      '已更新到 v1.0.2，重启后生效。'
+      '程序已替换，重启后生效。'
     )
     await assertNoHorizontalOverflow(page)
     if (mobile) expect(await smallTargets(page)).toEqual([])

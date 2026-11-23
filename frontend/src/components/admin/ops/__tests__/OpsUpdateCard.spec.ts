@@ -234,9 +234,10 @@ describe('ops update card', () => {
       undefined,
       expect.objectContaining({ timeoutMs: expect.any(Number) })
     )
-    expect(view.get('[data-update-restart-needed]').text()).toContain(
-      'Updated to v1.0.2. Restart to apply it.'
-    )
+    // The update answer does not name the installed release, so neither does the UI.
+    const notice = view.get('[data-update-restart-needed]').text()
+    expect(notice).toContain('The program was replaced. Restart to apply it.')
+    expect(notice).not.toContain('v1.0.2')
     expect(action('update').exists()).toBe(false)
     expect(action('rollback').exists()).toBe(false)
     expect(action('restart').exists()).toBe(true)
@@ -267,9 +268,9 @@ describe('ops update card', () => {
   it.each([
     [409, 'Another update, rollback or restart is in progress.'],
     [502, 'Downloading or verifying the release package failed.'],
-    [500, 'the original program was restored'],
-    [504, 'The operation may still be running'],
-    [undefined, 'The operation may still be running'],
+    [500, 'The server could not complete the operation'],
+    [504, 'do not click Update again'],
+    [undefined, 'do not click Update again'],
     [418, 'The request failed (HTTP 418).'],
   ])('maps update failures by HTTP status %s', async (status, text) => {
     replies['/api/admin/system/update'] = () => {
@@ -281,6 +282,8 @@ describe('ops update card', () => {
     await action('update').trigger('click')
     await confirm()
     expect(errorText()).toContain(text)
+    // The server may have failed to restore the old binary as well.
+    expect(errorText()).not.toContain('restored')
     expect(view.text()).not.toContain('server says')
     expect(view.find('[data-update-restart-needed]').exists()).toBe(false)
     expect(action('update').attributes('disabled')).toBeUndefined()
@@ -350,17 +353,19 @@ describe('ops update card', () => {
     expect(view.find('[data-update-restart-needed]').exists()).toBe(false)
   })
 
-  it('reloads after the restarted server reports the target version', async () => {
+  it('reloads after an update once the server reports a different version', async () => {
     replies['/api/admin/system/update'] = { need_restart: true }
     replies['/api/admin/system/restart'] = { restarting: true }
     const view = await setup()
     await action('update').trigger('click')
     await confirm()
     vi.useFakeTimers()
+    // v1.0.3 was published after the check that offered v1.0.2.
     mocks.status
       .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
       .mockRejectedValueOnce(new ApiError('Bad Gateway', { status: 502 }))
-      .mockResolvedValue({ version: 'v1.0.2', start_time: 200 })
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 150 })
+      .mockResolvedValue({ version: 'v1.0.3', start_time: 200 })
     await view.get('[data-update-restart-needed] button').trigger('click')
     openDialog().vm.$emit('confirm')
     await vi.advanceTimersByTimeAsync(0)
@@ -373,8 +378,94 @@ describe('ops update card', () => {
       'Restarting'
     )
     expect(reload).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(reload).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(6_000)
     expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('reloads after a rollback only once the rollback target answers', async () => {
+    replies['/api/admin/system/rollback'] = {
+      need_restart: true,
+      version: '1.0.0',
+    }
+    replies['/api/admin/system/restart'] = { restarting: true }
+    const view = await setup()
+    await action('rollback').trigger('click')
+    await flushPromises()
+    view.getComponent(FilterSelect).vm.$emit('update:modelValue', '1.0.0')
+    await flushPromises()
+    await view.get('[data-update-rollback-confirm]').trigger('click')
+    await flushPromises()
+    vi.useFakeTimers()
+    mocks.status
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
+      .mockResolvedValueOnce({ version: 'v1.0.2', start_time: 150 })
+      .mockResolvedValue({ version: 'v1.0.0', start_time: 200 })
+    await view.get('[data-update-restart-needed] button').trigger('click')
+    openDialog().vm.$emit('confirm')
+    await vi.advanceTimersByTimeAsync(2_500)
+    expect(reload).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps watching when the restart request loses its connection', async () => {
+    replies['/api/admin/system/restart'] = () => {
+      throw new ApiError('Network Error')
+    }
+    const view = await setup()
+    vi.useFakeTimers()
+    mocks.status
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
+      .mockResolvedValue({ version: 'v1.0.1', start_time: 300 })
+    await action('restart').trigger('click')
+    openDialog().vm.$emit('confirm')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(view.find('[data-update-error]').exists()).toBe(false)
+    expect(view.get('[data-update-restart-state]').text()).toContain(
+      'Restarting'
+    )
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not send the restart when the card unmounts before the baseline read answers', async () => {
+    replies['/api/admin/system/restart'] = { restarting: true }
+    const view = await setup()
+    let answer: (value: unknown) => void = () => {}
+    mocks.status.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve))
+    )
+    await action('restart').trigger('click')
+    openDialog().vm.$emit('confirm')
+    await flushPromises()
+    view.unmount()
+    wrapper = undefined
+    answer({ version: 'v1.0.1', start_time: 100 })
+    await flushPromises()
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it('does not reload when a success arrives after the card unmounted', async () => {
+    replies['/api/admin/system/restart'] = { restarting: true }
+    const view = await setup()
+    vi.useFakeTimers()
+    let answer: (value: unknown) => void = () => {}
+    mocks.status
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (answer = resolve))
+      )
+    await action('restart').trigger('click')
+    openDialog().vm.$emit('confirm')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(mocks.status).toHaveBeenCalledTimes(2)
+    view.unmount()
+    wrapper = undefined
+    answer({ version: 'v1.0.1', start_time: 300 })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(reload).not.toHaveBeenCalled()
   })
 
   it('reports an unknown state when the restart is not observed', async () => {
@@ -390,6 +481,20 @@ describe('ops update card', () => {
     expect(reload).not.toHaveBeenCalled()
     await view.get('[data-update-restart-state] button').trigger('click')
     expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a changed sign-in instead of a running operation', async () => {
+    replies['/api/admin/system/update'] = () => {
+      throw new ApiError('session changed', {
+        status: 409,
+        code: 'AUTH_SESSION_CHANGED',
+      })
+    }
+    await setup()
+    await action('update').trigger('click')
+    await confirm()
+    expect(errorText()).toContain('Your sign-in changed')
+    expect(errorText()).not.toContain('in progress')
   })
 
   it('keeps the page when a restart is refused', async () => {

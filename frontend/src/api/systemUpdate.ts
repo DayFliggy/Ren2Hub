@@ -43,12 +43,12 @@ export type UpdateResult =
   | { kind: 'current'; current_version: string; latest_version: string }
 
 /**
- * The backend may spend up to 15 minutes downloading, verifying and replacing
- * the binary; the request must outlive that bound.
+ * The backend stops an update or rollback after 5 minutes and Nginx waits
+ * 360 seconds, so the browser waits past the first but not the second.
  */
-export const LONG_OPERATION_TIMEOUT_MS = 16 * 60_000
+export const LONG_OPERATION_TIMEOUT_MS = 330_000
 const RESTART_POLL_MS = 2_000
-const RESTART_DEADLINE_MS = 120_000
+export const RESTART_DEADLINE_MS = 120_000
 
 const VERSION = '/api/admin/system/version'
 const CHECK = '/api/admin/system/check-updates'
@@ -175,6 +175,16 @@ export function sameVersion(left?: string, right?: string) {
   return normalize(left) !== '' && normalize(left) === normalize(right)
 }
 
+/**
+ * What proves the restarted process is up: an update does not report the
+ * installed release, so any other version counts; a rollback names its
+ * target; a plain restart only changes the start time.
+ */
+export type RestartExpectation =
+  | { kind: 'new-version' }
+  | { kind: 'version'; version: string }
+  | { kind: 'new-process' }
+
 function abortError() {
   return new DOMException('The restart watch was aborted', 'AbortError')
 }
@@ -196,35 +206,61 @@ function wait(ms: number, signal: AbortSignal) {
 
 function restarted(
   baseline: ServerIdentity,
-  target: string | null,
+  expectation: RestartExpectation,
   current: ServerIdentity
 ) {
-  // With a target, a new process still running the old binary is not success.
-  if (target) return sameVersion(current.version, target)
-  return (
-    current.start_time !== undefined &&
-    current.start_time !== baseline.start_time
-  )
+  switch (expectation.kind) {
+    case 'new-version':
+      return (
+        Boolean(current.version?.trim()) &&
+        !sameVersion(current.version, baseline.version)
+      )
+    case 'version':
+      return sameVersion(current.version, expectation.version)
+    case 'new-process':
+      return (
+        current.start_time !== undefined &&
+        current.start_time !== baseline.start_time
+      )
+  }
+}
+
+/** Reads the status, cancelled at the deadline; a failed read yields null. */
+async function readStatus(deadline: number, signal: AbortSignal) {
+  const request = new AbortController()
+  const stop = () => request.abort()
+  const timer = setTimeout(stop, Math.max(0, deadline - Date.now()))
+  signal.addEventListener('abort', stop, { once: true })
+  try {
+    return await publicApi.status(request.signal)
+  } catch {
+    // Reads fail while the process is down; the poll goes on.
+    return null
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', stop)
+  }
 }
 
 /**
- * Polls the public status until the restarted server is observed. Failed
- * reads are expected while the process is down and keep the poll going.
+ * Polls the public status until the restarted server is observed. The
+ * deadline is fixed when the restart is sent; an answer that arrives after it
+ * is not success.
  */
 export async function watchServerRestart(
   baseline: ServerIdentity,
-  target: string | null,
+  expectation: RestartExpectation,
+  deadline: number,
   signal: AbortSignal
 ): Promise<'restarted' | 'unknown'> {
-  const deadline = Date.now() + RESTART_DEADLINE_MS
-  while (Date.now() < deadline) {
-    await wait(RESTART_POLL_MS, signal)
-    try {
-      const current = await publicApi.status(signal)
-      if (restarted(baseline, target, current)) return 'restarted'
-    } catch {
-      if (signal.aborted) throw abortError()
-    }
+  for (;;) {
+    const left = deadline - Date.now()
+    if (left <= 0) return 'unknown'
+    await wait(Math.min(RESTART_POLL_MS, left), signal)
+    if (Date.now() >= deadline) return 'unknown'
+    const current = await readStatus(deadline, signal)
+    if (signal.aborted) throw abortError()
+    if (Date.now() >= deadline) return 'unknown'
+    if (current && restarted(baseline, expectation, current)) return 'restarted'
   }
-  return 'unknown'
 }

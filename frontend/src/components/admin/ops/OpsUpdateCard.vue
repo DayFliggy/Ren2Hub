@@ -4,8 +4,10 @@ import { AlertTriangle, ExternalLink } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { publicApi } from '@/api/public'
 import {
+  RESTART_DEADLINE_MS,
   systemUpdateApi,
   watchServerRestart,
+  type RestartExpectation,
   type RollbackVersion,
   type SystemVersion,
   type UpdateCheck,
@@ -45,7 +47,10 @@ const checking = ref(false)
 const operation = ref<Operation | null>(null)
 const error = ref('')
 const result = ref('')
-const restartNeeded = ref<{ message: string; target: string } | null>(null)
+const restartNeeded = ref<{
+  message: string
+  expectation: RestartExpectation
+} | null>(null)
 const restartState = ref<'waiting' | 'unknown' | null>(null)
 const confirmUpdate = ref(false)
 const confirmRestart = ref(false)
@@ -92,6 +97,9 @@ function published(value: string) {
 function message(cause: unknown, context: ErrorContext): string {
   if (!(cause instanceof ApiError)) return t('update.errors.generic')
   if (cause.code === 'INVALID_RESPONSE') return t('update.errors.invalid')
+  // The transport reports a sign-in change during the request as HTTP 409.
+  if (cause.code === 'AUTH_SESSION_CHANGED')
+    return t('update.errors.sessionChanged')
   switch (cause.status) {
     case 400:
       return t('update.errors.rejected')
@@ -100,7 +108,7 @@ function message(cause: unknown, context: ErrorContext): string {
     case 409:
       return t('update.errors.busy')
     case 500:
-      if (context === 'action') return t('update.errors.replace')
+      if (context === 'action') return t('update.errors.server')
       break
     case 502:
       return t(
@@ -163,16 +171,17 @@ function startAction(kind: Operation) {
 }
 
 async function update() {
-  const target = check.value?.latest_version ?? ''
   startAction('update')
   try {
     const outcome = await systemUpdateApi.update()
     if (disposed) return
     confirmUpdate.value = false
     if (outcome.kind === 'restart') {
+      // The answer does not name the installed release: GitHub may have
+      // published a newer one since the check.
       restartNeeded.value = {
-        message: t('update.updated', { version: display(target) }),
-        target,
+        message: t('update.updated'),
+        expectation: { kind: 'new-version' },
       }
       return
     }
@@ -226,7 +235,7 @@ async function rollback() {
     rollbackOpen.value = false
     restartNeeded.value = {
       message: t('update.rolledBack', { version: display(outcome.version) }),
-      target: outcome.version,
+      expectation: { kind: 'version', version: outcome.version },
     }
   } catch (cause) {
     if (!disposed) rollbackError.value = message(cause, 'action')
@@ -235,8 +244,8 @@ async function rollback() {
   }
 }
 
-/** Only an answered error refuses the restart; a dropped connection is the
- *  process going down and is followed by the status poll. */
+/** Only an answered error refuses the restart. A dropped connection leaves
+ *  the outcome unknown, so the status poll decides. */
 function refusedRestart(cause: unknown) {
   return !(cause instanceof ApiError) || cause.status !== undefined
 }
@@ -247,29 +256,34 @@ async function restart() {
   restartController?.abort()
   const request = new AbortController()
   restartController = request
+  const stale = () => disposed || request.signal.aborted
   try {
     const baseline = await publicApi.status(request.signal)
+    if (stale()) return
+    const deadline = Date.now() + RESTART_DEADLINE_MS
     try {
       await systemUpdateApi.restart()
     } catch (cause) {
       if (refusedRestart(cause)) throw cause
     }
-    if (request.signal.aborted) return
+    if (stale()) return
     restartState.value = 'waiting'
     const outcome = await watchServerRestart(
       baseline,
-      restartNeeded.value?.target ?? null,
+      restartNeeded.value?.expectation ?? { kind: 'new-process' },
+      deadline,
       request.signal
     )
+    if (stale()) return
     if (outcome === 'restarted') window.location.reload()
     else restartState.value = 'unknown'
   } catch (cause) {
-    if (!request.signal.aborted) {
+    if (!stale()) {
       restartState.value = null
       error.value = message(cause, 'action')
     }
   } finally {
-    if (!request.signal.aborted) operation.value = null
+    if (!stale()) operation.value = null
   }
 }
 
