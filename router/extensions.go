@@ -15,6 +15,14 @@ func handleSessionRoute(group *gin.RouterGroup, method, path string, handlers ..
 }
 
 func registerExtensionRoutes(api *gin.RouterGroup) {
+	system := api.Group("/admin/system", middleware.RootAuth())
+	handleSessionRoute(system, http.MethodGet, "/version", controller.SystemUpdates.Version)
+	handleSessionRoute(system, http.MethodGet, "/check-updates", controller.SystemUpdates.CheckUpdates)
+	handleSessionRoute(system, http.MethodGet, "/rollback-versions", controller.SystemUpdates.RollbackVersions)
+	handleSessionRoute(system, http.MethodPost, "/update", controller.SystemUpdates.Update)
+	handleSessionRoute(system, http.MethodPost, "/rollback", controller.SystemUpdates.Rollback)
+	handleSessionRoute(system, http.MethodPost, "/restart", controller.SystemUpdates.Restart)
+
 	// The guest home page shows only the model count, behind the /api/pricing gate.
 	middleware.DeclareAnyAccessTokenRoute(http.MethodGet, joinPaths(api.BasePath(), "/pricing/count"))
 	api.GET("/pricing/count", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricingCount)

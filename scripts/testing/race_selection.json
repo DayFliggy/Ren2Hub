@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "total_selected_top_level_executions": 143,
+  "total_selected_top_level_executions": 144,
   "groups": [
     {
       "id": "original-model",
@@ -222,6 +222,14 @@
         "TestRelayTaskSubmitRetryRepricesAndReservesBeforeUpstream"
       ],
       "pattern": "^(TestOriginTaskContinuationStillRequiresOriginalOwner|TestRealtimeFetchAppliesChannelHeaderOverrides|TestRealtimeFetchRefundsTaskItFindsFailed|TestApplyChannelPinPreservesOriginTasksAndRetryMode|TestTaskModel2DtoNormalizesLegacyAction|TestRelayTaskSubmitMapsBeforeValidateWhenOriginSet|TestRelayTaskSubmitDeclaredNameWithoutMappingIsUnchanged|TestRelayTaskSubmitDoesNotApplyMappingTwice|TestRelayTaskSubmitEmptyOriginKeepsLateMapping|TestRelayTaskSubmitAliasBillingIdentityAndExprFallback|TestSharedTaskBillingExpressionSelectionAndFrozenSettlement|TestSharedEndpointBillingKeepsOrdinaryAndPluginPricesSeparate|TestRelayTaskSubmitPricesModelsAPluginAlsoRelays|TestRelayTaskSubmitAcceptsAnySuccessfulUpstreamStatus|TestRelayTaskSubmitRetryRepricesAndReservesBeforeUpstream)$"
+    },
+    {
+      "id": "system-update",
+      "package": "controller",
+      "names": [
+        "TestSystemUpdateMutationsDoNotQueue"
+      ],
+      "pattern": "^(TestSystemUpdateMutationsDoNotQueue)$"
     }
   ],
   "delegated_stage": "known_upstream_logger_race",
@@ -250,7 +258,7 @@
       "TestUpdateVideoTasksMixedChannelSleepSettings"
     ]
   },
-  "ordinary_top_level_executions": 124,
+  "ordinary_top_level_executions": 125,
   "separately_verified_funds": [
     {
       "path": "/home/work/ren2hub-native-b388-20261114/implementation/funds/race-model-docker.jsonl",

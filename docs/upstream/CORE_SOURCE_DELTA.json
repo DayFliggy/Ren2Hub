@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 830,
     "adapted": 334,
-    "extension": 503,
+    "extension": 510,
     "removed": 47
   },
   "files": [
@@ -136,6 +136,19 @@
       "status": "upstream_equal",
       "upstream_sha256": "0e829f4e09f7cf36fd88187d416c8d1a0d948b7272ab0b0c763c3a61fbab5910",
       "local_sha256": "0e829f4e09f7cf36fd88187d416c8d1a0d948b7272ab0b0c763c3a61fbab5910"
+    },
+    {
+      "path": "common/build_type.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2b47ca46ddc9b797687256ad4b7d71e3f11cbfd8c9ff223aee2324f35aecf633",
+      "reasons": [
+        "system-update"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "Sub2API 管理更新适配。发布身份、来源和行为差异见 SYNC_LEDGER.md。"
+      }
     },
     {
       "path": "common/constants.go",
@@ -2708,6 +2721,25 @@
       "status": "upstream_equal",
       "upstream_sha256": "0135b48de6423260060775cd0182b6475f58bcafa28730335b3c07e5074d0895",
       "local_sha256": "0135b48de6423260060775cd0182b6475f58bcafa28730335b3c07e5074d0895"
+    },
+    {
+      "path": "controller/system_update.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "85d0126f34b0092b736bb6e431cf8d9a9344e622a0b0664abb824c1f83a2c49a",
+      "reasons": [
+        "system-update"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "Sub2API 管理更新适配。发布身份、来源和行为差异见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "controller/system_update_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e4977aad78e433a756a38e4e5655c4f6f1dbdf3a928eecec50f64127fe8b168a"
     },
     {
       "path": "controller/task.go",
@@ -11629,11 +11661,12 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0df5fbcadf94f7bd9105ffd69c90f5906a6126bd381ecf31aa1630741bdf1574",
+      "local_sha256": "875ba5f9b7d93577fe8a8b22e206c422ebf663bca1fd205fbf102134b721ef79",
       "reasons": [
         "affiliate",
         "ticket",
-        "token-routing"
+        "token-routing",
+        "system-update"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
@@ -11850,6 +11883,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "c280c7e42933bd5a5a2459385e122f6232cc387a8a3760bf6a84755d176a4071"
+    },
+    {
+      "path": "router/system_update_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "54e58c2dabf434d7c0de608362c79a07aeb17cece3a7578cd8caa4c3603146e6"
     },
     {
       "path": "router/task-plugin-protocol-router.go",
@@ -14206,6 +14245,19 @@
       }
     },
     {
+      "path": "service/system_restart.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ee7711dc50d3c0b4283ff926e0f313d098e439cc09dd3893f658c7b409cffe09",
+      "reasons": [
+        "system-update"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "Sub2API 管理更新适配。发布身份、来源和行为差异见 SYNC_LEDGER.md。"
+      }
+    },
+    {
       "path": "service/system_task.go",
       "status": "upstream_equal",
       "upstream_sha256": "9dedf4fb80a72f1ac588ae3e2659b12d2a134092daa55c18575cfed1281fe870",
@@ -14216,6 +14268,25 @@
       "status": "upstream_equal",
       "upstream_sha256": "5b2281c0eb235984d27518951f00e5746f96d68dfcbb4fd7d56ed46b0ed1fcf1",
       "local_sha256": "5b2281c0eb235984d27518951f00e5746f96d68dfcbb4fd7d56ed46b0ed1fcf1"
+    },
+    {
+      "path": "service/system_update.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a2491ffb11faf7ad64267bb47ffd08f23688b07932b43bcf844b7ad42e2a2206",
+      "reasons": [
+        "system-update"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "Sub2API 管理更新适配。发布身份、来源和行为差异见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/system_update_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a464f44ff05f369ceaa8bb521f0a389226e647e74e629b815eff6356e0f9178d"
     },
     {
       "path": "service/task.go",
@@ -15654,6 +15725,11 @@
       "basis": "用户批准的资金回执核验、余额一致性、生命周期、权限、凭据隔离及状态失败处理。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
+    },
+    "system-update": {
+      "kind": "approved_contract",
+      "basis": "按 Sub2API 流程提供 root 后台版本检查、更新、回滚与重启。",
+      "authority": "SYNC_LEDGER.md#现行本地差异"
     }
   },
   "review_scope": {
