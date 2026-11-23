@@ -17,14 +17,19 @@ export const useSystemUpdateStore = defineStore('system-update', () => {
   const loading = ref(false)
   const error = ref<unknown>(null)
   let pending: Promise<void> | null = null
+  let pendingForce = false
   let request: AbortController | null = null
 
-  /** Concurrent callers share the request in flight, forced or not. */
+  /** Concurrent callers of the same kind share the read in flight. A forced
+   *  check replaces an unforced read still running, so the refresh reaches
+   *  GitHub and the older answer is dropped. */
   function check(force: boolean): Promise<void> {
-    if (pending) return pending
-    if (!force && info.value) return Promise.resolve()
+    if (pending && (pendingForce || !force)) return pending
+    if (!pending && !force && info.value) return Promise.resolve()
+    request?.abort()
     const current = new AbortController()
     request = current
+    pendingForce = force
     loading.value = true
     pending = read(force, current.signal).finally(() => {
       if (request !== current) return
@@ -56,7 +61,10 @@ export const useSystemUpdateStore = defineStore('system-update', () => {
     error.value = null
   }
 
-  watch(() => auth.user?.id, clear)
+  // A different account or a lost Root role ends the reads of the old one.
+  // Synchronous, so the cache is empty before the top bar mounts the badge
+  // for the new account and that badge starts its own check.
+  watch(() => (auth.isRoot ? auth.user?.id : null), clear, { flush: 'sync' })
 
   return { info, loading, error, check, clear }
 })

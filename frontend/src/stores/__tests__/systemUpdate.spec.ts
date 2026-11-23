@@ -25,7 +25,7 @@ function deferred() {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   setActivePinia(createPinia())
   useAuthStore().persist({ id: 1, role: 100 } as never)
 })
@@ -45,19 +45,48 @@ describe('system update store', () => {
     expect(store.info?.latest_version).toBe('v1.0.2')
   })
 
-  it('shares one request between concurrent checks', async () => {
-    const reply = deferred()
-    mocks.get.mockReturnValue(reply.promise)
+  it.each([false, true])(
+    'shares one request between concurrent checks of the same kind (force %s)',
+    async (force) => {
+      const reply = deferred()
+      mocks.get.mockReturnValue(reply.promise)
+      const store = useSystemUpdateStore()
+      const first = store.check(force)
+      const second = store.check(force)
+      expect(mocks.get).toHaveBeenCalledTimes(1)
+      expect(store.loading).toBe(true)
+      reply.resolve(answer('v1.0.2'))
+      await Promise.all([first, second])
+      expect(mocks.get).toHaveBeenCalledTimes(1)
+      expect(store.info?.latest_version).toBe('v1.0.2')
+      expect(store.loading).toBe(false)
+    }
+  )
+
+  it('lets a forced check replace an unforced read in flight', async () => {
+    const unforced = deferred()
+    const forced = deferred()
+    mocks.get
+      .mockReturnValueOnce(unforced.promise)
+      .mockReturnValueOnce(forced.promise)
     const store = useSystemUpdateStore()
     const first = store.check(false)
-    // Even a forced check joins the read that is already running.
     const second = store.check(true)
-    expect(mocks.get).toHaveBeenCalledTimes(1)
-    expect(store.loading).toBe(true)
-    reply.resolve(answer('v1.0.2'))
-    await Promise.all([first, second])
-    expect(mocks.get).toHaveBeenCalledTimes(1)
-    expect(store.info?.latest_version).toBe('v1.0.2')
+    // An unforced check joins the forced read instead of starting a third.
+    const third = store.check(false)
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      '/api/admin/system/check-updates',
+      { force: true },
+      expect.anything()
+    )
+    forced.resolve(answer('v1.0.3'))
+    await Promise.all([second, third])
+    // The older unforced answer arrives last and is dropped.
+    unforced.resolve(answer('v1.0.2'))
+    await first
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+    expect(store.info?.latest_version).toBe('v1.0.3')
     expect(store.loading).toBe(false)
   })
 
@@ -113,5 +142,18 @@ describe('system update store', () => {
     useAuthStore().persist({ id: 2, role: 100 } as never)
     await Promise.resolve()
     expect(store.info).toBeNull()
+  })
+
+  it('drops a read in flight when Root is lost', async () => {
+    const reply = deferred()
+    mocks.get.mockReturnValue(reply.promise)
+    const store = useSystemUpdateStore()
+    const pending = store.check(false)
+    useAuthStore().persist({ id: 1, role: 1 } as never)
+    await Promise.resolve()
+    reply.resolve(answer('v1.0.2'))
+    await pending
+    expect(store.info).toBeNull()
+    expect(store.loading).toBe(false)
   })
 })

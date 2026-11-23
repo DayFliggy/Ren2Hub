@@ -7,6 +7,7 @@ import { useRoute } from 'vue-router'
 import LanguageSelector from '@/components/common/LanguageSelector.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 
 import CommandPaletteModal from './CommandPaletteModal.vue'
 import ConsoleMobileNavDrawer from './ConsoleMobileNavDrawer.vue'
@@ -17,6 +18,7 @@ import VersionBadge from './version/VersionBadge.vue'
 const { t } = useI18n()
 const route = useRoute()
 const app = useAppStore()
+const auth = useAuthStore()
 
 const searchOpen = ref(false)
 const navigationOpen = ref(false)
@@ -155,7 +157,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
           class="topbar-language hidden lg:block"
         />
         <ThemeSwitcher variant="console" />
-        <VersionBadge />
+        <!-- Keyed by account: a lost Root role or another account unmounts the
+             badge, which ends the old account's restart watch. -->
+        <VersionBadge v-if="auth.isRoot" :key="auth.user?.id" />
         <div
           class="topbar-divider hidden h-6 w-px bg-[var(--border-default)] sm:mx-1 sm:block"
         />

@@ -1,11 +1,12 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/types'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
 import { useAuthStore } from '@/stores/auth'
-import VersionBadge from '../VersionBadge.vue'
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -52,19 +53,38 @@ let wrapper: VueWrapper | undefined
 let reload: ReturnType<typeof vi.fn>
 const nativeLocation = window.location
 
+/** Mounts the real top bar, so role and account changes reach the badge
+ *  through the mount boundary they take in the console. */
 async function setup(role = 100) {
   useAuthStore().persist({ id: 1, role } as never)
-  wrapper = mount(VersionBadge, {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', name: 'dashboard', component: { template: '<div />' } },
+    ],
+  })
+  await router.push('/')
+  wrapper = mount(ConsoleTopbar, {
     attachTo: document.body,
     global: {
       plugins: [
+        router,
         createI18n({
           legacy: false,
           locale: 'en',
+          // The top bar's own labels are not under test here.
+          missingWarn: false,
+          fallbackWarn: false,
           messages: { en: { common: { confirm: 'OK', cancel: 'Cancel' } } },
         }),
       ],
       stubs: {
+        TopNavMenu: true,
+        UserMenu: true,
+        CommandPaletteModal: true,
+        ConsoleMobileNavDrawer: true,
+        LanguageSelector: true,
+        ThemeSwitcher: true,
         ConsoleModal: {
           props: ['open'],
           template:
@@ -309,22 +329,35 @@ describe('version badge', () => {
     ).toBeUndefined()
   })
 
-  it('closes on Escape and an outside click but keeps a running update', async () => {
+  it('closes on an outside click but keeps a running update', async () => {
     let finish: (value: unknown) => void = () => {}
     replies['/api/admin/system/update'] = () =>
       new Promise((resolve) => (finish = resolve))
     const view = await setup()
     await startUpdate()
-    await view.get('[data-version-panel]').trigger('keydown', { key: 'Escape' })
+    document.body.click()
+    await flushPromises()
     expect(view.find('[data-version-panel]').exists()).toBe(false)
     finish({ need_restart: true })
     await flushPromises()
     await openPanel()
     expect(panelState()).toBe('restart-needed')
-    document.body.click()
+    expect(mocks.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes on Escape wherever focus is and returns focus to the badge', async () => {
+    const view = await setup()
+    await openPanel()
+    // A click on panel text leaves focus on the page, not in the badge.
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    )
     await flushPromises()
     expect(view.find('[data-version-panel]').exists()).toBe(false)
-    expect(mocks.post).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(
+      view.get('[data-version-badge]').element
+    )
   })
 
   it('asks to restart after a confirmed update and clears the cached check', async () => {
@@ -704,5 +737,104 @@ describe('version badge', () => {
     await setup()
     expect(mocks.get).toHaveBeenCalledTimes(1)
     warn.mockRestore()
+  })
+
+  it('keeps the panel open when Escape closes a confirmation dialog', async () => {
+    const view = await setup()
+    await openPanel()
+    await view.get('[data-version-update-now]').trigger('click')
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    )
+    await flushPromises()
+    expect(view.find('[data-version-panel]').exists()).toBe(true)
+  })
+
+  it('shows a failed refresh after the program was replaced and keeps the restart', async () => {
+    replies['/api/admin/system/update'] = { need_restart: true }
+    const view = await setup()
+    await startUpdate()
+    replies['/api/admin/system/check-updates'] = () => {
+      throw httpError(502)
+    }
+    await view.get('[data-version-refresh]').trigger('click')
+    await flushPromises()
+    expect(panelState()).toBe('check-error')
+    expect(errorText()).toContain('GitHub')
+    expect(view.get('[data-version-restart-needed]').text()).toContain(
+      'The program was replaced. Restart to apply it.'
+    )
+    expect(view.find('[data-version-restart]').exists()).toBe(true)
+    replies['/api/admin/system/check-updates'] = check({
+      current_version: 'v1.0.1',
+    })
+    await view.get('[data-version-retry]').trigger('click')
+    await flushPromises()
+    expect(panelState()).toBe('restart-needed')
+    expect(view.find('[data-version-error]').exists()).toBe(false)
+    expect(view.find('[data-version-restart]').exists()).toBe(true)
+  })
+})
+
+describe('version badge account boundary', () => {
+  it('sends no restart when Root is lost before the baseline read answers', async () => {
+    replies['/api/admin/system/restart'] = { restarting: true }
+    const view = await setup()
+    await openPanel()
+    let answer: (value: unknown) => void = () => {}
+    mocks.status.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve))
+    )
+    await view.get('[data-version-restart-service]').trigger('click')
+    openDialog().vm.$emit('confirm')
+    await flushPromises()
+    useAuthStore().persist({ id: 1, role: 1 } as never)
+    await flushPromises()
+    expect(view.find('[data-version-badge]').exists()).toBe(false)
+    answer({ version: 'v1.0.1', start_time: 100 })
+    await flushPromises()
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it('does not reload for the old account once another account signs in', async () => {
+    replies['/api/admin/system/restart'] = { restarting: true }
+    const view = await setup()
+    await openPanel()
+    vi.useFakeTimers()
+    let answer: (value: unknown) => void = () => {}
+    mocks.status
+      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (answer = resolve))
+      )
+    await view.get('[data-version-restart-service]').trigger('click')
+    openDialog().vm.$emit('confirm')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(mocks.status).toHaveBeenCalledTimes(2)
+    useAuthStore().persist({ id: 2, role: 100 } as never)
+    await vi.advanceTimersByTimeAsync(0)
+    answer({ version: 'v1.0.1', start_time: 300 })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('starts over for another Root account', async () => {
+    replies['/api/admin/system/update'] = { need_restart: true }
+    const view = await setup()
+    await startUpdate()
+    expect(panelState()).toBe('restart-needed')
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    replies['/api/admin/system/check-updates'] = upToDate()
+    useAuthStore().persist({ id: 2, role: 100 } as never)
+    await flushPromises()
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      '/api/admin/system/check-updates',
+      { force: false },
+      expect.anything()
+    )
+    await openPanel()
+    expect(panelState()).toBe('current')
+    expect(view.find('[data-version-restart-needed]').exists()).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { onClickOutside, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import {
   AlertTriangle,
@@ -24,7 +24,6 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import MarkdownDocument from '@/components/common/MarkdownDocument.vue'
 import { systemUpdateMessages } from '@/i18n/systemUpdate'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
 import { useSystemUpdateStore } from '@/stores/systemUpdate'
 import { updateErrorMessage, type ErrorContext } from './errorMessage'
 import { displayVersion, publishedDate } from './format'
@@ -36,6 +35,8 @@ import './version.css'
  * running version with a dot when a release is newer; the panel shows one
  * state at a time. Operations live here, not in the panel, so closing the
  * panel never cancels them and reopening shows their progress or result.
+ * The top bar mounts it only for Root and keys it by account, so a lost role
+ * or another account unmounts it and ends everything the old one started.
  */
 const { t, locale } = useI18n({
   useScope: 'local',
@@ -44,12 +45,12 @@ const { t, locale } = useI18n({
 
 type Operation = 'update' | 'rollback' | 'restart'
 
-const auth = useAuthStore()
 const app = useAppStore()
 const releases = useSystemUpdateStore()
 const { info, loading, error: checkError } = storeToRefs(releases)
 
 const root = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
 const open = ref(false)
 const operation = ref<Operation | null>(null)
 const actionError = ref('')
@@ -85,12 +86,13 @@ const checkFailure = computed(() => {
   const { key, params } = updateErrorMessage(checkError.value, 'read')
   return t(key, params ?? {})
 })
-/** The one main state the panel shows, highest priority first. */
+/** The one main state the panel shows, highest priority first. A failed
+ *  check still shows the pending restart under the error. */
 const state = computed(() => {
   if (restartState.value) return 'restarting'
   if (actionError.value) return 'action-error'
-  if (restartNeeded.value) return 'restart-needed'
   if (checkFailure.value) return 'check-error'
+  if (restartNeeded.value) return 'restart-needed'
   if (!info.value) return 'loading'
   if (info.value.has_update) return isRelease.value ? 'update' : 'source-update'
   return 'current'
@@ -101,13 +103,7 @@ function message(cause: unknown, context: ErrorContext) {
   return t(key, params ?? {})
 }
 
-watch(
-  () => auth.isRoot,
-  (isRoot) => {
-    if (isRoot) void releases.check(false)
-  },
-  { immediate: true }
-)
+void releases.check(false)
 
 function toggle() {
   open.value = !open.value
@@ -120,11 +116,15 @@ function close() {
 // Clicks inside a confirmation dialog opened from the panel stay inside.
 onClickOutside(root, close, { ignore: ['[aria-modal="true"]'] })
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !open.value) return
+// Escape closes the panel wherever focus is, as in UserMenu. An open
+// confirmation dialog takes it first.
+useEventListener(document, 'keydown', (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !open.value || event.defaultPrevented) return
+  if (confirmUpdate.value || confirmRestart.value) return
+  event.preventDefault()
   close()
-  root.value?.querySelector<HTMLElement>('[data-version-badge]')?.focus()
-}
+  void nextTick(() => trigger.value?.focus())
+})
 
 /** Clears an action failure and reads the server again: after a failed or
  *  unanswered operation, the current state is what the next step needs. */
@@ -240,14 +240,9 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div
-    v-if="auth.isRoot"
-    ref="root"
-    class="relative"
-    data-version-root
-    @keydown="onKeydown"
-  >
+  <div ref="root" class="relative" data-version-root>
     <button
+      ref="trigger"
       type="button"
       class="version-badge focus-ring"
       data-version-badge
@@ -321,11 +316,7 @@ onBeforeUnmount(() => {
         {{ t('cachedWarning') }}
       </p>
 
-      <section
-        v-if="state === 'restarting'"
-        class="version-state"
-        role="status"
-      >
+      <div v-if="state === 'restarting'" class="version-state" role="status">
         <p v-if="restartState === 'waiting'" class="version-note">
           {{ t('restarting') }}
         </p>
@@ -337,9 +328,9 @@ onBeforeUnmount(() => {
             t('reload')
           }}</ConsoleButton>
         </template>
-      </section>
+      </div>
 
-      <section
+      <div
         v-else-if="state === 'action-error' || state === 'check-error'"
         class="version-state version-error"
         role="alert"
@@ -364,29 +355,13 @@ onBeforeUnmount(() => {
             state === 'action-error' ? t('refreshInfo') : t('retry')
           }}</ConsoleButton
         >
-      </section>
-
-      <section
-        v-else-if="state === 'restart-needed' && restartNeeded"
-        class="version-state version-success"
-        role="status"
-        data-version-restart-needed
-      >
-        <p>{{ restartNeeded.message }}</p>
-        <ConsoleButton
-          size="sm"
-          :disabled="busy"
-          data-version-restart
-          @click="confirmRestart = true"
-          >{{ t('restart') }}</ConsoleButton
-        >
-      </section>
+      </div>
 
       <p v-else-if="state === 'loading'" class="version-note" role="status">
         {{ t('checking') }}
       </p>
 
-      <section
+      <div
         v-else-if="state === 'source-update'"
         class="version-state"
         data-version-source-update
@@ -401,9 +376,9 @@ onBeforeUnmount(() => {
           >{{ t('viewRelease') }} <ExternalLink :size="13" aria-hidden="true"
         /></a>
         <p class="version-note">{{ t('sourceBuild') }}</p>
-      </section>
+      </div>
 
-      <section
+      <div
         v-else-if="state === 'update' && info"
         class="version-state version-available"
         data-version-update
@@ -468,9 +443,9 @@ onBeforeUnmount(() => {
             data-version-notes
           />
         </template>
-      </section>
+      </div>
 
-      <section
+      <div
         v-else-if="state === 'current' && info"
         class="version-state"
         data-version-up-to-date
@@ -511,20 +486,40 @@ onBeforeUnmount(() => {
           :busy="busy"
           @rollback="rollback"
         />
-      </section>
+      </div>
+
+      <div
+        v-if="
+          restartNeeded &&
+          (state === 'restart-needed' || state === 'check-error')
+        "
+        class="version-state version-success"
+        role="status"
+        data-version-restart-needed
+      >
+        <p>{{ restartNeeded.message }}</p>
+        <ConsoleButton
+          size="sm"
+          :disabled="busy"
+          data-version-restart
+          @click="confirmRestart = true"
+          >{{ t('restart') }}</ConsoleButton
+        >
+      </div>
 
       <footer
         v-if="isRelease && !restartNeeded && !restartState"
         class="version-panel-foot"
       >
-        <ConsoleButton
-          variant="ghost"
-          size="sm"
+        <button
+          type="button"
+          class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="busy"
           data-version-restart-service
           @click="confirmRestart = true"
-          >{{ t('restartService') }}</ConsoleButton
         >
+          {{ t('restartService') }}
+        </button>
       </footer>
     </div>
 
