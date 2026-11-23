@@ -90,29 +90,37 @@ defineExpose({ collapsed })
     :style="{ width: collapsed ? '4rem' : '13.75rem' }"
     data-handdrawn="navigation"
   >
-    <!-- brand header: serif typeface for hand-crafted feel -->
-    <RouterLink
-      :to="{ name: 'dashboard' }"
+    <!-- brand header: serif typeface for hand-crafted feel. The Root version
+         badge is teleported into the slot beside the link; a collapsed
+         sidebar hides it, as in Sub2API. -->
+    <div
       class="console-sidebar__brand flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)] transition-all"
-      :class="collapsed ? 'justify-center px-0' : 'gap-2.5 px-6'"
-      aria-current-value="false"
-      data-console-brand-link
-      :aria-label="`${app.systemName} ${t('nav.dashboard')}`"
+      :class="collapsed ? 'justify-center px-0' : 'gap-1.5 pl-6 pr-3'"
     >
-      <img
-        :src="app.logo"
-        alt=""
-        aria-hidden="true"
-        class="pencil-brand-frame h-7 w-7 shrink-0 object-contain"
-        style="filter: var(--brand-icon-shadow)"
-      />
-      <span
-        v-if="!collapsed"
-        class="display-title truncate text-lg font-bold tracking-tight text-[var(--text-primary)]"
+      <RouterLink
+        :to="{ name: 'dashboard' }"
+        class="flex h-full min-w-0 items-center gap-2.5"
+        :class="collapsed ? 'justify-center' : 'flex-1'"
+        aria-current-value="false"
+        data-console-brand-link
+        :aria-label="`${app.systemName} ${t('nav.dashboard')}`"
       >
-        {{ app.systemName }}
-      </span>
-    </RouterLink>
+        <img
+          :src="app.logo"
+          alt=""
+          aria-hidden="true"
+          class="pencil-brand-frame h-7 w-7 shrink-0 object-contain"
+          style="filter: var(--brand-icon-shadow)"
+        />
+        <span
+          v-if="!collapsed"
+          class="display-title truncate text-lg font-bold tracking-tight text-[var(--text-primary)]"
+        >
+          {{ app.systemName }}
+        </span>
+      </RouterLink>
+      <div v-show="!collapsed" class="shrink-0" data-sidebar-version-slot />
+    </div>
 
     <div
       class="subtle-scroll flex min-h-0 flex-1 flex-col overflow-y-auto py-4"

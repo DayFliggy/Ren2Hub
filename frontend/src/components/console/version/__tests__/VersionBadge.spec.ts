@@ -1,10 +1,16 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import {
+  DOMWrapper,
+  flushPromises,
+  mount,
+  type VueWrapper,
+} from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/types'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import CommandPaletteModal from '@/components/console/CommandPaletteModal.vue'
 import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -53,9 +59,20 @@ let wrapper: VueWrapper | undefined
 let reload: ReturnType<typeof vi.fn>
 const nativeLocation = window.location
 
+/** The panel is teleported to <body>, so lookups search the page. */
+const body = () => new DOMWrapper(document.body)
+const page = {
+  get: (selector: string) => body().get(selector),
+  find: (selector: string) => body().find(selector),
+  findAll: (selector: string) => body().findAll(selector),
+  text: () => body().text(),
+  unmount: () => wrapper!.unmount(),
+}
+
 /** Mounts the real top bar, so role and account changes reach the badge
- *  through the mount boundary they take in the console. */
-async function setup(role = 100) {
+ *  through the mount boundary they take in the console. `realModals` keeps
+ *  the real search dialog and ConsoleModal for keyboard order checks. */
+async function setup(role = 100, { realModals = false } = {}) {
   useAuthStore().persist({ id: 1, role } as never)
   const router = createRouter({
     history: createMemoryHistory(),
@@ -81,46 +98,48 @@ async function setup(role = 100) {
       stubs: {
         TopNavMenu: true,
         UserMenu: true,
-        CommandPaletteModal: true,
         ConsoleMobileNavDrawer: true,
         LanguageSelector: true,
         ThemeSwitcher: true,
-        ConsoleModal: {
-          props: ['open'],
-          template:
-            '<div v-if="open" aria-modal="true" data-modal><slot /><slot name="footer" /></div>',
-        },
+        ...(realModals
+          ? {}
+          : {
+              CommandPaletteModal: true,
+              ConsoleModal: {
+                props: ['open'],
+                template:
+                  '<div v-if="open" aria-modal="true" data-modal><slot /><slot name="footer" /></div>',
+              },
+            }),
       },
     },
   })
   await flushPromises()
-  return wrapper
+  return page
 }
 async function openPanel() {
-  await wrapper!.get('[data-version-badge]').trigger('click')
+  await page.get('[data-version-badge]').trigger('click')
   await flushPromises()
-  return wrapper!.get('[data-version-panel]')
+  return page.get('[data-version-panel]')
 }
 const panelState = () =>
-  wrapper!.get('[data-version-panel]').attributes('data-version-state')
+  page.get('[data-version-panel]').attributes('data-version-state')
 const openDialog = () =>
   wrapper!.findAllComponents(ConfirmDialog).find((d) => d.props('open'))!
 async function confirm() {
   openDialog().vm.$emit('confirm')
   await flushPromises()
 }
-const errorText = () => wrapper!.get('[data-version-error]').text()
+const errorText = () => page.get('[data-version-error]').text()
 async function startUpdate() {
   await openPanel()
-  await wrapper!.get('[data-version-update-now]').trigger('click')
+  await page.get('[data-version-update-now]').trigger('click')
   await confirm()
 }
 async function chooseRollback(version: string) {
-  await wrapper!.get('[data-version-rollback-toggle]').trigger('click')
+  await page.get('[data-version-rollback-toggle]').trigger('click')
   await flushPromises()
-  await wrapper!
-    .get(`[data-version-rollback-option="${version}"]`)
-    .trigger('click')
+  await page.get(`[data-version-rollback-option="${version}"]`).trigger('click')
 }
 
 beforeEach(() => {
@@ -740,13 +759,47 @@ describe('version badge', () => {
   })
 
   it('keeps the panel open when Escape closes a confirmation dialog', async () => {
-    const view = await setup()
+    const view = await setup(100, { realModals: true })
     await openPanel()
     await view.get('[data-version-update-now]').trigger('click')
     document.body.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
     )
     await flushPromises()
+    expect(openDialog()).toBeUndefined()
+    expect(view.find('[data-version-panel]').exists()).toBe(true)
+    // The dialog's node may still be leaving; the next Escape is the panel's.
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    )
+    await flushPromises()
+    expect(view.find('[data-version-panel]').exists()).toBe(false)
+  })
+
+  it('leaves Escape to a search dialog opened over the panel', async () => {
+    const view = await setup(100, { realModals: true })
+    await openPanel()
+    // The shortcut opens search without a click, so the panel stays open.
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })
+    )
+    await flushPromises()
+    // The dialog's leave transition keeps its node for a while; its open
+    // prop is what Escape changes.
+    const searchOpen = () =>
+      wrapper!.findComponent(CommandPaletteModal).props('open')
+    expect(searchOpen()).toBe(true)
+    expect(document.querySelector('[aria-modal="true"]')).not.toBeNull()
+    const target = document.activeElement ?? document.body
+    target.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      })
+    )
+    await flushPromises()
+    expect(searchOpen()).toBe(false)
     expect(view.find('[data-version-panel]').exists()).toBe(true)
   })
 

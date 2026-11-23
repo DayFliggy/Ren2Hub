@@ -10,7 +10,7 @@ const RELEASE_URL = 'https://github.com/DayFliggy/Ren2Hub/releases/tag/v1.0.2'
 const COMMAND =
   'sudo -n python3 -B scripts/server/ren2hub-app.py rollback --version v1.0.0'
 
-const badge = (page: Page) => page.locator('.topbar-nav [data-version-badge]')
+const badge = (page: Page) => page.locator('[data-version-badge]')
 const panel = (page: Page) => page.locator('[data-version-panel]')
 
 async function mockRelease(
@@ -72,6 +72,15 @@ async function gotoDashboard(page: Page) {
   await expect(page.locator('.topbar-nav')).toBeVisible({ timeout: 30_000 })
 }
 
+/** One badge beside the brand: the sidebar from lg up, the top bar below.
+ *  It is a sibling of the brand link, never inside it. */
+async function checkPlacement(page: Page, mobile: boolean) {
+  await expect(badge(page)).toHaveCount(1)
+  const home = mobile ? '.topbar-brand' : 'aside [data-sidebar-version-slot]'
+  await expect(page.locator(`${home} [data-version-badge]`)).toBeVisible()
+  await expect(page.locator('a [data-version-badge]')).toHaveCount(0)
+}
+
 /** The panel must stay inside the viewport, scroll nothing sideways, and on
  *  a phone offer only touch-sized controls. Prose links in the release notes
  *  keep the text line height. */
@@ -113,6 +122,7 @@ for (const [theme, mobile] of [
     await configureStablePage(page, { theme })
     await mockRelease(page)
     await gotoDashboard(page)
+    await checkPlacement(page, mobile)
     await expect(badge(page)).toHaveAttribute(
       'aria-label',
       '版本 v1.0.1，有新版本'
@@ -199,6 +209,62 @@ for (const [theme, mobile] of [
     })
   })
 }
+
+test('collapsed sidebar hides the badge until it expands', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await configureStablePage(page, { theme: 'light' })
+  // After the fixture's own init script, which expands the sidebar.
+  await page.addInitScript(() =>
+    window.localStorage.setItem('ren2hub_sidebar_collapsed', 'true')
+  )
+  await mockRelease(page)
+  await gotoDashboard(page)
+  await expect(badge(page)).toHaveCount(1)
+  await expect(badge(page)).toBeHidden()
+  await assertNoHorizontalOverflow(page)
+  await captureEvidence(page, {
+    path: testInfo.outputPath('update-collapsed-light-desktop.png'),
+  })
+  await page.locator('aside .console-sidebar__collapse').click()
+  await checkPlacement(page, false)
+})
+
+test('one badge keeps its state across the lg breakpoint', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await configureStablePage(page, { theme: 'dark' })
+  await mockRelease(page)
+  let checks = 0
+  page.on('request', (request) => {
+    if (request.url().includes('/api/admin/system/check-updates')) checks++
+  })
+  await gotoDashboard(page)
+  await badge(page).click()
+  await panel(page).locator('[data-version-update-now]').click()
+  await page
+    .getByRole('dialog', { name: '更新到 v1.0.2？' })
+    .getByRole('button', { name: '更新', exact: true })
+    .click()
+  await expect(panel(page)).toHaveAttribute(
+    'data-version-state',
+    'restart-needed'
+  )
+  await page.keyboard.press('Escape')
+  await expect(panel(page)).toHaveCount(0)
+  const before = checks
+  await page.setViewportSize({ width: 390, height: 844 })
+  await checkPlacement(page, true)
+  await badge(page).click()
+  // The same instance moved: the pending restart is still there and the
+  // move started no second check.
+  await expect(panel(page)).toHaveAttribute(
+    'data-version-state',
+    'restart-needed'
+  )
+  expect(checks).toBe(before)
+  await checkPanel(page, true)
+})
 
 test('version badge source build', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })

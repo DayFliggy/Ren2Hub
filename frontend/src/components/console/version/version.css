@@ -1,28 +1,39 @@
-/* Root version badge and its panel in the console top bar. Only shared theme
-   tokens: light keeps the original look, dark follows B1 Studio. */
+/* Root version badge in the console brand area and its panel. Only shared
+   theme tokens: light keeps the original look, dark follows B1 Studio. The
+   button is the 44px target; the tag inside it is the small visible label. */
 .version-badge {
-  position: relative;
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
   height: 2.75rem;
-  padding-inline: 0.75rem;
   border-radius: var(--shape-control);
-  background: var(--surface-muted);
   color: var(--text-secondary);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.version-badge-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  background: var(--surface-muted);
+  line-height: 1.25rem;
   transition:
     background-color 0.15s,
     color 0.15s;
 }
-.version-badge:hover {
+.version-badge:hover .version-badge-tag {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
 .version-badge-text {
-  max-width: 8rem;
+  max-width: 6rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -30,13 +41,10 @@
   display: none;
 }
 /* A narrow phone or enlarged text leaves no room for the version text in the
-   bar; the badge becomes an icon target and keeps the dot and its label. */
+   bar; the tag becomes an icon and keeps the dot and the button's label. */
 @container console-topbar (max-width: 23.9375rem) {
-  .version-badge {
-    justify-content: center;
-    width: 44px;
-    min-width: 44px;
-    padding: 0;
+  .version-badge-tag {
+    padding: 0.3125rem;
   }
   .version-badge-text {
     display: none;
@@ -47,8 +55,8 @@
 }
 .version-badge-dot {
   position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
+  top: -0.1875rem;
+  right: -0.1875rem;
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 9999px;
@@ -56,15 +64,11 @@
   box-shadow: 0 0 0 2px var(--surface-solid);
 }
 
+/* Placed by useFloatingPanel with fixed coordinates under the badge. */
 .version-panel {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: var(--z-popover);
   width: 20rem;
   max-width: calc(100vw - 16px);
   max-height: calc(100dvh - 5rem - env(safe-area-inset-top));
-  margin-top: 0.25rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--overlay-border);
@@ -72,19 +76,7 @@
   background: var(--surface-overlay);
   color: var(--text-primary);
   font-size: 0.875rem;
-}
-/* Phones: the badge sits mid-bar, so the panel spans the screen under the bar
-   instead of hanging off the badge. */
-@media (max-width: 639px) {
-  .version-panel {
-    position: fixed;
-    top: calc(env(safe-area-inset-top) + 3.5rem);
-    right: 8px;
-    left: 8px;
-    width: auto;
-    max-width: none;
-    margin-top: 0;
-  }
+  outline: none;
 }
 
 .version-panel-head {

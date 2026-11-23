@@ -19,24 +19,30 @@ import {
   type RestartExpectation,
 } from '@/api/systemUpdate'
 import { ApiError } from '@/api/types'
+import {
+  tabLeavesPanel,
+  useFloatingPanel,
+} from '@/composables/useFloatingPanel'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import MarkdownDocument from '@/components/common/MarkdownDocument.vue'
 import { systemUpdateMessages } from '@/i18n/systemUpdate'
 import { useAppStore } from '@/stores/app'
 import { useSystemUpdateStore } from '@/stores/systemUpdate'
+import { hasOpenModalDialog } from '@/utils/modalStack'
 import { updateErrorMessage, type ErrorContext } from './errorMessage'
 import { displayVersion, publishedDate } from './format'
 import VersionRollback from './VersionRollback.vue'
 import './version.css'
 
 /**
- * Root version badge after Sub2API's VersionBadge: the top bar shows the
+ * Root version badge after Sub2API's VersionBadge: the brand area shows the
  * running version with a dot when a release is newer; the panel shows one
  * state at a time. Operations live here, not in the panel, so closing the
  * panel never cancels them and reopening shows their progress or result.
  * The top bar mounts it only for Root and keys it by account, so a lost role
  * or another account unmounts it and ends everything the old one started.
+ * The panel is teleported to <body>: the sidebar clips its own overflow.
  */
 const { t, locale } = useI18n({
   useScope: 'local',
@@ -51,6 +57,7 @@ const { info, loading, error: checkError } = storeToRefs(releases)
 
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
 const open = ref(false)
 const operation = ref<Operation | null>(null)
 const actionError = ref('')
@@ -105,26 +112,59 @@ function message(cause: unknown, context: ErrorContext) {
 
 void releases.check(false)
 
-function toggle() {
-  open.value = !open.value
+const { style: floatingStyle, scope: panelScope } = useFloatingPanel(
+  trigger,
+  panel,
+  open,
+  { gap: 4 }
+)
+// Just above the bar the badge hangs from and below every modal layer, so
+// a confirmation opened from the panel covers it.
+const panelStyle = computed(() => ({
+  ...floatingStyle.value,
+  zIndex: 'calc(var(--z-topbar) + 1)',
+}))
+
+async function toggle() {
+  if (open.value) return close()
+  open.value = true
+  // The teleported panel is not next to the badge in tab order.
+  await nextTick()
+  panel.value?.focus()
 }
 
 function close() {
   open.value = false
 }
 
-// Clicks inside a confirmation dialog opened from the panel stay inside.
-onClickOutside(root, close, { ignore: ['[aria-modal="true"]'] })
-
-// Escape closes the panel wherever focus is, as in UserMenu. An open
-// confirmation dialog takes it first.
-useEventListener(document, 'keydown', (event: KeyboardEvent) => {
-  if (event.key !== 'Escape' || !open.value || event.defaultPrevented) return
-  if (confirmUpdate.value || confirmRestart.value) return
-  event.preventDefault()
+function closeToBadge() {
   close()
   void nextTick(() => trigger.value?.focus())
+}
+
+// Clicks inside a confirmation dialog opened from the panel stay inside.
+onClickOutside(root, close, { ignore: [panel, '[aria-modal="true"]'] })
+
+// Escape closes the panel wherever focus is, as in UserMenu. Any open modal
+// (a confirmation from this panel, search, a drawer) sits above the panel and
+// handles its own Escape first. The modal stack, not the DOM, says which are
+// open: a closing dialog keeps its node through the leave transition.
+useEventListener(document, 'keydown', (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !open.value || event.defaultPrevented) return
+  if (hasOpenModalDialog()) return
+  event.preventDefault()
+  closeToBadge()
 })
+
+/** Tab past either end of the panel returns to the badge. */
+function onPanelKeydown(event: KeyboardEvent) {
+  const element = panel.value
+  if (event.key !== 'Tab' || !element) return
+  const fromPanel = event.shiftKey && document.activeElement === element
+  if (!fromPanel && !tabLeavesPanel(event, element)) return
+  event.preventDefault()
+  closeToBadge()
+}
 
 /** Clears an action failure and reads the server again: after a failed or
  *  unanswered operation, the current state is what the next step needs. */
@@ -255,273 +295,285 @@ onBeforeUnmount(() => {
       :aria-expanded="open"
       @click="toggle"
     >
-      <Tag :size="18" class="version-badge-icon" aria-hidden="true" />
-      <span class="version-badge-text">{{ current }}</span>
-      <span
-        v-if="hasUpdate"
-        class="version-badge-dot"
-        aria-hidden="true"
-        data-version-badge-dot
-      />
+      <span class="version-badge-tag">
+        <Tag :size="14" class="version-badge-icon" aria-hidden="true" />
+        <span class="version-badge-text">{{ current }}</span>
+        <span
+          v-if="hasUpdate"
+          class="version-badge-dot"
+          aria-hidden="true"
+          data-version-badge-dot
+        />
+      </span>
     </button>
 
-    <div
-      v-if="open"
-      class="version-panel subtle-scroll animate-scale-in"
-      role="dialog"
-      :aria-label="t('title')"
-      data-handdrawn="menu"
-      data-version-panel
-      :data-version-state="state"
-    >
-      <header class="version-panel-head">
-        <h2>{{ t('title') }}</h2>
-        <button
-          type="button"
-          class="version-icon-button"
-          :aria-label="t('refresh')"
-          :title="t('refresh')"
-          :disabled="busy"
-          data-version-refresh
-          @click="refresh"
-        >
-          <RefreshCw
-            :size="15"
-            :class="{ 'animate-spin': loading }"
-            aria-hidden="true"
-          />
-        </button>
-      </header>
-
-      <div class="version-current">
-        <p class="version-current-value" data-version-current>
-          {{ current }}
-        </p>
-        <p
-          v-if="hasUpdate && info"
-          class="version-current-sub"
-          data-version-latest
-        >
-          {{
-            t('latestLine', { version: displayVersion(info.latest_version) })
-          }}
-        </p>
-      </div>
-      <p
-        v-if="info?.warning"
-        class="version-warning-line"
-        role="status"
-        data-version-warning
-      >
-        {{ t('cachedWarning') }}
-      </p>
-
-      <div v-if="state === 'restarting'" class="version-state" role="status">
-        <p v-if="restartState === 'waiting'" class="version-note">
-          {{ t('restarting') }}
-        </p>
-        <template v-else>
-          <p class="version-note" data-version-restart-unknown>
-            {{ t('restartUnknown') }}
-          </p>
-          <ConsoleButton size="sm" variant="secondary" @click="reload">{{
-            t('reload')
-          }}</ConsoleButton>
-        </template>
-      </div>
-
+    <Teleport to="body">
       <div
-        v-else-if="state === 'action-error' || state === 'check-error'"
-        class="version-state version-error"
-        role="alert"
-        data-version-error
+        v-if="open"
+        ref="panel"
+        class="version-panel subtle-scroll animate-scale-in"
+        role="dialog"
+        aria-modal="false"
+        :aria-label="t('title')"
+        tabindex="-1"
+        :style="panelStyle"
+        data-handdrawn="menu"
+        data-floating-panel
+        :data-handdrawn-scope="panelScope"
+        data-version-panel
+        :data-version-state="state"
+        @keydown="onPanelKeydown"
       >
-        <p class="version-error-title">
-          <AlertTriangle :size="15" aria-hidden="true" />
-          <span>{{
-            state === 'action-error' ? t('actionFailed') : t('checkFailed')
-          }}</span>
-        </p>
-        <p class="version-note">
-          {{ state === 'action-error' ? actionError : checkFailure }}
-        </p>
-        <ConsoleButton
-          size="sm"
-          variant="secondary"
-          :disabled="busy"
-          data-version-retry
-          @click="refresh"
-          >{{
-            state === 'action-error' ? t('refreshInfo') : t('retry')
-          }}</ConsoleButton
-        >
-      </div>
-
-      <p v-else-if="state === 'loading'" class="version-note" role="status">
-        {{ t('checking') }}
-      </p>
-
-      <div
-        v-else-if="state === 'source-update'"
-        class="version-state"
-        data-version-source-update
-      >
-        <a
-          v-if="release"
-          class="version-link"
-          :href="release.html_url"
-          target="_blank"
-          rel="noopener noreferrer"
-          data-version-release-link
-          >{{ t('viewRelease') }} <ExternalLink :size="13" aria-hidden="true"
-        /></a>
-        <p class="version-note">{{ t('sourceBuild') }}</p>
-      </div>
-
-      <div
-        v-else-if="state === 'update' && info"
-        class="version-state version-available"
-        data-version-update
-      >
-        <p class="version-available-head">
-          <span class="version-available-tag">{{
-            displayVersion(info.latest_version)
-          }}</span>
-          <span
-            v-if="release && publishedDate(release.published_at, locale)"
-            class="version-note"
-            >{{
-              t('published', {
-                date: publishedDate(release.published_at, locale),
-              })
-            }}</span
+        <header class="version-panel-head">
+          <h2>{{ t('title') }}</h2>
+          <button
+            type="button"
+            class="version-icon-button"
+            :aria-label="t('refresh')"
+            :title="t('refresh')"
+            :disabled="busy"
+            data-version-refresh
+            @click="refresh"
           >
-        </p>
-        <p v-if="operation === 'update'" class="version-note" role="status">
-          {{ t('updating') }}
-        </p>
-        <ConsoleButton
-          size="sm"
-          class="w-full"
-          :disabled="busy"
-          :loading="operation === 'update'"
-          data-version-update-now
-          @click="confirmUpdate = true"
-          >{{ t('updateNow') }}</ConsoleButton
+            <RefreshCw
+              :size="15"
+              :class="{ 'animate-spin': loading }"
+              aria-hidden="true"
+            />
+          </button>
+        </header>
+
+        <div class="version-current">
+          <p class="version-current-value" data-version-current>
+            {{ current }}
+          </p>
+          <p
+            v-if="hasUpdate && info"
+            class="version-current-sub"
+            data-version-latest
+          >
+            {{
+              t('latestLine', { version: displayVersion(info.latest_version) })
+            }}
+          </p>
+        </div>
+        <p
+          v-if="info?.warning"
+          class="version-warning-line"
+          role="status"
+          data-version-warning
         >
-        <template v-if="release">
-          <div class="version-row">
-            <a
-              class="version-link"
-              :href="release.html_url"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-version-release-link
-              >{{ t('changelog') }} <ExternalLink :size="13" aria-hidden="true"
-            /></a>
-            <button
-              v-if="release.body"
-              type="button"
-              class="version-toggle"
-              :aria-expanded="notesOpen"
-              data-version-notes-toggle
-              @click="notesOpen = !notesOpen"
+          {{ t('cachedWarning') }}
+        </p>
+
+        <div v-if="state === 'restarting'" class="version-state" role="status">
+          <p v-if="restartState === 'waiting'" class="version-note">
+            {{ t('restarting') }}
+          </p>
+          <template v-else>
+            <p class="version-note" data-version-restart-unknown>
+              {{ t('restartUnknown') }}
+            </p>
+            <ConsoleButton size="sm" variant="secondary" @click="reload">{{
+              t('reload')
+            }}</ConsoleButton>
+          </template>
+        </div>
+
+        <div
+          v-else-if="state === 'action-error' || state === 'check-error'"
+          class="version-state version-error"
+          role="alert"
+          data-version-error
+        >
+          <p class="version-error-title">
+            <AlertTriangle :size="15" aria-hidden="true" />
+            <span>{{
+              state === 'action-error' ? t('actionFailed') : t('checkFailed')
+            }}</span>
+          </p>
+          <p class="version-note">
+            {{ state === 'action-error' ? actionError : checkFailure }}
+          </p>
+          <ConsoleButton
+            size="sm"
+            variant="secondary"
+            :disabled="busy"
+            data-version-retry
+            @click="refresh"
+            >{{
+              state === 'action-error' ? t('refreshInfo') : t('retry')
+            }}</ConsoleButton
+          >
+        </div>
+
+        <p v-else-if="state === 'loading'" class="version-note" role="status">
+          {{ t('checking') }}
+        </p>
+
+        <div
+          v-else-if="state === 'source-update'"
+          class="version-state"
+          data-version-source-update
+        >
+          <a
+            v-if="release"
+            class="version-link"
+            :href="release.html_url"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-version-release-link
+            >{{ t('viewRelease') }} <ExternalLink :size="13" aria-hidden="true"
+          /></a>
+          <p class="version-note">{{ t('sourceBuild') }}</p>
+        </div>
+
+        <div
+          v-else-if="state === 'update' && info"
+          class="version-state version-available"
+          data-version-update
+        >
+          <p class="version-available-head">
+            <span class="version-available-tag">{{
+              displayVersion(info.latest_version)
+            }}</span>
+            <span
+              v-if="release && publishedDate(release.published_at, locale)"
+              class="version-note"
+              >{{
+                t('published', {
+                  date: publishedDate(release.published_at, locale),
+                })
+              }}</span
             >
-              {{ notesOpen ? t('hideNotes') : t('showNotes') }}
-              <ChevronDown
-                :size="14"
-                :class="{ 'rotate-180': notesOpen }"
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-          <MarkdownDocument
-            v-if="notesOpen && release.body"
-            class="version-notes subtle-scroll"
-            :markdown="release.body"
-            :base-url="release.html_url"
-            data-version-notes
+          </p>
+          <p v-if="operation === 'update'" class="version-note" role="status">
+            {{ t('updating') }}
+          </p>
+          <ConsoleButton
+            size="sm"
+            class="w-full"
+            :disabled="busy"
+            :loading="operation === 'update'"
+            data-version-update-now
+            @click="confirmUpdate = true"
+            >{{ t('updateNow') }}</ConsoleButton
+          >
+          <template v-if="release">
+            <div class="version-row">
+              <a
+                class="version-link"
+                :href="release.html_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-version-release-link
+                >{{ t('changelog') }}
+                <ExternalLink :size="13" aria-hidden="true"
+              /></a>
+              <button
+                v-if="release.body"
+                type="button"
+                class="version-toggle"
+                :aria-expanded="notesOpen"
+                data-version-notes-toggle
+                @click="notesOpen = !notesOpen"
+              >
+                {{ notesOpen ? t('hideNotes') : t('showNotes') }}
+                <ChevronDown
+                  :size="14"
+                  :class="{ 'rotate-180': notesOpen }"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+            <MarkdownDocument
+              v-if="notesOpen && release.body"
+              class="version-notes subtle-scroll"
+              :markdown="release.body"
+              :base-url="release.html_url"
+              data-version-notes
+            />
+          </template>
+        </div>
+
+        <div
+          v-else-if="state === 'current' && info"
+          class="version-state"
+          data-version-up-to-date
+        >
+          <p class="version-ok">
+            <CheckCircle2 :size="16" aria-hidden="true" />
+            <span>{{ t('upToDate') }}</span>
+          </p>
+          <a
+            v-if="release"
+            class="version-link"
+            :href="release.html_url"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-version-release-link
+            >{{ t('viewRelease') }} <ExternalLink :size="13" aria-hidden="true"
+          /></a>
+          <button
+            type="button"
+            class="version-toggle"
+            :aria-expanded="rollbackOpen"
+            data-version-rollback-toggle
+            @click="rollbackOpen = !rollbackOpen"
+          >
+            {{ t('rollback') }}
+            <ChevronDown
+              :size="14"
+              :class="{ 'rotate-180': rollbackOpen }"
+              aria-hidden="true"
+            />
+          </button>
+          <p v-if="operation === 'rollback'" class="version-note" role="status">
+            {{ t('rollingBack') }}
+          </p>
+          <VersionRollback
+            v-if="rollbackOpen"
+            :release="isRelease"
+            :busy="busy"
+            @rollback="rollback"
           />
-        </template>
-      </div>
+        </div>
 
-      <div
-        v-else-if="state === 'current' && info"
-        class="version-state"
-        data-version-up-to-date
-      >
-        <p class="version-ok">
-          <CheckCircle2 :size="16" aria-hidden="true" />
-          <span>{{ t('upToDate') }}</span>
-        </p>
-        <a
-          v-if="release"
-          class="version-link"
-          :href="release.html_url"
-          target="_blank"
-          rel="noopener noreferrer"
-          data-version-release-link
-          >{{ t('viewRelease') }} <ExternalLink :size="13" aria-hidden="true"
-        /></a>
-        <button
-          type="button"
-          class="version-toggle"
-          :aria-expanded="rollbackOpen"
-          data-version-rollback-toggle
-          @click="rollbackOpen = !rollbackOpen"
+        <div
+          v-if="
+            restartNeeded &&
+            (state === 'restart-needed' || state === 'check-error')
+          "
+          class="version-state version-success"
+          role="status"
+          data-version-restart-needed
         >
-          {{ t('rollback') }}
-          <ChevronDown
-            :size="14"
-            :class="{ 'rotate-180': rollbackOpen }"
-            aria-hidden="true"
-          />
-        </button>
-        <p v-if="operation === 'rollback'" class="version-note" role="status">
-          {{ t('rollingBack') }}
-        </p>
-        <VersionRollback
-          v-if="rollbackOpen"
-          :release="isRelease"
-          :busy="busy"
-          @rollback="rollback"
-        />
-      </div>
+          <p>{{ restartNeeded.message }}</p>
+          <ConsoleButton
+            size="sm"
+            :disabled="busy"
+            data-version-restart
+            @click="confirmRestart = true"
+            >{{ t('restart') }}</ConsoleButton
+          >
+        </div>
 
-      <div
-        v-if="
-          restartNeeded &&
-          (state === 'restart-needed' || state === 'check-error')
-        "
-        class="version-state version-success"
-        role="status"
-        data-version-restart-needed
-      >
-        <p>{{ restartNeeded.message }}</p>
-        <ConsoleButton
-          size="sm"
-          :disabled="busy"
-          data-version-restart
-          @click="confirmRestart = true"
-          >{{ t('restart') }}</ConsoleButton
+        <footer
+          v-if="isRelease && !restartNeeded && !restartState"
+          class="version-panel-foot"
         >
+          <button
+            type="button"
+            class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="busy"
+            data-version-restart-service
+            @click="confirmRestart = true"
+          >
+            {{ t('restartService') }}
+          </button>
+        </footer>
       </div>
-
-      <footer
-        v-if="isRelease && !restartNeeded && !restartState"
-        class="version-panel-foot"
-      >
-        <button
-          type="button"
-          class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="busy"
-          data-version-restart-service
-          @click="confirmRestart = true"
-        >
-          {{ t('restartService') }}
-        </button>
-      </footer>
-    </div>
+    </Teleport>
 
     <ConfirmDialog
       :open="confirmUpdate"

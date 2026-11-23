@@ -110,6 +110,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             >{{ app.systemName }}</span
           >
         </RouterLink>
+        <!-- One badge for the console, beside the brand: here below lg, moved
+             into the sidebar brand at lg and above. The move keeps the same
+             instance, so a running update survives a breakpoint change.
+             Keyed by account: a lost Root role or another account unmounts
+             the badge, which ends the old account's restart watch. -->
+        <Teleport defer to="[data-sidebar-version-slot]" :disabled="!isDesktop">
+          <VersionBadge v-if="auth.isRoot" :key="auth.user?.id" />
+        </Teleport>
       </div>
 
       <!-- center nav (desktop) -->
@@ -157,9 +165,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
           class="topbar-language hidden lg:block"
         />
         <ThemeSwitcher variant="console" />
-        <!-- Keyed by account: a lost Root role or another account unmounts the
-             badge, which ends the old account's restart watch. -->
-        <VersionBadge v-if="auth.isRoot" :key="auth.user?.id" />
         <div
           class="topbar-divider hidden h-6 w-px bg-[var(--border-default)] sm:mx-1 sm:block"
         />

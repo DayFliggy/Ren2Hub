@@ -160,7 +160,7 @@ test.describe('coarse pointer control targets', () => {
         await checkTargets(page.locator('[data-bonus-configure]'), 'bonus icon')
         await checkTargets(
           page.locator(
-            '.topbar-nav [aria-controls="console-mobile-navigation"], .topbar-nav .search-trigger, .topbar-nav [data-theme-switcher], .topbar-nav [data-user-menu-trigger], .topbar-nav [data-version-badge], .topbar-language > button'
+            '.topbar-nav [aria-controls="console-mobile-navigation"], .topbar-nav .search-trigger, .topbar-nav [data-theme-switcher], .topbar-nav [data-user-menu-trigger], .topbar-brand [data-version-badge], .topbar-language > button'
           ),
           'topbar actions'
         )
@@ -707,7 +707,8 @@ for (const theme of ['light', 'dark'] as const) {
           return { x, y, width, height }
         })
       )
-    // Navigation, search, theme, the Root version badge and the user menu.
+    // Navigation and the Root version badge beside the brand, then search,
+    // theme and the user menu.
     expect(buttons).toHaveLength(5)
     for (const button of buttons) {
       expect(button.width).toBeGreaterThanOrEqual(44)
