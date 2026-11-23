@@ -36,16 +36,13 @@ const { t } = useI18n()
     </div>
   </div>
 
-  <div
+  <!-- 外层 ConsoleCard 已是表面容器，空态直接放在卡片内，避免双层描边。 -->
+  <EmptyState
     v-else-if="orders.length === 0"
-    class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
-  >
-    <EmptyState
-      :title="t('orders.emptyTitle')"
-      :hint="t('orders.emptyHint')"
-      illustration="empty-search"
-    />
-  </div>
+    :title="t('orders.emptyTitle')"
+    :hint="t('orders.emptyHint')"
+    illustration="empty-search"
+  />
 
   <div v-else class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
     <article

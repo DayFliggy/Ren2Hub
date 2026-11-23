@@ -3,15 +3,17 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 const ENTER_THRESHOLD_PX = 64 // 舞台条下滑进入阈值
 const EXIT_THRESHOLD_PX = 64 // 沉浸态上滑退出阈值
 const DIRECTION_RATIO = 1.5 // 竖向判定：|dy| > |dx| × 1.5（与横滑转图对称互斥）
+const TOP_TOLERANCE_PX = 1 // 视作页面顶部的滚动余量
 const CLAIM_PX = 8 // 手势方向判定阈值
 const HINT_DELAY_MS = 1400 // 首访提示入场延迟
 const HINT_DURATION_MS = 4500 // 提示自动隐藏时长
 
 /**
- * 移动端「下滑进入全屏沉浸」：舞台条下滑隐藏 Hero 内容（Ticker 同步隐去），
+ * 移动端「下滑进入全屏沉浸」：页面在顶部时舞台条下滑隐藏 Hero 内容（Ticker 同步隐去），
  * 全屏态上滑或点召回钮恢复；附首访引导提示的显示调度。
- * 手势未判定时零拦截；竖向判定与 HeroWorldMap 的横滑转图方向比对称（1.5），
- * 同一次滑动手势只会被其中一方认领，互不劫持。
+ * 舞台条声明 touch-action: pan-y，上滑照常滚动页面；只有页面在顶部的下滑
+ * 才被认领并 preventDefault（此时没有可滚动的内容，拦下的是下拉刷新）。
+ * 竖向判定与 HeroWorldMap 的横滑转图方向比对称（1.5），互不劫持。
  */
 export function useImmersiveStage() {
   const immersive = ref(false)
@@ -24,7 +26,7 @@ export function useImmersiveStage() {
   // 进入手势（舞台条元素级）
   let enterStartX = 0
   let enterStartY = 0
-  let enterGesture: 'idle' | 'pending' | 'pass' = 'idle'
+  let enterGesture: 'idle' | 'pending' | 'claim' | 'pass' = 'idle'
 
   // 退出手势（window 级，仅沉浸态注册）
   let exitStartX = 0
@@ -54,9 +56,9 @@ export function useImmersiveStage() {
     immersive.value = false
   }
 
-  /* ===== 进入：舞台条下滑（pan-x 已排除浏览器竖滚/下拉刷新，无需拦截） ===== */
+  /* ===== 进入：页面顶部时舞台条下滑（认领后 preventDefault 防下拉刷新） ===== */
   function onStageTouchStart(e: TouchEvent) {
-    if (e.touches.length !== 1) {
+    if (e.touches.length !== 1 || window.scrollY > TOP_TOLERANCE_PX) {
       enterGesture = 'idle'
       return
     }
@@ -66,17 +68,26 @@ export function useImmersiveStage() {
   }
 
   function onStageTouchMove(e: TouchEvent) {
-    if (enterGesture !== 'pending') return
+    if (enterGesture !== 'pending' && enterGesture !== 'claim') return
     const dx = e.touches[0].clientX - enterStartX
     const dy = e.touches[0].clientY - enterStartY
-    if (Math.abs(dx) < CLAIM_PX && Math.abs(dy) < CLAIM_PX) return
-    if (dy > 0 && Math.abs(dy) > Math.abs(dx) * DIRECTION_RATIO) {
-      if (dy >= ENTER_THRESHOLD_PX) {
-        enter()
-        enterGesture = 'idle'
+    if (enterGesture === 'pending') {
+      if (Math.abs(dx) < CLAIM_PX && Math.abs(dy) < CLAIM_PX) {
+        // 顶部向下的起始位移只会开始下拉刷新；放过它，后续 move 就不可取消了
+        if (dy > 0 && e.cancelable) e.preventDefault()
+        return
       }
-    } else {
-      enterGesture = 'pass'
+      if (dy > 0 && Math.abs(dy) > Math.abs(dx) * DIRECTION_RATIO) {
+        enterGesture = 'claim'
+      } else {
+        enterGesture = 'pass' // 上滑交给页面滚动，横滑交给地图转动
+        return
+      }
+    }
+    if (e.cancelable) e.preventDefault()
+    if (dy >= ENTER_THRESHOLD_PX) {
+      enter()
+      enterGesture = 'idle'
     }
   }
 

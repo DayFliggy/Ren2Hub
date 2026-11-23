@@ -99,7 +99,7 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 
 ## 品牌与媒体例外
 
-外部供应商 Logo 保留官方品牌色；活动 Banner 保留业务强调色。为保证媒体文字可读性，可以使用 `--media-scrim-strong/medium/soft` 黑色遮罩，不得在组件内复制固定暗色渐变。除供应商品牌色外，Canvas 与 ECharts 的结构色必须从 CSS 语义令牌解析。
+外部供应商 Logo 保留官方品牌色；活动 Banner 保留业务强调色。为保证媒体文字可读性，可以使用 `--media-scrim-strong/medium/soft` 黑色遮罩，不得在组件内复制固定暗色渐变。除供应商品牌色外，Canvas 与 ECharts 的结构色必须从 CSS 语义令牌解析。首页 Canvas 两套主题共用 `src/canvas/theme.ts` 的令牌映射和同一个解析函数，令牌缺失或不是不透明颜色时回退到该文件的调色值；日间没有同值语义令牌的结构色使用 `tokens.css` 日间作用域里的 `--canvas-*` 令牌，取值与回退色相同。
 
 2FA 二维码容器是唯一的功能性纯白例外：扫码识别要求固定 `#ffffff` 底色，不随主题切换（SecurityAccessView）。
 

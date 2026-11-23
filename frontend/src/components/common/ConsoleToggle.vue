@@ -116,7 +116,6 @@ function toggle(event: MouseEvent) {
 
 .console-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--state-focus-layer) !important;
 }
 
 /* Keep the compact track while reserving a centred 44px touch target. */
@@ -200,7 +199,7 @@ html:not(.dark) .console-toggle:hover:not(.is-disabled) .console-toggle-thumb {
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   夜间模式：One Night（沉静炭蓝 · 精密流光高阶质感）
+   夜间模式：B1 Studio（沉静炭蓝 · 精密流光高阶质感）
    ═════════════════════════════════════════════════════════════════ */
 html.dark .console-toggle {
   border-radius: 9999px;
@@ -269,5 +268,18 @@ html.dark
   box-shadow:
     0 3px 8px rgba(0, 0, 0, 0.35),
     0 0 5px rgba(255, 255, 255, 0.6);
+}
+
+/* 焦点阴影替换轨道阴影，规则放在末尾靠源码顺序取胜。日间与状态规则同为
+   (0,3,1)；夜间悬停规则是 (0,5,1)，这里用 :is() 与 :not() 补到同级。 */
+html:not(.dark) .console-toggle:focus-visible {
+  box-shadow: 0 0 0 3px var(--state-focus-layer);
+}
+
+html.dark
+  .console-toggle:is(.is-checked, .is-unchecked):focus-visible:not(
+    .is-disabled
+  ) {
+  box-shadow: var(--focus-halo);
 }
 </style>

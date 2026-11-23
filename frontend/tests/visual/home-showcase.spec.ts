@@ -1229,6 +1229,27 @@ async function swipe(
 test.describe('immersive focus hand-off', () => {
   test.use({ hasTouch: true })
 
+  // The stage strip covers the thumb zone of the first screen; it once
+  // declared pan-x, so swiping up there could not scroll the page.
+  test('swiping up on the stage strip scrolls the page', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await configureStablePage(page, { theme: 'dark', authenticated: true })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+
+    const stageStrip = page.locator('.hero-map-stage')
+    await expect(stageStrip).toHaveCSS('touch-action', 'pan-y')
+    const stage = (await stageStrip.boundingBox())!
+    // Start below the hint so the gesture lands on the strip itself.
+    const fromY = stage.y + stage.height - 12
+    await swipe(page, 60, fromY, fromY - 240)
+
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0)
+    await expect(page.getByRole('button', { name: '展开介绍' })).toHaveCount(0)
+  })
+
   // Gestures and the desktop breakpoint end the mode without a click, and
   // used to drop focus to <body> when the focused toggle disappeared.
   test('focus follows gesture and breakpoint exits; taps show no ring', async ({

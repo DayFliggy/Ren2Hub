@@ -1,4 +1,4 @@
-/* Shared Desert Ledger / One Night semantic tokens. */
+/* Shared Desert Ledger / B1 Studio semantic tokens. */
 :root {
   color-scheme: light;
 
@@ -154,6 +154,14 @@
   --glow-rgb: 127 164 99;
   --live-dot: #5f7d47;
   --live-dot-rgb: 95 125 71;
+  /* 首页 Canvas 日间结构色中没有同值语义令牌的部分（src/canvas/theme.ts）；
+     夜间 Canvas 全部复用语义令牌，不覆盖这一组。 */
+  --canvas-background-bottom: #ece6d4;
+  --canvas-map-ocean: #c2bca6;
+  --canvas-map-label: #827e66;
+  --canvas-map-flow: #6fa894;
+  --canvas-char-rain: #b2b598;
+  --canvas-hub-halo: #e4c276;
   --hero-title-gradient-start: #c8a030;
   --hero-title-gradient-middle: #5ea898;
   --hero-title-gradient-end: #9a3d1c;

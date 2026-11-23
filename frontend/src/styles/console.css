@@ -273,3 +273,21 @@ html.dark .checkbox-round:checked {
 html.dark [data-surface-variant='default'] .table-scroll-fade {
   --table-fade-surface: var(--surface-solid);
 }
+
+/*
+ * Admin bulk-action bars sit above their list. Below lg the list is a card
+ * stack in the page scroll, so the bar pins to the top of the scroll zone and
+ * stays reachable after scrolling down; the muted tint is layered over the
+ * solid surface so rows do not show through. Desktop tables keep their own
+ * sticky header, so the bar stays in flow there.
+ */
+@media (max-width: 1023.98px) {
+  .console-bulk-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background:
+      linear-gradient(var(--surface-muted), var(--surface-muted)),
+      var(--surface-solid);
+  }
+}

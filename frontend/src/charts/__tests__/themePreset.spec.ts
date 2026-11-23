@@ -47,7 +47,7 @@ describe('chart mood', () => {
     ])
   })
 
-  it('preserves the smooth glowing One Night chart mood', () => {
+  it('preserves the smooth glowing B1 Studio chart mood', () => {
     const mood = lineMood(palette(true))
 
     expect(mood.line).toMatchObject({

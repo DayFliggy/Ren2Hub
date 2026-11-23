@@ -1,9 +1,9 @@
 import { normalizeOpaqueColor } from '@/utils/cssColor'
 
 /**
- * Palette used by the canvas scene. Light keeps its protected Desert Ledger
- * values. Night resolves its structural colours from the same semantic CSS
- * tokens as the DOM; vendor overrides remain explicit brand-colour exceptions.
+ * Palette used by the canvas scene. Both themes resolve their structural
+ * colours from the same CSS tokens as the DOM and fall back to the values
+ * below; vendor overrides remain explicit brand-colour exceptions.
  */
 export type CanvasThemeName = 'light' | 'dark'
 
@@ -90,7 +90,8 @@ const CANVAS_THEMES: Record<CanvasThemeName, CanvasTheme> = {
     accent: '#e4c06b',
     glowComposite: 'lighter',
   },
-  // Desert Ledger：暖米白纸面为底，点阵=橄榄墨点，航线/数据包=焦糖批注。
+  // Desert Ledger：暖米白纸面为底，运行时从日间令牌解析，取值与下列回退色相同。
+  // 点阵=橄榄墨点，航线/数据包=焦糖批注。
   // 草甸绿点缀（田园航拍：草甸中绿/树篱深绿/麦茬金）：用户=田间人影、
   // 响应包=牧绿回程、枢纽副轨焦糖绿交替、字符雨首字符新绿、涟漪=草浪、流尾=青绿水痕。
   light: {
@@ -147,67 +148,100 @@ const CANVAS_THEMES: Record<CanvasThemeName, CanvasTheme> = {
   },
 }
 
-function resolveNightToken(name: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim()
-  return normalizeOpaqueColor(value, fallback)
+type CanvasColorKey = Exclude<
+  keyof CanvasTheme,
+  'name' | 'modelColorOverrides' | 'glowComposite'
+>
+
+// 每个结构色对应的 CSS 令牌；解析失败时回退到 CANVAS_THEMES 的同名值。
+// 日间只映射取值与回退色完全相同的令牌，保证像素不变。
+const CANVAS_TOKENS: Record<CanvasThemeName, Record<CanvasColorKey, string>> = {
+  dark: {
+    backgroundTop: '--surface-container-lowest',
+    backgroundBottom: '--page-background',
+    mapLand: '--signal',
+    mapHighlight: '--accent',
+    mapOcean: '--signal-deep',
+    mapLabel: '--text-secondary',
+    mapFlow: '--glow-strong',
+    mapRipple: '--glow',
+    mapGlyph: '--signal-bright',
+    mapGlyphAccent: '--accent',
+    mapCursorGlow: '--accent',
+    mapCursorRing: '--focus-ring',
+    modelFallback: '--signal',
+    charRain: '--signal-strong',
+    charRainLead: '--glow',
+    nodeSurface: '--surface-container',
+    nodeLabelSurface: '--surface-container-lowest',
+    nodeLabelText: '--text-primary',
+    userAccent: '--glow',
+    userCore: '--glow-bright',
+    hubHalo: '--signal-strong',
+    hubSurface: '--surface-container-lowest',
+    hubOrbitPrimary: '--accent',
+    hubOrbitSecondary: '--glow',
+    hubOrbitCore: '--accent-hover',
+    hubRing: '--accent',
+    hubLabel: '--text-primary',
+    channelStroke: '--accent',
+    channelGlow: '--accent',
+    channelPacket: '--accent-hover',
+    channelCore: '--text-primary',
+    responsePacket: '--glow',
+    packetCore: '--on-colored',
+    accent: '--accent',
+  },
+  light: {
+    backgroundTop: '--surface-container-lowest',
+    backgroundBottom: '--canvas-background-bottom',
+    mapLand: '--signal',
+    mapHighlight: '--accent',
+    mapOcean: '--canvas-map-ocean',
+    mapLabel: '--canvas-map-label',
+    mapFlow: '--canvas-map-flow',
+    mapRipple: '--glow',
+    mapGlyph: '--signal-strong',
+    mapGlyphAccent: '--accent-active',
+    mapCursorGlow: '--accent',
+    mapCursorRing: '--focus-ring',
+    modelFallback: '--support-strong',
+    charRain: '--canvas-char-rain',
+    charRainLead: '--glow-strong',
+    nodeSurface: '--surface-container',
+    nodeLabelSurface: '--surface-container-lowest',
+    nodeLabelText: '--text-primary',
+    userAccent: '--glow',
+    userCore: '--glow-strong',
+    hubHalo: '--canvas-hub-halo',
+    hubSurface: '--surface-container',
+    hubOrbitPrimary: '--accent',
+    hubOrbitSecondary: '--glow',
+    hubOrbitCore: '--accent-active',
+    hubRing: '--accent-hover',
+    hubLabel: '--text-primary',
+    channelStroke: '--accent-active',
+    channelGlow: '--accent',
+    channelPacket: '--accent-hover',
+    channelCore: '--text-primary',
+    responsePacket: '--glow-strong',
+    packetCore: '--text-primary',
+    accent: '--accent',
+  },
 }
 
 export function getCanvasTheme(name: CanvasThemeName): CanvasTheme {
   const fallback = CANVAS_THEMES[name]
-  if (name === 'light') return fallback
+  if (typeof document === 'undefined') return fallback
 
-  return {
-    ...fallback,
-    backgroundTop: resolveNightToken(
-      '--surface-container-lowest',
-      fallback.backgroundTop
-    ),
-    backgroundBottom: resolveNightToken(
-      '--page-background',
-      fallback.backgroundBottom
-    ),
-    mapLand: resolveNightToken('--signal', fallback.mapLand),
-    mapHighlight: resolveNightToken('--accent', fallback.mapHighlight),
-    mapOcean: resolveNightToken('--signal-deep', fallback.mapOcean),
-    mapLabel: resolveNightToken('--text-secondary', fallback.mapLabel),
-    mapFlow: resolveNightToken('--glow-strong', fallback.mapFlow),
-    mapRipple: resolveNightToken('--glow', fallback.mapRipple),
-    mapGlyph: resolveNightToken('--signal-bright', fallback.mapGlyph),
-    mapGlyphAccent: resolveNightToken('--accent', fallback.mapGlyphAccent),
-    mapCursorGlow: resolveNightToken('--accent', fallback.mapCursorGlow),
-    mapCursorRing: resolveNightToken('--focus-ring', fallback.mapCursorRing),
-    modelFallback: resolveNightToken('--signal', fallback.modelFallback),
-    charRain: resolveNightToken('--signal-strong', fallback.charRain),
-    charRainLead: resolveNightToken('--glow', fallback.charRainLead),
-    nodeSurface: resolveNightToken('--surface-container', fallback.nodeSurface),
-    nodeLabelSurface: resolveNightToken(
-      '--surface-container-lowest',
-      fallback.nodeLabelSurface
-    ),
-    nodeLabelText: resolveNightToken('--text-primary', fallback.nodeLabelText),
-    userAccent: resolveNightToken('--glow', fallback.userAccent),
-    userCore: resolveNightToken('--glow-bright', fallback.userCore),
-    hubHalo: resolveNightToken('--signal-strong', fallback.hubHalo),
-    hubSurface: resolveNightToken(
-      '--surface-container-lowest',
-      fallback.hubSurface
-    ),
-    hubOrbitPrimary: resolveNightToken('--accent', fallback.hubOrbitPrimary),
-    hubOrbitSecondary: resolveNightToken('--glow', fallback.hubOrbitSecondary),
-    hubOrbitCore: resolveNightToken('--accent-hover', fallback.hubOrbitCore),
-    hubRing: resolveNightToken('--accent', fallback.hubRing),
-    hubLabel: resolveNightToken('--text-primary', fallback.hubLabel),
-    channelStroke: resolveNightToken('--accent', fallback.channelStroke),
-    channelGlow: resolveNightToken('--accent', fallback.channelGlow),
-    channelPacket: resolveNightToken('--accent-hover', fallback.channelPacket),
-    channelCore: resolveNightToken('--text-primary', fallback.channelCore),
-    responsePacket: resolveNightToken('--glow', fallback.responsePacket),
-    packetCore: resolveNightToken('--on-colored', fallback.packetCore),
-    accent: resolveNightToken('--accent', fallback.accent),
+  const style = getComputedStyle(document.documentElement)
+  const theme = { ...fallback }
+  const tokens = CANVAS_TOKENS[name]
+  for (const key of Object.keys(tokens) as CanvasColorKey[]) {
+    const value = style.getPropertyValue(tokens[key]).trim()
+    theme[key] = normalizeOpaqueColor(value, fallback[key])
   }
+  return theme
 }
 
 export function withAlpha(hex: string, alpha: number): string {

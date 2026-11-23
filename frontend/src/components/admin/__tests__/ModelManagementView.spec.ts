@@ -87,7 +87,6 @@ async function setup(path = '/models/metadata', realModelDrawer = false) {
           VendorDrawer: true,
           ConfirmDialog: true,
           FieldVisibilityMenu: true,
-          PageBreadcrumb: { template: '<div><slot name="action" /></div>' },
           // jsdom renders both layouts; the mobile cards carry the checkboxes.
           DataTable: true,
         },

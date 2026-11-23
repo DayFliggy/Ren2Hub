@@ -12,7 +12,6 @@ import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import { useToast } from '@/composables/useToast'
 
 import {
@@ -114,75 +113,76 @@ const overrides = computed(() =>
 
 <template>
   <div class="min-w-0">
-    <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('taskPlugins.title')]">
-      <template #action>
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="flex items-center gap-2" data-task-plugin-master>
-            <ConsoleToggle
-              id="task-plugin-enabled-switch"
-              :model-value="enabled ?? false"
-              :disabled="enabled === null || enabledSaving"
-              :loading="enabledSaving"
-              :label="t('taskPlugins.enableTaskPlugins')"
-              @update:model-value="toggleEnabled"
-            />
-            <label
-              for="task-plugin-enabled-switch"
-              class="hidden text-sm text-[var(--text-secondary)] sm:inline"
-              >{{ t('taskPlugins.enableTaskPlugins') }}</label
+    <!-- Tabs lead the page; the master switch and upload share their row. -->
+    <div
+      class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+      data-task-plugins-toolbar
+    >
+      <ConsoleTabs
+        v-model="tab"
+        :items="tabs"
+        panel-id="task-plugins-panel"
+        :aria-label="t('taskPlugins.sections')"
+      />
+      <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+        <div class="flex items-center gap-2" data-task-plugin-master>
+          <ConsoleToggle
+            id="task-plugin-enabled-switch"
+            :model-value="enabled ?? false"
+            :disabled="enabled === null || enabledSaving"
+            :loading="enabledSaving"
+            :label="t('taskPlugins.enableTaskPlugins')"
+            @update:model-value="toggleEnabled"
+          />
+          <label
+            for="task-plugin-enabled-switch"
+            class="hidden text-sm text-[var(--text-secondary)] sm:inline"
+            >{{ t('taskPlugins.enableTaskPlugins') }}</label
+          >
+          <div ref="help" class="relative" @keydown.escape="helpOpen = false">
+            <IconButton
+              :label="t('taskPlugins.behaviorHelp')"
+              :aria-expanded="helpOpen"
+              aria-controls="task-plugin-help"
+              @click="helpOpen = !helpOpen"
             >
-            <div ref="help" class="relative" @keydown.escape="helpOpen = false">
-              <IconButton
-                :label="t('taskPlugins.behaviorHelp')"
-                :aria-expanded="helpOpen"
-                aria-controls="task-plugin-help"
-                @click="helpOpen = !helpOpen"
-              >
-                <CircleHelp :size="16" aria-hidden="true" />
-              </IconButton>
-              <div
-                v-if="helpOpen"
-                id="task-plugin-help"
-                role="dialog"
-                :aria-label="t('taskPlugins.behaviorHelp')"
-                class="absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] sibling-space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 text-sm shadow-lg"
-              >
-                <p class="font-medium">
-                  {{ t('taskPlugins.enableTaskPlugins') }}
-                </p>
-                <p class="text-[var(--text-secondary)]">
-                  {{ t('taskPlugins.masterSwitchHelp') }}
-                </p>
-                <p class="font-medium">{{ t('taskPlugins.behaviorHelp') }}</p>
-                <p class="text-[var(--text-secondary)]">
-                  {{ t('taskPlugins.factoryBehaviorHelp') }}
-                </p>
-              </div>
+              <CircleHelp :size="16" aria-hidden="true" />
+            </IconButton>
+            <div
+              v-if="helpOpen"
+              id="task-plugin-help"
+              role="dialog"
+              :aria-label="t('taskPlugins.behaviorHelp')"
+              class="absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] sibling-space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 text-sm shadow-lg"
+            >
+              <p class="font-medium">
+                {{ t('taskPlugins.enableTaskPlugins') }}
+              </p>
+              <p class="text-[var(--text-secondary)]">
+                {{ t('taskPlugins.masterSwitchHelp') }}
+              </p>
+              <p class="font-medium">{{ t('taskPlugins.behaviorHelp') }}</p>
+              <p class="text-[var(--text-secondary)]">
+                {{ t('taskPlugins.factoryBehaviorHelp') }}
+              </p>
             </div>
           </div>
-          <ConsoleButton
-            v-if="tab === 'installed'"
-            size="sm"
-            @click="upload = { key: '' }"
-          >
-            <Upload :size="14" aria-hidden="true" />
-            {{ t('taskPlugins.uploadPlugin') }}
-          </ConsoleButton>
         </div>
-      </template>
-    </PageBreadcrumb>
+        <ConsoleButton
+          v-if="tab === 'installed'"
+          size="sm"
+          @click="upload = { key: '' }"
+        >
+          <Upload :size="14" aria-hidden="true" />
+          {{ t('taskPlugins.uploadPlugin') }}
+        </ConsoleButton>
+      </div>
+    </div>
     <ErrorBanner
       v-if="enabledError"
       class="mb-3"
       :message="enabledError"
       @retry="loadEnabled"
-    />
-    <ConsoleTabs
-      v-model="tab"
-      :items="tabs"
-      panel-id="task-plugins-panel"
-      class="mb-4"
-      :aria-label="t('taskPlugins.sections')"
     />
     <div
       id="task-plugins-panel"

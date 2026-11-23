@@ -5,7 +5,7 @@ import type { ChartPalette } from './palette'
  *
  * Day (Desert Ledger): hand-drawn ledger feel — no smoothing, visible circle
  * markers, dashed grid ruling like a paper ledger.
- * Night (One Night): elegant Material — smooth lines with a soft golden glow,
+ * Night (B1 Studio): elegant Material — smooth lines with a soft golden glow,
  * hairline solid grid, quiet surfaces.
  *
  * Charts consume these via spreads inside their option builders so each chart

@@ -42,7 +42,6 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
@@ -63,7 +62,6 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
 })
 const { t, te } = useI18n({ useScope: 'local', messages: modelPricingMessages })
-const { t: tGlobal } = useI18n()
 const route = useRoute()
 // The page width is the only layout breakpoint: the list and editor columns
 // need 320px + 440px plus the gap, so a narrower page (a phone, or a tablet
@@ -588,14 +586,9 @@ onBeforeUnmount(() => {
         @save="save"
       />
     </DefineEditor>
-    <PageBreadcrumb
-      v-if="!embedded"
-      :crumbs="[tGlobal('nav.groupAdmin'), t('title')]"
-    >
-      <template #action>
-        <PricingActionBar :state="barState" />
-      </template>
-    </PageBreadcrumb>
+    <div v-if="!embedded" class="mb-3 flex justify-end">
+      <PricingActionBar :state="barState" />
+    </div>
 
     <fieldset
       class="pricing-controls"

@@ -31,7 +31,6 @@ import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import UserAffiliateModal from '@/components/console/users/UserAffiliateModal.vue'
 import UserAvatar from '@/components/console/users/UserAvatar.vue'
 import UserFormModal from '@/components/console/users/UserFormModal.vue'
@@ -379,34 +378,6 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
 <template>
   <div>
     <SecurityProofDialog ref="proofDialog" />
-    <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('nav.userManagement')]">
-      <template #action>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            class="hidden text-xs tabular-nums text-[var(--text-tertiary)] sm:inline"
-            aria-live="polite"
-          >
-            {{ t('users.resultCount', { count: total }) }}
-          </span>
-          <div class="flex items-center gap-2">
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :loading="refreshing"
-              :disabled="isCrudBusy || isBulkBusy"
-              @click="load({ background: true })"
-            >
-              <RefreshCw v-if="!refreshing" :size="14" />
-              {{ t('users.refreshList') }}
-            </ConsoleButton>
-            <ConsoleButton size="sm" :disabled="!canMutate" @click="openCreate">
-              <Plus :size="14" />
-              {{ t('users.createUser') }}
-            </ConsoleButton>
-          </div>
-        </div>
-      </template>
-    </PageBreadcrumb>
 
     <ConsoleCard :padded="false">
       <div
@@ -420,7 +391,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           class="w-full xl:w-72"
         />
         <div
-          class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:flex-1 xl:grid-cols-4"
+          class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:flex-1 xl:grid-cols-3"
         >
           <FilterSelect
             v-model="role"
@@ -464,11 +435,36 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
             />
           </div>
         </div>
+        <div
+          class="order-first flex items-center gap-2 xl:order-none xl:shrink-0"
+          data-users-toolbar-actions
+        >
+          <span
+            class="mr-auto text-xs tabular-nums text-[var(--text-tertiary)] xl:mr-1"
+            aria-live="polite"
+          >
+            {{ t('users.resultCount', { count: total }) }}
+          </span>
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :loading="refreshing"
+            :disabled="isCrudBusy || isBulkBusy"
+            @click="load({ background: true })"
+          >
+            <RefreshCw v-if="!refreshing" :size="14" />
+            {{ t('users.refreshList') }}
+          </ConsoleButton>
+          <ConsoleButton size="sm" :disabled="!canMutate" @click="openCreate">
+            <Plus :size="14" />
+            {{ t('users.createUser') }}
+          </ConsoleButton>
+        </div>
       </div>
       <div
         v-if="selectedIds.length > 0"
         data-user-bulk-actions
-        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
       >
         <div class="mr-auto min-w-0" aria-live="polite">
           <p class="text-xs font-semibold text-[var(--text-secondary)]">

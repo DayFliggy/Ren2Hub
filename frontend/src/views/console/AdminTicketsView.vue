@@ -10,7 +10,6 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
@@ -395,32 +394,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="sibling-space-y-4">
-    <!-- Top Breadcrumb & Status summary -->
-    <PageBreadcrumb
-      :crumbs="[t('tickets.breadcrumb.0'), t('tickets.admin.title')]"
-    >
-      <template #action>
-        <div class="flex items-center gap-2.5">
-          <span class="hidden text-xs text-[var(--text-tertiary)] sm:inline">
-            {{ t('tickets.admin.queueSummary', ticketQueue.summary) }}
-          </span>
-          <IconButton
-            :label="t('common.refresh')"
-            :disabled="queueLoading"
-            @click="loadQueue"
-          >
-            <RefreshCw
-              :size="15"
-              :class="{ 'animate-spin': queueLoading }"
-              aria-hidden="true"
-            />
-          </IconButton>
-        </div>
-      </template>
-    </PageBreadcrumb>
-
     <div
-      class="flex min-h-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:h-[calc(100dvh-13.5rem)] lg:min-h-[580px] lg:overflow-hidden"
+      class="flex min-h-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:h-[calc(100dvh-9.5rem)] lg:min-h-[580px] lg:overflow-hidden"
       data-handdrawn="surface"
     >
       <aside
@@ -436,10 +411,21 @@ onBeforeUnmount(() => {
               >
                 {{ t('tickets.admin.queue') }}
               </h1>
-              <p class="text-xs text-[var(--text-tertiary)]">
+              <p class="text-xs text-[var(--text-tertiary)]" aria-live="polite">
                 {{ t('tickets.admin.queueSummary', ticketQueue.summary) }}
               </p>
             </div>
+            <IconButton
+              :label="t('common.refresh')"
+              :disabled="queueLoading"
+              @click="loadQueue"
+            >
+              <RefreshCw
+                :size="15"
+                :class="{ 'animate-spin': queueLoading }"
+                aria-hidden="true"
+              />
+            </IconButton>
           </div>
 
           <div

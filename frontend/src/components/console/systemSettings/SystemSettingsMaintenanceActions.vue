@@ -299,7 +299,7 @@ onMounted(loadStats)
           {{ t('systemSettings.maintenance.cacheEntries') }}
         </div>
         <div
-          class="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-xl text-[var(--text-primary)]"
         >
           {{ affinityStats.total }}
         </div>
@@ -309,7 +309,7 @@ onMounted(loadStats)
           {{ t('systemSettings.maintenance.unknownEntries') }}
         </div>
         <div
-          class="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-xl text-[var(--text-primary)]"
         >
           {{ affinityStats.unknown }}
         </div>
@@ -319,7 +319,7 @@ onMounted(loadStats)
           {{ t('systemSettings.maintenance.cacheAlgorithm') }}
         </div>
         <div
-          class="mt-1 font-mono text-base font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-base text-[var(--text-primary)]"
         >
           {{ affinityStats.cache_algo || '—' }}
         </div>
@@ -335,7 +335,7 @@ onMounted(loadStats)
           {{ t('systemSettings.maintenance.diskCache') }}
         </div>
         <div
-          class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-lg text-[var(--text-primary)]"
         >
           {{
             formatBytes(
@@ -349,7 +349,7 @@ onMounted(loadStats)
           {{ t('systemSettings.maintenance.memory') }}
         </div>
         <div
-          class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-lg text-[var(--text-primary)]"
         >
           {{ formatBytes(performanceStats.memory_stats.alloc) }}
         </div>
@@ -359,7 +359,7 @@ onMounted(loadStats)
           Goroutine
         </div>
         <div
-          class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-lg text-[var(--text-primary)]"
         >
           {{ performanceStats.memory_stats.num_goroutine }}
         </div>
@@ -377,7 +377,7 @@ onMounted(loadStats)
         </p>
         <div
           v-else
-          class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-lg text-[var(--text-primary)]"
         >
           {{ formatBytes(logFiles?.total_size) }}
         </div>

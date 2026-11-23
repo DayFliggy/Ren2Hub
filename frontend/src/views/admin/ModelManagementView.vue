@@ -21,7 +21,6 @@ import { metadataApi, type ModelVendor } from '@/api/adminManagement'
 import ActionMenu from '@/components/common/ActionMenu.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import MetadataSyncDialog from '@/components/admin/MetadataSyncDialog.vue'
 import MissingModelsDialog from '@/components/admin/MissingModelsDialog.vue'
 import ModelMetadataDrawer from '@/components/admin/ModelMetadataDrawer.vue'
@@ -44,7 +43,6 @@ const ModelPricingView = defineAsyncComponent(
 const props = defineProps<{ section: 'metadata' | 'vendors' | 'pricing' }>()
 // Pricing header text lives in PricingActionBar's own message scope.
 const { t } = useI18n({ useScope: 'local', messages: modelMetadataMessages })
-const { t: tGlobal } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -78,13 +76,6 @@ watch(
   }
 )
 
-const crumb = computed(() =>
-  props.section === 'vendors'
-    ? t('vendorManagement')
-    : props.section === 'pricing'
-      ? t('pricingManagement')
-      : t('modelManagement')
-)
 const tabs = computed(() => [
   { key: 'metadata', label: t('models') },
   { key: 'vendors', label: t('vendors') },
@@ -153,46 +144,49 @@ onMounted(loadVendors)
 </script>
 <template>
   <div class="model-management-page">
-    <PageBreadcrumb :crumbs="[tGlobal('nav.groupAdmin'), crumb]">
-      <template #action>
-        <div
-          v-if="section === 'metadata'"
-          class="flex flex-wrap items-center gap-2"
-        >
-          <ConsoleButton variant="secondary" size="sm" @click="syncOpen = true">
-            {{ t('syncMetadata') }}
-          </ConsoleButton>
-          <ConsoleButton size="sm" @click="openDrawer(null)">
-            <Plus :size="14" aria-hidden="true" />{{ t('addModel') }}
-          </ConsoleButton>
-          <ActionMenu
-            :items="moreItems"
-            :label="t('openMenu')"
-            variant="outline"
-            @select="selectMore"
-          />
-        </div>
-        <ConsoleButton
-          v-else-if="section === 'vendors'"
-          size="sm"
-          @click="vendorsSection?.openCreate()"
-        >
-          <Plus :size="14" aria-hidden="true" />{{ t('addVendor') }}
-        </ConsoleButton>
-        <PricingActionBar
-          v-else-if="section === 'pricing' && pricingBarState"
-          :state="pricingBarState"
-        />
-      </template>
-    </PageBreadcrumb>
-    <ConsoleTabs
-      :model-value="section"
-      :items="tabs"
-      panel-id="model-management-panel"
+    <!-- Section tabs lead the page; the section's actions share their row. -->
+    <div
+      class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
       :class="section === 'pricing' ? 'mb-3' : 'mb-5'"
-      :aria-label="t('sections')"
-      @update:model-value="switchSection"
-    />
+      data-model-management-toolbar
+    >
+      <ConsoleTabs
+        :model-value="section"
+        :items="tabs"
+        panel-id="model-management-panel"
+        :aria-label="t('sections')"
+        @update:model-value="switchSection"
+      />
+      <div
+        v-if="section === 'metadata'"
+        class="flex flex-wrap items-center gap-2"
+      >
+        <ConsoleButton variant="secondary" size="sm" @click="syncOpen = true">
+          {{ t('syncMetadata') }}
+        </ConsoleButton>
+        <ConsoleButton size="sm" @click="openDrawer(null)">
+          <Plus :size="14" aria-hidden="true" />{{ t('addModel') }}
+        </ConsoleButton>
+        <ActionMenu
+          :items="moreItems"
+          :label="t('openMenu')"
+          variant="outline"
+          @select="selectMore"
+        />
+      </div>
+      <ConsoleButton
+        v-else-if="section === 'vendors'"
+        size="sm"
+        class="self-start lg:self-auto"
+        @click="vendorsSection?.openCreate()"
+      >
+        <Plus :size="14" aria-hidden="true" />{{ t('addVendor') }}
+      </ConsoleButton>
+      <PricingActionBar
+        v-else-if="section === 'pricing' && pricingBarState"
+        :state="pricingBarState"
+      />
+    </div>
     <div
       v-if="vendorRequest.error.value && section !== 'pricing'"
       role="alert"
