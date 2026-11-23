@@ -23,6 +23,8 @@ from run import environment, go_result, playwright_cases, playwright_result, ui_
 COUNTER = ['bind', '/proc/1/net/dev', '/host/proc/net/dev', True]
 COUNTER_MOUNT = {'Type': 'bind', 'Source': '/proc/1/net/dev', 'Destination': '/host/proc/net/dev', 'RW': False}
 CA_MOUNT = {'Type': 'bind', 'Source': '/run/candidate/server.crt', 'Destination': '/etc/ren2hub/mock-ca.crt', 'RW': False}
+ATTACHMENTS = 'ren2hub-candidate-local-test-attachments'
+ATTACHMENT_MOUNT = {'Type': 'volume', 'Name': ATTACHMENTS, 'Destination': '/app/ticket-attachments', 'RW': True}
 
 
 class RunnerContractTests(unittest.TestCase):
@@ -517,13 +519,18 @@ class HostTrafficCandidateTests(unittest.TestCase):
         runner.simulator_image = 'simulator-image' if simulator_address else None
         runner.report = {'source': {'candidate_sha': 'a' * 40, 'working_tree_sha256': 'b' * 64}}
         runner.verify_build_identities = lambda: None
-        started = {}
+        started, volumes = {}, []
         labels = {'org.opencontainers.image.revision': 'a' * 40, 'org.opencontainers.image.version': 'a' * 40,
                   'io.ren2hub.source-sha256': 'b' * 64}
 
         def docker(*argv, **kwargs):
             if argv[:2] == ('image', 'inspect'):
                 return SimpleNamespace(stdout=json.dumps([{'Id': argv[2], 'Config': {'Labels': labels}}]).encode())
+            if argv[:2] == ('volume', 'create'):
+                volumes.append(argv[-1])
+                return SimpleNamespace(stdout=(argv[-1] + '\n').encode())
+            if argv[:2] == ('volume', 'inspect'):
+                return SimpleNamespace(stdout=json.dumps([{'Name': argv[2], 'Labels': {candidate.LABEL: runner.run_id}}]).encode())
             self.assertEqual(argv[:2], ('network', 'create'))
             return SimpleNamespace(stdout=b'e' * 64 + b'\n')
 
@@ -538,8 +545,8 @@ class HostTrafficCandidateTests(unittest.TestCase):
             mounts = []
             for spec in (options[index + 1] for index, value in enumerate(options) if value == '--mount'):
                 fields = dict(part.partition('=')[::2] for part in spec.split(','))
-                mounts.append({'Type': fields['type'], 'Source': fields['src'], 'Destination': fields['dst'],
-                               'RW': 'readonly' not in fields})
+                mounts.append({'Type': fields['type'], 'Source': fields['src'], 'Name': fields['src'],
+                               'Destination': fields['dst'], 'RW': 'readonly' not in fields})
             return {'Mounts': mounts}
 
         runner.docker, runner.start, runner.owned = docker, start, owned
@@ -561,6 +568,11 @@ class HostTrafficCandidateTests(unittest.TestCase):
         env = dict(line.split('=', 1) for line in (root / 'private/app.env').read_text().splitlines())
         with patch.dict('os.environ', {'REN2HUB_ACCEPTANCE_TARGET': str(root / 'private/target.json')}):
             target = acceptance_target()
+        # Without an upgrade source the app still gets the run-owned attachment volume, never tmpfs.
+        self.assertEqual(volumes, [runner.prefix + '-attachments'])
+        self.assertEqual((target['attachment_volume'], target['upgrade']), (volumes[0], False))
+        require_candidate_mounts('app', owned('app'), target)
+        self.assertFalse(any(value.startswith('/app/ticket-attachments') for value in started['app']))
         return started['app'], env, target, runner.report['isolation']['traffic']
 
     def test_simulator_proxy_bypass_uses_only_the_verified_owned_address(self):
@@ -630,19 +642,21 @@ class HostTrafficCandidateTests(unittest.TestCase):
             runner.assert_not_called()
 
     def test_isolation_accepts_counter_mount_only_when_configured(self):
-        host, listener = {'ca_path': CA_MOUNT['Source'], 'traffic_host_interface': 'eth0'}, {'ca_path': CA_MOUNT['Source'], 'traffic_host_interface': ''}
+        host = {'ca_path': CA_MOUNT['Source'], 'traffic_host_interface': 'eth0', 'attachment_volume': ATTACHMENTS}
+        listener = {**host, 'traffic_host_interface': ''}
         tmpfs = {'Type': 'tmpfs', 'Source': '', 'Destination': '/tmp', 'RW': True}
-        require_candidate_mounts('app', {'Mounts': [CA_MOUNT, COUNTER_MOUNT, tmpfs]}, host)
-        require_candidate_mounts('app', {'Mounts': [CA_MOUNT, tmpfs]}, listener)
+        base = [CA_MOUNT, ATTACHMENT_MOUNT]
+        require_candidate_mounts('app', {'Mounts': [*base, COUNTER_MOUNT, tmpfs]}, host)
+        require_candidate_mounts('app', {'Mounts': [*base, tmpfs]}, listener)
         rejected = (
-            ('listener_has_counter', [CA_MOUNT, COUNTER_MOUNT], listener, 'candidate_unexpected_bind_mount'),
-            ('wrong_source', [CA_MOUNT, {**COUNTER_MOUNT, 'Source': '/proc/self/net/dev'}], host, 'candidate_unexpected_bind_mount'),
-            ('whole_proc_net', [CA_MOUNT, {**COUNTER_MOUNT, 'Source': '/proc/1/net', 'Destination': '/host/proc/net'}], host, 'candidate_unexpected_bind_mount'),
-            ('writable', [CA_MOUNT, {**COUNTER_MOUNT, 'RW': True}], host, 'candidate_unexpected_bind_mount'),
-            ('extra_bind', [CA_MOUNT, COUNTER_MOUNT, {**CA_MOUNT, 'Destination': '/data'}], host, 'candidate_unexpected_bind_mount'),
-            ('second_counter', [CA_MOUNT, COUNTER_MOUNT, COUNTER_MOUNT], host, 'candidate_traffic_counter_mount_mismatch'),
-            ('missing_counter', [CA_MOUNT], host, 'candidate_traffic_counter_mount_mismatch'),
-            ('writable_ca', [{**CA_MOUNT, 'RW': True}, COUNTER_MOUNT], host, 'candidate_unexpected_bind_mount'),
+            ('listener_has_counter', [*base, COUNTER_MOUNT], listener, 'candidate_unexpected_bind_mount'),
+            ('wrong_source', [*base, {**COUNTER_MOUNT, 'Source': '/proc/self/net/dev'}], host, 'candidate_unexpected_bind_mount'),
+            ('whole_proc_net', [*base, {**COUNTER_MOUNT, 'Source': '/proc/1/net', 'Destination': '/host/proc/net'}], host, 'candidate_unexpected_bind_mount'),
+            ('writable', [*base, {**COUNTER_MOUNT, 'RW': True}], host, 'candidate_unexpected_bind_mount'),
+            ('extra_bind', [*base, COUNTER_MOUNT, {**CA_MOUNT, 'Destination': '/data'}], host, 'candidate_unexpected_bind_mount'),
+            ('second_counter', [*base, COUNTER_MOUNT, COUNTER_MOUNT], host, 'candidate_traffic_counter_mount_mismatch'),
+            ('missing_counter', base, host, 'candidate_traffic_counter_mount_mismatch'),
+            ('writable_ca', [{**CA_MOUNT, 'RW': True}, ATTACHMENT_MOUNT, COUNTER_MOUNT], host, 'candidate_unexpected_bind_mount'),
         )
         for name, mounts, target, code in rejected:
             with self.subTest(name), self.assertRaisesRegex(RequirementError, code):
@@ -862,10 +876,10 @@ class UpgradeCandidateTests(unittest.TestCase):
                                        ('upgrade-resume-p', True, None)):
             with self.subTest(stage=stage, upgrade=upgrade), tempfile.TemporaryDirectory() as directory:
                 configuration = {'private': directory, 'output': directory, 'stage': stage, 'revision': 'b' * 40}
-                target = {'attachment_volume': 'owned-volume'} if upgrade else {}
+                if upgrade:
+                    (Path(directory) / 'upgrade-source-target.json').write_text('{}')
                 with patch('contracts.worker.sys.stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(configuration).encode()))), \
                         patch('contracts.worker.configure_target'), \
-                        patch('contracts.worker.acceptance_target', return_value=target), \
                         patch('contracts.gateway.run_group', return_value={'success': True}) as group, \
                         patch('contracts.plugin.run_plugin', return_value={'success': True}) as plugin, \
                         self.assertRaises(SystemExit) as exited:
@@ -881,13 +895,13 @@ class UpgradeCandidateTests(unittest.TestCase):
                     self.assertTrue(args.resume_state)
                     self.assertEqual(args.state.name, 'upgrade-plugin-p.json')
 
-    def test_upgrade_accepts_only_its_one_attachment_volume(self):
-        target = {'ca_path': CA_MOUNT['Source'], 'traffic_host_interface': '',
-                  'attachment_volume': 'ren2hub-candidate-local-test-attachments'}
-        volume = {'Type': 'volume', 'Name': target['attachment_volume'],
-                  'Destination': '/app/ticket-attachments', 'RW': True}
+    def test_app_accepts_only_its_one_attachment_volume(self):
+        # Every candidate, with or without an upgrade source, stores uploads on its own volume.
+        target = {'ca_path': CA_MOUNT['Source'], 'traffic_host_interface': '', 'attachment_volume': ATTACHMENTS}
+        volume = ATTACHMENT_MOUNT
         require_candidate_mounts('app', {'Mounts': [CA_MOUNT, volume]}, target)
-        for mounts in ([CA_MOUNT], [volume, volume], [{**volume, 'Name': 'production'}],
+        tmpfs = {'Type': 'tmpfs', 'Source': '', 'Destination': '/app/ticket-attachments', 'RW': True}
+        for mounts in ([CA_MOUNT], [CA_MOUNT, tmpfs], [volume, volume], [{**volume, 'Name': 'production'}],
                        [{**volume, 'Destination': '/app'}], [{**volume, 'RW': False}]):
             with self.subTest(mounts=mounts), self.assertRaises(RequirementError):
                 require_candidate_mounts('app', {'Mounts': mounts}, target)

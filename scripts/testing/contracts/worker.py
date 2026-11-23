@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 
-from .common import RequirementError, acceptance_target, atomic_private, configure_target, require
+from .common import RequirementError, atomic_private, configure_target, require
 
 
 def execute():
@@ -22,7 +22,7 @@ def execute():
     quantity = stage.rsplit('-', 1)[-1] if upgrade_plugin else 'seconds'
     after = stage == 'plugin-after' or stage.startswith('upgrade-after-')
     attachment_phase = 'capture' if stage == 'upgrade-management' else (
-        'verify' if stage == 'upstream_sync' and 'attachment_volume' in acceptance_target() else None)
+        'verify' if stage == 'upstream_sync' and (private / 'upgrade-source-target.json').exists() else None)
     args = SimpleNamespace(revision=configuration['revision'], report=output / (stage + '.json'),
                            credentials=credentials if credentials.exists() else None,
                            credentials_output=credentials, mock_tls_cert=private / 'server.crt',

@@ -488,14 +488,13 @@ class Candidate:
             **({'TRAFFIC_HOST_INTERFACE': self.traffic_interface} if self.traffic_interface else {})})
         # 默认不挂载也不设网卡名，应用使用主监听器计数；--mount 的源缺失时容器创建直接失败。
         counter = ('--mount', 'type=bind,src=' + COUNTER_SOURCE + ',dst=' + COUNTER_TARGET + ',readonly') if self.traffic_interface else ()
-        storage = ('--tmpfs', '/app/ticket-attachments:rw,size=128m')
-        if getattr(self, 'previous_image', None):
-            self.attachment_volume = self.prefix + '-attachments'
-            self.docker('volume', 'create', '--label', LABEL + '=' + self.run_id, self.attachment_volume)
-            volume = json.loads(self.docker('volume', 'inspect', self.attachment_volume).stdout)[0]
-            require(volume['Name'] == self.attachment_volume and volume.get('Labels', {}).get(LABEL) == self.run_id,
-                    'candidate_attachment_volume_identity_mismatch')
-            storage = ('--mount', 'type=volume,src=' + self.attachment_volume + ',dst=/app/ticket-attachments')
+        # Ticket uploads require 5 GiB free after the write, so attachments use a run-owned volume on host disk.
+        self.attachment_volume = self.prefix + '-attachments'
+        self.docker('volume', 'create', '--label', LABEL + '=' + self.run_id, self.attachment_volume)
+        volume = json.loads(self.docker('volume', 'inspect', self.attachment_volume).stdout)[0]
+        require(volume['Name'] == self.attachment_volume and volume.get('Labels', {}).get(LABEL) == self.run_id,
+                'candidate_attachment_volume_identity_mismatch')
+        storage = ('--mount', 'type=volume,src=' + self.attachment_volume + ',dst=/app/ticket-attachments')
         self.app_options = ('--network', 'container:' + self.containers['mock'],
                    '--env-file', str(app_env),
                    '--mount', 'type=bind,src=' + str(certificate) + ',dst=/etc/ren2hub/mock-ca.crt,readonly', *counter,
@@ -509,8 +508,7 @@ class Candidate:
                       redis_host='redis:6379', network=self.network, network_id=self.network_id, run_id=self.run_id,
                       container_ids=dict(self.containers), image_id=self.active_image_id, revision=self.active_revision, ca_path=str(certificate), network_guard=self.network_guard,
                       traffic_host_interface=self.traffic_interface)
-        if getattr(self, 'attachment_volume', None):
-            target['attachment_volume'] = self.attachment_volume
+        target.update(attachment_volume=self.attachment_volume, upgrade=bool(getattr(self, 'previous_image', None)))
         if getattr(self, 'simulator_image', None):
             from simulator_support import target as simulator_target
             target['simulator'] = simulator_target(self)
@@ -524,7 +522,7 @@ class Candidate:
                    'mounts': counter_mounts(self.owned('app'))}
         self.report['isolation'] = {'network_id': self.network_id, 'internal': True,
                                     'container_ids': dict(self.containers), 'published_ports': [],
-                                    'storage': 'tmpfs_and_owned_attachment_volume' if getattr(self, 'attachment_volume', None) else 'tmpfs',
+                                    'storage': 'tmpfs_and_owned_attachment_volume',
                                     'network_guard': self.network_guard,
                                     'traffic': traffic}
 
