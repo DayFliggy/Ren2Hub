@@ -310,3 +310,147 @@ for (const [width, theme] of [
     await expect(dialog).toHaveCount(0)
   })
 }
+
+for (const [theme, width] of [
+  ['light', 1440],
+  ['dark', 1440],
+  ['dark', 390],
+] as const) {
+  test(`single-line channel overflow rail and master-detail workbench ${theme} ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await configureStablePage(page, { theme })
+    await page.setViewportSize({ width, height: 900 })
+    const fixture = createModelMarketFixture()
+    fixture.models[0]!.tags = '推理,视觉,代码,长上下文'
+    for (const [id, name, ratio] of [
+      [14, '低价聚合', '0.4'],
+      [15, '极速直连', '0.8'],
+      [16, '海外备用', '1.2'],
+    ] as const) {
+      fixture.channels.push({
+        ...fixture.channels[0]!,
+        id,
+        name,
+        channel_ratio: ratio,
+      })
+      fixture.offers.push({
+        ...fixture.offers.find(
+          (offer) => offer.model_id === 'gpt-4.1' && offer.channel_id === 11
+        )!,
+        channel_id: id,
+        channel_ratio: ratio,
+        pricing_values: {
+          input: String(Number((2.5 * Number(ratio)).toFixed(4))),
+          output: String(Number((10 * Number(ratio)).toFixed(4))),
+        },
+      })
+    }
+    const baseTs = 1_785_038_400
+    const hourlySeries = Array.from({ length: 12 }, (_, index) => ({
+      ts: baseTs + index * 3600,
+      avg_ttft_ms: 180 + index * 12,
+      avg_latency_ms: 720 + index * 25,
+      success_rate: index === 7 ? 96.5 : 99.6,
+      avg_tps: 45.2 - index * 0.4,
+    }))
+    await page.route('**/api/user/model-catalog', (route) =>
+      route.fulfill({ json: { success: true, data: fixture } })
+    )
+    await page.route('**/api/perf-metrics/summary**', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            summary: { avg_latency_ms: 820, success_rate: 99.3, avg_tps: 43.1 },
+            window_start: baseTs,
+            window_end: baseTs + 86_400,
+            models: [
+              {
+                model_name: 'gpt-4.1',
+                avg_latency_ms: 820,
+                success_rate: 99.3,
+                avg_tps: 43.1,
+                recent_success_series: hourlySeries.map(
+                  ({ ts, success_rate }) => ({ ts, success_rate })
+                ),
+              },
+            ],
+          },
+        },
+      })
+    )
+    await page.route('**/api/perf-metrics?*', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            model_name: 'gpt-4.1',
+            series_schema: 'v1',
+            summary: { avg_latency_ms: 820, success_rate: 99.3, avg_tps: 43.1 },
+            series: hourlySeries,
+            window_start: baseTs,
+            window_end: baseTs + 86_400,
+          },
+        },
+      })
+    )
+
+    await page.goto('/models')
+    await waitForStablePage(page)
+    const card = page.locator('[data-model-card][data-model-name="gpt-4.1"]')
+    const rail = card.locator('[data-channel-rail]')
+    await expect(rail).toBeVisible()
+    // All visible chips and overflow trigger stay on one horizontal line.
+    const chips = rail.locator('[data-channel-chip]')
+    const chipCount = await chips.count()
+    expect(chipCount).toBeGreaterThanOrEqual(1)
+    expect(chipCount).toBeLessThanOrEqual(3)
+    const firstBox = (await chips.first().boundingBox())!
+    for (let i = 1; i < chipCount; i++) {
+      const box = (await chips.nth(i).boundingBox())!
+      expect(Math.abs(box.y - firstBox.y)).toBeLessThanOrEqual(2)
+    }
+    const overflow = rail.locator('[data-channel-overflow]')
+    await expect(overflow).toBeVisible()
+    const overflowBox = (await overflow.boundingBox())!
+    expect(Math.abs(overflowBox.y - firstBox.y)).toBeLessThanOrEqual(2)
+
+    await overflow.click()
+    const menu = card.locator('[data-channel-overflow-menu]')
+    await expect(menu).toBeVisible()
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`mode-a-overflow-${theme}-${width}.png`),
+    })
+    await menu.locator('[data-channel-overflow-item="16"]').click()
+    await expect(menu).toHaveCount(0)
+    await expect(card.locator('[data-channel-quote]')).toContainText('海外备用')
+    await expect(card.locator('[data-channel-quote]')).toContainText('$3.000')
+    await assertNoHorizontalOverflow(page)
+
+    await card
+      .getByRole('button', {
+        name: '查看 gpt-4.1 的模型详情与渠道报价',
+        exact: true,
+      })
+      .click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.locator('[data-model-statistics-series] button')
+    ).toHaveCount(12)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`detail-quote-${theme}-${width}.png`),
+    })
+    await dialog.getByRole('tab', { name: '接入', exact: true }).click()
+    await expect(dialog).toContainText('https://api.example.test')
+    await expect(dialog).toContainText('/v1/chat/completions')
+    await expect(dialog).toContainText('curl ')
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`detail-integrate-${theme}-${width}.png`),
+    })
+    await assertNoHorizontalOverflow(page)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+  })
+}

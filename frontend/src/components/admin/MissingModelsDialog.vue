@@ -16,8 +16,16 @@ import { modelMetadataSyncMessages } from '@/i18n/modelMetadataSync'
 // Upstream DEFAULT_PAGE_SIZE; pagination is client-side over the full list.
 const PAGE_SIZE = 20
 
-const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: []; create: [name: string]; sync: [] }>()
+const props = withDefaults(
+  defineProps<{ open: boolean; canConfigurePricing?: boolean }>(),
+  { canConfigurePricing: false }
+)
+const emit = defineEmits<{
+  close: []
+  create: [name: string]
+  pricing: [name: string]
+  sync: []
+}>()
 const { t } = useI18n({
   useScope: 'local',
   messages: modelMetadataSyncMessages,
@@ -174,13 +182,19 @@ async function copyName(name: string) {
                 }}</span>
               </StatusChip>
             </button>
-            <ConsoleButton
-              size="sm"
-              class="shrink-0"
-              @click="emit('create', name)"
-            >
-              <Plus :size="16" aria-hidden="true" />{{ t('configure') }}
-            </ConsoleButton>
+            <div class="flex shrink-0 items-center gap-1.5">
+              <ConsoleButton
+                v-if="canConfigurePricing"
+                variant="secondary"
+                size="sm"
+                @click="emit('pricing', name)"
+              >
+                {{ t('configurePricing') }}
+              </ConsoleButton>
+              <ConsoleButton size="sm" @click="emit('create', name)">
+                <Plus :size="16" aria-hidden="true" />{{ t('configure') }}
+              </ConsoleButton>
+            </div>
           </li>
         </ul>
         <div

@@ -75,6 +75,19 @@ export function projectMarketPricing(
     endpointTypes: raw.supported_endpoint_types,
   }
 }
+export function parseModelTags(raw?: string): string[] {
+  if (!raw) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const part of raw.split(',')) {
+    const tag = part.trim()
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    result.push(tag)
+  }
+  return result
+}
+
 export function buildModelMarketCatalog(
   response: ModelCatalog
 ): ModelMarketCatalog {
@@ -91,6 +104,7 @@ export function buildModelMarketCatalog(
       name: model.model_name,
       description: model.description,
       icon: model.icon,
+      tags: parseModelTags(model.tags),
       vendor:
         response.vendors.find((vendor) => vendor.id === model.vendor_id)
           ?.name || PLATFORM_VENDOR,
@@ -99,10 +113,9 @@ export function buildModelMarketCatalog(
       endpoints: model.supported_endpoint_types.map((type) => ({
         type,
         path:
-          response.supported_endpoints[type]?.path.replaceAll(
-            '{model}',
-            model.model_name
-          ) ?? '',
+          response.supported_endpoints[type]?.path
+            .replaceAll('{model}', model.model_name)
+            .replaceAll(':model', model.model_name) ?? '',
         method: response.supported_endpoints[type]?.method ?? '',
       })),
       baselines: [baseline],
@@ -126,6 +139,7 @@ export function buildModelMarketCatalog(
   return {
     models,
     channels,
+    serverAddress: response.server_address,
     telemetry: {
       status: 'unavailable',
       reason: 'channel_metrics_not_collected',

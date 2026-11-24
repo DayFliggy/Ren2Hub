@@ -108,7 +108,7 @@ describe('expression editor drafts', () => {
     await button(wrapper, 'Add multiplier rule').trigger('click')
     await field(wrapper, '.price-rule', 'Field path').setValue('service_tier')
     expect(wrapper.vm.dirty()).toBe(true)
-    await button(wrapper, 'Save model prices').trigger('click')
+    await button(wrapper, 'Save all changes').trigger('click')
     expect(wrapper.emitted('save')).toBeUndefined()
     expect(
       wrapper.get('.pricing-editor-scroll > [role="alert"]').text()
@@ -250,7 +250,7 @@ describe('manual model price editor', () => {
     const save = () =>
       wrapper
         .findAll('button')
-        .find((button) => button.text() === 'Save model prices')!
+        .find((button) => button.text() === 'Save all changes')!
     // An empty expression is not free, so nothing is saved.
     await save().trigger('click')
     expect(wrapper.emitted('save')).toBeUndefined()
@@ -725,6 +725,38 @@ describe('editor drafts from the shared pricing parts', () => {
     expect(wrapper.get('.price-expression [role="alert"]').text()).toContain(
       '请输入有限的非负价格。'
     )
+    wrapper.unmount()
+  })
+  it('shows human-readable labels for price and condition variables while keeping raw values', async () => {
+    const wrapper = setup(
+      tiered(
+        '(len > 100000) ? tier("long", p * 4 + c * 8) : tier("base", p * 2 + cr * 0.5)'
+      )
+    )
+    const conditionOptions = wrapper
+      .findAll('.price-condition select')[1]!
+      .findAll('option')
+    expect(
+      conditionOptions.find((opt) => opt.attributes('value') === 'len')?.text()
+    ).toBe('Context length (len)')
+    const priceOptions = wrapper
+      .findAll('.price-tier-line select')[0]!
+      .findAll('option')
+    expect(
+      priceOptions.find((opt) => opt.attributes('value') === 'cr')?.text()
+    ).toBe('Cache read (cr)')
+    wrapper.unmount()
+  })
+  it('emits openMetadata when the metadata shortcut is enabled and clicked', async () => {
+    const wrapper = mount(ModelPricingEditor, {
+      props: { modelName: 'test-model', pricing: {}, canOpenMetadata: true },
+      global: {
+        plugins,
+        stubs: { ConsoleModal: { template: '<div><slot /></div>' } },
+      },
+    })
+    await button(wrapper as EditorWrapper, 'View metadata').trigger('click')
+    expect(wrapper.emitted('openMetadata')).toEqual([['test-model']])
     wrapper.unmount()
   })
 })

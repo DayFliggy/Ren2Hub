@@ -192,7 +192,7 @@ for (const [theme, width] of [
       path: testInfo.outputPath('plugin-pricing.png'),
     })
     const editorSave = editor.getByRole('button', {
-      name: 'Save model prices',
+      name: 'Save all changes',
       exact: true,
     })
     // Desktop pins the editor footer, so Save is reachable without
@@ -401,7 +401,7 @@ for (const [theme, width] of [
       fullPage: true,
     })
     await editor
-      .getByRole('button', { name: 'Save model prices', exact: true })
+      .getByRole('button', { name: 'Save all changes', exact: true })
       .click()
     await confirmPriceChanges(page)
     await expect(
@@ -485,7 +485,7 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
   const editor = page.locator('.pricing-editor')
   await editor.getByLabel('Model ID', { exact: true }).fill('free-model')
   await editor
-    .getByRole('button', { name: 'Save model prices', exact: true })
+    .getByRole('button', { name: 'Save all changes', exact: true })
     .click()
   await expect(editor.getByRole('alert')).toContainText('explicitly enter 0')
   expect(saves).toBe(0)
@@ -493,7 +493,7 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
     .getByRole('textbox', { name: 'Expression source', exact: true })
     .fill('0')
   await editor
-    .getByRole('button', { name: 'Save model prices', exact: true })
+    .getByRole('button', { name: 'Save all changes', exact: true })
     .click()
   await confirmPriceChanges(page)
   await expect(page.getByRole('alert').first()).toContainText(
@@ -619,7 +619,7 @@ for (const [theme, width] of [
       .getByRole('textbox', { name: 'Expression source', exact: true })
       .fill('u("seconds") * 0.125')
     await editor
-      .getByRole('button', { name: 'Save model prices', exact: true })
+      .getByRole('button', { name: 'Save all changes', exact: true })
       .click()
     await confirmPriceChanges(page)
     await expect(

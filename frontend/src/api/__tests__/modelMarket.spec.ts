@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import { getModelMarket, parseModelMarket } from '@/api/modelMarket'
+import { parsePerfMetricsDetail } from '@/api/liveContracts'
 import { modelCatalogFixture } from './modelCatalogFixture'
 vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
 beforeEach(() => vi.resetAllMocks())
@@ -103,5 +104,37 @@ describe('native model catalog', () => {
     const input = modelCatalogFixture()
     mutate(input)
     expect(() => parseModelMarket(input)).toThrow('Invalid API response')
+  })
+  it('preserves optional model tags and parses hourly perf-metrics series', () => {
+    const input = modelCatalogFixture()
+    input.models[0]!.tags = 'reasoning, vision'
+    expect(parseModelMarket(input).models[0]!.tags).toBe('reasoning, vision')
+
+    const detail = parsePerfMetricsDetail({
+      model_name: 'fixture-model',
+      summary: { avg_latency_ms: 420, success_rate: 99.4, avg_tps: 38.5 },
+      series: [
+        {
+          ts: 1785121200,
+          avg_ttft_ms: 150,
+          avg_latency_ms: 420,
+          success_rate: 99.4,
+          avg_tps: 38.5,
+        },
+      ],
+      window_start: 1785038400,
+      window_end: 1785124800,
+    })
+    expect(detail.series).toHaveLength(1)
+    expect(detail.series[0]!.avg_ttft_ms).toBe(150)
+    expect(() =>
+      parsePerfMetricsDetail({
+        model_name: 'fixture-model',
+        summary: null,
+        series: [{ ts: 1, avg_latency_ms: 10, success_rate: 105, avg_tps: 1 }],
+        window_start: 0,
+        window_end: 10,
+      })
+    ).toThrow('Invalid API response')
   })
 })

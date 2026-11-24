@@ -5,9 +5,9 @@ import MissingModelsDialog from '../MissingModelsDialog.vue'
 
 const mocks = vi.hoisted(() => ({ missing: vi.fn() }))
 vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
-async function mountDialog() {
+async function mountDialog(canConfigurePricing = false) {
   const wrapper = mount(MissingModelsDialog, {
-    props: { open: true },
+    props: { open: true, canConfigurePricing },
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: {} })],
       stubs: {
@@ -79,5 +79,21 @@ describe('missing models dialog', () => {
     expect(wrapper.text()).toContain('No missing models found.')
     expect(wrapper.find('input[type="search"]').exists()).toBe(false)
     wrapper.unmount()
+  })
+  it('offers a pricing shortcut only when canConfigurePricing is enabled', async () => {
+    const withoutPricing = await mountDialog(false)
+    expect(withoutPricing.text()).not.toContain('Configure pricing')
+    withoutPricing.unmount()
+
+    const withPricing = await mountDialog(true)
+    const row = withPricing
+      .findAll('li')
+      .find((item) => item.text().includes('model-2'))!
+    await row
+      .findAll('button')
+      .find((item) => item.text().includes('Configure pricing'))!
+      .trigger('click')
+    expect(withPricing.emitted('pricing')).toEqual([['model-2']])
+    withPricing.unmount()
   })
 })

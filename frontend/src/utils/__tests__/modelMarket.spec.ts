@@ -4,6 +4,7 @@ import {
   compareMarketOffers,
   formatMarketRatio,
   normalizeMarketView,
+  parseModelTags,
 } from '@/utils/modelMarket'
 import { modelCatalogFixture } from '@/api/__tests__/modelCatalogFixture'
 describe('native model catalog projection', () => {
@@ -40,5 +41,9 @@ describe('native model catalog projection', () => {
     )
     expect(normalizeMarketView('comparison')).toBe('comparison')
     expect(normalizeMarketView('old-grid')).toBe('models')
+    expect(parseModelTags(' reasoning, vision , , reasoning ')).toEqual([
+      'reasoning',
+      'vision',
+    ])
   })
 })

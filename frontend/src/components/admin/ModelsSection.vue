@@ -4,7 +4,15 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useStorage } from '@vueuse/core'
-import { AlertTriangle, Copy, Eye, EyeOff, Trash2, X } from 'lucide-vue-next'
+import {
+  AlertTriangle,
+  Coins,
+  Copy,
+  Eye,
+  EyeOff,
+  Trash2,
+  X,
+} from 'lucide-vue-next'
 import {
   metadataApi,
   type ModelMetadata,
@@ -25,6 +33,7 @@ import TablePagination from '@/components/common/TablePagination.vue'
 import { useAdminRequest } from '@/composables/useAdminRequest'
 import { useToast } from '@/composables/useToast'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
+import { useAuthStore } from '@/stores/auth'
 import ModelMetadataCell, {
   type ModelMetadataField,
 } from './ModelMetadataCell.vue'
@@ -35,6 +44,7 @@ const emit = defineEmits<{ edit: [id: number] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMetadataMessages })
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const toast = useToast()
 const { loading, error, run } = useAdminRequest()
 
@@ -240,11 +250,21 @@ async function mutate(
 }
 
 function rowAction(row: ModelMetadata, key: string) {
+  if (key === 'pricing') {
+    void router.push({
+      path: '/models/pricing',
+      query: { model: row.model_name },
+    })
+    return
+  }
   if (key === 'delete') deleteRows.value = [row]
   else void mutate([row], key as 'show' | 'hide')
 }
 function rowMenu(row: ModelMetadata) {
   return [
+    ...(auth.isRoot
+      ? [{ key: 'pricing', label: t('configurePricing'), icon: Coins }]
+      : []),
     row.status === 1
       ? { key: 'hide', label: t('hideFromSquare'), icon: EyeOff }
       : { key: 'show', label: t('showInSquare'), icon: Eye },

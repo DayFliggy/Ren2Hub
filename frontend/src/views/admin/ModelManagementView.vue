@@ -111,6 +111,10 @@ function createFromMissing(name: string) {
   missingOpen.value = false
   openDrawer(null, name)
 }
+function priceFromMissing(name: string) {
+  missingOpen.value = false
+  void router.push({ path: '/models/pricing', query: { model: name } })
+}
 function syncFromMissing() {
   missingOpen.value = false
   syncOpen.value = true
@@ -239,8 +243,10 @@ onMounted(loadVendors)
     />
     <MissingModelsDialog
       :open="missingOpen"
+      :can-configure-pricing="auth.isRoot"
       @close="missingOpen = false"
       @create="createFromMissing"
+      @pricing="priceFromMissing"
       @sync="syncFromMissing"
     />
     <!-- Prefill groups feed channel forms; nothing on this page reloads. -->

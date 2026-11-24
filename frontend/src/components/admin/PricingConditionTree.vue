@@ -11,7 +11,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 // Every edit emits a new condition; the document owner replaces its node.
 const props = defineProps<{ node: VisualCondition }>()
 const emit = defineEmits<{ change: [node: VisualCondition] }>()
-const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
+const { t, te } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const PROBES = ['p', 'c', 'len', 'hour', 'minute', 'weekday', 'month', 'day']
 const OPERATORS = ['<', '<=', '>', '>=', '==', '!='] as const
 function changeKind(event: Event) {
@@ -68,7 +68,9 @@ function replaceChild(index: number, child: VisualCondition) {
             })
           "
         >
-          <option v-for="probe in PROBES" :key="probe">{{ probe }}</option>
+          <option v-for="probe in PROBES" :key="probe" :value="probe">
+            {{ te(`condVar_${probe}`) ? t(`condVar_${probe}`) : probe }}
+          </option>
         </select></label
       >
       <label v-if="!['p', 'c', 'len'].includes(node.probe)" class="admin-field"

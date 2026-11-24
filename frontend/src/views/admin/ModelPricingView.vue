@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
@@ -63,6 +63,7 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
 })
 const { t, te } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const route = useRoute()
+const router = useRouter()
 // The page width is the only layout breakpoint: the list and editor columns
 // need 320px + 440px plus the gap, so a narrower page (a phone, or a tablet
 // beside the console sidebar) lists models alone and edits in a drawer.
@@ -389,6 +390,9 @@ function open(name: string) {
 function closeEditor() {
   if (commitOpen()) editing.value = null
 }
+function openMetadata(name: string) {
+  void router.push({ path: '/models/metadata', query: { filter: name } })
+}
 // Moving the editor between the card and the drawer mounts it again from the
 // page draft, so it moves only once its edit commits. An edit that does not
 // commit stays where it is, showing its error. A fixed edit stays too, so
@@ -581,9 +585,11 @@ onBeforeUnmount(() => {
         :site-currency="siteCurrency"
         :exchange-rate="exchangeRate"
         :issues="activeIssues"
+        can-open-metadata
         @update="updateDraft"
         @dirty="editorDirty = $event"
         @save="save"
+        @open-metadata="openMetadata"
       />
     </DefineEditor>
     <div v-if="!embedded" class="mb-3 flex justify-end">
@@ -658,11 +664,17 @@ onBeforeUnmount(() => {
           class="flex flex-wrap items-center gap-3 text-xs"
         >
           <PricingExposeToggle />
-          <ConsoleButton variant="ghost" size="sm" @click="clearOpen = true">
-            {{ t('clear') }}
-          </ConsoleButton>
           <ConsoleButton variant="secondary" size="sm" @click="switchMode">
             {{ t(mode === 'visual' ? 'json' : 'visual') }}
+          </ConsoleButton>
+          <span class="h-4 w-px bg-[var(--border-subtle)]" aria-hidden="true" />
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            class="pricing-clear-button"
+            @click="clearOpen = true"
+          >
+            {{ t('clear') }}
           </ConsoleButton>
         </div>
       </div>
@@ -1119,6 +1131,14 @@ button.pricing-model-name:hover {
   z-index: 1;
   /* Matches the hosting ConsoleCard's rounded-2xl bottom corners. */
   border-radius: 0 0 1rem 1rem;
+}
+.pricing-clear-button {
+  color: var(--status-danger-text);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 42%, transparent);
+}
+.pricing-clear-button:hover {
+  color: var(--status-danger-text);
+  background: var(--status-danger-soft);
 }
 /* compact is set from the page width; see STACKED_WIDTH. */
 .is-compact .pricing-workspace {

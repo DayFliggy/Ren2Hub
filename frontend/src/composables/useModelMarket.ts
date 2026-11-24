@@ -115,7 +115,7 @@ export function useModelMarket() {
               (!channel.value || offer.channelId === Number(channel.value)) &&
               (!billing.value || offer.pricing.billingMode === billing.value) &&
               (!query ||
-                `${model.name} ${vendorLabel(model.vendor)} ${offer.channelName}`
+                `${model.name} ${vendorLabel(model.vendor)} ${offer.channelName} ${model.tags.join(' ')}`
                   .toLowerCase()
                   .includes(query))
           )

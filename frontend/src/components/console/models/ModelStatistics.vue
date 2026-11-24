@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MODEL_PERFORMANCE_HOURS } from '@/api/modelMarket'
+import type { PerfBucketPoint } from '@/api/liveContracts'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import type { ModelPerformanceState } from '@/types/modelMarket'
 import { formatLatencyMs } from '@/utils/opsFormat'
@@ -12,8 +13,18 @@ import { formatLatencyMs } from '@/utils/opsFormat'
  * measure, so the unavailable state and its reason are shown instead.
  */
 const props = withDefaults(
-  defineProps<{ compact?: boolean; performance?: ModelPerformanceState }>(),
-  { compact: false, performance: undefined }
+  defineProps<{
+    compact?: boolean
+    performance?: ModelPerformanceState
+    series?: PerfBucketPoint[]
+    seriesLoading?: boolean
+  }>(),
+  {
+    compact: false,
+    performance: undefined,
+    series: undefined,
+    seriesLoading: false,
+  }
 )
 const { t, locale } = useI18n({
   useScope: 'local',
@@ -27,6 +38,20 @@ function formatNumber(value: number) {
   }).format(value)
 }
 
+function rateTone(rate: number): 'good' | 'warn' | 'bad' {
+  if (rate >= 99) return 'good'
+  if (rate >= 95) return 'warn'
+  return 'bad'
+}
+
+function formatSlotTime(ts: number) {
+  return new Intl.DateTimeFormat(locale.value, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(ts * 1000))
+}
+
 const metrics = computed(() => {
   if (props.performance?.status !== 'ready') return []
   const summary = props.performance.summary
@@ -35,6 +60,7 @@ const metrics = computed(() => {
     {
       key: 'successRate',
       value: `${formatNumber(summary.success_rate)}%`,
+      tone: rateTone(summary.success_rate),
     },
     { key: 'latency', value: `${latency.value} ${latency.unit}` },
     {
@@ -47,6 +73,65 @@ const metrics = computed(() => {
     },
   ]
 })
+
+const compactRibbon = computed(() => {
+  if (props.performance?.status !== 'ready') return []
+  return (props.performance.summary.recent_success_series ?? []).slice(-16)
+})
+
+const chartPoints = computed(() => {
+  if (props.series?.length) {
+    return props.series.slice(-24).map((point) => ({
+      ts: point.ts,
+      time: formatSlotTime(point.ts),
+      successRate: point.success_rate,
+      tone: rateTone(point.success_rate),
+      heightPct: Math.max(12, Math.min(100, point.success_rate)),
+      latency:
+        point.avg_latency_ms > 0
+          ? formatLatencyMs(point.avg_latency_ms, locale.value)
+          : null,
+      ttft:
+        point.avg_ttft_ms > 0
+          ? formatLatencyMs(point.avg_ttft_ms, locale.value)
+          : null,
+      tps: point.avg_tps > 0 ? formatNumber(point.avg_tps) : null,
+    }))
+  }
+  if (props.performance?.status === 'ready') {
+    const recent = props.performance.summary.recent_success_series ?? []
+    return recent.slice(-24).map((point) => ({
+      ts: point.ts,
+      time: formatSlotTime(point.ts),
+      successRate: point.success_rate,
+      tone: rateTone(point.success_rate),
+      heightPct: Math.max(12, Math.min(100, point.success_rate)),
+      latency: null,
+      ttft: null,
+      tps: null,
+    }))
+  }
+  return []
+})
+
+const activeSlot = ref(-1)
+watch(chartPoints, (points) => {
+  activeSlot.value = points.length ? points.length - 1 : -1
+})
+const inspectedPoint = computed(() =>
+  activeSlot.value >= 0 ? chartPoints.value[activeSlot.value] : undefined
+)
+
+function stepSlot(delta: number, event: KeyboardEvent) {
+  const total = chartPoints.value.length
+  if (!total) return
+  event.preventDefault()
+  const next = Math.max(0, Math.min(total - 1, activeSlot.value + delta))
+  activeSlot.value = next
+  const group = (event.currentTarget as HTMLElement).parentElement
+  const target = group?.children[next] as HTMLElement | undefined
+  target?.focus()
+}
 </script>
 
 <template>
@@ -62,12 +147,116 @@ const metrics = computed(() => {
     <span v-if="!compact" class="statistics-scope">{{
       t('modelStats.scope', { hours })
     }}</span>
-    <dl class="statistics-metrics">
-      <div v-for="metric in metrics" :key="metric.key">
-        <dt>{{ t(`modelStats.${metric.key}`) }}</dt>
-        <dd>{{ metric.value }}</dd>
+    <div class="statistics-summary-row">
+      <dl class="statistics-metrics">
+        <div v-for="metric in metrics" :key="metric.key">
+          <dt>
+            <span
+              v-if="metric.tone"
+              class="statistics-dot"
+              :class="`is-${metric.tone}`"
+              aria-hidden="true"
+            />{{ t(`modelStats.${metric.key}`) }}
+          </dt>
+          <dd>{{ metric.value }}</dd>
+        </div>
+      </dl>
+      <div
+        v-if="compact && compactRibbon.length"
+        class="statistics-mini-ribbon"
+        aria-hidden="true"
+      >
+        <span
+          v-for="point in compactRibbon"
+          :key="point.ts"
+          class="statistics-mini-bar"
+          :class="`is-${rateTone(point.success_rate)}`"
+          :style="{
+            height: `${Math.max(20, Math.min(100, point.success_rate))}%`,
+          }"
+        />
       </div>
-    </dl>
+    </div>
+    <div
+      v-if="!compact && chartPoints.length"
+      class="statistics-series"
+      data-model-statistics-series
+    >
+      <div class="statistics-series-head">
+        <span>{{ t('modelStats.seriesTitle') }}</span>
+        <span class="statistics-series-range">
+          {{ chartPoints[0]?.time }} – {{ chartPoints.at(-1)?.time }}
+        </span>
+      </div>
+      <div
+        class="statistics-bars"
+        role="group"
+        :aria-label="t('modelStats.seriesTitle')"
+      >
+        <button
+          v-for="(point, index) in chartPoints"
+          :key="point.ts"
+          type="button"
+          class="statistics-bar-slot focus-ring"
+          :class="{ active: index === activeSlot }"
+          :aria-label="
+            t('modelStats.slotLabel', {
+              time: point.time,
+              rate: formatNumber(point.successRate),
+            })
+          "
+          :aria-pressed="index === activeSlot"
+          @mouseenter="activeSlot = index"
+          @focus="activeSlot = index"
+          @click="activeSlot = index"
+          @keydown.arrow-left="stepSlot(-1, $event)"
+          @keydown.arrow-right="stepSlot(1, $event)"
+        >
+          <span
+            class="statistics-bar-fill"
+            :class="`is-${point.tone}`"
+            :style="{ height: `${point.heightPct}%` }"
+          />
+        </button>
+      </div>
+      <div
+        v-if="inspectedPoint"
+        class="statistics-slot-readout"
+        aria-live="polite"
+      >
+        <span class="statistics-slot-time">{{ inspectedPoint.time }}</span>
+        <span>
+          <span
+            class="statistics-dot"
+            :class="`is-${inspectedPoint.tone}`"
+            aria-hidden="true"
+          />
+          {{ t('modelStats.successRate') }}
+          <strong>{{ formatNumber(inspectedPoint.successRate) }}%</strong>
+        </span>
+        <span v-if="inspectedPoint.latency">
+          {{ t('modelStats.latency') }}
+          <strong
+            >{{ inspectedPoint.latency.value }}
+            {{ inspectedPoint.latency.unit }}</strong
+          >
+        </span>
+        <span v-if="inspectedPoint.ttft">
+          {{ t('modelStats.ttft') }}
+          <strong
+            >{{ inspectedPoint.ttft.value }}
+            {{ inspectedPoint.ttft.unit }}</strong
+          >
+        </span>
+        <span v-if="inspectedPoint.tps">
+          {{ t('modelStats.tps') }}
+          <strong>{{ inspectedPoint.tps }}</strong>
+        </span>
+      </div>
+    </div>
+    <p v-else-if="!compact && seriesLoading" class="statistics-series-note">
+      {{ t('modelStats.loading') }}
+    </p>
   </div>
   <div
     v-else-if="!compact && performance"
@@ -104,11 +293,19 @@ const metrics = computed(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.5rem;
-  padding: 0.65rem 0;
+  gap: 0.45rem 0.55rem;
+  padding: 0.7rem 0;
   color: var(--text-tertiary);
   font-size: 0.75rem;
   border-top: 1px dashed var(--border-subtle);
+}
+.statistics-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
 }
 .statistics-mark {
   width: 0.4rem;
@@ -117,24 +314,142 @@ const metrics = computed(() => {
   border-radius: 50%;
   flex: none;
 }
+.statistics-dot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  margin-right: 0.28rem;
+  vertical-align: middle;
+}
+.statistics-dot.is-good,
+.statistics-bar-fill.is-good,
+.statistics-mini-bar.is-good {
+  background: var(--status-success);
+}
+.statistics-dot.is-warn,
+.statistics-bar-fill.is-warn,
+.statistics-mini-bar.is-warn {
+  background: var(--status-warning);
+}
+.statistics-dot.is-bad,
+.statistics-bar-fill.is-bad,
+.statistics-mini-bar.is-bad {
+  background: var(--status-danger);
+}
 .statistics-explanation,
 .statistics-scope {
   flex-basis: 100%;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 .statistics-metrics {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem 1rem;
+  gap: 0.3rem 0.9rem;
 }
 .statistics-metrics > div {
   display: flex;
   align-items: baseline;
-  gap: 0.35rem;
+  gap: 0.32rem;
 }
 .statistics-metrics dd {
   color: var(--text-primary);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.statistics-mini-ribbon {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 1rem;
+  flex: none;
+}
+.statistics-mini-bar {
+  width: 3px;
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+.statistics-series {
+  flex-basis: 100%;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  background: var(--surface-muted);
+}
+.statistics-series-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+}
+.statistics-series-range {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.statistics-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 2.75rem;
+  padding-top: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.statistics-bar-slot {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 1px;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+}
+.statistics-bar-slot:hover,
+.statistics-bar-slot.active {
+  background: var(--state-hover-layer);
+}
+.statistics-bar-fill {
+  width: 100%;
+  max-width: 0.7rem;
+  border-radius: 3px 3px 0 0;
+  opacity: 0.78;
+  transition: opacity 0.12s ease;
+}
+.statistics-bar-slot:hover .statistics-bar-fill,
+.statistics-bar-slot.active .statistics-bar-fill {
+  opacity: 1;
+}
+.statistics-slot-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.85rem;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+}
+.statistics-slot-readout strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.statistics-slot-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.statistics-series-note {
+  flex-basis: 100%;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
 }
 .statistics-status.is-error {
   color: var(--status-danger-text);
@@ -142,5 +457,14 @@ const metrics = computed(() => {
 .compact {
   padding: 0.5rem 0 0;
   font-size: 0.6875rem;
+}
+html.dark .model-statistics,
+html.dark .model-statistics-empty {
+  border-top-style: solid;
+}
+@media (prefers-reduced-motion: reduce) {
+  .statistics-bar-fill {
+    transition: none;
+  }
 }
 </style>

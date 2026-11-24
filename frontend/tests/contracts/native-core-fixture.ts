@@ -395,6 +395,15 @@ export async function nativeCoreFixture(
         window_end: now,
         models: [],
       })
+    if (path === '/api/perf-metrics')
+      return ok({
+        model_name: url.searchParams.get('model') || '',
+        series_schema: 'v1',
+        summary: null,
+        series: [],
+        window_start: now - 86_400,
+        window_end: now,
+      })
     if (path === '/api/channel/labs')
       return ok({
         total: 1,
