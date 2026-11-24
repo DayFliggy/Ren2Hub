@@ -204,12 +204,11 @@ for (const theme of ['light', 'dark'] as const) {
           const name = await row
             .getByText(longName, { exact: true })
             .boundingBox()
-          const state = await row
-            .locator('header')
-            .getByRole('button', { name: '启停', exact: true })
-            .boundingBox()
+          const header = await row.locator('header').boundingBox()
           expect(name!.width).toBeGreaterThan(80)
-          expect(name!.x + name!.width).toBeLessThanOrEqual(state!.x)
+          expect(name!.x + name!.width).toBeLessThanOrEqual(
+            header!.x + header!.width
+          )
         } else {
           const nameCell = page.locator('td[headers$="-name"]')
           const nameBox = await nameCell

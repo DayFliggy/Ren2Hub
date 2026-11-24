@@ -13,8 +13,8 @@ const token: TokenSummary = {
   selected_only: false,
   route_channel_count: 0,
   status: 1,
-  used_quota: '250',
-  remain_quota: 750,
+  used_quota: '500000',
+  remain_quota: 1_500_000,
   unlimited: false,
   model_limits: [],
   ip_limits: [],
@@ -40,6 +40,7 @@ async function mountList(tokens: TokenSummary[] = [token]) {
       selectedIds: [],
       allSelected: false,
       isToggling: () => false,
+      now: 1_800_000_000,
       ...actions,
     },
     global: { plugins: [i18n] },
@@ -94,13 +95,84 @@ describe('KeyMobileList', () => {
     expect(types[0]!.find('[data-route-warning]').exists()).toBe(false)
   })
 
+  it('says why a key is blocked next to its ring, not by colour alone', async () => {
+    const { wrapper } = await mountList([
+      { ...token, status: 2 },
+      { ...token, id: 8, status: 4, remain_quota: 0 },
+    ])
+    const [disabled, exhausted] = wrapper.findAll('[data-key-mobile-row]')
+
+    expect(
+      disabled!.get('[data-ring-state]').attributes('data-ring-state')
+    ).toBe('disabled')
+    expect(disabled!.get('[data-key-quota-note]').text()).toBe('禁用')
+    expect(disabled!.find('[data-ring-state] path').exists()).toBe(true)
+    expect(
+      exhausted!.get('[data-ring-state]').attributes('data-ring-state')
+    ).toBe('exhausted')
+    expect(exhausted!.get('[data-key-quota-note]').text()).toBe('额度耗尽')
+    // A spent balance is the one shape no mark is needed for: a full red ring.
+    expect(exhausted!.find('[data-ring-state] path').exists()).toBe(false)
+  })
+
+  it('shows the balance on the quota bar and expands the rest in place', async () => {
+    const { wrapper } = await mountList([token, { ...token, id: 8 }])
+    const [first, second] = wrapper.findAll('[data-key-mobile-row]')
+    const bar = first!.get('button[data-key-quota-ring]')
+
+    // No hover on touch: the figures the desktop ring hides are shown here.
+    expect(bar.get('[data-key-remaining]').text()).toBe('$3.000')
+    expect(bar.text()).toContain('已用 $1.000')
+    expect(bar.attributes('aria-expanded')).toBe('false')
+
+    await bar.trigger('click')
+    const region = first!.get(`#${bar.attributes('aria-controls')}`)
+    expect(bar.attributes('aria-expanded')).toBe('true')
+    expect(region.attributes('role')).toBe('region')
+    // The bar already carries the balance; the detail adds the rest.
+    expect(region.text()).toContain('查询账户额度')
+    expect(region.text()).not.toContain('可用额度')
+    expect(second!.find('[role="region"]').exists()).toBe(false)
+
+    await bar.trigger('click')
+    expect(first!.find('[role="region"]').exists()).toBe(false)
+  })
+
+  it('tints the quota bar by urgency, never for a blocked key', async () => {
+    const { wrapper } = await mountList([
+      { ...token, remain_quota: 50_000, used_quota: '950000' },
+      { ...token, id: 8, remain_quota: 0 },
+      { ...token, id: 9, status: 2, remain_quota: 0 },
+    ])
+    expect(
+      wrapper
+        .findAll('.key-quota-bar')
+        .map((bar) => bar.attributes('data-tone'))
+    ).toEqual(['warning', 'danger', 'quiet'])
+  })
+
+  it('fades only the cards whose key cannot serve', async () => {
+    const { wrapper } = await mountList([
+      { ...token, status: 2 },
+      { ...token, id: 8, status: 4, remain_quota: 0 },
+      // Past its expiry before the backend has flipped the status.
+      { ...token, id: 9, expired_time: 1_700_000_000 },
+      { ...token, id: 10 },
+    ])
+    expect(
+      wrapper
+        .findAll('[data-key-mobile-row]')
+        .map((card) => card.classes().includes('opacity-80'))
+    ).toEqual([true, false, true, false])
+  })
+
   it('keeps selection and every row action reachable', async () => {
     const { wrapper, actions } = await mountList()
     const row = wrapper.get('[data-key-mobile-row]')
 
     await wrapper.get('label input[type="checkbox"]').trigger('change')
     await row.get('input[type="checkbox"]').trigger('change')
-    await row.get('header button[aria-label="启停"]').trigger('click')
+    await row.get('footer button[aria-label="启停"]').trigger('click')
     await row.get('button[aria-label="查看完整密钥"]').trigger('click')
     await row.get('button[aria-label="编辑令牌"]').trigger('click')
     await row.get('button[aria-label="删除"]').trigger('click')

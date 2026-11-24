@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
@@ -9,7 +9,11 @@ import { ApiError, type PageResult } from '@/api/types'
 import type { TokenSummary } from '@/types/console'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
+import KeyIdentity from '@/components/console/keys/KeyIdentity.vue'
 import KeyMobileList from '@/components/console/keys/KeyMobileList.vue'
+import KeyQuotaPopover from '@/components/console/keys/KeyQuotaPopover.vue'
+import KeyQuotaTrigger from '@/components/console/keys/KeyQuotaTrigger.vue'
+import { useKeyQuotaDetail } from '@/components/console/keys/useKeyQuotaDetail'
 import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
 import KeyRevealModal from '@/components/console/keys/KeyRevealModal.vue'
 import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
@@ -23,15 +27,12 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
-import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
-import { formatDate, formatQuota } from '@/utils/format'
-import { tokenStatusLabel } from '@/utils/tokenStatus'
 
 const { t } = useI18n()
 const { t: clientText } = useI18n({
@@ -69,13 +70,13 @@ const deleteLoading = ref(false)
 const revealTokenId = ref<number | null>(null)
 const clientConfigTokenId = ref<number | null>(null)
 
+// The quota ring replaces the balance figures; status and expiry live in the
+// ring and the note under each name. Figures are in the ring's popover.
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
   { key: 'type', label: t('keys.colType'), width: '150px' },
   { key: 'key', label: t('keys.colKey') },
-  { key: 'status', label: t('keys.colStatus'), width: '100px' },
-  { key: 'usage', label: t('keys.colUsage'), align: 'right', width: '150px' },
-  { key: 'expired_time', label: t('keys.colExpired'), width: '120px' },
+  { key: 'quota', label: t('keys.colQuota'), align: 'center', width: '88px' },
   // Five actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding (24px).
   {
     key: 'actions',
@@ -102,6 +103,47 @@ function toggleSelected(row: TokenSummary) {
 }
 
 const listRequest = useLatestRequest()
+
+// One clock per load, so every ring on the page judges expiry alike.
+const nowSec = ref(Math.floor(Date.now() / 1000))
+const detail = useKeyQuotaDetail()
+const detailId = useId()
+
+/**
+ * Mouse hover anywhere on a table row opens the detail by its ring — except
+ * over the actions, which the popover hanging below the row would otherwise
+ * cover for the rows underneath. Cards expand their detail inline instead.
+ */
+function hoverRow(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return
+  const target = event.target as Element
+  if (target.closest('td[headers$="-actions"]')) {
+    detail.leave(true)
+    return
+  }
+  const row = target.closest('tbody tr')
+  const ring = row?.querySelector<HTMLElement>('[data-key-quota-ring]')
+  const token = ring
+    ? rows.value.find((item) => String(item.id) === ring.dataset.tokenId)
+    : undefined
+  if (!ring || !token) {
+    detail.leave()
+    return
+  }
+  detail.hover(token, ring)
+}
+
+/** A mouse click keeps the hover popover; touch and keyboard toggle it. */
+function openDetail(
+  token: TokenSummary,
+  anchor: HTMLElement,
+  pointerType: string
+) {
+  if (pointerType === 'mouse') detail.show(token, anchor)
+  else detail.toggle(token, anchor)
+}
+
+watch(rows, () => detail.hide())
 
 async function load() {
   loading.value = true
@@ -132,6 +174,7 @@ async function load() {
     return
   }
   const pageResult = result.value
+  nowSec.value = Math.floor(Date.now() / 1000)
   rows.value = pageResult.items
   total.value = pageResult.total
   selected.value = []
@@ -319,14 +362,11 @@ onBeforeUnmount(() => {
         checkbox-shape="round"
         :empty-title="t('keys.emptyTitle')"
         empty-illustration="empty-keys"
+        @pointerover="hoverRow"
+        @pointerleave="detail.leave()"
       >
         <template #cell-name="{ row }">
-          <span
-            class="block min-w-0 max-w-full truncate font-medium"
-            :title="(row as TokenSummary).name"
-          >
-            {{ (row as TokenSummary).name }}
-          </span>
+          <KeyIdentity :token="row as TokenSummary" :now="nowSec" />
         </template>
 
         <template #cell-type="{ row }">
@@ -369,47 +409,18 @@ onBeforeUnmount(() => {
           </div>
         </template>
 
-        <!-- status: click to toggle -->
-        <template #cell-status="{ row }">
-          <button
-            type="button"
-            class="inline-flex min-h-6 items-center rounded-sm transition-opacity hover:opacity-70 focus-ring"
-            :disabled="togglingIds.has((row as TokenSummary).id)"
-            :aria-label="t('keys.toggleKey')"
-            @click.stop="toggleStatus(row as TokenSummary)"
-          >
-            <StatusChip
-              :tone="(row as TokenSummary).status === 1 ? 'success' : 'neutral'"
-            >
-              {{ t(tokenStatusLabel((row as TokenSummary).status)) }}
-            </StatusChip>
-          </button>
-        </template>
-
-        <template #cell-usage="{ row }">
-          <div class="text-xs text-right break-keep">
-            {{ t('billing.used') }}
-            {{ formatQuota((row as TokenSummary).used_quota, 3) }}<br />{{
-              t('billing.available')
-            }}
-            <span class="font-semibold">
-              {{
-                (row as TokenSummary).unlimited
-                  ? t('common.unlimited')
-                  : formatQuota((row as TokenSummary).remain_quota, 3)
-              }}
-            </span>
-          </div>
-        </template>
-
-        <template #cell-expired_time="{ row }">
-          <span class="text-xs text-[var(--text-tertiary)]">
-            {{
-              (row as TokenSummary).expired_time < 0
-                ? t('common.never')
-                : formatDate((row as TokenSummary).expired_time)
-            }}
-          </span>
+        <template #cell-quota="{ row }">
+          <KeyQuotaTrigger
+            :token="row as TokenSummary"
+            :now="nowSec"
+            :expanded="detail.token.value?.id === (row as TokenSummary).id"
+            :detail-id="detailId"
+            @detail="
+              (anchor, pointerType) =>
+                openDetail(row as TokenSummary, anchor, pointerType)
+            "
+            @blur="detail.hide(row as TokenSummary)"
+          />
         </template>
 
         <template #cell-actions="{ row }">
@@ -561,6 +572,7 @@ onBeforeUnmount(() => {
           :edit-key="openEdit"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"
+          :now="nowSec"
         />
         <div data-key-mobile-pagination :aria-busy="loading">
           <TablePagination
@@ -571,6 +583,15 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </ConsoleCard>
+
+    <KeyQuotaPopover
+      :id="detailId"
+      :token="detail.token.value"
+      :anchor="detail.anchor.value"
+      :pinned="detail.pinned.value"
+      :now="nowSec"
+      @close="detail.hide()"
+    />
 
     <!-- create / edit -->
 

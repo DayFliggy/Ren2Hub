@@ -56,9 +56,25 @@ for (const [theme, mobile] of [
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))
     await page.goto('/keys')
-    await expect(
-      page.getByText('$2.469', { exact: true }).filter({ visible: true })
-    ).toBeVisible()
+    // The table's ring keeps the balance in its popover; cards show it.
+    if (mobile) {
+      await expect(
+        page
+          .locator('[data-key-mobile-row] [data-key-remaining]')
+          .filter({ hasText: '$2.469' })
+      ).toBeVisible()
+    } else {
+      await page
+        .locator('[data-key-quota-ring]')
+        .filter({ visible: true })
+        .click()
+      await expect(
+        page
+          .locator('[data-key-quota-popover]')
+          .getByText('$2.469', { exact: true })
+      ).toBeVisible()
+      await page.keyboard.press('Escape')
+    }
     await page
       .getByRole('button', { name: '编辑令牌', exact: true })
       .filter({ visible: true })

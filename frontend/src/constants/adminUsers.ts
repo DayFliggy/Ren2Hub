@@ -1,4 +1,8 @@
-import { quotaInteger, quotaRatio } from '@/utils/quota'
+import {
+  quotaMeter,
+  quotaMeterColor,
+  type QuotaMeter,
+} from '@/utils/quotaMeter'
 import type { AdminUser, AdminUserRole, AdminUserSortBy } from '@/types/console'
 
 /** Backend role ladder (common/constants.go). Ascending privilege. */
@@ -84,63 +88,16 @@ export function adminUserStatusTone(
   return user.status === 1 && !user.deleted ? 'success' : 'danger'
 }
 
-export type AdminUserQuotaState = 'normal' | 'low' | 'exhausted'
-
-export interface AdminUserQuotaMeter {
-  state: AdminUserQuotaState
-  /** Consumed share of the lifetime allowance, 0-100. */
-  percent: number
-  /** Remaining share, 0-100 — what the "only N% left" note reports. */
-  remainingPercent: number
+export interface AdminUserQuotaMeter extends QuotaMeter {
   color: string
 }
 
-/** Below this remaining share the row is worth an operator's attention. */
-const QUOTA_LOW_REMAINING_RATIO = 0.1
-
-/**
- * Deliberately NOT CapacityMeter's policy. Channel capacity is a hard ceiling —
- * at 80% it is nearly unroutable, so it warns early. A user's quota is a soft
- * balance that a top-up refills, so 80% consumed means nothing; only "almost
- * out" and "out" are worth signalling. Same reason the users table stopped
- * rendering a used/total pair: the total is not a real domain value.
- */
+/** The users table follows the shared soft-balance policy in quotaMeter. */
 export function adminUserQuotaMeter(
   user: Pick<AdminUser, 'quota' | 'used_quota'>
 ): AdminUserQuotaMeter {
-  // The display denominator can exceed one account field's int64 range.
-  const lifetime =
-    quotaInteger(String(user.quota)) + quotaInteger(String(user.used_quota))
-  const percent =
-    lifetime > 0n
-      ? Math.min(
-          100,
-          Math.max(0, quotaRatio(String(user.used_quota), lifetime) * 100)
-        )
-      : 0
-  const remainingRatio =
-    lifetime > 0n ? quotaRatio(String(user.quota), lifetime) : 0
-
-  // quota <= 0 covers both a spent-out account and one never funded; either way
-  // the operator's takeaway is identical — this user cannot spend.
-  const state: AdminUserQuotaState =
-    BigInt(user.quota) <= 0n
-      ? 'exhausted'
-      : remainingRatio < QUOTA_LOW_REMAINING_RATIO
-        ? 'low'
-        : 'normal'
-
-  return {
-    state,
-    percent,
-    remainingPercent: Math.round(remainingRatio * 100),
-    color:
-      state === 'exhausted'
-        ? 'var(--status-danger)'
-        : state === 'low'
-          ? 'var(--status-warning)'
-          : 'var(--signal)',
-  }
+  const meter = quotaMeter(user.quota, user.used_quota)
+  return { ...meter, color: quotaMeterColor(meter.state) }
 }
 
 export function adminUserStatusLabelKey(
