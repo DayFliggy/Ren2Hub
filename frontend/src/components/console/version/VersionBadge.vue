@@ -106,6 +106,8 @@ const state = computed(() => {
   if (checkFailure.value) return 'check-error'
   if (restartNeeded.value) return 'restart-needed'
   if (!info.value) return 'loading'
+  // An empty latest version means GitHub has no published release yet.
+  if (!info.value.latest_version) return 'no-release'
   if (info.value.has_update) return isRelease.value ? 'update' : 'source-update'
   return 'current'
 })
@@ -123,7 +125,8 @@ const restartConfirm = computed(() => ({
 const tone = computed(() => {
   if (state.value === 'action-error' || state.value === 'check-error')
     return 'danger'
-  if (state.value === 'current' || state.value === 'loading') return 'neutral'
+  if (['current', 'no-release', 'loading'].includes(state.value))
+    return 'neutral'
   return 'warning'
 })
 const badgeLabel = computed(() => {
@@ -140,6 +143,7 @@ const badgeLabel = computed(() => {
     loading: 'badgeChecking',
     update: 'badgeUpdate',
     'source-update': 'badgeUpdate',
+    'no-release': 'badgeNoRelease',
     current: 'badgeCurrent',
   }[state.value]
   return t(key, { version, latest })
@@ -472,6 +476,14 @@ onBeforeUnmount(() => {
         <p v-else-if="state === 'loading'" class="version-note" role="status">
           {{ t('checking') }}
         </p>
+
+        <div
+          v-else-if="state === 'no-release'"
+          class="version-state"
+          data-version-no-release
+        >
+          <p class="version-note">{{ t('noRelease') }}</p>
+        </div>
 
         <div
           v-else-if="state === 'source-update'"

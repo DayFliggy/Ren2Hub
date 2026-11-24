@@ -14273,7 +14273,7 @@
       "path": "service/system_update.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bdbd7c6d10081603a91749afabc1874b1bb012853e3683bfee3444219e44661c",
+      "local_sha256": "263a2cc8bd3e6ddd194f2e4a099e6e7f23a2bade4583c1fd640c85a50b8c7c77",
       "reasons": [
         "system-update"
       ],
@@ -14286,7 +14286,7 @@
       "path": "service/system_update_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "35d2c7cecb663c44e2ecc46cd314d6d3b562931e29bfa521cb7f4f9ee27620b6"
+      "local_sha256": "31b59f787036a61f0f869aa957b4cf027db5e82e5e004c6fbb5c5635fca97e82"
     },
     {
       "path": "service/task.go",

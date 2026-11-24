@@ -2,6 +2,7 @@
 const zh = {
   badgeChecking: '版本 {version}，正在检查更新',
   badgeCurrent: '版本 {version}，已是最新',
+  badgeNoRelease: '版本 {version}，尚未发布版本',
   badgeUpdate: '版本 {version}，有新版本 {latest}',
   badgeRestart: '版本 {version}，已替换，重启后生效',
   badgeRestarting: '版本 {version}，正在重启',
@@ -13,6 +14,7 @@ const zh = {
   checking: '正在检查更新…',
   latestLine: '最新：{version}',
   upToDate: '已是最新',
+  noRelease: 'GitHub 上还没有发布版本。',
   published: '发布于 {date}',
   updateNow: '立即更新',
   changelog: '查看更新日志',
@@ -73,6 +75,7 @@ const zh = {
 const en: typeof zh = {
   badgeChecking: 'Version {version}, checking for updates',
   badgeCurrent: 'Version {version}, up to date',
+  badgeNoRelease: 'Version {version}, no release published yet',
   badgeUpdate: 'Version {version}, {latest} available',
   badgeRestart: 'Version {version}, replaced; restart to apply',
   badgeRestarting: 'Version {version}, restarting',
@@ -84,6 +87,7 @@ const en: typeof zh = {
   checking: 'Checking for updates…',
   latestLine: 'Latest: {version}',
   upToDate: 'Up to date',
+  noRelease: 'No release has been published on GitHub yet.',
   published: 'Published {date}',
   updateNow: 'Update now',
   changelog: 'View changelog',

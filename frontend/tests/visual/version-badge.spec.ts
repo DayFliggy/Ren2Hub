@@ -472,6 +472,51 @@ test('version badge source build', async ({ page }, testInfo) => {
   })
 })
 
+for (const [theme, mobile] of [
+  ['light', false],
+  ['dark', true],
+] as const) {
+  const viewport = mobile ? 'mobile' : 'desktop'
+  test(`version badge without a published release ${theme} ${viewport}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }
+    )
+    await configureStablePage(page, { theme })
+    await mockRelease(page, {
+      latest_version: '',
+      has_update: false,
+      release_info: undefined,
+    })
+    const api = recordApi(page)
+    await gotoDashboard(page)
+    await expect(badge(page)).toHaveAttribute('data-version-tone', 'neutral')
+    await expect(badge(page)).toHaveAttribute(
+      'aria-label',
+      '版本 v1.0.1，尚未发布版本'
+    )
+    await badge(page).click()
+    await expect(panel(page)).toHaveAttribute(
+      'data-version-state',
+      'no-release'
+    )
+    await expect(panel(page).locator('[data-version-no-release]')).toHaveText(
+      'GitHub 上还没有发布版本。'
+    )
+    await expect(panel(page)).not.toContainText('已是最新')
+    await expect(panel(page).locator('[data-version-error]')).toHaveCount(0)
+    await expect(
+      panel(page).locator('[data-version-rollback-toggle]')
+    ).toHaveCount(0)
+    await checkPanel(page, mobile)
+    expect(api.has('/api/admin/system/rollback-versions')).toBe(false)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`update-no-release-${theme}-${viewport}.png`),
+    })
+  })
+}
+
 test('version badge check failure offers retry', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await configureStablePage(page, {

@@ -266,6 +266,26 @@ describe('version badge', () => {
     expect(notes.find('script').exists()).toBe(false)
   })
 
+  it('explains that nothing is published yet when GitHub has no release', async () => {
+    replies['/api/admin/system/check-updates'] = check({
+      latest_version: '',
+      has_update: false,
+      release_info: undefined,
+    })
+    await setup()
+    const panel = await openPanel()
+    expect(panelState()).toBe('no-release')
+    expect(tone()).toBe('neutral')
+    expect(badgeLabel()).toBe('Version v1.0.1, no release published yet')
+    expect(panel.get('[data-version-no-release]').text()).toBe(
+      'No release has been published on GitHub yet.'
+    )
+    expect(panel.text()).not.toContain('Up to date')
+    expect(panel.find('[data-version-error]').exists()).toBe(false)
+    expect(panel.find('[data-version-update-now]').exists()).toBe(false)
+    expect(panel.find('[data-version-rollback-toggle]').exists()).toBe(false)
+  })
+
   it('offers no restart on an up-to-date release', async () => {
     replies['/api/admin/system/check-updates'] = upToDate()
     await setup()

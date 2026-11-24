@@ -75,6 +75,43 @@ func TestSystemUpdateCheckCache(t *testing.T) {
 	require.ErrorIs(t, err, ErrSystemRelease)
 }
 
+func TestSystemUpdateCheckWithoutRelease(t *testing.T) {
+	updateTestBuild(t, "v1.0.1")
+	var published atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/releases/latest" || !published.Load() {
+			w.WriteHeader(404)
+			return
+		}
+		fmt.Fprint(w, `{"tag_name":"v1.0.2","name":"Release","published_at":"2026-11-01","html_url":"https://github.com/DayFliggy/Ren2Hub","body":""}`)
+	}))
+	defer server.Close()
+	s := NewSystemUpdateService(server.URL, server.Client())
+	ctx := t.Context()
+	checkNoRelease := func() {
+		t.Helper()
+		info, err := s.CheckUpdate(ctx, true)
+		require.NoError(t, err)
+		data, err := common.Marshal(info)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"current_version":"v1.0.1","latest_version":"","build_type":"release","has_update":false,"cached":false}`, string(data))
+	}
+	checkNoRelease()
+	_, err := s.PerformUpdate(ctx)
+	require.ErrorIs(t, err, ErrSystemRelease)
+
+	// A release that is withdrawn later is not served from the cache.
+	published.Store(true)
+	info, err := s.CheckUpdate(ctx, true)
+	require.NoError(t, err)
+	require.True(t, info.HasUpdate)
+	published.Store(false)
+	checkNoRelease()
+	info, err = s.CheckUpdate(ctx, false)
+	require.NoError(t, err)
+	require.Empty(t, info.LatestVersion)
+}
+
 func TestSystemUpdateRollbackVersions(t *testing.T) {
 	updateTestBuild(t, "v1.2.20")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

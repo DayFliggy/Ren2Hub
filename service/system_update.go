@@ -33,6 +33,8 @@ var (
 	ErrSystemRollbackNotFound = errors.New("version is not in the rollback list")
 	ErrSystemRelease          = errors.New("release retrieval or verification failed")
 	ErrSystemReplace          = errors.New("failed to replace application executable")
+	// GitHub answers 404 for releases/latest while the repository has no published release.
+	errSystemNoRelease = fmt.Errorf("%w: no published release", ErrSystemRelease)
 )
 
 type SystemReleaseInfo struct {
@@ -114,6 +116,9 @@ func releaseMetadata(ctx context.Context, client *http.Client, endpoint string, 
 		return fmt.Errorf("%w: %w", ErrSystemRelease, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return errSystemNoRelease
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%w: GitHub returned %d", ErrSystemRelease, resp.StatusCode)
 	}
@@ -126,6 +131,12 @@ func releaseMetadata(ctx context.Context, client *http.Client, endpoint string, 
 func (s *SystemUpdateService) latest(ctx context.Context) (*systemRelease, error) {
 	var release systemRelease
 	err := releaseMetadata(ctx, s.client, s.apiBase+"/releases/latest", &release)
+	if errors.Is(err, errSystemNoRelease) {
+		// A release seen earlier is no longer published; do not show it again.
+		s.mu.Lock()
+		s.cached = nil
+		s.mu.Unlock()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +178,10 @@ func (s *SystemUpdateService) CheckUpdate(ctx context.Context, force bool) (*Sys
 		return updateInfo(cached, true, "")
 	}
 	release, err := s.latest(ctx)
+	if errors.Is(err, errSystemNoRelease) {
+		// An empty latest version tells the panel that nothing is published yet.
+		return &SystemUpdateInfo{CurrentVersion: common.Version, BuildType: common.BuildType}, nil
+	}
 	if err != nil {
 		if cached != nil {
 			return updateInfo(cached, true, "GitHub is unavailable. Showing cached release information.")
