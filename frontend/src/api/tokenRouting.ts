@@ -15,7 +15,14 @@ export interface TokenRouteEntry {
   position: number
 }
 export type TokenRouteMode = 'auto' | 'ordered'
-/** selected_only=false uses every platform channel; true limits routing to the saved entries. */
+export type TokenRouteScope = 'platform' | 'selected' | 'empty'
+
+/**
+ * Persisted token routing profile plus backend-derived effective scope/mode.
+ * selected_only=false uses every platform channel; selected_only=true with all
+ * entries disabled falls back to platform auto routing while preserving entries;
+ * selected_only=true with 0 entries is the orphaned empty scope (503).
+ */
 export interface TokenRoute {
   token_id: number
   mode: TokenRouteMode
@@ -23,7 +30,11 @@ export interface TokenRoute {
   version: number
   max_channel_ratio: string | null
   entries: TokenRouteEntry[]
+  route_scope?: TokenRouteScope
+  effective_mode?: TokenRouteMode
+  enabled_route_channel_count?: number
 }
+
 export interface TokenRouteChannel {
   id: number
   name: string
@@ -35,13 +46,41 @@ export interface TokenRouteChannel {
   eligible: boolean
   filter_reason?: string
 }
+
+export interface TokenRouteCandidateQuery {
+  model_limits?: string[]
+  max_channel_ratio?: string
+}
+
 const endpoint = (id: number) => `/api/token/${id}/routing`
+const candidatesEndpoint = '/api/token/routing/channels'
+
 function parseMaxRatio(value: unknown): string | null {
   if (value === null) return null
   if (!isDecimal(value) || Number(value) <= 0)
     invalidResponse('/api/token/:id/routing')
   return value
 }
+
+function parseRouteScope(
+  value: unknown,
+  path: string
+): TokenRouteScope | undefined {
+  if (value === undefined) return undefined
+  if (value === 'platform' || value === 'selected' || value === 'empty')
+    return value
+  invalidResponse(path)
+}
+
+function parseRouteMode(
+  value: unknown,
+  path: string
+): TokenRouteMode | undefined {
+  if (value === undefined) return undefined
+  if (value === 'auto' || value === 'ordered') return value
+  invalidResponse(path)
+}
+
 export function parseTokenRoute(value: unknown): TokenRoute {
   if (
     !isRecord(value) ||
@@ -49,98 +88,81 @@ export function parseTokenRoute(value: unknown): TokenRoute {
     !Array.isArray(value.entries)
   )
     invalidResponse('/api/token/:id/routing')
+  const entries = value.entries.map((entry) => {
+    if (!isRecord(entry)) invalidResponse('/api/token/:id/routing')
+    return {
+      channel_id: requiredStrictInteger(entry.channel_id, endpoint(0)),
+      enabled: requiredBoolean(entry.enabled, endpoint(0)),
+      position: requiredStrictInteger(entry.position, endpoint(0)),
+    }
+  })
+  const selectedOnly = requiredBoolean(
+    value.selected_only,
+    '/api/token/:id/routing'
+  )
+  const enabledCount =
+    value.enabled_route_channel_count === undefined
+      ? entries.filter((entry) => entry.enabled).length
+      : requiredStrictInteger(
+          value.enabled_route_channel_count,
+          '/api/token/:id/routing'
+        )
+  const scope =
+    parseRouteScope(value.route_scope, '/api/token/:id/routing') ??
+    (!selectedOnly
+      ? 'platform'
+      : entries.length === 0
+        ? 'empty'
+        : enabledCount === 0
+          ? 'platform'
+          : 'selected')
+  const effectiveMode =
+    parseRouteMode(value.effective_mode, '/api/token/:id/routing') ??
+    (scope === 'selected' && value.mode === 'ordered' ? 'ordered' : 'auto')
   return {
     token_id: requiredStrictInteger(value.token_id, '/api/token/:id/routing'),
     mode: value.mode,
-    selected_only: requiredBoolean(
-      value.selected_only,
-      '/api/token/:id/routing'
-    ),
+    selected_only: selectedOnly,
     version: requiredStrictInteger(value.version, '/api/token/:id/routing'),
     max_channel_ratio: parseMaxRatio(value.max_channel_ratio),
-    entries: value.entries.map((entry) => {
-      if (!isRecord(entry)) invalidResponse('/api/token/:id/routing')
-      return {
-        channel_id: requiredStrictInteger(entry.channel_id, endpoint(0)),
-        enabled: requiredBoolean(entry.enabled, endpoint(0)),
-        position: requiredStrictInteger(entry.position, endpoint(0)),
-      }
-    }),
+    entries,
+    route_scope: scope,
+    effective_mode: effectiveMode,
+    enabled_route_channel_count: enabledCount,
   }
 }
-export type RouteTransport = 'http' | 'websocket'
-export interface TokenRoutePreviewQuery {
-  transport?: RouteTransport
-  model: string
-  path: string
-  stream: boolean
-}
-export interface TokenRoutePreview {
-  transport: RouteTransport
-  mode: TokenRouteMode
-  version: number
-  model: string
-  path: string
-  stream: boolean
-  /** Automatic order is drawn per request, so its preview is one sample. */
-  ordering: 'ordered' | 'weighted_random_per_request'
-  entries: Array<{
-    channel_id: number
-    name?: string
-    eligible: boolean
-    reason: string
-    channel_ratio: string
-  }>
-}
-export const tokenRoutingApi = {
-  async preview(
-    id: number,
-    query: TokenRoutePreviewQuery,
-    signal?: AbortSignal
-  ): Promise<TokenRoutePreview> {
-    const url = `${endpoint(id)}/preview`
-    const value = await api.get<unknown>(
-      url,
-      {
-        model: query.model,
-        path: query.path,
-        stream: String(query.stream),
-        transport: query.transport ?? 'http',
-      },
-      { signal }
-    )
-    if (
-      !isRecord(value) ||
-      (value.mode !== 'auto' && value.mode !== 'ordered') ||
-      (value.transport !== 'http' && value.transport !== 'websocket') ||
-      (value.ordering !== 'ordered' &&
-        value.ordering !== 'weighted_random_per_request') ||
-      !Array.isArray(value.entries)
-    )
-      invalidResponse(url)
+
+function parseRouteChannels(
+  value: unknown,
+  source: string
+): TokenRouteChannel[] {
+  if (!Array.isArray(value)) invalidResponse(source)
+  return value.map((item) => {
+    if (!isRecord(item)) invalidResponse(source)
     return {
-      mode: value.mode,
-      transport: value.transport,
-      version: requiredStrictInteger(value.version, url),
-      model: requiredString(value.model, url),
-      path: requiredString(value.path, url),
-      stream: requiredBoolean(value.stream, url),
-      ordering: value.ordering,
-      entries: value.entries.map((item) => {
-        if (!isRecord(item)) invalidResponse(url)
-        return {
-          channel_id: requiredStrictInteger(item.channel_id, url),
-          name:
-            item.name === undefined
-              ? undefined
-              : requiredString(item.name, url),
-          eligible: requiredBoolean(item.eligible, url),
-          reason: requiredString(item.reason, url),
-          channel_ratio: requiredString(item.channel_ratio, url),
-        }
-      }),
+      id: requiredStrictInteger(item.id, source),
+      name: requiredString(item.name, source),
+      type: requiredStrictInteger(item.type, source),
+      status: requiredStrictInteger(item.status, source),
+      models: parseStringArray(item.models, source),
+      channel_ratio: parseMaxRatio(item.channel_ratio)!,
+      max_concurrency: requiredStrictInteger(item.max_concurrency, source),
+      eligible: requiredBoolean(item.eligible, source),
+      filter_reason:
+        item.filter_reason === undefined
+          ? undefined
+          : requiredString(item.filter_reason, source),
     }
-  },
+  })
+}
+
+export function parseCreatedTokenId(value: unknown): number | null {
+  if (!isRecord(value) || value.id === undefined) return null
+  const id = requiredStrictInteger(value.id, '/api/token/')
+  return id > 0 ? id : null
+}
+
+export const tokenRoutingApi = {
   async get(id: number, signal?: AbortSignal) {
     return parseTokenRoute(await api.get(endpoint(id), undefined, { signal }))
   },
@@ -151,7 +173,8 @@ export const tokenRoutingApi = {
       'mode' | 'selected_only' | 'version' | 'entries' | 'max_channel_ratio'
     >
   ) {
-    // The platform scope stores no entries, so a hidden draft list is dropped here.
+    // Platform scope stores no entries; selected scope preserves both enabled
+    // and paused entries so users keep their saved list order.
     return parseTokenRoute(
       await api.put(endpoint(id), {
         mode: value.mode,
@@ -167,6 +190,24 @@ export const tokenRoutingApi = {
       })
     )
   },
+  async candidates(
+    query: TokenRouteCandidateQuery = {},
+    signal?: AbortSignal
+  ): Promise<TokenRouteChannel[]> {
+    const params: Record<string, string> = {}
+    const limits = (query.model_limits ?? [])
+      .map((item) => item.trim())
+      .filter(Boolean)
+    if (limits.length > 0) params.model_limits = limits.join(',')
+    const ratio = query.max_channel_ratio?.trim() ?? ''
+    if (ratio) params.max_channel_ratio = ratio
+    const value = await api.get<unknown>(
+      candidatesEndpoint,
+      Object.keys(params).length > 0 ? params : undefined,
+      { signal }
+    )
+    return parseRouteChannels(value, candidatesEndpoint)
+  },
   async channels(
     id: number,
     signal?: AbortSignal
@@ -176,26 +217,6 @@ export const tokenRoutingApi = {
       undefined,
       { signal }
     )
-    if (!Array.isArray(value)) invalidResponse(endpoint(id))
-    return value.map((item) => {
-      if (!isRecord(item)) invalidResponse(endpoint(id))
-      return {
-        id: requiredStrictInteger(item.id, endpoint(id)),
-        name: requiredString(item.name, endpoint(id)),
-        type: requiredStrictInteger(item.type, endpoint(id)),
-        status: requiredStrictInteger(item.status, endpoint(id)),
-        models: parseStringArray(item.models, endpoint(id)),
-        channel_ratio: parseMaxRatio(item.channel_ratio)!,
-        max_concurrency: requiredStrictInteger(
-          item.max_concurrency,
-          endpoint(id)
-        ),
-        eligible: requiredBoolean(item.eligible, endpoint(id)),
-        filter_reason:
-          item.filter_reason === undefined
-            ? undefined
-            : requiredString(item.filter_reason, endpoint(id)),
-      }
-    })
+    return parseRouteChannels(value, `${endpoint(id)}/channels`)
   },
 }

@@ -309,7 +309,7 @@ class Routing(Experiment):
         self.route(['b', 'a'], disabled=['b'])
         self.check(['a'])
         self.route(['a'], disabled=['a'])
-        self.check([], status=503, amount=0)
+        self.check(['a'])
         self.route(['a'])
         self.configure('a', model_mapping=json.dumps({'route-test': 'mapped-test'}), channel_ratio='1.5')
         _, rows = self.check(['a'], amount=1500)

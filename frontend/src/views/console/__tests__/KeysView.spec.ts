@@ -20,12 +20,48 @@ import { useAuthStore } from '@/stores/auth'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeysView from '@/views/console/KeysView.vue'
 
-// Platform auto, ordered list, automatic list, and a list whose channels were deleted.
+// Platform auto, ordered list, automatic list, all-paused fallback, and orphaned empty selection.
 const routes = [
-  { type: 'auto', selected_only: false, route_channel_count: 0 },
-  { type: 'ordered', selected_only: true, route_channel_count: 3 },
-  { type: 'auto', selected_only: true, route_channel_count: 2 },
-  { type: 'ordered', selected_only: true, route_channel_count: 0 },
+  {
+    type: 'auto',
+    selected_only: false,
+    route_channel_count: 0,
+    enabled_route_channel_count: 0,
+    route_scope: 'platform',
+    effective_mode: 'auto',
+  },
+  {
+    type: 'ordered',
+    selected_only: true,
+    route_channel_count: 3,
+    enabled_route_channel_count: 3,
+    route_scope: 'selected',
+    effective_mode: 'ordered',
+  },
+  {
+    type: 'auto',
+    selected_only: true,
+    route_channel_count: 2,
+    enabled_route_channel_count: 2,
+    route_scope: 'selected',
+    effective_mode: 'auto',
+  },
+  {
+    type: 'ordered',
+    selected_only: true,
+    route_channel_count: 2,
+    enabled_route_channel_count: 0,
+    route_scope: 'platform',
+    effective_mode: 'auto',
+  },
+  {
+    type: 'ordered',
+    selected_only: true,
+    route_channel_count: 0,
+    enabled_route_channel_count: 0,
+    route_scope: 'empty',
+    effective_mode: 'auto',
+  },
 ] as const
 
 const tokens: TokenSummary[] = Array.from({ length: 10 }, (_, index) => ({
@@ -50,6 +86,9 @@ const backendTokens = tokens.map((token) => ({
   type: token.type,
   selected_only: token.selected_only,
   route_channel_count: token.route_channel_count,
+  enabled_route_channel_count: token.enabled_route_channel_count,
+  route_scope: token.route_scope,
+  effective_mode: token.effective_mode,
   status: token.status,
   used_quota: Number(token.used_quota),
   remain_quota: token.remain_quota,
@@ -157,16 +196,10 @@ describe('KeysView token routing entry', () => {
     wrapper = mount(KeysView, {
       global: {
         plugins: [i18n],
-        stubs: {
-          RouterLink: {
-            props: ['to'],
-            template: '<a :data-route="to.name"><slot /></a>',
-          },
-        },
       },
     })
     await flushPromises()
-    return wrapper.findAll('a[data-route="token-routing"]')
+    return wrapper.findAll('[data-key-route-trigger]')
   }
 
   it.each([
@@ -174,52 +207,39 @@ describe('KeysView token routing entry', () => {
     ['live', false, 0],
     ['disabled', true, 0],
   ])(
-    'shows desktop and mobile routing links for %s with read %s',
+    'makes desktop and mobile route chips clickable for %s with read %s',
     async (routing, read, count) => {
       expect(await mountWithAccess(routing, read)).toHaveLength(count)
+      expect(wrapper!.findAll('a[data-route="token-routing"]')).toHaveLength(0)
     }
   )
 
-  it('labels each key by routing mode and channel scope', async () => {
+  it('labels each key by effective routing mode and channel scope and opens the modal focused on routing', async () => {
     await mountWithAccess('live', true)
     const labels = wrapper!
       .findAll('td[headers$="-type"]')
-      .slice(0, 4)
+      .slice(0, 5)
       .map((cell) => cell.text())
     expect(labels).toEqual([
       '自动 · 全平台',
       '顺序 · 3 条渠道',
       '自动 · 2 条渠道',
-      expect.stringContaining('所选渠道已不可用'),
+      '自动 · 全平台 · 2 条已暂停',
+      expect.stringContaining('自选渠道已失效'),
     ])
-    const unavailable = wrapper!.findAll('td[headers$="-type"]')[3]!
+    const unavailable = wrapper!.findAll('td[headers$="-type"]')[4]!
     expect(unavailable.text()).toContain('没有可用渠道')
-    expect(unavailable.get('[data-route-warning]').attributes('title')).toBe(
-      i18n.global.t('keys.route.unavailableHint')
-    )
-  })
+    expect(
+      unavailable.get('[data-key-route-trigger]').attributes('title')
+    ).toBe(i18n.global.t('keys.route.unavailableHint'))
 
-  it.each([
-    ['live', true, true],
-    ['disabled', true, false],
-  ])(
-    'after creating a key with routing %s, the routing hint shown is %s',
-    async (routing, read, shown) => {
-      await mountWithAccess(routing, read)
-      const form = wrapper!.findComponent(KeyFormModal)
-      form.vm.$emit('saved', false)
-      await flushPromises()
-      expect(wrapper!.find('[data-key-created-notice]').exists()).toBe(false)
-      form.vm.$emit('saved', true)
-      await flushPromises()
-      const notice = wrapper!.find('[data-key-created-notice]')
-      expect(notice.exists()).toBe(shown)
-      if (!shown) return
-      expect(notice.text()).toContain('自动路由和全平台渠道')
-      await notice.get('button[aria-label="关闭提示"]').trigger('click')
-      expect(wrapper!.find('[data-key-created-notice]').exists()).toBe(false)
-    }
-  )
+    await unavailable.get('[data-key-route-trigger]').trigger('click')
+    const form = wrapper!.findComponent(KeyFormModal)
+    expect(form.props('open')).toBe(true)
+    expect(form.props('editing')?.id).toBe(5)
+    expect(form.props('focus')).toBe('routing')
+    expect(wrapper!.find('[data-key-created-notice]').exists()).toBe(false)
+  })
 })
 
 describe('KeysView key detail popover', () => {
@@ -445,5 +465,33 @@ describe('KeysView key detail popover', () => {
       模型限制: '不限制',
     })
     expect(detailRows()).not.toHaveProperty('已用占比')
+  })
+
+  it('dims blocked desktop rows, aligns reveal label, and uses solid ring for blocked unlimited keys', async () => {
+    await mountList([
+      { ...backendTokens[0]!, id: 201, status: 2, unlimited_quota: true },
+      { ...backendTokens[1]!, id: 202, status: 4, remain_quota: 0 },
+      { ...backendTokens[2]!, id: 203, status: 1, expired_time: 1_000_000_000 },
+    ])
+
+    const rows = wrapper!.findAll('tbody tr')
+    expect(rows[0]!.classes()).toContain('opacity-80')
+    expect(rows[1]!.classes()).not.toContain('opacity-80')
+    expect(rows[2]!.classes()).toContain('opacity-80')
+
+    // Desktop key reveal button matches mobile label.
+    expect(
+      rows[0]!
+        .find('td[headers$="-key"] button[aria-label="查看完整密钥"]')
+        .exists()
+    ).toBe(true)
+
+    // Blocked unlimited key draws a solid blocked ring, not an extra-faded dashed ring.
+    const blockedCircles = rows[0]!.findAll(
+      '[data-ring-state="disabled"] circle'
+    )
+    expect(blockedCircles.every((c) => c.attributes('opacity') !== '0.7')).toBe(
+      true
+    )
   })
 })

@@ -25,9 +25,12 @@ type tokenRequest struct {
 }
 
 type tokenResponse struct {
-	Type              string `json:"type"`
-	SelectedOnly      bool   `json:"selected_only"`
-	RouteChannelCount int    `json:"route_channel_count"`
+	Type                     string                `json:"type"`
+	SelectedOnly             bool                  `json:"selected_only"`
+	RouteChannelCount        int                   `json:"route_channel_count"`
+	EnabledRouteChannelCount int                   `json:"enabled_route_channel_count"`
+	RouteScope               model.TokenRouteScope `json:"route_scope"`
+	EffectiveMode            string                `json:"effective_mode"`
 	*model.Token
 }
 
@@ -47,7 +50,12 @@ func buildMaskedTokenResponse(token *model.Token) *tokenResponse {
 	}
 	maskedToken := *token
 	maskedToken.Key = token.GetMaskedKey()
-	return &tokenResponse{Token: &maskedToken, Type: model.TokenRouteAuto}
+	return &tokenResponse{
+		Token:         &maskedToken,
+		Type:          model.TokenRouteAuto,
+		RouteScope:    model.TokenRouteScopePlatform,
+		EffectiveMode: model.TokenRouteAuto,
+	}
 }
 
 func buildMaskedTokenResponses(tokens []*model.Token) []*tokenResponse {
@@ -299,6 +307,7 @@ func AddToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
+		"data":    gin.H{"id": cleanToken.Id},
 	})
 }
 

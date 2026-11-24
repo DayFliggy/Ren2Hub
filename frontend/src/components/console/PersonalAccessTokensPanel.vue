@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import FormField from '@/components/common/FormField.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import {
   personalAccessTokensApi,
@@ -38,6 +40,7 @@ const name = ref('')
 const scopes = ref<string[]>([])
 const expires = ref('')
 const secret = ref('')
+const editorFormId = useId()
 let epoch = 0
 let controller = new AbortController()
 let disposed = false
@@ -261,7 +264,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    class="border-t border-[var(--border-subtle)] p-6 sm:p-7"
+    class="no-handdrawn border-t border-[var(--border-subtle)] p-6 sm:p-7"
     data-testid="pat-panel"
   >
     <div class="flex flex-wrap items-start justify-between gap-3">
@@ -312,6 +315,7 @@ onBeforeUnmount(() => {
         >
         <ConsoleButton
           variant="ghost"
+          class="text-[var(--status-danger-text)] hover:bg-[var(--status-danger-soft)] hover:text-[var(--status-danger-text)]"
           :disabled="busy"
           @click="revokeTarget = 'legacy'"
           >{{ t('pat.revoke') }}</ConsoleButton
@@ -320,7 +324,9 @@ onBeforeUnmount(() => {
       <p class="mt-2 text-sm text-[var(--text-secondary)]">
         {{ t('pat.legacyRetire', { date: timestamp(legacy.retire_at) }) }}
       </p>
-      <dl class="mt-2 text-xs text-[var(--text-tertiary)]">
+      <dl
+        class="mt-2 grid gap-x-5 gap-y-1 text-xs text-[var(--text-tertiary)] sm:grid-cols-3"
+      >
         <div v-if="legacy.created_at">
           <dt>{{ t('pat.created') }}</dt>
           <dd>{{ timestamp(legacy.created_at) }}</dd>
@@ -334,7 +340,7 @@ onBeforeUnmount(() => {
     <p
       v-if="error"
       role="alert"
-      class="mt-3 text-sm text-[var(--status-danger)]"
+      class="mt-3 text-sm text-[var(--status-danger-text)]"
     >
       {{ error }}
     </p>
@@ -350,13 +356,15 @@ onBeforeUnmount(() => {
     >
       <li v-for="item in items" :key="item.id" class="min-w-0 py-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="min-w-0">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
             <span class="break-all font-semibold text-[var(--text-primary)]">{{
               item.name
-            }}</span
-            ><span class="ml-3 text-xs text-[var(--text-secondary)]">{{
-              t(`pat.${state(item)}`)
             }}</span>
+            <StatusChip
+              :tone="state(item) === 'active' ? 'success' : 'neutral'"
+            >
+              {{ t(`pat.${state(item)}`) }}
+            </StatusChip>
           </div>
           <div v-if="state(item) === 'active'" class="flex flex-wrap gap-1">
             <ConsoleButton
@@ -371,6 +379,7 @@ onBeforeUnmount(() => {
               >{{ t('pat.permissions') }}</ConsoleButton
             ><ConsoleButton
               variant="ghost"
+              class="text-[var(--status-danger-text)] hover:bg-[var(--status-danger-soft)] hover:text-[var(--status-danger-text)]"
               :disabled="busy"
               @click="revokeTarget = item"
               >{{ t('pat.revoke') }}</ConsoleButton
@@ -408,30 +417,34 @@ onBeforeUnmount(() => {
     </ul>
     <ConsoleModal
       :open="editor !== null"
-      :aria-label="editor === 'create' ? t('pat.create') : t('pat.edit')"
+      :title="editor === 'create' ? t('pat.create') : t('pat.edit')"
       :close-disabled="busy"
       @close="editor = null"
     >
-      <form class="sibling-space-y-4" @submit.prevent="save">
-        <h3 class="text-lg font-semibold">
-          {{ editor === 'create' ? t('pat.create') : t('pat.edit') }}
-        </h3>
-        <label class="block text-sm"
-          >{{ t('pat.name')
-          }}<TextInput
+      <form
+        :id="editorFormId"
+        class="sibling-space-y-4 text-left"
+        @submit.prevent="save"
+      >
+        <FormField :label="t('pat.name')">
+          <TextInput
             v-model="name"
             :disabled="busy"
             :aria-label="t('pat.name')"
-        /></label>
+          />
+        </FormField>
         <fieldset v-if="editor !== 'rename'" :disabled="busy">
           <legend class="text-sm font-semibold">{{ t('pat.scopes') }}</legend>
           <p class="my-2 text-xs text-[var(--text-secondary)]">
             {{ t('pat.scopeHint') }}
           </p>
-          <div class="max-h-80 space-y-4 overflow-y-auto pr-1">
+          <div
+            class="subtle-scroll max-h-80 sibling-space-y-4 overflow-y-auto pr-1"
+          >
             <section
               v-for="group in catalog?.groups ?? []"
               :key="group.group"
+              class="no-handdrawn"
               :data-testid="`pat-group-${group.group}`"
             >
               <h4 class="text-xs font-semibold text-[var(--text-tertiary)]">
@@ -454,7 +467,7 @@ onBeforeUnmount(() => {
                     v-model="scopes"
                     type="checkbox"
                     :value="action.scope"
-                    class="mt-0.5"
+                    class="mt-0.5 accent-[var(--accent)]"
                   />
                   <span class="min-w-0"
                     >{{ serverText(action.label_key)
@@ -476,46 +489,51 @@ onBeforeUnmount(() => {
                 v-model="scopes"
                 type="checkbox"
                 :value="scope"
-                class="mt-0.5"
+                class="mt-0.5 accent-[var(--accent)]"
               />{{ scope }} · {{ t('pat.unavailableScope') }}
             </label>
           </div>
         </fieldset>
-        <label v-if="editor === 'create'" class="block text-sm"
-          >{{ t('pat.expiry')
-          }}<TextInput
+        <FormField
+          v-if="editor === 'create'"
+          :label="t('pat.expiry')"
+          :hint="
+            t('pat.defaultExpiry', { days: catalog?.default_lifetime_days })
+          "
+        >
+          <TextInput
             v-model="expires"
             type="datetime-local"
             step="1"
             :disabled="busy"
             :aria-label="t('pat.expiry')"
-          /><span class="mt-1 block text-xs text-[var(--text-tertiary)]">{{
-            t('pat.defaultExpiry', { days: catalog?.default_lifetime_days })
-          }}</span></label
-        >
+          />
+        </FormField>
+      </form>
+      <template #footer>
         <div class="flex justify-end gap-2">
           <ConsoleButton
             variant="secondary"
             :disabled="busy"
             @click="editor = null"
             >{{ t('pat.cancel') }}</ConsoleButton
-          ><ConsoleButton type="submit" :loading="busy">{{
+          ><ConsoleButton type="submit" :form="editorFormId" :loading="busy">{{
             t('pat.save')
           }}</ConsoleButton>
         </div>
-      </form>
+      </template>
     </ConsoleModal>
     <ConsoleModal
       :open="Boolean(secret)"
-      :aria-label="t('pat.oneTime')"
+      :title="t('pat.oneTime')"
       @close="secret = ''"
-      ><div class="sibling-space-y-4">
-        <h3 class="text-lg font-semibold">{{ t('pat.oneTime') }}</h3>
-        <code
-          class="block select-all break-all rounded-lg bg-[var(--surface-muted)] p-4 text-sm"
-          data-testid="pat-secret"
-          >{{ secret }}</code
-        >
+    >
+      <code
+        class="block select-all break-all rounded-lg bg-[var(--surface-muted)] p-4 text-sm"
+        data-testid="pat-secret"
+        >{{ secret }}</code
+      >
+      <template #footer>
         <div class="flex justify-end gap-2">
           <ConsoleButton variant="secondary" @click="copySecret">{{
             t('pat.copy')
@@ -524,8 +542,8 @@ onBeforeUnmount(() => {
             t('pat.close')
           }}</ConsoleButton>
         </div>
-      </div></ConsoleModal
-    >
+      </template>
+    </ConsoleModal>
     <ConfirmDialog
       :open="Boolean(revokeTarget)"
       :title="t('pat.revokeTitle')"

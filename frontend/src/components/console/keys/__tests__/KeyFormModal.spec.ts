@@ -81,7 +81,7 @@ describe('KeyFormModal', () => {
           '/api/token/',
           expect.objectContaining({ remain_quota: quota })
         )
-        expect(wrapper.emitted('saved')).toEqual([[false]])
+        expect(wrapper.emitted('saved')).toEqual([[]])
       } finally {
         wrapper.unmount()
         configureQuotaDisplay({ quota_per_unit: 500_000 })
@@ -166,7 +166,7 @@ describe('KeyFormModal', () => {
         expect.objectContaining({ allow_user_quota_query: true })
       )
       expect(post.mock.calls[0]![1]).not.toHaveProperty('type')
-      expect(wrapper.emitted('saved')).toEqual([[true]])
+      expect(wrapper.emitted('saved')).toEqual([[]])
     } finally {
       wrapper.unmount()
     }

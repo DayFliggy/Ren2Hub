@@ -17,6 +17,57 @@ const (
 	MaxTokenRouteEntries = 100
 )
 
+type TokenRouteScope string
+
+const (
+	TokenRouteScopePlatform TokenRouteScope = "platform"
+	TokenRouteScopeSelected TokenRouteScope = "selected"
+	TokenRouteScopeEmpty    TokenRouteScope = "empty"
+)
+
+// RouteScopeOf 是生效路由范围的唯一判定来源：
+// - 未选定范围（selectedOnly=false）→ platform
+// - 选定范围但管理员已删光所有条目（total==0）→ empty（调用返 503，不静默放开）
+// - 选定范围且条目存在但全部被停用（enabled==0）→ platform（自动退回全平台自动路由）
+// - 其余至少有一条启用条目 → selected
+func RouteScopeOf(selectedOnly bool, total, enabled int) TokenRouteScope {
+	if !selectedOnly {
+		return TokenRouteScopePlatform
+	}
+	if total == 0 {
+		return TokenRouteScopeEmpty
+	}
+	if enabled == 0 {
+		return TokenRouteScopePlatform
+	}
+	return TokenRouteScopeSelected
+}
+
+func EffectiveTokenRouteMode(mode string, scope TokenRouteScope) string {
+	if scope == TokenRouteScopeSelected && mode == TokenRouteOrdered {
+		return TokenRouteOrdered
+	}
+	return TokenRouteAuto
+}
+
+func (r TokenRouting) EnabledCount() int {
+	enabled := 0
+	for _, entry := range r.Entries {
+		if entry.Enabled {
+			enabled++
+		}
+	}
+	return enabled
+}
+
+func (r TokenRouting) Scope() TokenRouteScope {
+	return RouteScopeOf(r.SelectedOnly, len(r.Entries), r.EnabledCount())
+}
+
+func (r TokenRouting) EffectiveMode() string {
+	return EffectiveTokenRouteMode(r.Mode, r.Scope())
+}
+
 var (
 	ErrTokenRouteInvalid   = errors.New("invalid token routing configuration")
 	ErrTokenRouteConflict  = errors.New("token routing version conflict")
@@ -185,14 +236,17 @@ func lockRouteChannels(tx *gorm.DB, entries []TokenRouteEntry) error {
 }
 
 type TokenRoutingSummary struct {
-	TokenID           int
-	Mode              string
-	SelectedOnly      bool
-	RouteChannelCount int
+	TokenID                  int
+	Mode                     string
+	SelectedOnly             bool
+	RouteChannelCount        int
+	EnabledRouteChannelCount int
+	RouteScope               TokenRouteScope
+	EffectiveMode            string
 }
 
-// TokenRoutingModes reads mode, scope and count in one statement so an editor
-// saving a new version cannot mix old settings with the new entry count.
+// TokenRoutingModes reads mode, scope and entry counts in one statement so an
+// editor saving a new version cannot mix old settings with the new entry count.
 func TokenRoutingModes(tokenIDs []int) (map[int]TokenRoutingSummary, error) {
 	modes := make(map[int]TokenRoutingSummary, len(tokenIDs))
 	if len(tokenIDs) == 0 {
@@ -200,7 +254,12 @@ func TokenRoutingModes(tokenIDs []int) (map[int]TokenRoutingSummary, error) {
 	}
 	var profiles []TokenRoutingSummary
 	count := DB.Model(&TokenRouteEntry{}).Select("count(*)").Where("token_id = profiles.token_id")
-	err := DB.Model(&TokenRouteProfile{}).Table("(?) AS profiles", DB.Model(&TokenRouteProfile{}).Select("token_id, mode, selected_only")).Select("profiles.*, (?) AS route_channel_count", count).Where("profiles.token_id IN ?", tokenIDs).Scan(&profiles).Error
+	enabledCount := DB.Model(&TokenRouteEntry{}).Select("count(*)").Where("token_id = profiles.token_id AND enabled = ?", true)
+	err := DB.Model(&TokenRouteProfile{}).
+		Table("(?) AS profiles", DB.Model(&TokenRouteProfile{}).Select("token_id, mode, selected_only")).
+		Select("profiles.*, (?) AS route_channel_count, (?) AS enabled_route_channel_count", count, enabledCount).
+		Where("profiles.token_id IN ?", tokenIDs).
+		Scan(&profiles).Error
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +267,8 @@ func TokenRoutingModes(tokenIDs []int) (map[int]TokenRoutingSummary, error) {
 		if profile.Mode != TokenRouteAuto && profile.Mode != TokenRouteOrdered {
 			return nil, fmt.Errorf("%w: token %d", ErrTokenRouteInvalid, profile.TokenID)
 		}
+		profile.RouteScope = RouteScopeOf(profile.SelectedOnly, profile.RouteChannelCount, profile.EnabledRouteChannelCount)
+		profile.EffectiveMode = EffectiveTokenRouteMode(profile.Mode, profile.RouteScope)
 		modes[profile.TokenID] = profile
 	}
 	return modes, nil

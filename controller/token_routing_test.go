@@ -115,90 +115,6 @@ func TestTokenRoutingAPIIsolationConflictAndPublicProjection(t *testing.T) {
 	require.Equal(t, 400, w.Code)
 }
 
-func TestTokenRoutingPreviewIsOwnedReadOnlyAndExplainsConstraints(t *testing.T) {
-	db := setupTokenControllerTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}))
-	require.NoError(t, db.Create(&model.User{Id: 71, Username: "preview-owner"}).Error)
-	require.NoError(t, db.Create(&model.Token{Id: 72, UserId: 71, Key: "preview-token", RemainQuota: 12345, ModelLimitsEnabled: true, ModelLimits: "fixture"}).Error)
-	for _, ch := range []model.Channel{
-		{Id: 1, Name: "Eligible", Type: constant.ChannelTypeOpenAI, Status: 1, Models: "fixture", Key: "not-public"},
-		{Id: 2, Name: "Advanced", Type: constant.ChannelTypeAdvancedCustom, Status: 1, Models: "fixture"},
-		{Id: 3, Name: "Another model", Type: constant.ChannelTypeOpenAI, Status: 1, Models: "other"},
-		{Id: 4, Name: "Over ratio limit", Type: constant.ChannelTypeOpenAI, Status: 1, ChannelRatio: "2", Models: "fixture"},
-		{Id: 5, Name: "Disabled", Type: constant.ChannelTypeOpenAI, Status: 2, Models: "fixture"},
-	} {
-		require.NoError(t, db.Create(&ch).Error)
-		require.NoError(t, db.Create(&model.Ability{ChannelId: ch.Id, Model: ch.Models, Enabled: ch.Status == 1}).Error)
-	}
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 72, Mode: "ordered", SelectedOnly: true, Version: 3, MaxChannelRatio: common.GetPointer("1")}).Error)
-	entries := []model.TokenRouteEntry{}
-	for i, id := range []int{2, 4, 5, 3, 1} {
-		entries = append(entries, model.TokenRouteEntry{TokenID: 72, ChannelID: id, Position: i, Enabled: true})
-	}
-	require.NoError(t, db.Create(&entries).Error)
-	request := func(user int, query string) *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest(http.MethodGet, "/api/token/72/routing/preview?"+query, nil)
-		c.Params = gin.Params{{Key: "id", Value: "72"}}
-		c.Set("id", user)
-		GetTokenRoutingPreview(c)
-		return w
-	}
-	w := request(71, "model=fixture&path=/v1/responses")
-	require.Equal(t, 200, w.Code)
-	var result struct {
-		Data struct {
-			Mode    string `json:"mode"`
-			Version int    `json:"version"`
-			Entries []struct {
-				ChannelID int    `json:"channel_id"`
-				Eligible  bool   `json:"eligible"`
-				Reason    string `json:"reason"`
-			} `json:"entries"`
-		} `json:"data"`
-	}
-	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &result))
-	require.Equal(t, "ordered", result.Data.Mode)
-	require.Equal(t, 3, result.Data.Version)
-	require.Len(t, result.Data.Entries, 5)
-	require.Equal(t, "protocol_unavailable", result.Data.Entries[0].Reason)
-	require.Equal(t, "channel_ratio_exceeded", result.Data.Entries[1].Reason)
-	require.Equal(t, "channel_unavailable", result.Data.Entries[2].Reason)
-	require.Equal(t, "model_unavailable", result.Data.Entries[3].Reason)
-	require.True(t, result.Data.Entries[4].Eligible)
-	require.NotContains(t, w.Body.String(), "not-public")
-	require.NotContains(t, w.Body.String(), "not-public")
-	require.Equal(t, 404, request(99, "model=fixture&path=/v1/responses").Code)
-	require.Equal(t, 400, request(71, "model=fixture&path=https://invalid.example").Code)
-	require.Equal(t, 400, request(71, "model=fixture&path=/v1/responses&stream=maybe").Code)
-	require.Contains(t, request(71, "model=fixture&path=/v1/responses&stream=true").Body.String(), `"stream":true`)
-	require.Contains(t, w.Body.String(), `"ordering":"ordered"`)
-	require.Contains(t, w.Body.String(), `"transport":"http"`)
-	ws := request(71, "model=fixture&path=/v1/responses&transport=websocket")
-	require.Equal(t, 200, ws.Code)
-	require.Contains(t, ws.Body.String(), `"transport":"websocket"`)
-	require.Contains(t, ws.Body.String(), `"stream":true`)
-	require.NotContains(t, ws.Body.String(), `"eligible":true`)
-	for _, suffix := range []string{"&path=/v1/chat/completions&transport=websocket", "&path=/custom/plugin"} {
-		unsupported := request(71, "model=fixture"+suffix)
-		require.Equal(t, 400, unsupported.Code)
-		require.Contains(t, unsupported.Body.String(), "preview_path_unsupported")
-	}
-	require.Equal(t, 400, request(71, "model=fixture&path=/v1/responses&transport=invalid").Code)
-
-	require.Contains(t, request(71, "model=forbidden&path=/v1/responses").Body.String(), "model_not_allowed")
-	token, err := model.GetTokenByIds(72, 71)
-	require.NoError(t, err)
-	require.Equal(t, 12345, token.RemainQuota)
-	view, err := model.ReadTokenRouting(t.Context(), 72)
-	require.NoError(t, err)
-	require.EqualValues(t, 3, view.Version)
-	require.Len(t, view.Entries, 5)
-	require.NoError(t, db.Where("token_id = ?", 72).Delete(&model.TokenRouteEntry{}).Error)
-	require.Contains(t, request(71, "model=fixture&path=/v1/responses").Body.String(), `"entries":[]`)
-}
-
 func TestTokenRoutingPUTRestoresPlatformSelection(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}))
@@ -233,4 +149,75 @@ func TestTokenRoutingPUTRestoresPlatformSelection(t *testing.T) {
 	channel, failure := service.SelectChannelForRequest(c, "scope-model", nil)
 	require.Nil(t, failure)
 	require.Equal(t, 22, channel.Id)
+}
+
+func TestAddTokenReturnsCreatedID(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+	require.NoError(t, db.Create(&model.User{Id: 31, Username: "token-creator"}).Error)
+	ctx, w := newAuthenticatedContext(t, http.MethodPost, "/api/token/", map[string]any{"name": "new-key", "unlimited_quota": true}, 31)
+	AddToken(ctx)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Greater(t, payload.Data.ID, 0)
+	stored, err := model.GetTokenByIds(payload.Data.ID, 31)
+	require.NoError(t, err)
+	require.Equal(t, "new-key", stored.Name)
+}
+
+func TestGetTokenRoutingCandidateChannelsFiltersDraftPolicy(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}))
+	require.NoError(t, db.Create(&model.User{Id: 35, Username: "candidate-owner"}).Error)
+	privateURL := "https://private-candidate.example"
+	for _, ch := range []model.Channel{
+		{Id: 11, Name: "Cheap-A", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Key: "secret-a", BaseURL: &privateURL, Models: "gpt-4o,claude-4", ChannelRatio: "1"},
+		{Id: 22, Name: "Pricey-B", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Key: "secret-b", Models: "gpt-4o", ChannelRatio: "2.5"},
+		{Id: 33, Name: "Other-C", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Key: "secret-c", Models: "other-model", ChannelRatio: "1"},
+		{Id: 44, Name: "Disabled-D", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusManuallyDisabled, Key: "secret-d", Models: "gpt-4o", ChannelRatio: "1"},
+	} {
+		require.NoError(t, db.Create(&ch).Error)
+		for _, m := range ch.GetModels() {
+			require.NoError(t, db.Create(&model.Ability{ChannelId: ch.Id, Model: m, Enabled: true}).Error)
+		}
+	}
+	query := func(rawQuery string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/token/routing/channels"+rawQuery, nil)
+		c.Set("id", 35)
+		GetTokenRoutingCandidateChannels(c)
+		return w
+	}
+
+	w := query("?model_limits=gpt-4o&max_channel_ratio=1.5")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), "secret-a")
+	require.NotContains(t, w.Body.String(), "private-candidate")
+	var resp struct {
+		Success bool                   `json:"success"`
+		Data    []service.RouteChannel `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	byID := map[int]service.RouteChannel{}
+	for _, ch := range resp.Data {
+		byID[ch.ID] = ch
+	}
+	require.NotContains(t, byID, 33, "channel serving no allowed model is excluded")
+	require.True(t, byID[11].Eligible)
+	require.False(t, byID[22].Eligible)
+	require.Equal(t, "channel_ratio_exceeded", byID[22].FilterReason)
+	require.False(t, byID[44].Eligible)
+	require.Equal(t, "channel_unavailable", byID[44].FilterReason)
+
+	require.Equal(t, http.StatusBadRequest, query("?max_channel_ratio=-1").Code)
+	require.Equal(t, http.StatusBadRequest, query("?model_limits="+strings.Repeat("a", maxCandidateModelLimitsBytes+1)).Code)
 }

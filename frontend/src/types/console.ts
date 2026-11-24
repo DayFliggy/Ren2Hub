@@ -8,6 +8,8 @@ export interface TokenChannel {
   weight?: number // load-balance weight (only meaningful when load_balance)
 }
 
+export type TokenRouteScope = 'platform' | 'selected' | 'empty'
+
 export interface TokenItem {
   id: number
   name: string
@@ -17,6 +19,12 @@ export interface TokenItem {
   selected_only: boolean
   /** Saved route entries, enabled or not; 0 with selected_only means calls are rejected. */
   route_channel_count: number
+  /** Enabled route entries inside the saved selection. */
+  enabled_route_channel_count?: number
+  /** Effective backend scope: platform (including all-paused), selected, or empty (orphaned). */
+  route_scope?: TokenRouteScope
+  /** Effective backend routing mode: auto unless route_scope is selected + ordered. */
+  effective_mode?: TokenType
   allow_user_quota_query?: boolean
   status: number // Native: 1 enabled, 2 disabled, 3 expired, 4 exhausted
   used_quota: string

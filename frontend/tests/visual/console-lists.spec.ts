@@ -171,3 +171,133 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await expect(region).toBeHidden()
   })
 }
+
+test('light mobile cards preserve semantic quota borders and straight row dividers', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await configureStablePage(page, { theme: 'light', authenticated: true })
+  await page.route('**/api/token/?*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          page: 1,
+          page_size: 10,
+          total: 1,
+          items: [
+            {
+              id: 7,
+              name: 'Low Key',
+              key: 'sk-****1234',
+              type: 'ordered',
+              selected_only: true,
+              route_channel_count: 2,
+              status: 1,
+              remain_quota: 40_000,
+              used_quota: 960_000,
+              unlimited_quota: false,
+              model_limits_enabled: false,
+              model_limits: '',
+              allow_ips: null,
+              allow_user_quota_query: true,
+              created_time: 1785124800,
+              expired_time: -1,
+            },
+          ],
+        },
+      },
+    })
+  )
+  await page.goto('/keys', { waitUntil: 'domcontentloaded' })
+  await waitForStablePage(page)
+
+  const styles = await page.evaluate(() => {
+    const row = document.querySelector<HTMLElement>('[data-key-mobile-row]')!
+    const bar = document.querySelector<HTMLElement>('.key-quota-bar')!
+    return {
+      rowRadius: getComputedStyle(row).borderRadius,
+      barBorderColor: getComputedStyle(bar).borderColor,
+      barRadius: getComputedStyle(bar).borderRadius,
+    }
+  })
+  expect(styles.rowRadius).toBe('0px')
+  expect(styles.barRadius).toBe('12px')
+  expect(styles.barBorderColor).not.toBe('rgba(56, 55, 43, 0.27)')
+})
+
+test('dark route chip matches in table and popover, and en route chip stays single-line', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await configureStablePage(page, {
+    theme: 'dark',
+    locale: 'en',
+    authenticated: true,
+  })
+  await page.addInitScript(() => {
+    if (window !== window.top || location.protocol !== 'http:') return
+    localStorage.setItem('ren2hub_locale', 'en')
+  })
+  await page.route('**/api/token/?*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          page: 1,
+          page_size: 10,
+          total: 1,
+          items: [
+            {
+              id: 7,
+              name: 'Ordered Key',
+              key: 'sk-****1234',
+              type: 'ordered',
+              selected_only: true,
+              route_channel_count: 2,
+              status: 1,
+              remain_quota: 500_000,
+              used_quota: 250_000,
+              unlimited_quota: false,
+              model_limits_enabled: false,
+              model_limits: '',
+              allow_ips: null,
+              allow_user_quota_query: true,
+              created_time: 1785124800,
+              expired_time: -1,
+            },
+          ],
+        },
+      },
+    })
+  )
+  await page.goto('/keys', { waitUntil: 'domcontentloaded' })
+  await waitForStablePage(page)
+
+  const row = page.locator('[data-key-page] tbody tr').first()
+  await row.locator('td[headers$="-name"]').hover()
+  const popover = page.locator('[data-key-quota-popover]')
+  await expect(popover).toBeVisible()
+
+  const metrics = await page.evaluate(() => {
+    const tableChip = document.querySelector<HTMLElement>(
+      'td[headers$="-type"] [data-handdrawn="chip"]'
+    )!
+    const pop = document.querySelector<HTMLElement>('[data-key-quota-popover]')!
+    const popChip = pop.querySelector<HTMLElement>('.key-route-chip')!
+    const tcs = getComputedStyle(tableChip)
+    const pcs = getComputedStyle(popChip)
+    return {
+      tableHeight: Math.round(tableChip.getBoundingClientRect().height),
+      tableBg: tcs.backgroundColor,
+      tableColor: tcs.color,
+      popBg: pcs.backgroundColor,
+      popColor: pcs.color,
+      popOverflow: pop.scrollWidth - pop.clientWidth,
+    }
+  })
+  expect(metrics.tableHeight).toBeLessThanOrEqual(26)
+  expect(metrics.popBg).toBe(metrics.tableBg)
+  expect(metrics.popColor).toBe(metrics.tableColor)
+  expect(metrics.popOverflow).toBeLessThanOrEqual(0)
+})

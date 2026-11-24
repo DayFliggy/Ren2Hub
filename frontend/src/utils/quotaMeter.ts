@@ -46,7 +46,9 @@ export function quotaMeter(
   return {
     state,
     percent,
-    remainingPercent: Math.round(remainingRatio * 100),
+    // Never round a positive remaining share down to 0% while still active.
+    remainingPercent:
+      state === 'exhausted' ? 0 : Math.max(1, Math.round(remainingRatio * 100)),
   }
 }
 

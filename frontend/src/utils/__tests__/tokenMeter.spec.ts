@@ -66,6 +66,19 @@ describe('tokenMeter', () => {
     ])
   })
 
+  it('never reports 0% left or 100% used while a low balance is still active', () => {
+    const { meter, note } = meterOf({ remain_quota: 500, used_quota: '999500' })
+    expect(meter).toMatchObject({
+      state: 'low',
+      usedPercent: 99,
+      remainingPercent: 1,
+    })
+    expect(note).toEqual([
+      { key: 'keys.meter.onlyLeft', params: { percent: 1 }, tone: 'warning' },
+      { key: 'common.never' },
+    ])
+  })
+
   it('fills the ring red when the balance is spent or was never funded', () => {
     for (const patch of [
       { remain_quota: 0, used_quota: '500' },

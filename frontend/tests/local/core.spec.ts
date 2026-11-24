@@ -213,30 +213,17 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         fullPage: true,
       })
     })
-    await test.step('每 Key 路由通过页面保存并在刷新后保持', async () => {
-      await page.locator(`a[href="/keys/${tokenId}/routing"]:visible`).click()
+    await test.step('每 Key 路由通过编辑弹窗保存并在刷新后保持', async () => {
+      await page.locator('[data-key-route-trigger]:visible').first().click()
+      const dialog = page.getByRole('dialog', { name: '编辑令牌', exact: true })
+      await expect(dialog).toBeVisible()
       // The empty install has no channels, so this flow checks the default
-      // scope, the client-side block on an empty ordered list, and a saved
-      // platform scope; selected-channel saves are covered with fixtures.
-      const orderedMode = page.getByRole('radio', {
-        name: '顺序路由',
-        exact: true,
-      })
-      const automatic = page.getByRole('radio', {
-        name: '自动路由',
-        exact: true,
-      })
-      const platform = page.getByRole('radio', {
-        name: '全平台渠道',
-        exact: true,
-      })
-      const selectedScope = page.getByRole('radio', {
-        name: '指定渠道',
-        exact: true,
-      })
-      const save = page.getByRole('button', { name: '保存', exact: true })
-      await expect(automatic).toBeChecked()
-      await expect(platform).toBeChecked()
+      // automatic all-platform state, the client-side block on an empty
+      // ordered list, and saving a ratio cap via the modal.
+      const orderedMode = dialog.getByRole('radio', { name: /顺序路由/ })
+      const automatic = dialog.getByRole('radio', { name: /自动路由/ })
+      const confirm = dialog.getByRole('button', { name: '确认', exact: true })
+      await expect(automatic).toHaveAttribute('aria-checked', 'true')
       const writes: string[] = []
       const recordWrite = (request: import('@playwright/test').Request) => {
         if (
@@ -247,26 +234,25 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       }
       page.on('request', recordWrite)
       try {
-        await orderedMode.check()
-        await expect(selectedScope).toBeChecked()
-        await expect(platform).toBeDisabled()
-        await save.click()
+        await orderedMode.click()
         await expect(
-          page.getByRole('alert').filter({ hasText: '请至少添加一个渠道' })
+          dialog.locator('[data-routing-ordered-empty]')
         ).toBeVisible()
+        await confirm.click()
         expect(writes).toEqual([])
       } finally {
         page.off('request', recordWrite)
       }
-      await automatic.check()
-      await platform.check()
+      await automatic.click()
+      await dialog.getByRole('button', { name: /渠道倍率上限/ }).click()
+      await dialog.locator('input[name="token-max-channel-ratio"]').fill('2')
       const saved = page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname ===
             `/api/token/${tokenId}/routing` &&
           response.request().method() === 'PUT'
       )
-      await save.click()
+      await confirm.click()
       const response = await saved
       expect(response.status()).toBe(200)
       const body = await response.json()
@@ -274,17 +260,28 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       expect(body.data).toMatchObject({
         mode: 'auto',
         selected_only: false,
+        max_channel_ratio: '2',
         entries: [],
         version: 1,
       })
+      await expect(dialog).toHaveCount(0)
       await page.reload()
-      await expect(automatic).toBeChecked()
-      await expect(platform).toBeChecked()
-      await layout(page, 'Key 路由')
+      await page.locator('[data-key-route-trigger]:visible').first().click()
+      await expect(
+        page.getByRole('dialog', { name: '编辑令牌', exact: true })
+      ).toBeVisible()
+      await expect(
+        page.locator('input[name="token-max-channel-ratio"]')
+      ).toHaveValue('2')
+      await layout(page, 'Key 路由弹窗')
       await page.screenshot({
         path: info.outputPath('token-routing.png'),
         fullPage: true,
       })
+      await page
+        .getByRole('dialog', { name: '编辑令牌', exact: true })
+        .getByRole('button', { name: '取消', exact: true })
+        .click()
     })
     await test.step('钱包使用原生信息，空安装不创建支付订单', async () => {
       const infoResponse = page.waitForResponse(

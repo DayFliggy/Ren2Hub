@@ -167,7 +167,7 @@ useEventListener(
           >
             {{ token.name }}
           </p>
-          <p class="mt-1 flex items-center gap-1.5">
+          <p class="mt-1 flex flex-wrap items-center gap-1.5">
             <StatusChip :tone="statusTone">
               {{ t(tokenMeterLabel(token, meter)) }}
             </StatusChip>

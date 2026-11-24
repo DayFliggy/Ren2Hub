@@ -1020,11 +1020,20 @@ func verifyAPITokenAudit(t *testing.T) {
 func TestTokenListAndDetailRoutingScope(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	for index, tc := range []struct {
-		mode     string
-		selected bool
-		count    int
-	}{{"auto", false, 0}, {"auto", true, 2}, {"ordered", true, 1}, {"auto", true, 0}} {
-		t.Run(fmt.Sprintf("%s-%t-%d", tc.mode, tc.selected, tc.count), func(t *testing.T) {
+		mode          string
+		selected      bool
+		count         int
+		enabledCount  int
+		wantScope     string
+		wantEffective string
+	}{
+		{"auto", false, 0, 0, "platform", "auto"},
+		{"auto", true, 2, 1, "selected", "auto"},
+		{"ordered", true, 1, 1, "selected", "ordered"},
+		{"ordered", true, 2, 0, "platform", "auto"},
+		{"auto", true, 0, 0, "empty", "auto"},
+	} {
+		t.Run(fmt.Sprintf("%s-%t-%d-%d", tc.mode, tc.selected, tc.count, tc.enabledCount), func(t *testing.T) {
 			userID := index + 1
 			token := seedToken(t, db, userID, t.Name(), t.Name())
 			if tc.selected {
@@ -1032,13 +1041,16 @@ func TestTokenListAndDetailRoutingScope(t *testing.T) {
 				require.NoError(t, common.Unmarshal([]byte(fmt.Sprintf(`{"token_id":%d,"mode":%q,"selected_only":true,"version":1}`, token.Id, tc.mode)), &profile))
 				require.NoError(t, db.Create(&profile).Error)
 				for i := range tc.count {
-					require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: token.Id, ChannelID: i + 1, Position: i, Enabled: i == 0}).Error)
+					require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: token.Id, ChannelID: i + 1, Position: i, Enabled: i < tc.enabledCount}).Error)
 				}
 			}
 			check := func(row map[string]any) {
 				require.Equal(t, tc.mode, row["type"])
 				require.Equal(t, tc.selected, row["selected_only"])
 				require.Equal(t, float64(tc.count), row["route_channel_count"])
+				require.Equal(t, float64(tc.enabledCount), row["enabled_route_channel_count"])
+				require.Equal(t, tc.wantScope, row["route_scope"])
+				require.Equal(t, tc.wantEffective, row["effective_mode"])
 			}
 			ctx, w := newAuthenticatedContext(t, http.MethodGet, "/api/token/", nil, userID)
 			GetAllTokens(ctx)

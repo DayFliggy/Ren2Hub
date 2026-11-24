@@ -700,11 +700,103 @@ export default {
     editTitle: 'Edit key',
     route: {
       autoPlatform: 'Auto · all platform',
+      autoPlatformPaused: 'Auto · all platform · {count} paused',
       autoSelected: 'Auto · {count} channel | Auto · {count} channels',
       ordered: 'Ordered · {count} channel | Ordered · {count} channels',
       unavailable: 'Selected channels unavailable',
       unavailableHint:
-        'Calls with this key fail with “no available channel”. Choose channels again in Routing, or switch back to all platform channels.',
+        'Calls with this key fail with “no available channel”. Click to select channels again or restore all platform channels.',
+      editAria: 'Configure routing for "{name}": {label}',
+    },
+    routingPanel: {
+      title: 'Routing',
+      configure: 'Choose channels',
+      collapse: 'Collapse',
+      summaryPlatform: 'Automatic · all platform channels',
+      summaryPlatformCount:
+        'Automatic · all platform channels ({count} available)',
+      summarySelectedAuto:
+        'Automatic · narrowed to {count} channel | Automatic · narrowed to {count} channels',
+      summarySelectedOrdered:
+        'Ordered · tries {count} channel in order | Ordered · tries {count} channels in order',
+      summaryAllPaused: 'Automatic · all paused (using all platform)',
+      summaryOrphaned: 'Selected channels unavailable (calls return 503)',
+      modeLabel: 'Routing mode',
+      modes: {
+        auto: 'Automatic routing',
+        ordered: 'Ordered routing',
+      },
+      modeHints: {
+        auto: 'Picks by health, quality, load, and priority. Uses all platform channels when none are selected and narrows automatically once you pick channels.',
+        ordered:
+          'Tries enabled channels in the order below, checking only capacity and model support.',
+      },
+      orderedInactiveHint:
+        'All entries are paused; ordered routing is currently inactive',
+      orderedRequired: 'Ordered routing requires at least one channel.',
+      switchToAuto: 'Switch to automatic (all platform)',
+      revertedToPlatform:
+        'All selected channels cleared; scope restored to all platform channels.',
+      allPausedNotice:
+        'Every selected channel is paused. Requests automatically fall back to all platform channels (still subject to model limits and multiplier cap) while keeping your list.',
+      orphanedNotice:
+        'The previously selected channels were removed. Calls with this key currently fail with “no available channel”. Select channels again or restore all platform channels.',
+      orphanedRequired:
+        'Select at least one channel or restore all platform channels before saving.',
+      usePlatform: 'Use all platform channels',
+      selectedTitle: 'Selected channels',
+      orderedListHint: 'Drag or use the arrow buttons to set priority order',
+      autoListHint:
+        'Automatic routing picks among enabled channels below; order is ignored',
+      clearToPlatform: 'Clear to all platform',
+      pickChannels: 'Choose channels',
+      hideCandidates: 'Hide candidates',
+      searchPlaceholder: 'Search by name, #ID, or model…',
+      filterEligible: 'Eligible only',
+      sortByRatio: 'Lowest multiplier',
+      filteredByModels: 'Filtered by current model limits',
+      filteredByRatio: 'Flagging channels above ×{ratio}',
+      showMore: 'Show more ({count} left)',
+      noChannels: 'No platform channels available.',
+      noMatches: 'No matching channels.',
+      loading: 'Loading routing configuration…',
+      loadingCandidates: 'Loading candidate channels…',
+      loadFailed: 'Failed to load routing: {error}',
+      candidatesFailed: 'Failed to load candidate channels: {error}',
+      reload: 'Reload',
+      readOnlyCreate:
+        'New keys use automatic routing across all platform channels (read-only permission).',
+      readOnlyEdit:
+        'You can view this key’s routing configuration, but cannot edit it.',
+      moreOptions: 'Channel multiplier cap',
+      maxRatio: 'Maximum channel multiplier',
+      maxRatioHint:
+        'Applies to both all-platform and selected scopes. Leave empty for no limit (max 1000, up to 18 decimals).',
+      maxRatioPlaceholder: 'No multiplier limit',
+      invalidRatio:
+        'Enter a positive multiplier up to 1000 with at most 18 decimals, or leave empty.',
+      channelMetrics: '×{ratio} · {models} models · concurrency {limit}',
+      selectedMetrics: 'Multiplier ×{ratio} · concurrency limit {limit}',
+      unavailableChannel: 'Channel #{id} unavailable',
+      enabled: 'Enabled',
+      up: 'Move up',
+      down: 'Move down',
+      remove: 'Remove',
+      conflict: 'Routing changed elsewhere. Reload before saving.',
+      partialCreated:
+        'Key created (automatic · all platform), but routing was not saved: {error}. Retry saving routing below.',
+      partialUpdated:
+        'Key settings saved, but routing was not saved: {error}. Retry saving routing below.',
+      retryRouting: 'Retry saving routing',
+      reasons: {
+        eligible: 'Eligible',
+        channel_unavailable: 'Unavailable',
+        channel_ratio_exceeded: 'Above multiplier cap',
+        invalid_channel_ratio: 'Invalid multiplier',
+        invalid_ratio_limit: 'Invalid multiplier cap',
+        entry_disabled: 'Paused',
+        not_in_manual_route: 'Not selected',
+      },
     },
     advancedTitle: 'Advanced settings',
     advancedSummary: 'Balance queries, model and IP restrictions',
@@ -726,9 +818,6 @@ export default {
     revealTitle: 'Full key',
     revealNote: 'Store the full key securely.',
     created: 'Key created',
-    createdRoutingHint:
-      'New keys use automatic routing across all platform channels. Change this with Routing in the key row.',
-    dismissHint: 'Dismiss',
     updated: 'Key updated',
     deleted: 'Key deleted',
     copied: 'Key copied',

@@ -56,9 +56,10 @@ const legacy = {
 }
 const token = 'nap_' + 'a'.repeat(43)
 const modal = {
-  props: { open: Boolean },
+  props: { open: Boolean, title: String },
   emits: ['close'],
-  template: '<div v-if="open"><slot /></div>',
+  template:
+    '<div v-if="open"><h2 v-if="title">{{ title }}</h2><slot /><slot name="footer" /></div>',
 }
 const confirm = {
   props: { open: Boolean },

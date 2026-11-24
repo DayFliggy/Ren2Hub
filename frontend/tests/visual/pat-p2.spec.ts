@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
-import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
+import {
+  assertNoHorizontalOverflow,
+  configureStablePage,
+  waitForStablePage,
+} from './fixtures'
 
 const endpoint = '/api/user/access_tokens'
 const now = Math.floor(new Date('2026-07-27T12:00:00+08:00').getTime() / 1000)
@@ -148,10 +152,12 @@ for (const [theme, mobile] of [
   }) => {
     const { operations } = await prepare(page, theme, mobile)
     await page.goto('/security')
+    await waitForStablePage(page)
     const panel = page.getByTestId('pat-panel')
     await expect(
       panel.getByText('existing automation', { exact: true })
     ).toBeVisible()
+    await expect(panel.locator('li [data-handdrawn="chip"]')).toHaveCount(2)
     for (const name of ['expired automation']) {
       const row = panel.locator('li').filter({ hasText: name })
       await expect(row.getByRole('button')).toHaveCount(0)
@@ -163,6 +169,10 @@ for (const [theme, mobile] of [
       name: '创建访问令牌',
       exact: true,
     })
+    await expect(create.locator('header h2.display-title')).toHaveText(
+      '创建访问令牌'
+    )
+    await expect(create.locator('footer')).toBeVisible()
     await create.getByLabel('名称', { exact: true }).fill('browser automation')
     await create.locator('input[type=checkbox][value="profile:read"]').check()
     await create.getByRole('button', { name: '保存', exact: true }).click()

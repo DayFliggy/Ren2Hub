@@ -6,12 +6,10 @@ import {
   Pencil,
   Power,
   PowerOff,
-  Route,
   Trash2,
 } from 'lucide-vue-next'
 import { ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 
 import IconButton from '@/components/common/IconButton.vue'
 import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
@@ -33,11 +31,16 @@ const props = withDefaults(
     viewKey: (token: TokenSummary) => void
     clientConfig?: (token: TokenSummary) => void
     editKey: (token: TokenSummary) => void
+    configureRouting?: (token: TokenSummary) => void
     deleteKey: (token: TokenSummary) => void
     routingEnabled?: boolean
     now: number
   }>(),
-  { routingEnabled: false, clientConfig: undefined }
+  {
+    routingEnabled: false,
+    clientConfig: undefined,
+    configureRouting: undefined,
+  }
 )
 
 const { t } = useI18n()
@@ -91,7 +94,7 @@ watch(
         v-for="token in tokens"
         :key="token.id"
         data-key-mobile-row
-        class="min-w-0 px-4 py-4 transition-colors"
+        class="no-handdrawn min-w-0 px-4 py-4 transition-colors"
         :class="isBlocked(token) ? 'bg-[var(--surface-muted)] opacity-80' : ''"
       >
         <header class="flex min-w-0 items-start gap-2.5">
@@ -108,7 +111,11 @@ watch(
             <KeyIdentity :token="token" :now="now" heading />
             <!-- Route labels run long, so they sit under the name, not beside it. -->
             <p class="mt-1.5 flex min-w-0" data-token-type>
-              <KeyRouteChip :token="token" />
+              <KeyRouteChip
+                :token="token"
+                :interactive="routingEnabled && Boolean(configureRouting)"
+                @configure="configureRouting?.(token)"
+              />
             </p>
           </div>
         </header>
@@ -137,17 +144,7 @@ watch(
               {{ token.key_preview }}
             </span>
           </p>
-          <div class="flex items-center justify-end gap-1">
-            <RouterLink
-              v-if="routingEnabled"
-              :to="{ name: 'token-routing', params: { id: token.id } }"
-              class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-8 sm:w-8"
-              :aria-label="t('keys.routing')"
-              :title="t('keys.routing')"
-              data-handdrawn="control"
-            >
-              <Route :size="16" />
-            </RouterLink>
+          <div class="flex flex-wrap items-center justify-end gap-1">
             <IconButton :label="t('keys.viewKey')" @click="viewKey(token)">
               <Eye :size="16" />
             </IconButton>
@@ -187,14 +184,3 @@ watch(
     </div>
   </div>
 </template>
-
-<style scoped>
-/* B1 Studio: neutralize non-status type badge in dark mode to prevent visual clutter */
-html.dark
-  [data-token-type]
-  :deep([data-handdrawn='chip']:not([data-route-warning])) {
-  background: var(--surface-muted) !important;
-  color: var(--text-secondary) !important;
-  border-left-color: var(--border-default) !important;
-}
-</style>

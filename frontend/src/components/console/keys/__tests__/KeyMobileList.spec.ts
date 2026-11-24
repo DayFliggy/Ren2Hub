@@ -61,38 +61,82 @@ describe('KeyMobileList', () => {
     expect(wrapper.text()).toContain('永不过期')
   })
 
-  it('names the routing scope and flags a selection whose channels were deleted', async () => {
-    const { wrapper } = await mountList([
-      {
-        ...token,
-        id: 1,
-        type: 'ordered',
-        selected_only: true,
-        route_channel_count: 1,
+  it('names the routing scope, paused fallback, and orphaned selection warning', async () => {
+    const configureRouting = vi.fn()
+    await loadMessageDomain('console')
+    await setLocale('zh-CN')
+    const wrapper = mount(KeyMobileList, {
+      props: {
+        tokens: [
+          {
+            ...token,
+            id: 1,
+            type: 'ordered',
+            selected_only: true,
+            route_channel_count: 1,
+            enabled_route_channel_count: 1,
+            route_scope: 'selected',
+            effective_mode: 'ordered',
+          },
+          {
+            ...token,
+            id: 2,
+            type: 'auto',
+            selected_only: true,
+            route_channel_count: 4,
+            enabled_route_channel_count: 4,
+            route_scope: 'selected',
+            effective_mode: 'auto',
+          },
+          {
+            ...token,
+            id: 3,
+            type: 'ordered',
+            selected_only: true,
+            route_channel_count: 2,
+            enabled_route_channel_count: 0,
+            route_scope: 'platform',
+            effective_mode: 'auto',
+          },
+          {
+            ...token,
+            id: 4,
+            type: 'auto',
+            selected_only: true,
+            route_channel_count: 0,
+            enabled_route_channel_count: 0,
+            route_scope: 'empty',
+            effective_mode: 'auto',
+          },
+        ],
+        selectedIds: [],
+        allSelected: false,
+        isToggling: () => false,
+        toggleAllSelected: vi.fn(),
+        toggleSelected: vi.fn(),
+        toggleStatus: vi.fn(),
+        viewKey: vi.fn(),
+        editKey: vi.fn(),
+        configureRouting,
+        deleteKey: vi.fn(),
+        routingEnabled: true,
+        now: 1_800_000_000,
       },
-      {
-        ...token,
-        id: 2,
-        type: 'auto',
-        selected_only: true,
-        route_channel_count: 4,
-      },
-      {
-        ...token,
-        id: 3,
-        type: 'auto',
-        selected_only: true,
-        route_channel_count: 0,
-      },
-    ])
+      global: { plugins: [i18n] },
+    })
     const types = wrapper.findAll('[data-token-type]')
     expect(types.map((item) => item.text())).toEqual([
       '顺序 · 1 条渠道',
       '自动 · 4 条渠道',
-      expect.stringContaining('所选渠道已不可用'),
+      '自动 · 全平台 · 2 条已暂停',
+      expect.stringContaining('自选渠道已失效'),
     ])
-    expect(types[2]!.find('[data-route-warning]').exists()).toBe(true)
+    expect(types[3]!.find('[data-route-warning]').exists()).toBe(true)
     expect(types[0]!.find('[data-route-warning]').exists()).toBe(false)
+    await types[3]!.get('[data-key-route-trigger]').trigger('click')
+    expect(configureRouting).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 4 })
+    )
   })
 
   it('says why a key is blocked next to its ring, not by colour alone', async () => {

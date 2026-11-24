@@ -11,10 +11,7 @@ import {
 } from 'vue-router'
 
 import HomeView from '@/views/HomeView.vue'
-import {
-  getConsoleRouteAccessMeta,
-  tokenRoutingAccess,
-} from '@/constants/navigation/consoleNav'
+import { getConsoleRouteAccessMeta } from '@/constants/navigation/consoleNav'
 import { getTopNavRouteMeta } from '@/constants/navigation/topNav'
 import { loadMessageDomain } from '@/i18n'
 import { useAppStore } from '@/stores'
@@ -197,17 +194,6 @@ const router = createRouter({
             wide: true,
             noPageScroll: true,
             feature: 'api_tokens',
-          },
-        },
-        {
-          path: '/keys/:id/routing',
-          name: 'token-routing',
-          component: () => import('@/views/console/TokenRoutingView.vue'),
-          meta: {
-            wide: true,
-            noPageScroll: true,
-            protected: true,
-            ...tokenRoutingAccess,
           },
         },
         {

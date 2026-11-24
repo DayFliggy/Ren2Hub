@@ -82,7 +82,7 @@ function limitText(items: string[], max: number): string {
         {{ limitText(token.model_limits, MODEL_LIMIT) }}
       </dd>
       <dt>{{ t('keys.meter.ips') }}</dt>
-      <dd class="font-mono break-all">
+      <dd class="font-mono break-words">
         {{ limitText(token.ip_limits, IP_LIMIT) }}
       </dd>
       <dt>{{ t('keys.meter.quotaQuery') }}</dt>

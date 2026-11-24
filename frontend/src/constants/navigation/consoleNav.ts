@@ -237,8 +237,8 @@ export function getAccessibleConsoleNavGroups(
   })
 }
 
-/** The Keys page entry and the token-routing route share one rule; the
- * backend gates every routing API with routing:read. */
+/** The Keys page routing chip and KeyFormModal routing section share one rule;
+ * the backend gates every routing API with routing:read. */
 export const tokenRoutingAccess = {
   feature: 'token_private_routing',
   requiresPermission: { resource: 'routing', action: 'read' },

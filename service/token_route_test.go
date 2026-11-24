@@ -148,26 +148,65 @@ func TestSelectedOnlyRejectsUnavailableEntries(t *testing.T) {
 				db := setupRouteTest(t)
 				createRouteChannel(t, db, 11, "route-model")
 				createRouteChannel(t, db, 22, "route-model")
+				require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Update("priority", 100).Error)
 				seedSelectedRoute(t, mode, model.TokenRouteEntry{ChannelID: 11, Enabled: deleted})
 				if deleted {
 					require.NoError(t, db.Delete(&model.Channel{}, 11).Error)
 					require.NoError(t, model.DeleteOrphanChannelRouteEntries(t.Context()))
+					channel, failure := SelectChannelForRequest(routeTestContext(t), "route-model", nil)
+					require.Nil(t, channel)
+					require.NotNil(t, failure)
+					require.Equal(t, http.StatusServiceUnavailable, failure.StatusCode)
+					require.Equal(t, types.ErrorCodeModelNotFound, failure.Code)
+					return
 				}
-				channel, failure := SelectChannelForRequest(routeTestContext(t), "route-model", nil)
-				require.Nil(t, channel)
-				require.NotNil(t, failure)
-				require.Equal(t, http.StatusServiceUnavailable, failure.StatusCode)
-				require.Equal(t, types.ErrorCodeModelNotFound, failure.Code)
+				// 所有已选条目均停用时，自动退回全平台自动路由（按优先级选中 22）。
+				c := routeTestContext(t)
+				channel, failure := SelectChannelForRequest(c, "route-model", nil)
+				require.Nil(t, failure)
+				require.NotNil(t, channel)
+				require.Equal(t, 22, channel.Id)
+				ReleaseRouteChannel(c)
 			})
 		}
 	}
+}
+
+func TestAllDisabledSelectionFallsBackToPlatformWithPolicyAndCatalog(t *testing.T) {
+	db := setupRouteTest(t)
+	createRouteChannel(t, db, 11, "route-model")
+	createRouteChannel(t, db, 22, "route-model")
+	createRouteChannel(t, db, 33, "other-model")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Updates(map[string]any{"priority": 100, "channel_ratio": "2"}).Error)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Updates(map[string]any{"priority": 10, "channel_ratio": "1"}).Error)
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", 7).Updates(map[string]any{"model_limits_enabled": true, "model_limits": "route-model"}).Error)
+	seedSelectedRoute(t, "ordered", model.TokenRouteEntry{ChannelID: 11, Enabled: false})
+	require.NoError(t, db.Model(&model.TokenRouteProfile{}).Where("token_id = ?", 7).Update("max_channel_ratio", "1.5").Error)
+
+	// 退回全平台后仍受 max_channel_ratio（过滤 11）与 model_limits（过滤 33）约束。
+	c := routeTestContext(t)
+	selected, failure := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, failure)
+	require.Equal(t, 22, selected.Id)
+	ReleaseRouteChannel(c)
+
+	catalog, err := CatalogRouteChannels(t.Context(), 17, 7)
+	require.NoError(t, err)
+	eligibleIDs := []int{}
+	for _, item := range catalog {
+		if item.Eligible {
+			eligibleIDs = append(eligibleIDs, item.ID)
+		}
+	}
+	require.Equal(t, []int{22}, eligibleIDs)
 }
 
 func TestUnavailableSelectionKeepsModelNotFoundResponse(t *testing.T) {
 	for _, pinned := range []bool{false, true} {
 		t.Run(fmt.Sprintf("pinned=%t", pinned), func(t *testing.T) {
 			setupAffinityChannels(t)
-			seedSelectedRoute(t, "auto", model.TokenRouteEntry{ChannelID: 22, Enabled: false})
+			// 孤儿态（selected_only=true 且 entries=0）在亲和或固定渠道存在时仍拒绝返回 503。
+			require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteAuto, SelectedOnly: true, Version: 1}).Error)
 			c, _ := enableRouteAffinity(t, "strict", 22)
 			if pinned {
 				GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 22, Source: dto.PinSourceToken})
