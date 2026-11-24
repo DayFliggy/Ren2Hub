@@ -225,6 +225,23 @@ for (const [theme, mobile] of [
     await captureEvidence(page, {
       path: testInfo.outputPath(`update-restart-${theme}-${viewport}.png`),
     })
+
+    // The restart offered after the update is confirmed in the panel too.
+    await panel(page).locator('[data-version-restart]').click()
+    const restartStep = panel(page).getByRole('group', { name: '重启服务器？' })
+    await expect(restartStep).toContainText('进行中的请求会被中断')
+    await expect(page.locator('[aria-modal="true"]')).toHaveCount(0)
+    await expect(
+      restartStep.getByRole('button', { name: '取消', exact: true })
+    ).toBeFocused()
+    await checkPanel(page, mobile)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(
+        `update-restart-confirm-${theme}-${viewport}.png`
+      ),
+    })
+    await restartStep.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(panel(page).locator('[data-version-restart]')).toBeFocused()
   })
 
   test(`version badge rollback ${theme} ${viewport}`, async ({
@@ -270,25 +287,6 @@ for (const [theme, mobile] of [
     await captureEvidence(page, {
       path: testInfo.outputPath(`update-rollback-${theme}-${viewport}.png`),
     })
-
-    // Restarting from the footer is confirmed in the footer itself.
-    await panel(page).locator('[data-version-restart-service]').click()
-    const step = panel(page).getByRole('group', { name: '重启服务器？' })
-    await expect(step).toContainText('进行中的请求会被中断')
-    await expect(page.locator('[aria-modal="true"]')).toHaveCount(0)
-    await expect(
-      step.getByRole('button', { name: '取消', exact: true })
-    ).toBeFocused()
-    await checkPanel(page, mobile)
-    await captureEvidence(page, {
-      path: testInfo.outputPath(
-        `update-restart-confirm-${theme}-${viewport}.png`
-      ),
-    })
-    await step.getByRole('button', { name: '取消', exact: true }).click()
-    await expect(
-      panel(page).locator('[data-version-restart-service]')
-    ).toBeFocused()
   })
 }
 

@@ -154,7 +154,6 @@ export const systemUpdateApi = {
 
 export interface ServerIdentity {
   version?: string
-  start_time?: number
 }
 
 export function sameVersion(left?: string, right?: string) {
@@ -165,12 +164,10 @@ export function sameVersion(left?: string, right?: string) {
 /**
  * What proves the restarted process is up: an update does not report the
  * installed release, so any other version counts; a rollback names its
- * target; a plain restart only changes the start time.
+ * target.
  */
 export type RestartExpectation =
-  | { kind: 'new-version' }
-  | { kind: 'version'; version: string }
-  | { kind: 'new-process' }
+  { kind: 'new-version' } | { kind: 'version'; version: string }
 
 function abortError() {
   return new DOMException('The restart watch was aborted', 'AbortError')
@@ -204,11 +201,6 @@ function restarted(
       )
     case 'version':
       return sameVersion(current.version, expectation.version)
-    case 'new-process':
-      return (
-        current.start_time !== undefined &&
-        current.start_time !== baseline.start_time
-      )
   }
 }
 

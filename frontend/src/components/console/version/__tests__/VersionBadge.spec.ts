@@ -139,6 +139,13 @@ async function startUpdate() {
   await page.get('[data-version-update-now]').trigger('click')
   await confirm()
 }
+/** A restart is offered only once an update has replaced the program. */
+async function replaceProgram() {
+  replies['/api/admin/system/update'] = { need_restart: true }
+  await startUpdate()
+}
+const restartSent = () =>
+  mocks.post.mock.calls.some(([url]) => url === '/api/admin/system/restart')
 async function chooseRollback(version: string) {
   await page.get('[data-version-rollback-toggle]').trigger('click')
   await flushPromises()
@@ -259,6 +266,17 @@ describe('version badge', () => {
     expect(notes.find('script').exists()).toBe(false)
   })
 
+  it('offers no restart on an up-to-date release', async () => {
+    replies['/api/admin/system/check-updates'] = upToDate()
+    await setup()
+    const panel = await openPanel()
+    expect(panelState()).toBe('current')
+    expect(panel.find('[data-version-restart]').exists()).toBe(false)
+    expect(panel.findAll('button').some((b) => /restart/i.test(b.text()))).toBe(
+      false
+    )
+  })
+
   it('shows a source build with a newer release as a link without update or rollback', async () => {
     replies['/api/admin/system/check-updates'] = check({ build_type: 'source' })
     const view = await setup()
@@ -271,7 +289,6 @@ describe('version badge', () => {
       RELEASE_URL
     )
     expect(panel.find('[data-version-update-now]').exists()).toBe(false)
-    expect(panel.find('[data-version-restart-service]').exists()).toBe(false)
     expect(view.find('[data-version-rollback-toggle]').exists()).toBe(false)
   })
 
@@ -407,7 +424,6 @@ describe('version badge', () => {
     // The cleared check leaves the running version to /api/status, unset here.
     expect(badgeLabel()).toMatch(/, replaced; restart to apply$/)
     expect(view.find('[data-version-update-now]').exists()).toBe(false)
-    expect(view.find('[data-version-restart-service]').exists()).toBe(false)
   })
 
   it('reads the check again when the server is already up to date', async () => {
@@ -666,17 +682,17 @@ describe('version badge', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
-  it('restarts the service on a new start time and keeps watching after a dropped POST', async () => {
+  it('keeps watching after a dropped restart POST', async () => {
     replies['/api/admin/system/restart'] = () => {
       throw new ApiError('Network Error')
     }
     const view = await setup()
-    await openPanel()
+    await replaceProgram()
     vi.useFakeTimers()
     mocks.status
       .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 100 })
-      .mockResolvedValue({ version: 'v1.0.1', start_time: 300 })
-    await view.get('[data-version-restart-service]').trigger('click')
+      .mockResolvedValue({ version: 'v1.0.2', start_time: 300 })
+    await view.get('[data-version-restart]').trigger('click')
     await accept()
     await vi.advanceTimersByTimeAsync(0)
     expect(view.find('[data-version-error]').exists()).toBe(false)
@@ -690,8 +706,8 @@ describe('version badge', () => {
       throw httpError(409)
     }
     const view = await setup()
-    await openPanel()
-    await view.get('[data-version-restart-service]').trigger('click')
+    await replaceProgram()
+    await view.get('[data-version-restart]').trigger('click')
     await confirm()
     expect(errorText()).toContain(
       'Another update, rollback or restart is in progress.'
@@ -704,9 +720,9 @@ describe('version badge', () => {
   it('reports an unknown state when the restart is not observed in 120 seconds', async () => {
     replies['/api/admin/system/restart'] = { restarting: true }
     const view = await setup()
-    await openPanel()
+    await replaceProgram()
     vi.useFakeTimers()
-    await view.get('[data-version-restart-service]').trigger('click')
+    await view.get('[data-version-restart]').trigger('click')
     await accept()
     await vi.advanceTimersByTimeAsync(125_000)
     expect(view.get('[data-version-restart-unknown]').text()).toContain(
@@ -722,25 +738,25 @@ describe('version badge', () => {
   it('does not send the restart when the badge unmounts before the baseline read answers', async () => {
     replies['/api/admin/system/restart'] = { restarting: true }
     const view = await setup()
-    await openPanel()
+    await replaceProgram()
     let answer: (value: unknown) => void = () => {}
     mocks.status.mockImplementationOnce(
       () => new Promise((resolve) => (answer = resolve))
     )
-    await view.get('[data-version-restart-service]').trigger('click')
+    await view.get('[data-version-restart]').trigger('click')
     await accept()
     await flushPromises()
     view.unmount()
     wrapper = undefined
     answer({ version: 'v1.0.1', start_time: 100 })
     await flushPromises()
-    expect(mocks.post).not.toHaveBeenCalled()
+    expect(restartSent()).toBe(false)
   })
 
   it('does not reload when a success arrives after the badge unmounted', async () => {
     replies['/api/admin/system/restart'] = { restarting: true }
     const view = await setup()
-    await openPanel()
+    await replaceProgram()
     vi.useFakeTimers()
     let answer: (value: unknown) => void = () => {}
     mocks.status
@@ -748,13 +764,13 @@ describe('version badge', () => {
       .mockImplementationOnce(
         () => new Promise((resolve) => (answer = resolve))
       )
-    await view.get('[data-version-restart-service]').trigger('click')
+    await view.get('[data-version-restart]').trigger('click')
     await accept()
     await vi.advanceTimersByTimeAsync(2_000)
     expect(mocks.status).toHaveBeenCalledTimes(2)
     view.unmount()
     wrapper = undefined
-    answer({ version: 'v1.0.1', start_time: 300 })
+    answer({ version: 'v1.0.2', start_time: 300 })
     await vi.advanceTimersByTimeAsync(10_000)
     expect(reload).not.toHaveBeenCalled()
   })
@@ -803,7 +819,7 @@ describe('version badge', () => {
   it('cancels the second step on Escape before closing the panel', async () => {
     const view = await setup(100, { realModals: true })
     await openPanel()
-    await view.get('[data-version-restart-service]').trigger('click')
+    await view.get('[data-version-update-now]').trigger('click')
     await flushPromises()
     expect(view.find('[data-version-confirm]').exists()).toBe(true)
     document.body.dispatchEvent(
@@ -813,7 +829,7 @@ describe('version badge', () => {
     expect(view.find('[data-version-panel]').exists()).toBe(true)
     expect(view.find('[data-version-confirm]').exists()).toBe(false)
     expect(document.activeElement).toBe(
-      view.get('[data-version-restart-service]').element
+      view.get('[data-version-update-now]').element
     )
     document.body.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
@@ -891,12 +907,12 @@ describe('version badge account boundary', () => {
   it('sends no restart when Root is lost before the baseline read answers', async () => {
     replies['/api/admin/system/restart'] = { restarting: true }
     const view = await setup()
-    await openPanel()
+    await replaceProgram()
     let answer: (value: unknown) => void = () => {}
     mocks.status.mockImplementationOnce(
       () => new Promise((resolve) => (answer = resolve))
     )
-    await view.get('[data-version-restart-service]').trigger('click')
+    await view.get('[data-version-restart]').trigger('click')
     await accept()
     await flushPromises()
     useAuthStore().persist({ id: 1, role: 1 } as never)
@@ -904,13 +920,13 @@ describe('version badge account boundary', () => {
     expect(view.find('[data-version-badge]').exists()).toBe(false)
     answer({ version: 'v1.0.1', start_time: 100 })
     await flushPromises()
-    expect(mocks.post).not.toHaveBeenCalled()
+    expect(restartSent()).toBe(false)
   })
 
   it('does not reload for the old account once another account signs in', async () => {
     replies['/api/admin/system/restart'] = { restarting: true }
     const view = await setup()
-    await openPanel()
+    await replaceProgram()
     vi.useFakeTimers()
     let answer: (value: unknown) => void = () => {}
     mocks.status
@@ -918,13 +934,13 @@ describe('version badge account boundary', () => {
       .mockImplementationOnce(
         () => new Promise((resolve) => (answer = resolve))
       )
-    await view.get('[data-version-restart-service]').trigger('click')
+    await view.get('[data-version-restart]').trigger('click')
     await accept()
     await vi.advanceTimersByTimeAsync(2_000)
     expect(mocks.status).toHaveBeenCalledTimes(2)
     useAuthStore().persist({ id: 2, role: 100 } as never)
     await vi.advanceTimersByTimeAsync(0)
-    answer({ version: 'v1.0.1', start_time: 300 })
+    answer({ version: 'v1.0.2', start_time: 300 })
     await vi.advanceTimersByTimeAsync(10_000)
     expect(reload).not.toHaveBeenCalled()
   })

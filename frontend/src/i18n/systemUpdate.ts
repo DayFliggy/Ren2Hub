@@ -45,7 +45,6 @@ const zh = {
   copyFailed: '复制失败，请手动选择命令。',
   rollbackConfirm: '回滚到 {version}',
   restart: '重启',
-  restartService: '重启服务',
   confirmRestart: '重启服务器？',
   confirmRestartAction: '确认重启',
   confirmRestartMessage: '进行中的请求会被中断。服务器恢复后页面会自动刷新。',
@@ -120,7 +119,6 @@ const en: typeof zh = {
   copyFailed: 'Copying failed; select the command by hand.',
   rollbackConfirm: 'Roll back to {version}',
   restart: 'Restart',
-  restartService: 'Restart service',
   confirmRestart: 'Restart the server?',
   confirmRestartAction: 'Confirm restart',
   confirmRestartMessage:

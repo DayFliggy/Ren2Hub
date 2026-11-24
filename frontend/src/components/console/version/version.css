@@ -312,14 +312,6 @@
   line-height: 1.5;
 }
 
-.version-panel-foot {
-  padding-block: 0.25rem;
-  border-top: 1px solid var(--border-subtle);
-}
-.version-panel-foot-confirm {
-  padding: 0.5rem 1rem 0.75rem;
-}
-
 /* The second step of an update or restart, in place of its button. */
 .version-confirm {
   display: grid;

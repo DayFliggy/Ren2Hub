@@ -200,7 +200,7 @@ describe('system update API contract', () => {
 })
 
 describe('server restart watch', () => {
-  const baseline = { version: 'v1.0.1', start_time: 100 }
+  const baseline = { version: 'v1.0.1' }
   const old = { version: 'v1.0.1', start_time: 100 }
   const watch = (
     expectation: RestartExpectation,
@@ -239,18 +239,6 @@ describe('server restart watch', () => {
     await vi.advanceTimersByTimeAsync(10_000)
     await expect(outcome).resolves.toBe('restarted')
     expect(status).toHaveBeenCalledTimes(3)
-  })
-
-  it('without a pending replacement, succeeds on a new start time', async () => {
-    vi.useFakeTimers()
-    const status = vi
-      .spyOn(publicApi, 'status')
-      .mockResolvedValueOnce(old)
-      .mockResolvedValueOnce({ version: 'v1.0.1', start_time: 180 })
-    const outcome = watch({ kind: 'new-process' })
-    await vi.advanceTimersByTimeAsync(10_000)
-    await expect(outcome).resolves.toBe('restarted')
-    expect(status).toHaveBeenCalledTimes(2)
   })
 
   it('keeps polling through failed reads and reports unknown after 120 seconds', async () => {
@@ -318,7 +306,7 @@ describe('server restart watch', () => {
     vi.useFakeTimers()
     const status = vi.spyOn(publicApi, 'status').mockResolvedValue(old)
     const controller = new AbortController()
-    const outcome = watch({ kind: 'new-process' }, controller.signal)
+    const outcome = watch({ kind: 'new-version' }, controller.signal)
     const rejected = expect(outcome).rejects.toMatchObject({
       name: 'AbortError',
     })

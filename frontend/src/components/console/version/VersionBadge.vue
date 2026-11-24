@@ -189,7 +189,7 @@ function close() {
 /** Origins of each second step, focused again when it is cancelled. */
 const CONFIRM_ORIGIN = {
   update: '[data-version-update-now]',
-  restart: '[data-version-restart], [data-version-restart-service]',
+  restart: '[data-version-restart]',
 } as const
 
 function cancelConfirm() {
@@ -307,7 +307,8 @@ function refusedRestart(cause: unknown) {
 }
 
 async function restart() {
-  if (operation.value) return
+  const pending = restartNeeded.value
+  if (operation.value || !pending) return
   startAction('restart')
   restartController?.abort()
   const request = new AbortController()
@@ -326,7 +327,7 @@ async function restart() {
     restartState.value = 'waiting'
     const outcome = await watchServerRestart(
       baseline,
-      restartNeeded.value?.expectation ?? { kind: 'new-process' },
+      pending.expectation,
       deadline,
       request.signal
     )
@@ -639,32 +640,6 @@ onBeforeUnmount(() => {
             >{{ t('restart') }}</ConsoleButton
           >
         </div>
-
-        <footer
-          v-if="isRelease && !restartNeeded && !restartState"
-          class="version-panel-foot"
-        >
-          <div
-            v-if="confirming === 'restart' || operation === 'restart'"
-            class="version-panel-foot-confirm"
-          >
-            <VersionConfirm
-              v-bind="restartConfirm"
-              @confirm="restart"
-              @cancel="cancelConfirm"
-            />
-          </div>
-          <button
-            v-else
-            type="button"
-            class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="busy"
-            data-version-restart-service
-            @click="confirming = 'restart'"
-          >
-            {{ t('restartService') }}
-          </button>
-        </footer>
       </div>
     </Teleport>
   </div>
