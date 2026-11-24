@@ -35,7 +35,7 @@ const tone = computed(() => {
 </script>
 
 <template>
-  <div class="key-quota-bar rounded-xl border" :data-tone="tone">
+  <div class="key-quota-bar no-handdrawn rounded-xl border" :data-tone="tone">
     <button
       type="button"
       class="flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--state-hover-layer)] focus-ring"

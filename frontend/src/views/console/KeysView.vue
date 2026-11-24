@@ -1,4 +1,16 @@
 <script setup lang="ts">
+import {
+  Eye,
+  FileCode2,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+  Route,
+  Trash2,
+  X,
+} from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -33,6 +45,7 @@ import { useToast } from '@/composables/useToast'
 import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { tokenMeter } from '@/utils/tokenMeter'
 
 const { t } = useI18n()
 const { t: clientText } = useI18n({
@@ -74,7 +87,7 @@ const clientConfigTokenId = ref<number | null>(null)
 // ring and the note under each name. Figures are in the ring's popover.
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
-  { key: 'type', label: t('keys.colType'), width: '150px' },
+  { key: 'type', label: t('keys.colType'), width: '184px' },
   { key: 'key', label: t('keys.colKey') },
   { key: 'quota', label: t('keys.colQuota'), align: 'center', width: '88px' },
   // Five actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding (24px).
@@ -85,6 +98,15 @@ const columns = computed<TableColumn[]>(() => [
     width: '264px',
   },
 ])
+
+// Mirror KeyMobileList: only keys that cannot serve fade back; spent keys stay
+// at full strength so their red quota ring keeps calling for action.
+function rowClass(row: TokenSummary): string | undefined {
+  const state = tokenMeter(row, nowSec.value).state
+  return state === 'disabled' || state === 'expired'
+    ? 'bg-[var(--surface-muted)] opacity-80'
+    : undefined
+}
 
 const allPageSelected = computed(
   () =>
@@ -302,16 +324,7 @@ onBeforeUnmount(() => {
             {{ t('keys.batchDelete') }} ({{ selected.length }})
           </ConsoleButton>
           <ConsoleButton class="ml-auto sm:ml-0" @click="openCreate">
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <Plus :size="15" :stroke-width="2.5" aria-hidden="true" />
             {{ t('keys.createKey') }}
           </ConsoleButton>
         </div>
@@ -321,7 +334,7 @@ onBeforeUnmount(() => {
         v-if="createdNotice"
         role="status"
         data-key-created-notice
-        class="mx-4 mb-4 flex items-start gap-2 rounded-xl border border-[var(--status-info)] bg-[var(--status-info-soft)] py-2 pl-4 pr-2 text-sm text-[var(--status-info-text)]"
+        class="no-handdrawn mx-4 mb-4 flex items-start gap-2 rounded-xl border border-[var(--status-info)] bg-[var(--status-info-soft)] py-2 pl-4 pr-2 text-sm text-[var(--status-info-text)]"
       >
         <span class="min-w-0 flex-1 self-center">{{
           t('keys.createdRoutingHint')
@@ -331,18 +344,7 @@ onBeforeUnmount(() => {
           :label="t('keys.dismissHint')"
           @click="createdNotice = false"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            aria-hidden="true"
-          >
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
+          <X :size="16" aria-hidden="true" />
         </IconButton>
       </div>
 
@@ -352,11 +354,12 @@ onBeforeUnmount(() => {
         :columns="columns"
         :rows="rows"
         row-key="id"
+        :row-class="rowClass"
         :loading="loading"
         :skeleton-rows="pageSize"
         adaptive-scroll
         :page-size="pageSize"
-        min-table-width="860px"
+        min-table-width="896px"
         :scroll-region-label="t('keys.breadcrumb.1')"
         selectable
         checkbox-shape="round"
@@ -387,24 +390,10 @@ onBeforeUnmount(() => {
             </span>
             <IconButton
               class="shrink-0"
-              :label="t('common.copy')"
+              :label="t('keys.viewKey')"
               @click="copyKey(row as TokenSummary)"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path
-                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                />
-              </svg>
+              <Eye :size="15" aria-hidden="true" />
             </IconButton>
           </div>
         </template>
@@ -441,84 +430,44 @@ onBeforeUnmount(() => {
               :title="t('keys.routing')"
               data-handdrawn="control"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="6" cy="5" r="2" />
-                <circle cx="18" cy="19" r="2" />
-                <path d="M8 5h3a4 4 0 0 1 4 4v6a4 4 0 0 0 4 4" />
-              </svg>
+              <Route :size="16" aria-hidden="true" />
             </RouterLink>
             <IconButton
               :label="clientText('title')"
               @click="clientConfigTokenId = (row as TokenSummary).id"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                aria-hidden="true"
-              >
-                <path d="m8 5-7 7 7 7m8-14 7 7-7 7M14 3l-4 18" />
-              </svg>
+              <FileCode2 :size="16" aria-hidden="true" />
             </IconButton>
             <IconButton
               :label="t('keys.editKey')"
               @click="openEdit(row as TokenSummary)"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z" />
-              </svg>
+              <Pencil :size="16" aria-hidden="true" />
             </IconButton>
             <IconButton
               :label="t('keys.toggleKey')"
               :disabled="togglingIds.has((row as TokenSummary).id)"
               @click="toggleStatus(row as TokenSummary)"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v9" />
-              </svg>
+              <LoaderCircle
+                v-if="togglingIds.has((row as TokenSummary).id)"
+                :size="16"
+                class="animate-spin"
+                aria-hidden="true"
+              />
+              <PowerOff
+                v-else-if="(row as TokenSummary).status === 1"
+                :size="16"
+                aria-hidden="true"
+              />
+              <Power v-else :size="16" aria-hidden="true" />
             </IconButton>
             <IconButton
               :label="t('keys.deleteKey')"
               tone="danger"
               @click="deleting = row as TokenSummary"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6" />
-              </svg>
+              <Trash2 :size="16" aria-hidden="true" />
             </IconButton>
           </div>
         </template>
@@ -649,19 +598,5 @@ onBeforeUnmount(() => {
   .key-list-cards {
     display: none;
   }
-}
-
-/* B1 Studio: route-type labels are auxiliary and stay neutral; the warning for
-   deleted selected channels keeps its status colour. DataTable renders the td,
-   so the scope anchor is this page's own [data-key-page] and the rest goes in
-   :deep(). !important overrides the chip's inline tone style. */
-html.dark
-  [data-key-page]
-  :deep(
-    td[headers$='-type'] [data-handdrawn='chip']:not([data-route-warning])
-  ) {
-  background: var(--surface-muted) !important;
-  color: var(--text-secondary) !important;
-  border-left-color: var(--border-default) !important;
 }
 </style>

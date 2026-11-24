@@ -67,7 +67,7 @@ function openDetail(event: MouseEvent) {
 }
 
 /* A 44px touch target without moving the 28px glyph off its grid. */
-@media (pointer: coarse) {
+@media (max-width: 1023px), (pointer: coarse) {
   .key-quota-trigger::before {
     content: '';
     position: absolute;

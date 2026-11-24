@@ -99,7 +99,13 @@ export function tokenMeter(token: MeterToken, nowSec: number): TokenMeter {
   return {
     state,
     arcPercent,
-    usedPercent: quota ? Math.round(quota.percent) : null,
+    // Keep non-exhausted usage below 100% so active rings never read as spent
+    // and avoid crowding 4-character text inside the 36px mobile ring.
+    usedPercent: quota
+      ? state === 'exhausted'
+        ? 100
+        : Math.min(99, Math.round(quota.percent))
+      : null,
     remainingPercent: quota ? quota.remainingPercent : null,
     expiresInDays,
     ringColor: ringColor(state, urgent),

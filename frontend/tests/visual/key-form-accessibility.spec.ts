@@ -197,6 +197,32 @@ for (const theme of ['light', 'dark'] as const) {
           page.locator('code').filter({ hasText: 'https://api-' })
         ).toHaveCount(3)
         await assertNoHorizontalOverflow(page)
+        if (width < 1024) {
+          const endpointGroups = page.locator('[data-endpoint-actions]')
+          const groupCount = await endpointGroups.count()
+          expect(groupCount).toBe(3)
+          for (let g = 0; g < groupCount; g++) {
+            const buttons = await endpointGroups
+              .nth(g)
+              .locator('button')
+              .evaluateAll((nodes) =>
+                nodes.map((node) => {
+                  const {
+                    y,
+                    width: w,
+                    height: h,
+                  } = node.getBoundingClientRect()
+                  return { y, w, h }
+                })
+              )
+            expect(buttons).toHaveLength(2)
+            for (const b of buttons) {
+              expect(b.w).toBeGreaterThanOrEqual(44)
+              expect(b.h).toBeGreaterThanOrEqual(44)
+            }
+            expect(buttons[1]!.y).toBeCloseTo(buttons[0]!.y, 0)
+          }
+        }
         const row = page
           .locator('[data-key-mobile-row]')
           .filter({ visible: true })
@@ -209,6 +235,19 @@ for (const theme of ['light', 'dark'] as const) {
           expect(name!.x + name!.width).toBeLessThanOrEqual(
             header!.x + header!.width
           )
+          const rowBox = (await row.boundingBox())!
+          const footerBounds = await row
+            .locator('footer button, footer a')
+            .evaluateAll((nodes) =>
+              nodes.map((node) => {
+                const { x, width: w } = node.getBoundingClientRect()
+                return { x, right: x + w }
+              })
+            )
+          for (const b of footerBounds) {
+            expect(b.x).toBeGreaterThanOrEqual(rowBox.x - 0.5)
+            expect(b.right).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5)
+          }
         } else {
           const nameCell = page.locator('td[headers$="-name"]')
           const nameBox = await nameCell
@@ -218,6 +257,23 @@ for (const theme of ['light', 'dark'] as const) {
           expect(nameBox!.x + nameBox!.width).toBeLessThanOrEqual(
             nameCellBox!.x + nameCellBox!.width
           )
+          if (width < 1024 || hasTouch) {
+            const ringHit = await page
+              .locator('td[headers$="-quota"] [data-key-quota-ring]')
+              .first()
+              .evaluate((el) => {
+                const r = el.getBoundingClientRect()
+                const before = getComputedStyle(el, '::before')
+                const inset = (side: string) =>
+                  parseFloat(before.getPropertyValue(side)) || 0
+                return {
+                  w: r.width - inset('left') - inset('right'),
+                  h: r.height - inset('top') - inset('bottom'),
+                }
+              })
+            expect(ringHit.w).toBeGreaterThanOrEqual(44)
+            expect(ringHit.h).toBeGreaterThanOrEqual(44)
+          }
           const actions = page.locator('td[headers$="-actions"]')
           const controls = actions.locator('button, a')
           await expect(controls).toHaveCount(5)

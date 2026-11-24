@@ -446,4 +446,32 @@ describe('KeysView key detail popover', () => {
     })
     expect(detailRows()).not.toHaveProperty('已用占比')
   })
+
+  it('dims blocked desktop rows, aligns reveal label, and uses solid ring for blocked unlimited keys', async () => {
+    await mountList([
+      { ...backendTokens[0]!, id: 201, status: 2, unlimited_quota: true },
+      { ...backendTokens[1]!, id: 202, status: 4, remain_quota: 0 },
+      { ...backendTokens[2]!, id: 203, status: 1, expired_time: 1_000_000_000 },
+    ])
+
+    const rows = wrapper!.findAll('tbody tr')
+    expect(rows[0]!.classes()).toContain('opacity-80')
+    expect(rows[1]!.classes()).not.toContain('opacity-80')
+    expect(rows[2]!.classes()).toContain('opacity-80')
+
+    // Desktop key reveal button matches mobile label.
+    expect(
+      rows[0]!
+        .find('td[headers$="-key"] button[aria-label="查看完整密钥"]')
+        .exists()
+    ).toBe(true)
+
+    // Blocked unlimited key draws a solid blocked ring, not an extra-faded dashed ring.
+    const blockedCircles = rows[0]!.findAll(
+      '[data-ring-state="disabled"] circle'
+    )
+    expect(blockedCircles.every((c) => c.attributes('opacity') !== '0.7')).toBe(
+      true
+    )
+  })
 })

@@ -34,7 +34,7 @@ const markSize = computed(() => Math.round(props.size * 0.42))
     :color="meter.ringColor"
     :size="size"
     :stroke-width="strokeWidth"
-    :indeterminate="unlimited"
+    :indeterminate="unlimited && !mark"
     :data-ring-state="meter.state"
   >
     <svg

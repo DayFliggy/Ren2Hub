@@ -387,7 +387,7 @@ watch(
     <div
       v-if="saveError"
       role="alert"
-      class="flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 text-sm"
+      class="no-handdrawn flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 text-sm"
       :class="
         conflict
           ? 'border-[var(--status-warning)] bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]'
@@ -409,7 +409,7 @@ watch(
     <div
       v-if="candidatesError"
       role="alert"
-      class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
+      class="no-handdrawn flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
     >
       <span>{{
         t('routing.savedCandidatesFailed', { error: candidatesError })
@@ -454,7 +454,7 @@ watch(
         v-if="savedOrphaned"
         role="alert"
         data-route-orphaned
-        class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
+        class="no-handdrawn flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
       >
         <span class="min-w-0 flex-1 basis-64">{{ t('routing.orphaned') }}</span>
         <ConsoleButton
@@ -477,7 +477,7 @@ watch(
           <label
             v-for="mode in ['ordered', 'auto'] as const"
             :key="mode"
-            class="flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
+            class="no-handdrawn flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
             :class="
               data.mode === mode
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
@@ -485,7 +485,7 @@ watch(
             "
           >
             <input
-              class="mt-1 shrink-0"
+              class="mt-1 shrink-0 accent-[var(--accent)]"
               type="radio"
               name="token-route-mode"
               :value="mode"
@@ -515,7 +515,7 @@ watch(
               <label
                 v-for="scope in ['platform', 'selected'] as const"
                 :key="scope"
-                class="flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
+                class="no-handdrawn flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
                 :class="[
                   selectedOnly === (scope === 'selected')
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
@@ -524,7 +524,7 @@ watch(
                 ]"
               >
                 <input
-                  class="mt-1 shrink-0"
+                  class="mt-1 shrink-0 accent-[var(--accent)]"
                   type="radio"
                   name="token-route-scope"
                   :value="scope"
@@ -582,7 +582,7 @@ watch(
             <select
               v-model="selected"
               :aria-label="t('routing.select')"
-              class="h-11 w-full min-w-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring sm:h-10"
+              class="console-input h-11 w-full sm:h-10"
               :disabled="!canEdit"
             >
               <option value="">{{ t('routing.select') }}</option>
@@ -636,7 +636,7 @@ watch(
               <p
                 v-if="allDisabled"
                 role="alert"
-                class="mb-3 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-3 text-sm text-[var(--status-warning-text)]"
+                class="no-handdrawn mb-3 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-3 text-sm text-[var(--status-warning-text)]"
               >
                 {{ t('routing.allDisabled') }}
               </p>
@@ -809,7 +809,7 @@ watch(
           <FormField :label="t('routing.path')"
             ><select
               v-model="previewPath"
-              class="h-11 w-full min-w-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+              class="console-input h-11 w-full"
               :aria-label="t('routing.path')"
               :disabled="loading || saving"
             >
@@ -828,7 +828,7 @@ watch(
             <select
               v-model="previewTransport"
               :aria-label="t('routing.transport')"
-              class="h-11 w-full min-w-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+              class="console-input h-11 w-full"
               :disabled="loading || saving"
             >
               <option value="http">HTTP</option>

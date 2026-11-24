@@ -91,7 +91,7 @@ watch(
         v-for="token in tokens"
         :key="token.id"
         data-key-mobile-row
-        class="min-w-0 px-4 py-4 transition-colors"
+        class="no-handdrawn min-w-0 px-4 py-4 transition-colors"
         :class="isBlocked(token) ? 'bg-[var(--surface-muted)] opacity-80' : ''"
       >
         <header class="flex min-w-0 items-start gap-2.5">
@@ -137,7 +137,7 @@ watch(
               {{ token.key_preview }}
             </span>
           </p>
-          <div class="flex items-center justify-end gap-1">
+          <div class="flex flex-wrap items-center justify-end gap-1">
             <RouterLink
               v-if="routingEnabled"
               :to="{ name: 'token-routing', params: { id: token.id } }"
@@ -187,14 +187,3 @@ watch(
     </div>
   </div>
 </template>
-
-<style scoped>
-/* B1 Studio: neutralize non-status type badge in dark mode to prevent visual clutter */
-html.dark
-  [data-token-type]
-  :deep([data-handdrawn='chip']:not([data-route-warning])) {
-  background: var(--surface-muted) !important;
-  color: var(--text-secondary) !important;
-  border-left-color: var(--border-default) !important;
-}
-</style>

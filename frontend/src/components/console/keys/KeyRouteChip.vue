@@ -31,7 +31,7 @@ const tone = computed(() => {
 
 <template>
   <StatusChip
-    class="relative"
+    class="key-route-chip relative"
     :tone="tone"
     :data-route-warning="unavailable ? '' : undefined"
     :title="unavailable ? t('keys.route.unavailableHint') : undefined"
@@ -42,3 +42,14 @@ const tone = computed(() => {
     }}</span>
   </StatusChip>
 </template>
+
+<style scoped>
+/* B1 Studio: route-type labels are auxiliary and stay neutral across the table,
+   mobile cards, and teleported popover; deleted-channel warnings keep status
+   colour. !important overrides the chip's inline tone style. */
+:global(html.dark .key-route-chip:not([data-route-warning])) {
+  background: var(--surface-muted) !important;
+  color: var(--text-secondary) !important;
+  border-left-color: var(--border-default) !important;
+}
+</style>

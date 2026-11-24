@@ -205,7 +205,7 @@ const router = createRouter({
           component: () => import('@/views/console/TokenRoutingView.vue'),
           meta: {
             wide: true,
-            noPageScroll: true,
+            nav: 'keys',
             protected: true,
             ...tokenRoutingAccess,
           },

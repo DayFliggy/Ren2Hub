@@ -195,50 +195,55 @@ onBeforeUnmount(() => {
       >
         {{ resultLabel(results[endpoint.id]) }}
       </span>
-      <button
-        type="button"
-        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] focus-ring sm:h-6 sm:w-6"
-        :aria-label="t('keys.endpoints.copy', { name: endpoint.label })"
-        :title="t('keys.endpoints.copy', { name: endpoint.label })"
-        @click="copyEndpoint(endpoint.url)"
+      <span
+        class="ml-auto inline-flex shrink-0 items-center gap-0.5 sm:ml-0"
+        data-endpoint-actions
       >
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
+        <button
+          type="button"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] focus-ring lg:h-6 lg:w-6"
+          :aria-label="t('keys.endpoints.copy', { name: endpoint.label })"
+          :title="t('keys.endpoints.copy', { name: endpoint.label })"
+          @click="copyEndpoint(endpoint.url)"
         >
-          <rect x="9" y="9" width="13" height="13" rx="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)] focus-ring disabled:cursor-wait disabled:opacity-50 sm:h-6 sm:w-6"
-        :disabled="results[endpoint.id].status === 'testing'"
-        :aria-label="t('keys.endpoints.test', { name: endpoint.label })"
-        :title="t('keys.endpoints.test', { name: endpoint.label })"
-        @click="probeEndpoint(endpoint.id, endpoint.url)"
-      >
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)] focus-ring disabled:cursor-wait disabled:opacity-50 lg:h-6 lg:w-6"
+          :disabled="results[endpoint.id].status === 'testing'"
+          :aria-label="t('keys.endpoints.test', { name: endpoint.label })"
+          :title="t('keys.endpoints.test', { name: endpoint.label })"
+          @click="probeEndpoint(endpoint.id, endpoint.url)"
         >
-          <path d="m13 2-9 12h8l-1 8 9-12h-8l1-8Z" />
-        </svg>
-      </button>
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m13 2-9 12h8l-1 8 9-12h-8l1-8Z" />
+          </svg>
+        </button>
+      </span>
       <p
         v-if="endpoint.description"
         class="w-full break-words text-[0.6875rem] text-[var(--text-secondary)]"

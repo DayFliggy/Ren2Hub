@@ -84,6 +84,32 @@ for (const theme of ['light', 'dark'] as const) {
       await waitForStablePage(page)
       const routePage = page.locator('[data-handdrawn-page="token-routing"]')
       await expect(routePage).toBeVisible()
+      if (viewport === 'desktop') {
+        await expect(
+          page
+            .locator('[data-handdrawn="navigation"] a')
+            .filter({ hasText: '令牌' })
+        ).toHaveAttribute('aria-current', 'page')
+      }
+      const routeVisual = await routePage.evaluate(() => {
+        const checkedLabel = document
+          .querySelector<HTMLInputElement>(
+            'input[name="token-route-mode"]:checked'
+          )!
+          .closest('label')!
+        const select = document.querySelector<HTMLSelectElement>('select')!
+        const card = select.closest<HTMLElement>('[data-handdrawn="surface"]')!
+        return {
+          labelBorder: getComputedStyle(checkedLabel).borderColor,
+          selectBg: getComputedStyle(select).backgroundColor,
+          cardBg: getComputedStyle(card).backgroundColor,
+        }
+      })
+      if (theme === 'light') {
+        expect(routeVisual.labelBorder).not.toBe('rgba(56, 55, 43, 0.27)')
+      } else {
+        expect(routeVisual.selectBg).not.toBe(routeVisual.cardBg)
+      }
       const orderedMode = page.getByRole('radio', {
         name: '顺序路由',
         exact: true,
