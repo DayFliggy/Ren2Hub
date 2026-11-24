@@ -47,6 +47,7 @@ const props = withDefaults(
     exchangeRate?: string
     /** Pricing issues of this model, each with the steps that resolve it. */
     issues?: ModelPricingIssue[]
+    canOpenMetadata?: boolean
   }>(),
   {
     entry: undefined,
@@ -55,12 +56,14 @@ const props = withDefaults(
     siteCurrency: 'USD',
     exchangeRate: '1',
     issues: () => [],
+    canOpenMetadata: false,
   }
 )
 const emit = defineEmits<{
   update: [name: string, pricing: PricingValues]
   save: []
   dirty: [dirty: boolean]
+  openMetadata: [name: string]
 }>()
 const { t, te, locale } = useI18n({
   useScope: 'local',
@@ -467,12 +470,21 @@ defineExpose({ commit, dirty })
   <section class="pricing-editor" :aria-label="t('edit')">
     <header class="pricing-editor-header">
       <h2>{{ t(modelName ? 'edit' : 'add') }}</h2>
-      <span
-        v-if="modelName"
-        class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-2 py-0.5 font-mono text-xs font-medium text-[var(--text-secondary)]"
-      >
-        {{ modelName }}
-      </span>
+      <div v-if="modelName" class="flex flex-wrap items-center gap-2">
+        <span
+          class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-2 py-0.5 font-mono text-xs font-medium text-[var(--text-secondary)]"
+        >
+          {{ modelName }}
+        </span>
+        <ConsoleButton
+          v-if="canOpenMetadata"
+          variant="ghost"
+          size="sm"
+          @click="emit('openMetadata', modelName)"
+        >
+          {{ t('openMetadata') }}
+        </ConsoleButton>
+      </div>
     </header>
     <div class="pricing-editor-scroll">
       <label class="admin-field"
@@ -733,7 +745,7 @@ defineExpose({ commit, dirty })
     </div>
     <footer class="pricing-editor-footer">
       <ConsoleButton :loading="saving" @click="commit() && emit('save')">{{
-        t('save')
+        t('saveAll')
       }}</ConsoleButton>
     </footer>
     <ConsoleModal

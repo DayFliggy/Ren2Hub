@@ -206,4 +206,53 @@ describe('native catalog cards', () => {
     expect(statistics.text()).not.toContain('近 24 小时')
     wrapper.unmount()
   })
+  it('keeps >3 channels on a single rail with an overflow popover that switches preview', async () => {
+    const fixture = modelCatalogFixture()
+    fixture.models[0]!.tags = '推理,视觉,代码,长上下文'
+    for (let id = 10; id <= 13; id++) {
+      fixture.channels.push({
+        ...fixture.channels[0]!,
+        id,
+        name: `Channel-${id}`,
+        channel_ratio: `0.${id - 7}`,
+      })
+      fixture.offers.push({
+        ...fixture.offers[0]!,
+        channel_id: id,
+        channel_ratio: `0.${id - 7}`,
+        pricing_values: { input: `${id}.0`, output: `${id * 2}.0` },
+      })
+    }
+    const model = buildModelMarketCatalog(fixture).models[0]!
+    const wrapper = mount(ModelCard, {
+      props: { model, performance: noSamples },
+      global: { plugins: [i18n] },
+    })
+    // Real tags are capped at 3 pills + overflow count.
+    const tags = wrapper.get('[data-model-tags]').text()
+    expect(tags).toContain('推理')
+    expect(tags).toContain('视觉')
+    expect(tags).toContain('代码')
+    expect(tags).toContain('+1')
+    expect(tags).not.toContain('长上下文')
+
+    // 5 total channels -> 3 inline chips + "+2" overflow trigger.
+    expect(wrapper.findAll('[data-channel-chip]')).toHaveLength(3)
+    const overflow = wrapper.get('[data-channel-overflow]')
+    expect(overflow.text()).toBe('+2')
+    await overflow.trigger('click')
+    const menu = wrapper.get('[data-channel-overflow-menu]')
+    expect(menu.findAll('[data-channel-overflow-item]')).toHaveLength(2)
+
+    // Selecting a hidden channel updates the inline quote stage and detail offerId.
+    await menu.get('[data-channel-overflow-item="13"]').trigger('click')
+    expect(wrapper.find('[data-channel-overflow-menu]').exists()).toBe(false)
+    expect(wrapper.get('[data-channel-quote]').text()).toContain('Channel-13')
+    expect(wrapper.get('[data-channel-quote]').text()).toContain('$13.000')
+    await wrapper.get('button[aria-label*="模型详情"]').trigger('click')
+    expect(wrapper.emitted('detail')).toEqual([
+      ['fixture-model', 'fixture-model:13'],
+    ])
+    wrapper.unmount()
+  })
 })

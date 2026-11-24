@@ -16,12 +16,48 @@ const shelvesId = useId()
 function offerDomId(kind: 'meta' | 'price', offerId: string) {
   return `${shelvesId}-${kind}-${encodeURIComponent(offerId)}`
 }
+function shelfAnchorId(channelId: number) {
+  return `${shelvesId}-shelf-${channelId}`
+}
+function jumpToShelf(channelId: number) {
+  const target = document.getElementById(shelfAnchorId(channelId))
+  if (!target) return
+  const reduced =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  target.scrollIntoView({
+    block: 'start',
+    behavior: reduced ? 'auto' : 'smooth',
+  })
+}
 </script>
 
 <template>
   <div class="market-shelves" data-market-shelves>
+    <nav
+      v-if="shelves.length > 1"
+      class="market-shelf-jump subtle-scroll"
+      :aria-label="t('shelfJumpLabel')"
+      data-shelf-jump
+    >
+      <button
+        v-for="shelf in shelves"
+        :key="shelf.channel.id"
+        type="button"
+        class="market-shelf-jump-pill focus-ring"
+        @click="jumpToShelf(shelf.channel.id)"
+      >
+        <span class="market-shelf-jump-name">{{ shelf.channel.name }}</span>
+        <span class="market-shelf-jump-ratio">{{
+          formatMarketRatio(shelf.channel.ratio)
+        }}</span>
+        <span class="market-shelf-jump-count">{{ shelf.items.length }}</span>
+      </button>
+    </nav>
+
     <section
       v-for="shelf in shelves"
+      :id="shelfAnchorId(shelf.channel.id)"
       :key="shelf.channel.id"
       class="market-shelf"
       :aria-label="shelf.channel.name"
@@ -41,15 +77,7 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
               >
             </h2>
             <p>
-              {{
-                t('resultCount', {
-                  models: shelf.items.length,
-                  offers: shelf.items.reduce(
-                    (count, item) => count + item.offers.length,
-                    0
-                  ),
-                })
-              }}
+              {{ t('shelfCount', { count: shelf.items.length }) }}
             </p>
           </div>
         </div>
@@ -117,7 +145,50 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
 <style scoped>
 .market-shelves {
   display: grid;
-  gap: 1.4rem;
+  gap: 1.25rem;
+}
+.market-shelf-jump {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0 0.35rem;
+  min-width: 0;
+}
+.market-shelf-jump-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  background: var(--surface-solid);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.market-shelf-jump-pill:hover {
+  border-color: var(--border-strong);
+  background: var(--state-hover-layer);
+}
+.market-shelf-jump-name {
+  font-weight: 500;
+}
+.market-shelf-jump-ratio {
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--shape-control);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font: 0.6875rem/1.4 var(--font-mono);
+}
+.market-shelf-jump-count {
+  color: var(--text-tertiary);
+  font: 0.6875rem/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .market-shelf {
   min-width: 0;
@@ -126,6 +197,7 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
   background: var(--surface-solid);
   overflow: hidden;
   box-shadow: var(--card-shadow);
+  scroll-margin-top: 1rem;
 }
 .market-shelf-header {
   display: flex;
@@ -157,6 +229,7 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
   background: var(--accent-soft);
   color: var(--accent-text);
   font-size: 0.75rem;
+  font-weight: 600;
 }
 .market-shelf-identity h2 {
   font-size: 1rem;
@@ -176,7 +249,7 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
 .market-shelf-identity p {
   font-size: 0.6875rem;
   color: var(--text-tertiary);
-  margin-top: 0.3rem;
+  margin-top: 0.25rem;
 }
 .market-shelf-statistics :deep(.model-statistics-empty) {
   border: 0;
@@ -192,14 +265,14 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 1.05rem 0;
+  padding: 1rem 0;
   border-bottom: 1px dashed var(--border-subtle);
 }
 .market-shelf-offers {
   display: flex;
   flex-direction: column;
   flex: 1;
-  margin-top: 0.8rem;
+  margin-top: 0.75rem;
 }
 .market-shelf-offer {
   position: relative;
@@ -296,5 +369,11 @@ html.dark .market-shelf-offer {
 }
 html.dark .market-shelf-statistics {
   border-top-style: solid;
+}
+@media (prefers-reduced-motion: reduce) {
+  .market-shelf-jump-pill,
+  .market-shelf-offer {
+    transition: none;
+  }
 }
 </style>

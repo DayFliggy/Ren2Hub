@@ -351,7 +351,7 @@ test('sync preview and missing-model creation write nothing until applied', asyn
   await page.getByRole('menuitem', { name: 'Missing Models' }).click()
   await page
     .getByRole('dialog')
-    .getByRole('button', { name: 'Configure', exact: true })
+    .getByRole('button', { name: 'Configure metadata', exact: true })
     .click()
   await expect(
     page.getByRole('dialog').getByLabel('Model Name', { exact: true })

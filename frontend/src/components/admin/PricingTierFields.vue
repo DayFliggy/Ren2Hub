@@ -21,7 +21,7 @@ const props = defineProps<{
   currency: string
 }>()
 const emit = defineEmits<{ change: [node: VisualPricingNode] }>()
-const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
+const { t, te } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 // len is the tier-condition context length; it is never priced on its own.
 const priceVariables = TOKEN_VARIABLES.filter((variable) => variable !== 'len')
 function change(patch: Partial<Tier>) {
@@ -102,8 +102,16 @@ function branch() {
               })
             "
           >
-            <option v-for="variable in priceVariables" :key="variable">
-              {{ variable }}
+            <option
+              v-for="variable in priceVariables"
+              :key="variable"
+              :value="variable"
+            >
+              {{
+                te(`priceVar_${variable}`)
+                  ? t(`priceVar_${variable}`)
+                  : variable
+              }}
             </option>
           </select></label
         ><label class="admin-field"
@@ -153,5 +161,8 @@ function branch() {
 .price-tier-line label,
 .price-tier-heading label {
   flex: 1 1 6rem;
+}
+.price-tier-line label:first-child {
+  flex: 1.5 1 9.5rem;
 }
 </style>

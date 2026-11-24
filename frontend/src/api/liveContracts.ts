@@ -78,11 +78,34 @@ export interface PricingModelContract {
     billing_mode: 'ratio' | 'tiered_expr' | 'unconfigured'
   }>
 }
+export interface PerfSuccessRatePoint {
+  ts: number
+  success_rate: number
+}
+export interface PerfBucketPoint {
+  ts: number
+  avg_ttft_ms: number
+  avg_latency_ms: number
+  success_rate: number
+  avg_tps: number
+}
 export interface PerfModelSummaryContract {
   model_name: string
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
+  recent_success_series?: PerfSuccessRatePoint[]
+}
+export interface PerfModelDetailContract {
+  model_name: string
+  summary: {
+    avg_latency_ms: number
+    success_rate: number
+    avg_tps: number
+  } | null
+  series: PerfBucketPoint[]
+  window_start: number
+  window_end: number
 }
 export function parsePricingModels(value: unknown): PricingModelContract[] {
   const endpoint = '/api/pricing'
@@ -201,6 +224,21 @@ export function parsePricingModelsPartial(value: unknown): {
   return { models, issues }
 }
 
+function parseSuccessRateSeries(
+  value: unknown,
+  endpoint: string
+): PerfSuccessRatePoint[] {
+  if (!Array.isArray(value)) invalidResponse(endpoint)
+  return value.map((item) => {
+    if (!isRecord(item)) invalidResponse(endpoint)
+    const ts = requiredInteger(item.ts, endpoint)
+    const success_rate = requiredNumber(item.success_rate, endpoint)
+    if (ts < 0 || success_rate < 0 || success_rate > 100)
+      invalidResponse(endpoint)
+    return { ts, success_rate }
+  })
+}
+
 /** pkg/perf_metrics ModelSummary: success_rate is a 0–100 percentage and
  * avg_tps is 0 when no generation timing was sampled. */
 export function parsePerfMetricsSummary(
@@ -210,10 +248,14 @@ export function parsePerfMetricsSummary(
   if (!isRecord(value) || !Array.isArray(value.models)) {
     invalidResponse(endpoint)
   }
+  const topSeries = isRecord(value.recent_success_series)
+    ? value.recent_success_series
+    : undefined
   return value.models.map((item) => {
     if (!isRecord(item)) invalidResponse(endpoint)
-    const result = {
-      model_name: requiredString(item.model_name, endpoint, false),
+    const model_name = requiredString(item.model_name, endpoint, false)
+    const result: PerfModelSummaryContract = {
+      model_name,
       avg_latency_ms: requiredInteger(item.avg_latency_ms, endpoint),
       success_rate: requiredNumber(item.success_rate, endpoint),
       avg_tps: requiredNumber(item.avg_tps, endpoint),
@@ -225,8 +267,64 @@ export function parsePerfMetricsSummary(
       result.avg_tps < 0
     )
       invalidResponse(endpoint)
+    const rawSeries = item.recent_success_series ?? topSeries?.[model_name]
+    if (rawSeries !== undefined) {
+      result.recent_success_series = parseSuccessRateSeries(rawSeries, endpoint)
+    }
     return result
   })
+}
+
+/** pkg/perf_metrics QueryResult: model-wide hourly buckets across all channels. */
+export function parsePerfMetricsDetail(
+  value: unknown
+): PerfModelDetailContract {
+  const endpoint = '/api/perf-metrics'
+  if (!isRecord(value) || !Array.isArray(value.series)) {
+    invalidResponse(endpoint)
+  }
+  const model_name = requiredString(value.model_name, endpoint, false)
+  const window_start = requiredInteger(value.window_start, endpoint)
+  const window_end = requiredInteger(value.window_end, endpoint)
+  let summary: PerfModelDetailContract['summary'] = null
+  if (value.summary !== null && value.summary !== undefined) {
+    if (!isRecord(value.summary)) invalidResponse(endpoint)
+    const avg_latency_ms = requiredInteger(
+      value.summary.avg_latency_ms,
+      endpoint
+    )
+    const success_rate = requiredNumber(value.summary.success_rate, endpoint)
+    const avg_tps = requiredNumber(value.summary.avg_tps, endpoint)
+    if (
+      avg_latency_ms < 0 ||
+      success_rate < 0 ||
+      success_rate > 100 ||
+      avg_tps < 0
+    )
+      invalidResponse(endpoint)
+    summary = { avg_latency_ms, success_rate, avg_tps }
+  }
+  const series = value.series.map((item): PerfBucketPoint => {
+    if (!isRecord(item)) invalidResponse(endpoint)
+    const point: PerfBucketPoint = {
+      ts: requiredInteger(item.ts, endpoint),
+      avg_ttft_ms: requiredInteger(item.avg_ttft_ms ?? 0, endpoint),
+      avg_latency_ms: requiredInteger(item.avg_latency_ms, endpoint),
+      success_rate: requiredNumber(item.success_rate, endpoint),
+      avg_tps: requiredNumber(item.avg_tps, endpoint),
+    }
+    if (
+      point.ts < 0 ||
+      point.avg_ttft_ms < 0 ||
+      point.avg_latency_ms < 0 ||
+      point.success_rate < 0 ||
+      point.success_rate > 100 ||
+      point.avg_tps < 0
+    )
+      invalidResponse(endpoint)
+    return point
+  })
+  return { model_name, summary, series, window_start, window_end }
 }
 
 /** The native global aggregate is weighted by request count, independently of models. */

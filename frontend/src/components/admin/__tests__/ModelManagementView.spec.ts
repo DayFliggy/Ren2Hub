@@ -393,4 +393,27 @@ describe('model management sections', () => {
     }
     wrapper.unmount()
   })
+  it('navigates from a model row menu to pricing for root only', async () => {
+    const { wrapper, router } = await setup()
+    const section = wrapper.getComponent(ModelsSection)
+    const firstMenu = section.findAllComponents(ActionMenu)[0]!
+    expect(
+      firstMenu.props('items').some((item) => item.key === 'pricing')
+    ).toBe(true)
+    firstMenu.vm.$emit('select', 'pricing')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/models/pricing')
+    expect(router.currentRoute.value.query.model).toBe('model-1')
+    wrapper.unmount()
+
+    authState.isRoot = false
+    const admin = await setup()
+    const adminMenu = admin.wrapper
+      .getComponent(ModelsSection)
+      .findAllComponents(ActionMenu)[0]!
+    expect(
+      adminMenu.props('items').some((item) => item.key === 'pricing')
+    ).toBe(false)
+    admin.wrapper.unmount()
+  })
 })

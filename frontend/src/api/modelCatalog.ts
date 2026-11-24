@@ -14,6 +14,7 @@ export interface CatalogModel {
   model_name: string
   description: string
   icon: string
+  tags?: string
   vendor_id: number
   supported_endpoint_types: string[]
   price_status: PriceStatus
@@ -95,6 +96,7 @@ export function parseModelCatalog(value: unknown): ModelCatalog {
     model_name: requiredString(row.model_name, endpoint, false),
     description: requiredString(row.description ?? '', endpoint),
     icon: requiredString(row.icon ?? '', endpoint),
+    ...(row.tags == null ? {} : { tags: requiredString(row.tags, endpoint) }),
     vendor_id: requiredStrictInteger(row.vendor_id ?? 0, endpoint),
     supported_endpoint_types: parseStringArray(
       row.supported_endpoint_types,

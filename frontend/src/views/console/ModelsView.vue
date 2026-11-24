@@ -279,6 +279,8 @@ onMounted(load)
     <ModelMarketDetails
       :model="detailModel"
       :offer-id="detailOfferId"
+      :performance="detailModel ? performanceFor(detailModel.name) : undefined"
+      :server-address="catalog?.serverAddress"
       @close="detailId = null"
     />
   </div>

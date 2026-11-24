@@ -12,7 +12,7 @@ import {
   countPricingCatalogModes,
   filterPricingCatalogByMode,
 } from '@/features/pricing/classification'
-import { isAudioEndpoint } from '@/utils/modelMarket'
+import { isAudioEndpoint, parseModelTags } from '@/utils/modelMarket'
 import { PRICE_SORTS, type PriceSort } from '@/types/pricingReference'
 import { pricingReferenceMessages } from '@/i18n/pricingReference'
 import PublicPage from '@/components/public/PublicPage.vue'
@@ -195,6 +195,18 @@ onBeforeUnmount(() => controller?.abort())
         <div>
           <h2>{{ detail.model_name }}</h2>
           <p>{{ detail.description }}</p>
+          <div
+            v-if="parseModelTags(detail.tags).length"
+            class="public-pricing-tags"
+            data-public-model-tags
+          >
+            <span
+              v-for="tag in parseModelTags(detail.tags)"
+              :key="tag"
+              class="public-pricing-tag"
+              >{{ tag }}</span
+            >
+          </div>
         </div>
         <ConsoleButton variant="ghost" @click="copy(detail.model_name)">{{
           t('copy')
@@ -268,6 +280,23 @@ onBeforeUnmount(() => controller?.abort())
             ><h2>{{ model.model_name }}</h2></RouterLink
           >
           <p>{{ model.description }}</p>
+          <div
+            v-if="parseModelTags(model.tags).length"
+            class="public-pricing-tags"
+            data-public-model-tags
+          >
+            <span
+              v-for="tag in parseModelTags(model.tags).slice(0, 3)"
+              :key="tag"
+              class="public-pricing-tag"
+              >{{ tag }}</span
+            >
+            <span
+              v-if="parseModelTags(model.tags).length > 3"
+              class="public-pricing-tag is-count"
+              >+{{ parseModelTags(model.tags).length - 3 }}</span
+            >
+          </div>
           <ModelPriceItems :pricing="model" :unit="unit" />
         </article>
       </div>
@@ -346,6 +375,26 @@ h2 {
 .public-pricing-card > p {
   font-size: 0.85rem;
   color: var(--text-secondary);
+}
+.public-pricing-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.public-pricing-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+.public-pricing-tag.is-count {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
 }
 .public-pricing-detail {
   display: flex;

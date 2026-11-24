@@ -43,6 +43,30 @@ function mockFeeds(performance: () => Promise<unknown>) {
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === '/api/user/model-catalog') return modelCatalogFixture()
     if (url === '/api/perf-metrics/summary') return performance()
+    if (url === '/api/perf-metrics')
+      return {
+        model_name: 'fixture-model',
+        series_schema: 'v1',
+        summary: { avg_latency_ms: 850, success_rate: 99.5, avg_tps: 42.25 },
+        series: [
+          {
+            ts: 1_785_117_600,
+            avg_ttft_ms: 210,
+            avg_latency_ms: 820,
+            success_rate: 99.8,
+            avg_tps: 44.1,
+          },
+          {
+            ts: 1_785_121_200,
+            avg_ttft_ms: 240,
+            avg_latency_ms: 880,
+            success_rate: 99.2,
+            avg_tps: 40.4,
+          },
+        ],
+        window_start: 1_785_038_400,
+        window_end: 1_785_124_800,
+      }
     throw new Error(`unexpected ${url}`)
   })
 }
@@ -102,6 +126,18 @@ describe('native model catalog page', () => {
     // Channel offers keep the unavailable state and explain why.
     expect(popup.textContent).toContain('未按渠道统计')
     expect(popup.textContent).toContain('统计按模型汇总，不区分渠道')
+    // Model-wide 24h hourly series renders from /api/perf-metrics.
+    const series = popup.querySelector('[data-model-statistics-series]')
+    expect(series).not.toBeNull()
+    expect(series?.querySelectorAll('button')).toHaveLength(2)
+    // Integrate tab shows base URL and protocol-appropriate cURL.
+    const integrateTab = Array.from(
+      popup.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    ).find((tab) => tab.textContent?.includes('接入'))!
+    integrateTab.click()
+    await flushPromises()
+    expect(popup.textContent).toContain('https://api.example.test')
+    expect(popup.textContent).toContain('curl ')
   })
   it('does not render permission-scoped prices after a catalog failure', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('denied'))

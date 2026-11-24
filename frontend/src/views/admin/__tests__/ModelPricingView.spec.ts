@@ -256,7 +256,7 @@ describe('pricing workspace draft lifecycle', () => {
     await field(wrapper, '.pricing-editor', 'Model ID').setValue(name)
     await editor
       .findAll('[role="tab"]')
-      .find((item) => item.text() === 'Per-request (deprecated)')!
+      .find((item) => item.text() === 'Per request')!
       .trigger('click')
     await editor.get('input[inputmode="decimal"]').setValue('0.5')
     await flushPromises()

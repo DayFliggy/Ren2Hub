@@ -2,6 +2,7 @@ import { api } from './client'
 import { createApiClient } from './createClient'
 import { publicHttpTransport } from './httpTransport'
 import {
+  parsePerfMetricsDetail,
   parsePerfMetricsSummaryResult,
   parsePerfMetricsSummary,
 } from './liveContracts'
@@ -20,6 +21,20 @@ export async function getModelPerformance(signal?: AbortSignal) {
     await api.get(
       '/api/perf-metrics/summary',
       { hours: MODEL_PERFORMANCE_HOURS },
+      { signal }
+    )
+  )
+}
+
+/** Native per-model hourly time series aggregated across all channels. */
+export async function getModelPerformanceDetail(
+  model: string,
+  signal?: AbortSignal
+) {
+  return parsePerfMetricsDetail(
+    await api.get(
+      '/api/perf-metrics',
+      { model, hours: MODEL_PERFORMANCE_HOURS },
       { signal }
     )
   )

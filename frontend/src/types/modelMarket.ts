@@ -54,6 +54,7 @@ export interface MarketModel {
   vendor: string
   icon: string
   description: string
+  tags: string[]
   type: MarketModelType
   endpointTypes: string[]
   endpoints: { type: string; path: string; method: string }[]
@@ -64,6 +65,7 @@ export interface MarketModel {
 export interface ModelMarketCatalog {
   models: MarketModel[]
   channels: MarketChannel[]
+  serverAddress: string
   telemetry: { status: 'unavailable'; reason: 'channel_metrics_not_collected' }
 }
 
