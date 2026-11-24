@@ -15,6 +15,7 @@ func handleSessionRoute(group *gin.RouterGroup, method, path string, handlers ..
 }
 
 func registerExtensionRoutes(api *gin.RouterGroup) {
+	registerUpstreamRoutes(api)
 	system := api.Group("/admin/system", middleware.RootAuth())
 	handleSessionRoute(system, http.MethodGet, "/version", controller.SystemUpdates.Version)
 	handleSessionRoute(system, http.MethodGet, "/check-updates", controller.SystemUpdates.CheckUpdates)
@@ -69,4 +70,29 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	handleSessionRoute(settings, http.MethodGet, "/config", controller.GetGmpayConfig)
 	handleSessionRoute(settings, http.MethodPost, "/save", controller.SaveGmpayConfig)
 	handleSessionRoute(settings, http.MethodPost, "/probe", middleware.CriticalRateLimit(), controller.ProbeGmpay)
+}
+
+func registerUpstreamRoutes(api *gin.RouterGroup) {
+	up := api.Group("/admin/upstreams", middleware.AdminAuth(), middleware.DisableCache())
+	handlePermissionRoute(up, http.MethodGet, "", authz.UpstreamRead, controller.ListManagedUpstreams)
+	handlePermissionRoute(up, http.MethodGet, "/bindings", authz.UpstreamRead, controller.ListUpstreamBindingsForChannels)
+	handlePermissionRoute(up, http.MethodPost, "/probe", authz.UpstreamSensitiveWrite, controller.ProbeUpstream)
+	handlePermissionRoute(up, http.MethodPost, "/auth", authz.UpstreamSensitiveWrite, controller.StartUpstreamAuth)
+	handlePermissionRoute(up, http.MethodPost, "/auth/verify", authz.UpstreamSensitiveWrite, controller.CompleteUpstreamAuth)
+	handlePermissionRoute(up, http.MethodGet, "/:id", authz.UpstreamRead, controller.GetManagedUpstream)
+	handlePermissionRoute(up, http.MethodPatch, "/:id", authz.UpstreamWrite, controller.EditManagedUpstream)
+	handlePermissionRoute(up, http.MethodPatch, "/:id/endpoint", authz.UpstreamSensitiveWrite, controller.EditManagedEndpoint)
+	handlePermissionRoute(up, http.MethodDelete, "/:id", authz.UpstreamSensitiveWrite, controller.DeleteManagedUpstream)
+	handlePermissionRoute(up, http.MethodPost, "/:id/sync", authz.UpstreamOperate, controller.SyncManagedUpstream)
+	handlePermissionRoute(up, http.MethodGet, "/:id/keys", authz.UpstreamRead, controller.ListManagedKeys)
+	handlePermissionRoute(up, http.MethodPost, "/:id/keys", authz.UpstreamSensitiveWrite, controller.CreateManagedKey)
+	handlePermissionRoute(up, http.MethodPatch, "/:id/keys/:key_id", authz.UpstreamWrite, controller.EditManagedKey)
+	handlePermissionRoute(up, http.MethodPatch, "/:id/keys/:key_id/status", authz.UpstreamWrite, controller.ToggleManagedKey)
+	handlePermissionRoute(up, http.MethodDelete, "/:id/keys/:key_id", authz.UpstreamSensitiveWrite, controller.DeleteManagedKey)
+	handlePermissionRoute(up, http.MethodGet, "/:id/bindings", authz.UpstreamRead, controller.ListManagedBindings)
+	handlePermissionRoute(up, http.MethodPost, "/:id/keys/:key_id/bind", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.BindManagedChannel)
+	handlePermissionRoute(up, http.MethodPost, "/:id/keys/:key_id/channel", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.CreateManagedChannel)
+	handlePermissionRoute(up, http.MethodPost, "/:id/channels", authz.UpstreamSensitiveWrite, controller.RequireUpstreamChannelWrite, controller.CreateManagedChannel)
+	handlePermissionRoute(up, http.MethodPatch, "/:id/bindings/:channel_id", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.EditManagedBinding)
+	handlePermissionRoute(up, http.MethodDelete, "/:id/bindings/:channel_id", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.DeleteManagedBinding)
 }

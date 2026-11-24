@@ -8,6 +8,7 @@ import {
   type UpstreamRatioMode,
 } from '@/api/channelUpstreamRatio'
 import { ApiError } from '@/api/types'
+import type { UpstreamBinding } from '@/api/upstreams'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
@@ -25,6 +26,8 @@ const props = defineProps<{
   channel: AdminChannel | null
   canOperate: boolean
   canWrite: boolean
+  /** Upstream account binding; ratio sync then writes the channel ratio. */
+  binding?: UpstreamBinding | null
 }>()
 const emit = defineEmits<{ close: []; saved: [view: ChannelUpstreamRatio] }>()
 const { t, locale } = useI18n()
@@ -35,6 +38,15 @@ const manualRatio = ref('')
 const groupName = ref('')
 const busy = ref(false)
 const error = ref('')
+
+const syncNote = computed(() => {
+  const binding = props.binding
+  if (!binding || binding.channel_id !== props.channel?.id) return ''
+  if (binding.stale || !binding.ratio_sync_enabled) return ''
+  return t('upstreams.channelLink.ratioDialogSync', {
+    factor: binding.ratio_sync_factor,
+  })
+})
 
 const mappableGroups = computed(() =>
   (view.value?.groups ?? []).filter(
@@ -154,6 +166,14 @@ watch(
   >
     <p class="mb-4 text-sm text-[var(--text-secondary)]">
       {{ t('channels.upstreamRatio.hint') }}
+    </p>
+    <p
+      v-if="syncNote"
+      role="note"
+      class="mb-4 rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)]"
+      data-upstream-ratio-sync-note
+    >
+      {{ syncNote }}
     </p>
     <p
       v-if="error"

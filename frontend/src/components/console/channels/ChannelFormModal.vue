@@ -70,6 +70,8 @@ import {
   HIDDEN_FIELD_CLEAR_VALUE,
   withoutSensitiveChannelFields,
 } from '@/constants/adminChannels'
+import { RouterLink } from 'vue-router'
+import type { UpstreamBinding } from '@/api/upstreams'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
@@ -86,6 +88,8 @@ const props = defineProps<{
     options?: AdminChannelCreateOptions
   ) => Promise<boolean>
   fetchModels: (params: AdminChannelFetchModelsParams) => Promise<string[]>
+  /** Upstream binding of the edited channel; null without upstream.read. */
+  upstreamBinding?: UpstreamBinding | null
 }>()
 
 const emit = defineEmits<{
@@ -93,6 +97,21 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
+
+const binding = computed(() => {
+  const value = props.upstreamBinding
+  return value && props.editing && value.channel_id === props.editing.id
+    ? value
+    : null
+})
+// A live ratio-sync binding owns channel_ratio: the field is shown read-only
+// and left out of the update so a save cannot overwrite the synced value.
+const ratioManaged = computed(
+  () =>
+    binding.value !== null &&
+    !binding.value.stale &&
+    binding.value.ratio_sync_enabled
+)
 const toast = useToast()
 const auth = useAuthStore()
 const saving = ref(false)
@@ -586,7 +605,7 @@ const valid = computed(
     Number.isSafeInteger(form.weight) &&
     form.weight >= 0 &&
     form.weight <= 1_000_000 &&
-    isValidChannelRatio(form.channel_ratio) &&
+    (ratioManaged.value || isValidChannelRatio(form.channel_ratio)) &&
     Number.isSafeInteger(form.max_concurrency) &&
     form.max_concurrency >= 0
 )
@@ -846,9 +865,10 @@ async function submit() {
     // ChannelSensitiveWrite can still save routing-level edits.
     const replacementKey = loginPlugin.value ? '' : form.key.trim()
     if (canSensitiveWrite.value && replacementKey) base.key = replacementKey
-    const update = canSensitiveWrite.value
-      ? base
+    const update: AdminChannelUpdateInput = canSensitiveWrite.value
+      ? { ...base }
       : withoutSensitiveChannelFields(base)
+    if (ratioManaged.value) delete update.channel_ratio
     if (await props.save(update)) emit('close')
   } finally {
     saving.value = false
@@ -864,6 +884,36 @@ async function submit() {
     @close="close"
   >
     <div class="sibling-space-y-4 text-left">
+      <div
+        v-if="binding"
+        role="note"
+        class="flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-sm"
+        :class="
+          binding.stale
+            ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]'
+            : 'bg-[var(--surface-muted)] text-[var(--text-secondary)]'
+        "
+        data-channel-upstream-notice
+      >
+        <span>
+          {{
+            t('upstreams.channelLink.formNotice', {
+              account: binding.account_id,
+              key: binding.remote_key_id,
+            })
+          }}
+        </span>
+        <span v-if="binding.stale">{{ t('upstreams.bindings.stale') }}</span>
+        <RouterLink
+          :to="{
+            name: 'upstreams',
+            query: { account: String(binding.account_id) },
+          }"
+          class="font-medium text-[var(--accent)] hover:underline"
+        >
+          {{ t('upstreams.channelLink.formOpen') }}
+        </RouterLink>
+      </div>
       <p
         v-if="settingsError"
         role="alert"
@@ -1744,7 +1794,13 @@ async function submit() {
             <FormField
               :label="t('channels.channelRatio')"
               :hint="
-                canSensitiveWrite ? '' : t('channels.channelRatioReadOnly')
+                ratioManaged
+                  ? t('upstreams.channelLink.ratioManaged', {
+                      factor: binding?.ratio_sync_factor ?? '',
+                    })
+                  : canSensitiveWrite
+                    ? ''
+                    : t('channels.channelRatioReadOnly')
               "
             >
               <div class="relative">
@@ -1753,7 +1809,8 @@ async function submit() {
                   type="text"
                   inputmode="decimal"
                   name="channel-ratio"
-                  :disabled="!canSensitiveWrite"
+                  :disabled="!canSensitiveWrite || ratioManaged"
+                  :data-upstream-managed="ratioManaged ? '' : undefined"
                   class="channel-form-number channel-form-number--ratio focus-ring"
                 />
                 <span

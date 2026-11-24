@@ -3,6 +3,7 @@ import { createI18n } from 'vue-i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import type { ChannelUpstreamRatio } from '@/api/channelUpstreamRatio'
+import type { UpstreamBinding } from '@/api/upstreams'
 import { ApiError } from '@/api/types'
 import type { AdminChannel } from '@/types/console'
 import ChannelUpstreamRatioDialog from '../ChannelUpstreamRatioDialog.vue'
@@ -40,12 +41,29 @@ const wire = {
   ),
 }
 
-function setup(canWrite = true) {
+const binding: UpstreamBinding = {
+  id: 1,
+  account_id: 4,
+  remote_key_id: 14,
+  channel_id: 101,
+  channel_created_time: 1799999900,
+  stale: false,
+  remote_status: 'active',
+  ratio_sync_enabled: true,
+  ratio_sync_factor: '1.25',
+  ratio_sync_error: '',
+}
+
+function setup(
+  canWrite = true,
+  upstreamBinding: UpstreamBinding | null = null
+) {
   return mount(ChannelUpstreamRatioDialog, {
     props: {
       channel: { id: 101, name: 'relay' } as AdminChannel,
       canOperate: true,
       canWrite,
+      binding: upstreamBinding,
     },
     global: {
       plugins: [
@@ -139,5 +157,35 @@ describe('channel upstream ratio dialog', () => {
     expect(
       wrapper.findAll('button').map((button) => button.text())
     ).not.toContain('common.save')
+  })
+
+  it('labels a group linked by an upstream account', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue([{ ...wire, mapping: 'account' }])
+    const wrapper = setup()
+    await flushPromises()
+    expect(wrapper.text()).toContain('channels.upstreamRatio.mappings.account')
+  })
+
+  it('notes ratio sync only for an active binding of this channel', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue([wire])
+    const synced = setup(true, binding)
+    await flushPromises()
+    expect(synced.find('[data-upstream-ratio-sync-note]').text()).toBe(
+      'upstreams.channelLink.ratioDialogSync'
+    )
+    synced.unmount()
+
+    for (const value of [
+      { ...binding, stale: true },
+      { ...binding, ratio_sync_enabled: false },
+      { ...binding, channel_id: 102 },
+    ]) {
+      const wrapper = setup(true, value)
+      await flushPromises()
+      expect(wrapper.find('[data-upstream-ratio-sync-note]').exists()).toBe(
+        false
+      )
+      wrapper.unmount()
+    }
   })
 })

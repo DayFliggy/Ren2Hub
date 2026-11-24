@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "total_selected_top_level_executions": 144,
+  "total_selected_top_level_executions": 146,
   "groups": [
     {
       "id": "original-model",
@@ -74,9 +74,10 @@
         "TestPluginLoginConcurrentSubmitRunsThePluginOnce",
         "TestPluginLoginConcurrentLoginsHoldOneAccountOnce",
         "TestScheduledStaleRemovedAndManualKeys",
-        "TestScheduledCancellationAndTLSKeepStoredState"
+        "TestScheduledCancellationAndTLSKeepStoredState",
+        "TestSub2APIConcurrentRefreshSerializesSingleRotation"
       ],
-      "pattern": "^(TestRefreshConcurrentRequestsMakeOnePluginCall|TestRefreshTwoNodesMakeOnePluginCall|TestRefreshPluginCallHoldsNoChannelLock|TestRefreshRotatedTokenIsNeverSentAgain|TestRefreshMergesItsResult|TestRefreshRemovedCredential|TestPluginLoginConcurrentSubmitRunsThePluginOnce|TestPluginLoginConcurrentLoginsHoldOneAccountOnce|TestScheduledStaleRemovedAndManualKeys|TestScheduledCancellationAndTLSKeepStoredState)$"
+      "pattern": "^(TestRefreshConcurrentRequestsMakeOnePluginCall|TestRefreshTwoNodesMakeOnePluginCall|TestRefreshPluginCallHoldsNoChannelLock|TestRefreshRotatedTokenIsNeverSentAgain|TestRefreshMergesItsResult|TestRefreshRemovedCredential|TestPluginLoginConcurrentSubmitRunsThePluginOnce|TestPluginLoginConcurrentLoginsHoldOneAccountOnce|TestScheduledStaleRemovedAndManualKeys|TestScheduledCancellationAndTLSKeepStoredState|TestSub2APIConcurrentRefreshSerializesSingleRotation)$"
     },
     {
       "id": "stream-lifecycle",
@@ -128,9 +129,10 @@
         "TestPricingConversionOfProviderChannelModels",
         "TestScheduledChannelLockedStatus",
         "TestScheduledChannelLockedCancellation",
-        "TestLockedCredentialWritesPublishCommittedChanges"
+        "TestLockedCredentialWritesPublishCommittedChanges",
+        "TestUpstreamBindingConcurrent1To1"
       ],
-      "pattern": "^(TestUpdateAuthFlowPayloadSwapsOnlyTheExpectedPayload|TestUpdateChannelLocked|TestProviderChannelSelectionFollowsRelayRoutes|TestPricingProviderChannelUsesRelayRoutes|TestPricingConversionOfProviderChannelModels|TestScheduledChannelLockedStatus|TestScheduledChannelLockedCancellation|TestLockedCredentialWritesPublishCommittedChanges)$"
+      "pattern": "^(TestUpdateAuthFlowPayloadSwapsOnlyTheExpectedPayload|TestUpdateChannelLocked|TestProviderChannelSelectionFollowsRelayRoutes|TestPricingProviderChannelUsesRelayRoutes|TestPricingConversionOfProviderChannelModels|TestScheduledChannelLockedStatus|TestScheduledChannelLockedCancellation|TestLockedCredentialWritesPublishCommittedChanges|TestUpstreamBindingConcurrent1To1)$"
     },
     {
       "id": "channel-pricing-cache",
@@ -258,7 +260,7 @@
       "TestUpdateVideoTasksMixedChannelSleepSettings"
     ]
   },
-  "ordinary_top_level_executions": 125,
+  "ordinary_top_level_executions": 127,
   "separately_verified_funds": [
     {
       "path": "/home/work/ren2hub-native-b388-20261114/implementation/funds/race-model-docker.jsonl",

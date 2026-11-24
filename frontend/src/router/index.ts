@@ -271,6 +271,16 @@ const router = createRouter({
           },
         },
         {
+          path: '/upstreams',
+          name: 'upstreams',
+          component: () => import('@/views/console/UpstreamsView.vue'),
+          meta: {
+            wide: true,
+            feature: 'admin',
+            ...getConsoleRouteAccessMeta('upstreams'),
+          },
+        },
+        {
           path: '/ticket-management/:id?',
           name: 'ticket-management',
           component: () => import('@/views/console/AdminTicketsView.vue'),

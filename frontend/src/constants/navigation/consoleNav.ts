@@ -113,6 +113,15 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M4 6h16M4 12h16M4 18h16M7 3v6M17 9v6M10 15v6',
       },
       {
+        name: 'upstream-management',
+        labelKey: 'nav.upstreamManagement',
+        route: 'upstreams',
+        feature: 'admin',
+        permission: { resource: 'upstream', action: 'read' },
+        // Lucide "cloud-upload"
+        icon: 'M12 13v8M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2M8 17l4-4 4 4',
+      },
+      {
         // Admin model workspace: metadata, vendors, and Root pricing.
         name: 'models-admin',
         labelKey: 'nav.adminModels',

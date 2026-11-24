@@ -91,6 +91,7 @@ PAIRED_TESTS = (
     ("controller", "TestIndependentAuditLogStores"),
 )
 PROVIDER_TESTS = (
+    ("model", "TestUpstreamManagementDatabaseMatrix"),
     ("model", "TestRestoredRound3ChannelStatusFailureRestoresCache"),
     ("model", "TestChannelStatusFailureDatabaseMatrix"),
     ("model", "TestChannelStatusCacheFastPathDatabaseMatrix"),

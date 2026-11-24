@@ -2,20 +2,16 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 const (
@@ -27,8 +23,7 @@ const (
 var (
 	errUpstreamRatioBodyTooLarge = errors.New("response too large")
 	errUpstreamRatioZonedHost    = errors.New("ipv6 zone host is not allowed")
-	errUpstreamRatioBaseURL      = errors.New("invalid base url")
-	errUpstreamRatioSetting      = errors.New("invalid channel setting")
+	errUpstreamRatioSetting      = model.ErrUpstreamRatioSetting
 )
 
 // 官方 API 域名不会提供 /v1/sub2api/billing 或 /api/usage/token/，直接判为不支持，
@@ -51,82 +46,13 @@ func isOfficialUpstreamAPI(host string) bool {
 	return false
 }
 
-// upstreamRatioTarget 是一次探测实际使用的请求要素，也是指纹的输入。
-type upstreamRatioTarget struct {
-	Type    int    `json:"type"`
-	BaseURL string `json:"base_url"`
-	Key     string `json:"key"`
-	Proxy   string `json:"proxy"`
-}
+type upstreamRatioTarget = model.UpstreamRatioTarget
 
-// upstreamProbeBaseURL 保留部署路径前缀，只去掉末尾的 /v1 或 /v1beta 协议段。
-func upstreamProbeBaseURL(raw string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	// 走代理时目标主机不经过本地拨号检查，带 zone 的 IPv6 目标在这里统一拒绝。
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || strings.Contains(parsed.Hostname(), "%") {
-		return "", errUpstreamRatioBaseURL
-	}
-	path := strings.TrimRight(parsed.Path, "/")
-	for _, suffix := range []string{"/v1", "/v1beta"} {
-		if strings.HasSuffix(path, suffix) {
-			path = strings.TrimSuffix(path, suffix)
-			break
-		}
-	}
-	parsed.Path = path
-	parsed.RawPath = ""
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String(), nil
+func newUpstreamRatioTarget(ch *model.Channel) (upstreamRatioTarget, error) {
+	return model.NewUpstreamRatioTarget(ch)
 }
-
-func newUpstreamRatioTarget(channel *model.Channel) (upstreamRatioTarget, error) {
-	baseURL, err := upstreamProbeBaseURL(channel.GetBaseURL())
-	if err != nil {
-		return upstreamRatioTarget{}, err
-	}
-	proxy, err := upstreamRatioProxy(channel)
-	if err != nil {
-		return upstreamRatioTarget{}, err
-	}
-	return upstreamRatioTarget{
-		Type:    channel.Type,
-		BaseURL: baseURL,
-		Key:     strings.TrimSpace(channel.Key),
-		Proxy:   proxy,
-	}, nil
-}
-
-// upstreamRatioProxy 只解析渠道设置。原生 GetSetting 遇到坏 JSON 会清空设置并写库，
-// 读取倍率的路径不能有这种副作用。
-func upstreamRatioProxy(channel *model.Channel) (string, error) {
-	if channel.Setting == nil || *channel.Setting == "" {
-		return "", nil
-	}
-	var setting dto.ChannelSettings
-	if err := common.UnmarshalJsonStr(*channel.Setting, &setting); err != nil {
-		return "", errUpstreamRatioSetting
-	}
-	return strings.TrimSpace(setting.Proxy), nil
-}
-
-// upstreamRatioFingerprint 对类型、探测地址、Key、代理的结构化编码取 sha256。
-// 渠道配置变化后指纹不同，旧记录在读取时显示为过期，写回时被拒绝。
-func upstreamRatioFingerprint(channel *model.Channel) string {
-	target, err := newUpstreamRatioTarget(channel)
-	if err != nil {
-		target = upstreamRatioTarget{Type: channel.Type, BaseURL: channel.GetBaseURL(), Key: channel.Key}
-		if channel.Setting != nil {
-			target.Proxy = *channel.Setting
-		}
-	}
-	encoded, err := common.Marshal(target)
-	if err != nil {
-		return ""
-	}
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:])
-}
+func upstreamProbeBaseURL(raw string) (string, error)   { return model.UpstreamProbeBaseURL(raw) }
+func upstreamRatioFingerprint(ch *model.Channel) string { return model.UpstreamRatioFingerprint(ch) }
 
 // newUpstreamRatioHTTPClient 每次探测新建，不复用中转用的共享 client：拒绝重定向。
 // 所有拨号（直连目标，或代理地址）都经过 SSRF 受保护拨号器，按解析后的 IP 检查。

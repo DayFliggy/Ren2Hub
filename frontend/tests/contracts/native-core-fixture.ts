@@ -447,6 +447,25 @@ export async function nativeCoreFixture(
       path === '/api/prefill_group/'
     )
       return ok([])
+    // Upstream reads replay the backend contract fixture; channel lists only
+    // receive the bindings of the IDs they ask for.
+    if (path.startsWith('/api/admin/upstreams') && method === 'GET') {
+      const upstreams =
+        nativeFixture<Record<string, { data: unknown }>>('upstreams.get.json')
+      if (path === '/api/admin/upstreams/bindings') {
+        const ids = new Set(
+          (url.searchParams.get('channel_ids') ?? '').split(',').map(Number)
+        )
+        const rows = upstreams.bindings.data as Array<{ channel_id: number }>
+        return ok(rows.filter((row) => ids.has(row.channel_id)))
+      }
+      if (path === '/api/admin/upstreams') return ok(upstreams.list.data)
+      if (path === '/api/admin/upstreams/4') return ok(upstreams.detail.data)
+      if (path === '/api/admin/upstreams/4/keys')
+        return ok(upstreams.newapi_keys.data)
+      if (path === '/api/admin/upstreams/4/bindings')
+        return ok(upstreams.bindings.data)
+    }
     // Visual channels are never probed: each requested id gets the real
     // handler's no-record view.
     if (path === '/api/channel/upstream_ratios') {

@@ -32,6 +32,7 @@ describe('console navigation', () => {
 
     expect(adminGroup?.items.map((item) => item.name)).toEqual([
       'channel-management',
+      'upstream-management',
       'models-admin',
       'ticket-management',
       'user-management',
@@ -47,22 +48,31 @@ describe('console navigation', () => {
         route: 'channels',
       })
     )
-    // Model management sits right after Channels.
+    // Upstream accounts sit right after Channels and share its admin gate.
     expect(adminGroup?.items[1]).toEqual(
+      expect.objectContaining({
+        name: 'upstream-management',
+        route: 'upstreams',
+        labelKey: 'nav.upstreamManagement',
+        feature: 'admin',
+        permission: { resource: 'upstream', action: 'read' },
+      })
+    )
+    expect(adminGroup?.items[2]).toEqual(
       expect.objectContaining({
         name: 'models-admin',
         route: 'models-admin',
         labelKey: 'nav.adminModels',
       })
     )
-    expect(adminGroup?.items[2]).toEqual(
+    expect(adminGroup?.items[3]).toEqual(
       expect.objectContaining({
         name: 'ticket-management',
         route: 'ticket-management',
         permission: { resource: 'ticket', action: 'read' },
       })
     )
-    expect(adminGroup?.items[3]).toEqual(
+    expect(adminGroup?.items[4]).toEqual(
       expect.objectContaining({
         name: 'user-management',
         route: 'users',
@@ -144,6 +154,10 @@ describe('console navigation', () => {
     expect(getConsoleRouteAccessMeta('channels')).toEqual({
       requiresAdmin: true,
       requiresPermission: { resource: 'channel', action: 'read' },
+    })
+    expect(getConsoleRouteAccessMeta('upstreams')).toEqual({
+      requiresAdmin: true,
+      requiresPermission: { resource: 'upstream', action: 'read' },
     })
     expect(getConsoleRouteAccessMeta('ticket-management')).toEqual({
       requiresAdmin: true,
