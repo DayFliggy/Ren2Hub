@@ -439,6 +439,7 @@ async function save() {
         ref="routingRef"
         :open="open"
         :editing-id="editing?.id ?? null"
+        :created-token-id="createdTokenId"
         :model-limits="form.model_limits"
         :can-read="canReadRouting"
         :can-write="canWriteRouting"

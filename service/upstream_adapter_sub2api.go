@@ -58,7 +58,7 @@ func decodeSub2Key(b []byte) (UpstreamRemoteKey, error) {
 	if common.Unmarshal(b, &k) != nil || k.ID < 1 || k.Status == "" || k.Key == "" {
 		return UpstreamRemoteKey{}, remoteError("upstream_invalid_response")
 	}
-	status := "inactive"
+	var status string
 	switch k.Status {
 	case "active":
 		status = "active"
@@ -67,10 +67,14 @@ func decodeSub2Key(b []byte) (UpstreamRemoteKey, error) {
 		} else if k.Quota > 0 && k.Used >= k.Quota {
 			status = "exhausted"
 		}
+	case "disabled", "inactive":
+		status = "inactive"
 	case "quota_exhausted":
 		status = "exhausted"
 	case "expired":
 		status = "expired"
+	default:
+		return UpstreamRemoteKey{}, remoteError("upstream_invalid_response")
 	}
 	expiresAt := ""
 	if k.ExpiresAt != nil {

@@ -153,3 +153,17 @@ export function isHttpUrl(value: string): boolean {
     return false
   }
 }
+
+export function isProxyUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (
+      url.protocol === 'http:' ||
+      url.protocol === 'https:' ||
+      url.protocol === 'socks5:' ||
+      url.protocol === 'socks5h:'
+    )
+  } catch {
+    return false
+  }
+}

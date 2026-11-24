@@ -48,6 +48,7 @@ export interface RoutingSaveState {
 const props = defineProps<{
   open: boolean
   editingId: number | null
+  createdTokenId?: number | null
   modelLimits: string[]
   canRead: boolean
   canWrite: boolean
@@ -407,7 +408,8 @@ async function loadAll(): Promise<void> {
     return
   }
 
-  if (props.editingId === null) {
+  const id = props.editingId ?? props.createdTokenId ?? null
+  if (id === null) {
     resetForCreate()
     await fetchCandidates()
     return
@@ -415,7 +417,6 @@ async function loadAll(): Promise<void> {
 
   loading.value = true
   candidatesLoading.value = true
-  const id = props.editingId
   const limits = [...props.modelLimits]
 
   const routeResult = await routeRequest.run((signal) =>
@@ -432,6 +433,7 @@ async function loadAll(): Promise<void> {
     return
   }
   applyRoute(routeResult.value)
+  emit('clear-error')
 
   const ratio = routeResult.value.max_channel_ratio ?? ''
   lastCandidateFilterKey = candidateFilterKey(limits, ratio)

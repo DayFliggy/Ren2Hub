@@ -2495,7 +2495,7 @@
       "path": "controller/responses_websocket_private_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "26765552c89131cb5e8b5bc207313d31f5b405704022836b2304fe04dd67aeef"
+      "local_sha256": "e1676ca8b98a08606d8dd9057d4ea8c8487033b5af80d5432da0726f4e8444e0"
     },
     {
       "path": "controller/responses_websocket_test.go",
@@ -5810,7 +5810,7 @@
       "path": "model/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7dae4a60f43725b00892ccf35861e63a6bacd9e11b4d2a1aec687374e5f32f33",
+      "local_sha256": "67007cb9fe53132847e0cd56f6245d228e9300c43cd043caa428e60d97bfd5a1",
       "reasons": [
         "token-routing"
       ],
@@ -14777,7 +14777,7 @@
       "path": "service/upstream_adapter_sub2api.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2c5141e56788cb8f17cb03615c4d4ab8edca297a145be72e4b27777ccff12e4e",
+      "local_sha256": "23c08b07c3e4483e3a7ef4a639bd21f399d9675ea974427ec9016f62b273fd94",
       "reasons": [
         "upstream-management"
       ],
@@ -14860,7 +14860,7 @@
       "path": "service/upstream_sync_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d3acb1e84fb1af63ed354e609c20283d5f7ad0e96da75bc583e3698c92b51e40"
+      "local_sha256": "5542e313e345d2ab13690f14ba19810336ff31f002b9b45b233ff38c10617436"
     },
     {
       "path": "service/upstream_usage_billing_test.go",

@@ -92,23 +92,3 @@ func EnabledRouteModels(ctx context.Context, channelIDs []int) (map[int][]string
 	}
 	return result, nil
 }
-
-// DeclaredRouteModels 返回每个渠道声明的全部模型及其能力行是否启用，只给路由预览说明原因用。
-// 渠道禁用时能力行也被置为禁用，只读启用行就无法区分“禁用了”和“不服务该模型”。
-func DeclaredRouteModels(ctx context.Context, channelIDs []int) (map[int]map[string]bool, error) {
-	result := map[int]map[string]bool{}
-	if len(channelIDs) == 0 {
-		return result, nil
-	}
-	var rows []Ability
-	if err := DB.WithContext(ctx).Select("channel_id", "model", "enabled").Where("channel_id IN ?", channelIDs).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		if result[row.ChannelId] == nil {
-			result[row.ChannelId] = map[string]bool{}
-		}
-		result[row.ChannelId][row.Model] = row.Enabled
-	}
-	return result, nil
-}

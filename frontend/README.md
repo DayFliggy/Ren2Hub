@@ -49,9 +49,9 @@ Tailwind 4 通过 `vite.config.ts` 里的 `@tailwindcss/vite` 构建，入口是
 - `/`：公开首页
 - `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`：认证与密码重置
 - `/oauth/:provider`：OAuth 登录、绑定与二次验证的弹窗回调
-- `/dashboard`、`/keys`、`/keys/:id/routing`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
+- `/dashboard`、`/keys`（令牌路由内嵌于令牌编辑弹窗）、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
 - `/models`：模型广场，提供模型聚合、渠道货架和比价矩阵；使用用户作用域的真实渠道与平台基准价格，见[模型广场契约](../docs/console/MODELS.md)
-- `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
+- `/channels`、`/upstreams`（Sub2API/NewAPI 上游管理）、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
 - `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；候选只回填草稿，只有保存后生效，见[计费界面契约](docs/BILLING.md)
 
 旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不转换也不加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
@@ -81,7 +81,7 @@ src/
   components/   common/home/auth/console/admin/public/layout
   composables/  页面领域状态、请求取消与交互
   constants/    首页数据与导航定义
-  features/     按功能聚合的模块：channels、pricing、task-plugins、topup-bonus
+  features/     按功能聚合的模块：channels、pricing、task-plugins、topup-bonus、upstreams
   i18n/         en/zh-CN 分域消息
   router/       路由、守卫和兼容重定向
   stores/       公开状态、会话、初始化与工单队列

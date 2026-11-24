@@ -19,7 +19,7 @@ import FormField from '@/components/common/FormField.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
-import { isHttpUrl, upstreamErrorText } from '../lib/upstreamText'
+import { isHttpUrl, isProxyUrl, upstreamErrorText } from '../lib/upstreamText'
 
 export type UpstreamAccountModalMode =
   'create' | 'reauth' | 'settings' | 'endpoint'
@@ -133,7 +133,7 @@ function connection() {
 
 function connectionError(): string {
   if (!isHttpUrl(form.baseUrl.trim())) return t('upstreams.account.invalidUrl')
-  if (form.proxyUrl.trim() && !isHttpUrl(form.proxyUrl.trim()))
+  if (form.proxyUrl.trim() && !isProxyUrl(form.proxyUrl.trim()))
     return t('upstreams.account.invalidUrl')
   return ''
 }
@@ -244,7 +244,7 @@ function endpointInput(
   }
   if (form.proxyMode === 'clear') input.proxy_url = ''
   if (form.proxyMode === 'set') {
-    if (!isHttpUrl(form.proxyUrl.trim()))
+    if (!isProxyUrl(form.proxyUrl.trim()))
       return t('upstreams.account.invalidUrl')
     input.proxy_url = form.proxyUrl.trim()
   }

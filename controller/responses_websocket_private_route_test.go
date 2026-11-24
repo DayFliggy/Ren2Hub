@@ -17,7 +17,7 @@ import (
 
 func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 	for _, cache := range []bool{false, true} {
-		for _, scenario := range []string{"ability revoked", "entry removed", "token model revoked", "channel ratio revoked", "route store unavailable", "automatic pin revoked", "selected auto entries disabled", "unchanged private pin", "unchanged automatic pin"} {
+		for _, scenario := range []string{"ability revoked", "entry removed", "token model revoked", "channel ratio revoked", "route store unavailable", "automatic pin revoked", "selected auto entries disabled", "selected auto entry disabled with sibling enabled", "unchanged private pin", "unchanged automatic pin"} {
 			t.Run(fmt.Sprintf("cache=%t/%s", cache, scenario), func(t *testing.T) {
 				var creates atomic.Int32
 				fixture := newResponsesWSBillingTestWithSetup(t, `tier("request", fixed(0.002))`, func(ws *websocket.Conn, _ *http.Request) {
@@ -35,17 +35,22 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 					require.NoError(t, model.DB.Model(f.user).Update("role", common.RoleAdminUser).Error)
 					if scenario != "automatic pin revoked" && scenario != "unchanged automatic pin" {
 						mode := model.TokenRouteOrdered
-						if scenario == "selected auto entries disabled" {
+						var outsideID int
+						if scenario == "selected auto entries disabled" || scenario == "selected auto entry disabled with sibling enabled" {
 							mode = model.TokenRouteAuto
 							// Both routes point to the counted upstream, so an outside-list retry is observable.
 							outside := *f.channel
 							outside.Id = 0
 							outside.Name = "outside selected list"
 							require.NoError(t, outside.Insert())
+							outsideID = outside.Id
 							t.Cleanup(func() { require.NoError(t, outside.Delete()) })
 						}
 						require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, SelectedOnly: true, Mode: mode, Version: 1}).Error)
-						require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: f.channel.Id, Enabled: true}).Error)
+						require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: f.channel.Id, Position: 0, Enabled: true}).Error)
+						if scenario == "selected auto entry disabled with sibling enabled" {
+							require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: outsideID, Position: 1, Enabled: true}).Error)
+						}
 						t.Cleanup(func() {
 							require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteEntry{}).Error)
 							require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteProfile{}).Error)
@@ -78,6 +83,8 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 					}
 				case "selected auto entries disabled":
 					require.NoError(t, model.DB.Model(&model.TokenRouteEntry{}).Where("token_id = ?", fixture.token.Id).Update("enabled", false).Error)
+				case "selected auto entry disabled with sibling enabled":
+					require.NoError(t, model.DB.Model(&model.TokenRouteEntry{}).Where("token_id = ? AND channel_id = ?", fixture.token.Id, fixture.channel.Id).Update("enabled", false).Error)
 				case "entry removed":
 					require.NoError(t, model.DB.Where("token_id = ?", fixture.token.Id).Delete(&model.TokenRouteEntry{}).Error)
 				case "route store unavailable":
@@ -98,7 +105,7 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 				}
 				require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, create))
 				event := readResponsesWSTestEvent(t, fixture.client)
-				if scenario == "unchanged private pin" || scenario == "unchanged automatic pin" {
+				if scenario == "unchanged private pin" || scenario == "unchanged automatic pin" || scenario == "selected auto entries disabled" {
 					require.Equal(t, "response.completed", event["type"])
 					fixture.closeAndWait(t)
 					require.EqualValues(t, 2, creates.Load())
@@ -110,7 +117,7 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 						status, closeCode = http.StatusInternalServerError, websocket.CloseInternalServerErr
 					}
 					require.EqualValues(t, status, event["status"])
-					if scenario == "selected auto entries disabled" {
+					if scenario == "selected auto entry disabled with sibling enabled" {
 						require.Equal(t, "access_denied", event["error"].(map[string]any)["code"])
 					}
 					_, _, err := fixture.client.ReadMessage()

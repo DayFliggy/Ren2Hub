@@ -318,3 +318,45 @@ func TestUpstreamNewAPIChannelChangeRestoresDueProbeWhenAccountUnreachable(t *te
 		})
 	}
 }
+
+func TestUpstreamSyncSub2APIUnknownStatusKeepsChannelEnabled(t *testing.T) {
+	db := setupUpstreamRatioTest(t)
+	require.NoError(t, db.AutoMigrate(&model.Ability{}))
+	t.Setenv("CRYPTO_SECRET", "fixture")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/auth/me":
+			fmt.Fprint(w, `{"code":0,"data":{"username":"fixture","balance":2}}`)
+		case "/api/v1/groups/available", "/api/v1/subscriptions/progress":
+			fmt.Fprint(w, `{"code":0,"data":[]}`)
+		case "/api/v1/groups/rates":
+			fmt.Fprint(w, `{"code":0,"data":{}}`)
+		case "/api/v1/keys":
+			fmt.Fprint(w, `{"code":0,"data":{"total":1,"page_size":200,"page":1,"items":[{"id":17,"name":"k1","status":"pending_review","key":"sub2-test-key","group_id":1}]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	base := server.URL
+	channel := model.Channel{Name: "sub2-unknown-status", Type: constant.ChannelTypeSub2API, Key: "sub2-test-key", BaseURL: &base, Status: common.ChannelStatusEnabled, Models: "gpt-4o", ChannelRatio: "1", CreatedTime: 1800000000}
+	require.NoError(t, channel.Insert())
+	account := model.UpstreamAccount{CredentialUID: "uid-sub2-unknown", Name: "sub2", Platform: "sub2api", BaseURL: server.URL, Status: "active"}
+	enc, err := sealUpstreamCredential(&account, UpstreamCredential{AccessToken: "at", RefreshToken: "rt", AccessExpiresAt: time.Now().Add(24 * time.Hour).Unix(), RefreshExpiresAt: time.Now().Add(30 * 24 * time.Hour).Unix()})
+	require.NoError(t, err)
+	account.CredentialCiphertext = enc
+	require.NoError(t, model.CreateUpstreamAccount(&account))
+	binding := model.UpstreamChannelBinding{AccountID: account.ID, RemoteKeyID: 17, ChannelID: channel.Id, ChannelCreatedTime: channel.CreatedTime, ChannelFP: upstreamRatioFingerprint(&channel), RemoteStatus: "active", RatioSyncFactor: "1"}
+	require.NoError(t, model.BindUpstreamChannel(&binding, func(*model.Channel) error { return nil }))
+
+	err = SyncUpstreamAccount(context.Background(), account.ID)
+	require.ErrorContains(t, err, "upstream_invalid_response")
+	gotChannel, err := model.GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, common.ChannelStatusEnabled, gotChannel.Status)
+	rows, err := model.ListUpstreamBindings(account.ID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "active", rows[0].RemoteStatus)
+}

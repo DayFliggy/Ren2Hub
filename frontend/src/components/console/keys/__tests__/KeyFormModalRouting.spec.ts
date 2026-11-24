@@ -584,4 +584,108 @@ describe('KeyFormModal integrated routing', () => {
     expect(candSpy).not.toHaveBeenCalled()
     hidden.unmount()
   })
+
+  it('clears 409 conflict after reloading and allows saving updated routing', async () => {
+    setupPermissions('live', true, true)
+    vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } })
+    vi.spyOn(tokenRoutingApi, 'candidates').mockResolvedValue(sampleChannels)
+    const getSpy = vi
+      .spyOn(tokenRoutingApi, 'get')
+      .mockResolvedValueOnce({
+        token_id: 7,
+        mode: 'auto',
+        selected_only: false,
+        version: 1,
+        max_channel_ratio: null,
+        entries: [],
+      })
+      .mockResolvedValueOnce({
+        token_id: 7,
+        mode: 'auto',
+        selected_only: true,
+        version: 2,
+        max_channel_ratio: null,
+        entries: [{ channel_id: 11, enabled: true, position: 0 }],
+      })
+    const saveSpy = vi
+      .spyOn(tokenRoutingApi, 'save')
+      .mockRejectedValueOnce(new ApiError('conflict', { status: 409 }))
+      .mockResolvedValueOnce({
+        token_id: 7,
+        mode: 'auto',
+        selected_only: true,
+        version: 3,
+        max_channel_ratio: null,
+        entries: [
+          { channel_id: 11, enabled: true, position: 0 },
+          { channel_id: 22, enabled: true, position: 1 },
+        ],
+      })
+
+    const wrapper = mount(KeyFormModal, {
+      attachTo: document.body,
+      global: { plugins: [i18n] },
+      props: {
+        open: true,
+        editing: makeToken({ id: 7 }),
+        models: ['gpt-4o'],
+        focus: 'routing',
+      },
+    })
+    try {
+      await flushPromises()
+      document
+        .querySelector<HTMLButtonElement>('[data-routing-picker-toggle]')!
+        .click()
+      await nextTick()
+      document
+        .querySelector<HTMLButtonElement>('[data-candidate-channel-id="11"]')!
+        .click()
+      await nextTick()
+
+      confirmButton().click()
+      await flushPromises()
+
+      // 409 conflict locks confirm button and exposes reload button.
+      expect(confirmButton().disabled).toBe(true)
+      const reloadBtn = document.querySelector<HTMLButtonElement>(
+        '[data-routing-save-error] button'
+      )!
+      expect(reloadBtn).not.toBeNull()
+      reloadBtn.click()
+      await flushPromises()
+
+      // After reload succeeds, conflict is cleared and user can edit + save again.
+      expect(getSpy).toHaveBeenCalledTimes(2)
+      expect(document.querySelector('[data-routing-save-error]')).toBeNull()
+      expect(confirmButton().disabled).toBe(false)
+
+      if (!document.querySelector('[data-candidate-channel-id="22"]')) {
+        document
+          .querySelector<HTMLButtonElement>('[data-routing-picker-toggle]')!
+          .click()
+        await nextTick()
+      }
+      document
+        .querySelector<HTMLButtonElement>('[data-candidate-channel-id="22"]')!
+        .click()
+      await nextTick()
+
+      confirmButton().click()
+      await flushPromises()
+      expect(saveSpy).toHaveBeenCalledTimes(2)
+      expect(saveSpy).toHaveBeenLastCalledWith(
+        7,
+        expect.objectContaining({
+          version: 2,
+          entries: [
+            { channel_id: 11, enabled: true, position: 0 },
+            { channel_id: 22, enabled: true, position: 1 },
+          ],
+        })
+      )
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })
