@@ -102,6 +102,9 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 		if strings.HasPrefix(route.Path, "/api/admin/tickets") {
 			assert.Equal(t, "scope", rule.Kind())
 			assert.True(t, strings.HasPrefix(rule.Scope(), "ticket:"))
+		} else if strings.HasPrefix(route.Path, "/api/admin/upstreams") {
+			assert.Equal(t, "scope", rule.Kind(), key)
+			assert.True(t, strings.HasPrefix(rule.Scope(), "upstream:"), key)
 		} else if scope, adminRoute := adminScopes[key]; adminRoute {
 			assert.Equal(t, "scope", rule.Kind(), key)
 			assert.Equal(t, scope, rule.Scope(), key)

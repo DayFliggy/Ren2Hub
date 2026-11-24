@@ -119,6 +119,21 @@ func TestChannelStatusCacheSnapshotsAreImmutable(t *testing.T) {
 }
 
 func TestChannelCacheReloadSerializesStatusPublication(t *testing.T) {
+	writers := map[string]func(int, int) ChannelStatusUpdateResult{
+		"status": func(id, status int) ChannelStatusUpdateResult {
+			return UpdateChannelStatusDetailed(id, "", status, "interleaved")
+		},
+		"locked": func(id, status int) ChannelStatusUpdateResult {
+			_, err := UpdateChannelLocked(id, func(ch *Channel) error { ch.Status = status; return nil })
+			return ChannelStatusUpdateResult{Changed: err == nil, Err: err}
+		},
+	}
+	for name, write := range writers {
+		t.Run(name, func(t *testing.T) { checkStatusPublication(t, write) })
+	}
+}
+
+func checkStatusPublication(t *testing.T, write func(int, int) ChannelStatusUpdateResult) {
 	useScheduledChannelDatabase(t)
 	oldCache := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = true
@@ -140,7 +155,7 @@ func TestChannelCacheReloadSerializesStatusPublication(t *testing.T) {
 	<-read
 	statusDone := make(chan ChannelStatusUpdateResult, 1)
 	go func() {
-		statusDone <- UpdateChannelStatusDetailed(channel.Id, "", common.ChannelStatusManuallyDisabled, "interleaved")
+		statusDone <- write(channel.Id, common.ChannelStatusAutoDisabled)
 	}()
 	var result ChannelStatusUpdateResult
 	completed := false
@@ -158,11 +173,11 @@ func TestChannelCacheReloadSerializesStatusPublication(t *testing.T) {
 	require.True(t, result.Changed)
 	cached, err := CacheGetChannel(channel.Id)
 	require.NoError(t, err)
-	require.Equal(t, common.ChannelStatusManuallyDisabled, cached.Status, "an earlier reload cannot overwrite a later committed status")
-	requireChannelAndAbilities(t, channel.Id, common.ChannelStatusManuallyDisabled)
+	require.Equal(t, common.ChannelStatusAutoDisabled, cached.Status, "an earlier reload cannot overwrite a later committed status")
+	requireChannelAndAbilities(t, channel.Id, common.ChannelStatusAutoDisabled)
 	// Post-commit hooks may reload without recursively acquiring the status lock.
 	recordChannelPublications(t, func(int) error { return ReloadChannelCache() })
-	result = UpdateChannelStatusDetailed(channel.Id, "", common.ChannelStatusEnabled, "callback reload")
+	result = write(channel.Id, common.ChannelStatusEnabled)
 	require.NoError(t, result.Err)
 	require.False(t, result.PublicationPending)
 	require.True(t, result.Changed)

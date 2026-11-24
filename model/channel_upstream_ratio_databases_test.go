@@ -51,10 +51,10 @@ func TestChannelUpstreamRatioDatabases(t *testing.T) {
 			t.Cleanup(func() {
 				DB = previousDB
 				common.SetMainDatabaseType(previousType)
-				require.NoError(t, db.Migrator().DropTable(&ChannelUpstreamRatio{}, &Channel{}))
+				require.NoError(t, db.Migrator().DropTable(&UpstreamChannelBinding{}, &UpstreamAccount{}, &ChannelUpstreamRatio{}, &Channel{}))
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Channel{}, &ChannelUpstreamRatio{}))
+			require.NoError(t, db.AutoMigrate(&Channel{}, &ChannelUpstreamRatio{}, &UpstreamAccount{}, &UpstreamChannelBinding{}))
 			for id, channelType := range map[int]int{1: constant.ChannelTypeSub2API, 2: constant.ChannelTypeNewAPI, 3: constant.ChannelTypeOpenAI} {
 				require.NoError(t, db.Create(&Channel{Id: id, Type: channelType, Name: "upstream-ratio", Key: "k", Models: "m"}).Error)
 			}

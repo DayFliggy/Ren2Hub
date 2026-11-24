@@ -1,0 +1,142 @@
+{
+  "bindings": {
+    "data": [
+      {
+        "account_id": 4,
+        "channel_created_time": 1799999900,
+        "channel_id": 9,
+        "id": 1,
+        "ratio_sync_enabled": false,
+        "ratio_sync_error": "",
+        "ratio_sync_factor": "1.25",
+        "remote_key_id": 14,
+        "remote_status": "active",
+        "stale": false
+      }
+    ],
+    "success": true
+  },
+  "detail": {
+    "data": {
+      "base_url": "https://example.invalid",
+      "has_proxy": true,
+      "id": 4,
+      "last_error": "",
+      "last_sync_at": 1800000000,
+      "name": "演示账号",
+      "next_sync_at": 1800000120,
+      "platform": "newapi",
+      "site_meta": {
+        "balance": "300",
+        "upstream_group": "standard",
+        "username": "demo"
+      },
+      "status": "active",
+      "subscriptions": [],
+      "upstream_groups": [
+        {
+          "name": "standard",
+          "ratio": "1.25"
+        }
+      ]
+    },
+    "success": true
+  },
+  "list": {
+    "data": [
+      {
+        "base_url": "https://example.invalid",
+        "has_proxy": true,
+        "id": 4,
+        "last_error": "",
+        "last_sync_at": 1800000000,
+        "name": "演示账号",
+        "next_sync_at": 1800000120,
+        "platform": "newapi",
+        "site_meta": {
+          "balance": "300",
+          "upstream_group": "standard",
+          "username": "demo"
+        },
+        "status": "active",
+        "subscriptions": [],
+        "upstream_groups": [
+          {
+            "name": "standard",
+            "ratio": "1.25"
+          }
+        ]
+      }
+    ],
+    "success": true
+  },
+  "newapi_keys": {
+    "data": [
+      {
+        "expired_time": -1,
+        "id": 1,
+        "name": "limited",
+        "remain_quota": 9000,
+        "remote_key_prefix": "synthe****ests",
+        "status": "active",
+        "unlimited_quota": false,
+        "upstream_group": "standard",
+        "upstream_group_id": 0,
+        "used_quota": 1000
+      }
+    ],
+    "success": true
+  },
+  "newapi_probe": {
+    "data": {
+      "captcha_enabled": true,
+      "password_login_available": false,
+      "password_login_encryption_enabled": true,
+      "platform": "newapi",
+      "quota_display_type": "CNY",
+      "quota_per_unit": 1000,
+      "site_name": "test-newapi",
+      "turnstile_enabled": true,
+      "usd_exchange_rate": 7,
+      "version": "1.0.0-rc.51"
+    },
+    "success": true
+  },
+  "newapi_site_meta": {
+    "balance": "9000",
+    "quota_display_type": "CNY",
+    "quota_per_unit": 1000,
+    "upstream_group": "standard",
+    "usd_exchange_rate": 7,
+    "username": "editor"
+  },
+  "sub2api_keys": {
+    "data": [
+      {
+        "expires_at": "2099-01-01T00:00:00Z",
+        "id": 1,
+        "name": "metered",
+        "quota": 30.5,
+        "quota_used": 4.75,
+        "remote_key_prefix": "synthe****ests",
+        "status": "active",
+        "upstream_group": "",
+        "upstream_group_id": 7
+      }
+    ],
+    "success": true
+  },
+  "sub2api_probe": {
+    "data": {
+      "backend_mode_enabled": false,
+      "captcha_enabled": false,
+      "password_login_available": true,
+      "platform": "sub2api",
+      "site_name": "test",
+      "totp_enabled": true,
+      "turnstile_enabled": false,
+      "version": "0.2.25"
+    },
+    "success": true
+  }
+}

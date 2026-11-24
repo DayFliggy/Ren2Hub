@@ -23,6 +23,7 @@ import {
 } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -48,6 +49,8 @@ import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue
 import ChannelTestPickerDialog from '@/components/console/channels/ChannelTestPickerDialog.vue'
 import ChannelUpstreamRatioDialog from '@/components/console/channels/ChannelUpstreamRatioDialog.vue'
 import UpstreamRatioSummary from '@/components/console/channels/UpstreamRatioSummary.vue'
+import ChannelUpstreamBindingBadge from '@/components/console/channels/ChannelUpstreamBindingBadge.vue'
+import { useChannelUpstreamBindings } from '@/composables/useChannelUpstreamBindings'
 import { useChannelUpstreamRatios } from '@/composables/useChannelUpstreamRatios'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import {
@@ -169,6 +172,56 @@ const { ratios: upstreamRatios, update: updateUpstreamRatio } =
   useChannelUpstreamRatios(rows, canRead)
 const editingUpstreamRatio = ref<AdminChannel | null>(null)
 
+const route = useRoute()
+const router = useRouter()
+const canReadUpstream = computed(() => auth.hasPermission('upstream', 'read'))
+const { bindings: upstreamBindings } = useChannelUpstreamBindings(
+  rows,
+  canReadUpstream
+)
+// Client-side filter over the loaded page; /api/channel/ params stay unchanged.
+const upstreamAccountFilter = computed({
+  get() {
+    const raw = route.query.upstream_account
+    return canReadUpstream.value &&
+      typeof raw === 'string' &&
+      /^[1-9]\d*$/.test(raw)
+      ? raw
+      : ''
+  },
+  set(value: string) {
+    const query = { ...route.query }
+    if (value) query.upstream_account = value
+    else delete query.upstream_account
+    void router.replace({ query })
+  },
+})
+const upstreamAccountOptions = computed(() => {
+  const ids = new Set(
+    Object.values(upstreamBindings.value).map((item) => item.account_id)
+  )
+  if (upstreamAccountFilter.value) ids.add(Number(upstreamAccountFilter.value))
+  return [
+    { value: '', label: t('upstreams.channelLink.allAccounts') },
+    ...[...ids]
+      .sort((left, right) => left - right)
+      .map((id) => ({
+        value: String(id),
+        label: t('upstreams.channelLink.account', { id }),
+      })),
+  ]
+})
+const visibleRows = computed(() => {
+  const account = Number(upstreamAccountFilter.value)
+  if (!account) return rows.value
+  return rows.value.filter(
+    (channel) => upstreamBindings.value[channel.id]?.account_id === account
+  )
+})
+function upstreamBindingFor(channel: AdminChannel | null) {
+  return channel ? (upstreamBindings.value[channel.id] ?? null) : null
+}
+
 const formOpen = ref(false)
 const editing = ref<AdminChannel | null>(null)
 const runtimeChannel = ref<AdminChannel | null>(null)
@@ -220,7 +273,7 @@ function isReadOnlyChannel(channel: AdminChannel): boolean {
 }
 
 const mutableRows = computed(() =>
-  rows.value.filter((channel) => !isReadOnlyChannel(channel))
+  visibleRows.value.filter((channel) => !isReadOnlyChannel(channel))
 )
 const selectedChannels = computed(() =>
   mutableRows.value.filter((channel) => selectedIds.value.includes(channel.id))
@@ -357,7 +410,7 @@ const minTableWidth = computed(() => {
 })
 
 const supplierGroups = computed<ChannelLabGroup[]>(() =>
-  groupChannelsByLab(rows.value)
+  groupChannelsByLab(visibleRows.value)
 )
 
 const tableRows = computed<AdminChannelTableRow[]>(() =>
@@ -823,6 +876,16 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             variant="facet"
             size="compact"
           />
+          <FilterSelect
+            v-if="canReadUpstream && upstreamAccountOptions.length > 1"
+            v-model="upstreamAccountFilter"
+            :options="upstreamAccountOptions"
+            :label="t('upstreams.channelLink.filter')"
+            :prefix-label="t('upstreams.channelLink.filter')"
+            variant="facet"
+            size="compact"
+            data-channel-upstream-filter
+          />
           <ConsoleButton
             v-if="hasFilters"
             variant="ghost"
@@ -1235,6 +1298,14 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             >
               {{ t('channels.labInvalidMapping') }}
             </StatusChip>
+            <ChannelUpstreamBindingBadge
+              v-if="
+                upstreamBindingFor(channelFromRow(row as AdminChannelTableRow))
+              "
+              :binding="
+                upstreamBindingFor(channelFromRow(row as AdminChannelTableRow))!
+              "
+            />
             <p
               v-if="
                 isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
@@ -1622,7 +1693,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             </div>
           </div>
           <EmptyState
-            v-else-if="rows.length === 0"
+            v-else-if="visibleRows.length === 0"
             :title="t('channels.emptyTitle')"
             :hint="t('channels.emptyHint')"
             illustration="empty-search"
@@ -1658,6 +1729,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             :sync-models="previewModelSync"
             :show-runtime="openRuntime"
             :delete-channel="requestDelete"
+            :upstream-bindings="upstreamBindings"
           />
           <TablePagination
             v-if="!loading"
@@ -1737,6 +1809,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
     <ChannelFormModal
       :open="formOpen"
       :editing="editing"
+      :upstream-binding="upstreamBindingFor(editing)"
       :save="saveForm"
       :fetch-models="fetchUpstreamModels"
       @close="closeForm"
@@ -1750,6 +1823,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
 
     <ChannelUpstreamRatioDialog
       :channel="editingUpstreamRatio"
+      :binding="upstreamBindingFor(editingUpstreamRatio)"
       :can-operate="canOperate && canMutate"
       :can-write="canWrite && canMutate"
       @close="editingUpstreamRatio = null"

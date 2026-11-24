@@ -1,8 +1,10 @@
 import { pluginExtensionMessages } from '../../pluginExtensions'
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
+import { upstreamMessages } from '../../upstreams'
 export default {
   pluginExtensions: pluginExtensionMessages['zh-CN'],
+  upstreams: upstreamMessages['zh-CN'],
   taskPlugins: taskPluginMessages['zh-CN'],
   security: securityMessages['zh-CN'],
   billing: {
@@ -358,6 +360,7 @@ export default {
     groupConsole: '控制台',
     groupAdmin: '管理员',
     channelManagement: '渠道管理',
+    upstreamManagement: '上游管理',
     ticketManagement: '工单管理',
     userManagement: '用户管理',
     redemptionManagement: '兑换码',
@@ -1346,7 +1349,11 @@ export default {
         unsupported: '不支持',
       },
       modes: { auto: '自动获取', manual: '手动填写' },
-      mappings: { name_match: '名称匹配（推定）', manual: '手动关联' },
+      mappings: {
+        name_match: '名称匹配（推定）',
+        manual: '手动关联',
+        account: '上游账号同步',
+      },
       statuses: {
         none: '未获取',
         ok: '正常',

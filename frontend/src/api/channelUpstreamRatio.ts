@@ -20,7 +20,7 @@ export type UpstreamRatioStatus =
   | 'auth_failed'
   | 'rate_limited'
   | 'failed'
-export type UpstreamRatioMapping = '' | 'name_match' | 'manual'
+export type UpstreamRatioMapping = '' | 'name_match' | 'manual' | 'account'
 
 export interface UpstreamRatioGroup {
   name: string
@@ -79,7 +79,7 @@ const statuses = [
   'rate_limited',
   'failed',
 ]
-const mappings = ['', 'name_match', 'manual']
+const mappings = ['', 'name_match', 'manual', 'account']
 
 function requiredEnum<T extends string>(
   value: unknown,

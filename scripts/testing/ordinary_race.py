@@ -15,7 +15,7 @@ from native_restored import InvalidEvidence, digest, regular_path, require, veri
 
 STAGE = 'ordinary_race'
 SELECTION = 'scripts/testing/race_selection.json'
-FROZEN_SELECTION = '421fa97297eb46c4943fd44341943911c9de8eddb680ef507593031fc6698b71'
+FROZEN_SELECTION = '82b246c27968cf039f41b6a7433b21202afa596f021dd217a2843a347bde26b1'
 IMAGE = logger.IMAGE
 DOCKER = logger.DOCKER
 
@@ -45,8 +45,8 @@ def load_selection(root):
         groups.append({**group, 'names': names, 'pattern': pattern})
     expected = sorted((package, name) for package, names in delegated.items() for name in names)
     require(sorted(removed) == expected and len(groups) == 12
-            and sum(len(group['names']) for group in selection['groups']) == 144
-            and sum(len(group['names']) for group in groups) == 125, 'ordinary_race_incomplete_selection')
+            and sum(len(group['names']) for group in selection['groups']) == 146
+            and sum(len(group['names']) for group in groups) == 127, 'ordinary_race_incomplete_selection')
     return selection, groups
 
 
@@ -129,9 +129,9 @@ def verify_report(report, output, root, expected_source=None):
         require(digest(raw) == row.get('plain_log_sha256') and raw.read_bytes() == plain.encode('utf-8'), 'ordinary_race_plain_log_mismatch')
         require(row.get('observed') == observed, 'ordinary_race_observed_mismatch')
     require(report.get('success') is True and report.get('contracts_success') is True
-            and report.get('exit_code') == 0 and report.get('counts') == {'pass': 125}, 'ordinary_race_summary_mismatch')
+            and report.get('exit_code') == 0 and report.get('counts') == {'pass': 127}, 'ordinary_race_summary_mismatch')
     return {'stage': STAGE, 'selection_sha256': FROZEN_SELECTION,
-            'groups': [group['id'] for group in groups], 'test_count': 125}
+            'groups': [group['id'] for group in groups], 'test_count': 127}
 
 
 def run(root, output, supplied_env=None, packages=None):

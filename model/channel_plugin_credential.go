@@ -50,6 +50,24 @@ func sqliteChannelKeyLock(channelID int) *sync.Mutex {
 // stored channel afterwards is returned, a new key is published to this
 // node's channel cache, and a new status to the channel's abilities.
 func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*Channel, error) {
+	channel, written, err := updateChannelStateAndCache(channelID, update)
+	if err != nil {
+		return nil, err
+	}
+	if written {
+		defer BumpSyncTopic(SyncTopicChannels)
+		if err := publishChannelRoutingIDs([]int{channelID}); err != nil {
+			return nil, err
+		}
+	}
+	return channel, nil
+}
+
+func updateChannelStateAndCache(channelID int, update func(*Channel) error) (*Channel, bool, error) {
+	if common.MemoryCacheEnabled {
+		channelStatusLock.Lock()
+		defer channelStatusLock.Unlock()
+	}
 	var channel Channel
 	var keyChanged, statusChanged, written bool
 	// changes runs update on channel and returns the columns it changed.
@@ -75,15 +93,21 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 		lock.Lock()
 		defer lock.Unlock()
 		if err := DB.Where("id = ?", channelID).First(&channel).Error; err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		stored := channel.Key
 		updates, err := changes()
 		if err != nil {
-			return nil, err
+			if mismatch, ok := err.(*upstreamBindingMismatch); ok {
+				err = validateUpstreamBindingDB(mismatch.binding)
+				if err == nil {
+					err = ErrUpstreamRatioConflict
+				}
+			}
+			return nil, false, err
 		}
 		if len(updates) > 0 {
-			err := DB.Transaction(func(tx *gorm.DB) error {
+			err := DB.Session(&gorm.Session{Logger: logger.Discard}).Transaction(func(tx *gorm.DB) error {
 				result := tx.Model(&Channel{}).Where("id = ?", channelID).Where(map[string]any{"key": stored}).Updates(updates)
 				if result.Error != nil {
 					return result.Error
@@ -97,12 +121,12 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 				return nil
 			})
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			written = true
 		}
 	} else {
-		err := DB.Transaction(func(tx *gorm.DB) error {
+		err := channelBindingTransaction(DB, func(tx *gorm.DB) error {
 			if err := lockForUpdate(tx).Where("id = ?", channelID).First(&channel).Error; err != nil {
 				return err
 			}
@@ -120,11 +144,8 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-	}
-	if written {
-		defer BumpSyncTopic(SyncTopicChannels)
 	}
 	if keyChanged {
 		CacheUpdateChannelKey(channelID, channel.Key)
@@ -132,12 +153,7 @@ func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*C
 	if statusChanged {
 		CacheUpdateChannelStatus(channelID, channel.Status)
 	}
-	if written {
-		if err := publishChannelRoutingIDs([]int{channelID}); err != nil {
-			return nil, err
-		}
-	}
-	return &channel, nil
+	return &channel, written, nil
 }
 
 // UpdateTaskPluginChannelLocked runs update on a task plugin channel while

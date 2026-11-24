@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { UpstreamBinding } from '@/api/upstreams'
+import ChannelUpstreamBindingBadge from './ChannelUpstreamBindingBadge.vue'
 import ChannelBalanceDetails from '@/features/channels/components/ChannelBalanceDetails.vue'
 import {
   Activity,
@@ -98,6 +100,8 @@ const props = defineProps<{
   syncModels: (channel: AdminChannel) => void
   showRuntime: (channel: AdminChannel) => void
   deleteChannel: (channel: AdminChannel) => void
+  /** Upstream bindings keyed by channel id; empty without upstream.read. */
+  upstreamBindings?: Record<number, UpstreamBinding>
 }>()
 
 const { t, locale } = useI18n()
@@ -328,6 +332,10 @@ function responseDisplay(channel: AdminChannel): {
                   >
                     {{ t('channels.labInvalidMapping') }}
                   </StatusChip>
+                  <ChannelUpstreamBindingBadge
+                    v-if="upstreamBindings?.[channel.id]"
+                    :binding="upstreamBindings[channel.id]"
+                  />
                   <p
                     v-if="
                       visibleFields.includes('id') ||

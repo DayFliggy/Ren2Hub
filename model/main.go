@@ -387,6 +387,8 @@ func migrateDB() error {
 		&TicketMessage{},
 		&TicketAttachment{},
 		&ChannelUpstreamRatio{},
+		&UpstreamAccount{},
+		&UpstreamChannelBinding{},
 		&TopUpBonusUsageHourly{},
 		&TopUpBonusConfigVersion{},
 		&TopUpBonusDecisionRecord{},

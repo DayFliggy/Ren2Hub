@@ -91,7 +91,7 @@ func setupUpstreamRatioTest(t *testing.T) *gorm.DB {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelUpstreamRatio{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelUpstreamRatio{}, &model.UpstreamAccount{}, &model.UpstreamChannelBinding{}))
 	model.DB = db
 	fetch := system_setting.GetFetchSetting()
 	original := *fetch

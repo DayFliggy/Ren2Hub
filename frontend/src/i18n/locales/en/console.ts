@@ -1,8 +1,10 @@
 import { pluginExtensionMessages } from '../../pluginExtensions'
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
+import { upstreamMessages } from '../../upstreams'
 export default {
   pluginExtensions: pluginExtensionMessages['en'],
+  upstreams: upstreamMessages['en'],
   taskPlugins: taskPluginMessages.en,
   security: securityMessages['en'],
   billing: {
@@ -381,6 +383,7 @@ export default {
     groupConsole: 'Console',
     groupAdmin: 'Administration',
     channelManagement: 'Channel management',
+    upstreamManagement: 'Upstreams',
     ticketManagement: 'Ticket management',
     userManagement: 'User management',
     redemptionManagement: 'Redemption codes',
@@ -1393,6 +1396,7 @@ export default {
       mappings: {
         name_match: 'Name match (inferred)',
         manual: 'Linked manually',
+        account: 'Synced from upstream account',
       },
       statuses: {
         none: 'Not fetched',

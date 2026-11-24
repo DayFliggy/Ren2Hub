@@ -24,6 +24,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(ticketAttachmentCleanupHandler{})
 	service.RegisterSystemTaskHandler(channelUpstreamRatioHandler{})
+	service.RegisterSystemTaskHandler(upstreamAccountSyncHandler{})
 	service.RegisterSystemTaskHandler(systemTaskCleanupHandler{})
 }
 

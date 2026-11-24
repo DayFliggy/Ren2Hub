@@ -26,6 +26,7 @@ const (
 	SystemTaskTypeAsyncTaskPoll           = "async_task_poll"
 	SystemTaskTypeTicketAttachmentCleanup = "ticket_attachment_cleanup"
 	SystemTaskTypeChannelUpstreamRatio    = "channel_upstream_ratio"
+	SystemTaskTypeUpstreamAccountSync     = "upstream_account_sync"
 	SystemTaskTypeChannelBalance          = "channel_balance"
 	SystemTaskTypeCleanup                 = "system_task_cleanup"
 

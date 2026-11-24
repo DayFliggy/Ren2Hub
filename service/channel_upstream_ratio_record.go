@@ -458,3 +458,102 @@ func RunChannelUpstreamRatioCycle(ctx context.Context) (*UpstreamRatioCycleSumma
 	wg.Wait()
 	return summary, nil
 }
+
+func handleBindingError(b model.UpstreamChannelBinding, err error) error {
+	if errors.Is(err, model.ErrUpstreamBindingStale) {
+		return nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if checkErr := model.ValidateUpstreamBinding(b); errors.Is(checkErr, model.ErrUpstreamBindingStale) {
+			return nil
+		} else if checkErr != nil {
+			return checkErr
+		}
+	}
+	return err
+}
+
+func writeBoundRatio(b model.UpstreamChannelBinding, ch *model.Channel, rec *model.ChannelUpstreamRatio, now time.Time) (string, error) {
+	verify := b.Verify
+	if err := verify(ch); err != nil {
+		if err = model.ValidateUpstreamBinding(b); err != nil {
+			return "", err
+		}
+		return "", model.ErrUpstreamRatioConflict
+	}
+	target, code := upstreamTargetRatio(buildUpstreamRatioView(ch, rec, false, now), b.RatioSyncFactor)
+	if code != "" {
+		return code, nil
+	}
+	_, err := model.UpdateChannelRatioFromUpstreamSyncLocked(ch.Id, b.ChannelCreatedTime, verify, target)
+	return "", err
+}
+
+// 高峰窗口的开始和结束独立于半小时一次的上游探测，分钟任务只读本地账单快照。
+func refreshSub2APIBoundRatios(ctx context.Context) error {
+	ids, err := model.Sub2APIRatioAccountIDs()
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(err, errors.Join(failures...))
+		}
+		if err := refreshSub2APIRatiosForAccount(ctx, id, time.Now()); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func refreshSub2APIRatiosForAccount(ctx context.Context, id int, now time.Time) error {
+	defer lockManagedAccount(id)()
+	a, err := model.GetUpstreamAccount(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if a.Platform != "sub2api" || a.Status != "active" || a.LastError != "" || a.LastSyncAt == 0 {
+		return nil
+	}
+	bindings, err := model.ListUpstreamBindings(id)
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, b := range bindings {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(err, errors.Join(failures...))
+		}
+		if b.Stale || !b.RatioSyncEnabled || b.RemoteStatus != "active" {
+			continue
+		}
+		if err := refreshSub2APIRatio(b, now); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func refreshSub2APIRatio(b model.UpstreamChannelBinding, now time.Time) error {
+	defer lockUpstreamRatioChannel(b.ChannelID)()
+	ch, err := model.GetChannelById(b.ChannelID, true)
+	if err != nil {
+		return handleBindingError(b, err)
+	}
+	rec, err := model.GetChannelUpstreamRatio(b.ChannelID)
+	if err != nil {
+		return err
+	}
+	code, err := writeBoundRatio(b, ch, rec, now)
+	if err != nil {
+		return handleBindingError(b, err)
+	}
+	if code != b.RatioSyncError {
+		return model.UpdateUpstreamBinding(b.ID, map[string]any{"ratio_sync_error": code})
+	}
+	return nil
+}

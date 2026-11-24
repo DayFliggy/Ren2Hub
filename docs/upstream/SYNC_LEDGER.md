@@ -25,6 +25,8 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 后端对齐冻结目标 `48f9df96e`，只保留用户批准的独有功能、明确改造和 Vue 实际对接所需的最小接点；历史 `verified_fix` 不构成保留理由。`NATIVE_B388_REVIEW.json` 保存对齐 b388 时对 346 个生产差异文件 1,109 段的逐段裁定（保留 873、恢复原生 169、拆分 67），这是当时的历史裁定，没有按新目标重新逐段复核；之后的窗口里仍有本地差异的文件，按新目标逐段登记在同一文件的 `current_file_reviews`。测试迁移见 `NATIVE_B388_TEST_MIGRATIONS.json`。产品合同摘要见 [AGENTS.md](../../AGENTS.md)，合同目录在 `CORE_SOURCE_DELTA.json` 的 `contracts`。
 
+上游管理通过独立的 model、service、controller 与权限资源接入两个远端账号协议。迁移和系统任务注册保留最小接点。渠道状态复用行锁更新，倍率写回只发布渠道缓存同步。倍率数据源与绑定语义见[渠道上游倍率](../channel/UPSTREAM_RATIO.md)。
+
 后台更新参考 Sub2API `328db26f450edbdf9f8d4344a3ea903ac6396842` 的 update service 与 admin system handler。Ren2Hub 使用独立的 common、service、controller 扩展文件与 router/extensions.go，沿用 RootAuth，只有 release 构建可替换程序。归档与校验清单的初始地址须使用 HTTPS，主机为 `github.com` 或 `objects.githubusercontent.com`，且不含用户信息。HTTP 客户端跟随 CDN 重定向。20 分钟进程内缓存、强制 SHA-256 清单、linux/amd64 单资产及进程内互斥对应单节点部署。检查更新时 GitHub 对 `releases/latest` 返回 404（仓库尚未发布 Release）按 200 返回空 `latest_version`，并清掉已缓存的 Release，面板显示“尚未发布版本”；其他读取失败有缓存时附 `warning` 返回缓存，没有缓存时返回 502，不像 Sub2API 那样把所有失败都当作“已是最新”。Release 工作流仅发布 semver 二进制归档，移除 docker-build、docker-image-branch、sync-release-to-gitcode 工作流。候选镜像保留独立的源码与二进制身份检查。
 
 | 模块           | 保留的差异                                                                                                                                                                                                                                                                          | 依据                                                                                                                               |

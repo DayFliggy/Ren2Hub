@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 830,
     "adapted": 334,
-    "extension": 510,
+    "extension": 528,
     "removed": 47
   },
   "files": [
@@ -1325,7 +1325,7 @@
       "path": "controller/channel_test_recovery_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "11ff65b41c236da232d5d31f0a176e43cc60d54497f98cea02c1dcfee44ce8a4"
+      "local_sha256": "3a83ebe5522821f909a2d62360923f6f131c8f4c6db9e29bf37d11c5b93f20d6"
     },
     {
       "path": "controller/channel_test_request_test.go",
@@ -2701,13 +2701,14 @@
       "path": "controller/system_task_handlers.go",
       "status": "adapted",
       "upstream_sha256": "449b018b236c4af1a88416d30685cc8485c938985ba5a203aa487aa1be4c3e57",
-      "local_sha256": "959e91bf0d2e4e7097c90fbc8cf9ba436e5901726d68777e17a6a80763c1d07b",
+      "local_sha256": "bce7eef71c654d8e53b3c953387b6b7652e7417ea4eca7f55531cb4afa82a528",
       "reasons": [
-        "ticket"
+        "ticket",
+        "upstream-management"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/system_task_handlers.go#1, controller/system_task_handlers.go#2",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：controller/system_task_handlers.go#1, controller/system_task_handlers.go#2 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -3343,6 +3344,25 @@
       "status": "upstream_equal",
       "upstream_sha256": "9cca277ae84ae6bdca708517f02bcae106ece98102a8256a45c37d3079ada709",
       "local_sha256": "9cca277ae84ae6bdca708517f02bcae106ece98102a8256a45c37d3079ada709"
+    },
+    {
+      "path": "controller/upstream_account.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8711b22f224210a190baec6f3378c5b8f79ae16c1a7305c84bac5f3583f43364",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "controller/upstream_account_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "433434a362abe536531119666727e47de9d68cea533361bab19c5f782148f72a"
     },
     {
       "path": "controller/uptime_kuma.go",
@@ -4754,15 +4774,16 @@
       "path": "model/channel_plugin_credential.go",
       "status": "adapted",
       "upstream_sha256": "d0733a5981dd2637b45a8d14e0cd4dcf1e8111e87a51b1bfc20603c34e7cffc3",
-      "local_sha256": "92dce25419b8cf9450aa4af07035304ca40b4b9257d47ee0b9a9338913fc06b6",
+      "local_sha256": "3f0f67a450ae65e4664327da29ecf4453b71135778204a2599e941eee5ed5c19",
       "reasons": [
         "auth-cache-integrity",
         "single-key-channel",
-        "token-routing"
+        "token-routing",
+        "upstream-management"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_plugin_credential.go#1, model/channel_plugin_credential.go#6, model/channel_plugin_credential.go#8, model/channel_plugin_credential.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_plugin_credential.go#1, model/channel_plugin_credential.go#6, model/channel_plugin_credential.go#8, model/channel_plugin_credential.go#9。一条渠道一把 Key 的接点见 SYNC_LEDGER.md“单 Key 渠道接点”（single-key-channel）。 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4839,7 +4860,7 @@
       "path": "model/channel_security_state_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4c779c911fec38b62d46dc722374b8c5f26ed23385fd6d613f4553a627987261"
+      "local_sha256": "969d8f476708a17dcabaf8eaf922481a2ed4ca0cf3eb227a4e32941b442746c1"
     },
     {
       "path": "model/channel_settings_test.go",
@@ -4897,13 +4918,14 @@
       "path": "model/channel_upstream_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6e69d688186295e2e9c3a7db42f4f6d8efbca1cd6853ff0a23d332a0dd51b155",
+      "local_sha256": "f73db9334b8776054c0796cd3ad6c266b4d285263b01b2bc3f8ff46650e9d8e9",
       "reasons": [
+        "upstream-management",
         "upstream-ratio"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_upstream_ratio.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/channel_upstream_ratio.go#1 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -4915,7 +4937,7 @@
       "path": "model/channel_upstream_ratio_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8b51e693f6721e0463a91052034c498d1a3f38808b3626c8bb79d0690b171d82"
+      "local_sha256": "bc43d44ce86407a01100783a115cbd903d58ec151ac6433d5b66e970bbd906a7"
     },
     {
       "path": "model/checkin.go",
@@ -5233,7 +5255,7 @@
       "path": "model/main.go",
       "status": "adapted",
       "upstream_sha256": "36d2ef0c7dd4124b0a07e0e5972830da44f5fc72e39b90703472ace43746a1e1",
-      "local_sha256": "06931ab92be729c1f1b8651e8bc11256b3f0e1c876dce210aadfe8d7d348b309",
+      "local_sha256": "24d1f7ef8ea1f5a0bc3a5b7aba7e702b72bbaa7d6c00abeefd25beae63a64042",
       "reasons": [
         "affiliate",
         "gmpay",
@@ -5242,11 +5264,12 @@
         "retired",
         "ticket",
         "token-routing",
-        "topup-bonus"
+        "topup-bonus",
+        "upstream-management"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本）",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/main.go#10, model/main.go#11, model/main.go#12, model/main.go#13, model/main.go#2, model/main.go#3, model/main.go#5, model/main.go#6, model/main.go#7, model/main.go#8, model/main.go#9；2026-11-16 充值加赠接点见 SYNC_LEDGER.md#充值加赠接点（NATIVE_B388_REVIEW.json 只记录 2026-11-14 的折扣版本） 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -5907,13 +5930,14 @@
       "path": "model/system_task.go",
       "status": "adapted",
       "upstream_sha256": "0e143667f3a903a70ac6fa58e909652ba1b0c233c7dad6a25ef1c8759f3d65bd",
-      "local_sha256": "f50fb767710aae958e4e000074f72a01de89e1ba80eb56eeb9fb0dd431697d4b",
+      "local_sha256": "325d3734b10afc527a3d9efd25e89fa42ce7e36bfb28c21739d949e63642ea86",
       "reasons": [
-        "ticket"
+        "ticket",
+        "upstream-management"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/system_task.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/system_task.go#1 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -6329,6 +6353,38 @@
       "status": "upstream_equal",
       "upstream_sha256": "a7e18bada4ce9fae61a1a9407a7fafb0f90f98f66e23da90b75a8cc2c7cd5148",
       "local_sha256": "a7e18bada4ce9fae61a1a9407a7fafb0f90f98f66e23da90b75a8cc2c7cd5148"
+    },
+    {
+      "path": "model/upstream_account.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fe3c4e56c7d0158ae94f3769d98a8cb2fecce049dfe896980ce7fd46e36a30f7",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "model/upstream_account_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "75080b78d8fb1d1aa7454743946292cf5f1a0420c5a2e44bd0860fd4ea5085e9"
+    },
+    {
+      "path": "model/upstream_channel_binding.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "360c9f2f460ade47919ff0f89578e2d470c65c0f06e418935df0990c6bacb7e1",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
     },
     {
       "path": "model/usedata.go",
@@ -11661,16 +11717,17 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "875ba5f9b7d93577fe8a8b22e206c422ebf663bca1fd205fbf102134b721ef79",
+      "local_sha256": "8818345e2d5eea5c946c9af76cd45aaa85cbcb010df9071c6280150136a9f2cd",
       "reasons": [
         "affiliate",
+        "system-update",
         "ticket",
         "token-routing",
-        "system-update"
+        "upstream-management"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/extensions.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：router/extensions.go#1 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -11682,7 +11739,7 @@
       "path": "router/extensions_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a066263094f67d0f07f9e5b9abb1377d195975805b02661258a1c7e62ee14299"
+      "local_sha256": "7bffd62838c3504f75181bbe8109bce0178ec1e621013a327afe007180fa4a74"
     },
     {
       "path": "router/frontend/embed-dist/brotli-probe.js",
@@ -11983,6 +12040,12 @@
       }
     },
     {
+      "path": "router/upstream_account_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f5ec480cc10ec237a9a08d4eb81b9a597111bc32da90912a1f863047970f0043"
+    },
+    {
       "path": "router/user_data_boundary_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -12252,6 +12315,19 @@
         "retained_or_split_hunks": [
           "service/authz/resources_ticket.go#1"
         ]
+      }
+    },
+    {
+      "path": "service/authz/resources_upstream.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ca51826b166f65d0e46259ef0f4071c71e6f28e7163c4db4b2539db9f7030539",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
       }
     },
     {
@@ -12552,14 +12628,15 @@
       "path": "service/channel_upstream_ratio_http.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "295c379c11e57e7f09a90768185dd16988c0827e2c11acc85eee84999d1692f8",
+      "local_sha256": "55693a3821294e7e73decb7a2e2ee45495151dfd4968628ebba9effa666abe8b",
       "reasons": [
         "audit-local-safety",
+        "upstream-management",
         "upstream-ratio"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_http.go#1 R2 AUD-AUTH-2/5：仅解析结果将被IP过滤时固定代理解析，其余保留代理DNS并应用开启的域名与端口规则。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_http.go#1 R2 AUD-AUTH-2/5：仅解析结果将被IP过滤时固定代理解析，其余保留代理DNS并应用开启的域名与端口规则。 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "审阅上游差异、公开入口和调用方；本地逻辑放扩展文件，仅保留必要接点，以红绿回归与适用三库验证。"
       }
     },
@@ -12591,13 +12668,14 @@
       "path": "service/channel_upstream_ratio_record.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "531d5649c3b4ac4527d74f7acd345c897e49b99ece00ae8b98f971f22d5ce598",
+      "local_sha256": "d385b0fdf93c7e67c316bb92a328a53ba0f34c3745f17439e84575b074eb5a82",
       "reasons": [
+        "upstream-management",
         "upstream-ratio"
       ],
       "review": {
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_record.go#1",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/channel_upstream_ratio_record.go#1 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。",
         "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
         "hunk_review": "NATIVE_B388_REVIEW.json",
         "retained_or_split_hunks": [
@@ -12627,7 +12705,7 @@
       "path": "service/channel_upstream_ratio_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ca21a2a337e6d0c1b809a7992ce001cc4ce51bb65d8cce0f67065c1249dacb6a"
+      "local_sha256": "432e5d08c4f9eb8e24970e8d12c28c218ec30a508529e802168b92ff0a19f60e"
     },
     {
       "path": "service/codex_channel_models.go",
@@ -14669,10 +14747,112 @@
       "local_sha256": "478b81e9e287e65d072293c95197a11325585256ff63290f21e861932da7d144"
     },
     {
+      "path": "service/upstream_account.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d230732015e287e623fc4baa3ed1d01400a60a504d76172bc8ba34e2702973a6",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/upstream_adapter.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d42e905a55179dadc848d7a8c1ebd894271421d8b77e22330daab72126254219",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/upstream_adapter_newapi.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "36f93aa962779f6d7914f2e56f37577aa1aef12af294a64acd069913d3d7fabd",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/upstream_adapter_sub2api.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2c5141e56788cb8f17cb03615c4d4ab8edca297a145be72e4b27777ccff12e4e",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/upstream_adapter_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "bca8d1acc29a6c095055d0efcfb8fd72d290d8aa4b296c2a131cbe315cfc97cc"
+    },
+    {
+      "path": "service/upstream_auth_flow.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5adef025187982e8069c1c8fdceb3ce228a4c3fb11a8e1bca2dd1095b1e34aad",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/upstream_auth_flow_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "154d1c6c3a6905afa5e65cd9186a9353fad1dfa51f729441c05692b856b7a2c2"
+    },
+    {
       "path": "service/upstream_boundary_test.go",
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "e3543f4461aff15d25b59c64e19910a89da85efe919a81b30314a2108ead488c"
+    },
+    {
+      "path": "service/upstream_crypto.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c8f5db6a6be9b4c6cb05e58fb3e64b99b73c19f65bdb26127102c975872b77ac",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
+    },
+    {
+      "path": "service/upstream_crypto_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "002c3ba1582d871762709acf7ae238934f4198343cf9d6bebfe12d2fe0df822c"
+    },
+    {
+      "path": "service/upstream_pagination_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d351407ca1315fc1b6ae89003f20974000471f80d3e5cf723923855e10449c15"
     },
     {
       "path": "service/upstream_response_headers.go",
@@ -14687,6 +14867,12 @@
         "basis": "RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
       }
+    },
+    {
+      "path": "service/upstream_sync_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d3acb1e84fb1af63ed354e609c20283d5f7ad0e96da75bc583e3698c92b51e40"
     },
     {
       "path": "service/upstream_usage_billing_test.go",
@@ -15707,7 +15893,7 @@
       "kind": "approved_contract"
     },
     "upstream-ratio": {
-      "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
+      "basis": "渠道上游倍率默认只读展示，绑定账号开启同步时按配置系数写回 channel_ratio。",
       "authority": "SYNC_LEDGER.md#现行本地差异",
       "kind": "approved_contract"
     },
@@ -15729,6 +15915,11 @@
     "system-update": {
       "kind": "approved_contract",
       "basis": "按 Sub2API 流程提供 root 后台版本检查、更新、回滚与重启。",
+      "authority": "SYNC_LEDGER.md#现行本地差异"
+    },
+    "upstream-management": {
+      "kind": "approved_contract",
+      "basis": "管理员维护 Sub2API/NewAPI 上游账号、远端 Key、渠道绑定及可选倍率同步。见 SYNC_LEDGER.md 与 ../channel/UPSTREAM_RATIO.md。",
       "authority": "SYNC_LEDGER.md#现行本地差异"
     }
   },
