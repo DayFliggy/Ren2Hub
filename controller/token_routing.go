@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -11,6 +12,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+const (
+	maxCandidateModelLimitsBytes = 4096
+	maxCandidateModelLimitsCount = 200
+)
+
+type tokenRoutingView struct {
+	model.TokenRouting
+	RouteScope               model.TokenRouteScope `json:"route_scope"`
+	EffectiveMode            string                `json:"effective_mode"`
+	EnabledRouteChannelCount int                   `json:"enabled_route_channel_count"`
+}
+
+func buildTokenRoutingView(route model.TokenRouting) tokenRoutingView {
+	return tokenRoutingView{
+		TokenRouting:             route,
+		RouteScope:               route.Scope(),
+		EffectiveMode:            route.EffectiveMode(),
+		EnabledRouteChannelCount: route.EnabledCount(),
+	}
+}
 
 // Creation always starts with the platform-wide automatic route.
 func validTokenCreationType(raw []byte) bool {
@@ -33,8 +55,6 @@ func tokenRoutingID(c *gin.Context) (int, bool) {
 func tokenRoutingError(c *gin.Context, err error) {
 	status, code, message := http.StatusInternalServerError, "ROUTING_INTERNAL_ERROR", "Unable to read or save token routing"
 	switch {
-	case errors.Is(err, service.ErrPreviewPathUnsupported):
-		status, code, message = http.StatusBadRequest, "preview_path_unsupported", "This path cannot be previewed without decoding a request body"
 	case errors.Is(err, model.ErrTokenRouteInvalid):
 		status, code, message = http.StatusBadRequest, "ROUTING_INVALID", model.ErrTokenRouteInvalid.Error()
 	case errors.Is(err, model.ErrTokenRouteForbidden):
@@ -59,7 +79,7 @@ func GetTokenRouting(c *gin.Context) {
 		tokenRoutingError(c, err)
 		return
 	}
-	common.ApiSuccess(c, view)
+	common.ApiSuccess(c, buildTokenRoutingView(view))
 }
 
 func PutTokenRouting(c *gin.Context) {
@@ -83,7 +103,7 @@ func PutTokenRouting(c *gin.Context) {
 		tokenRoutingError(c, err)
 		return
 	}
-	common.ApiSuccess(c, view)
+	common.ApiSuccess(c, buildTokenRoutingView(view))
 }
 
 func GetTokenRoutingChannels(c *gin.Context) {
@@ -92,6 +112,38 @@ func GetTokenRoutingChannels(c *gin.Context) {
 		return
 	}
 	channels, err := service.TokenRouteChannels(c.Request.Context(), c.GetInt("id"), id)
+	if err != nil {
+		tokenRoutingError(c, err)
+		return
+	}
+	common.ApiSuccess(c, channels)
+}
+
+func GetTokenRoutingCandidateChannels(c *gin.Context) {
+	rawLimits := c.Query("model_limits")
+	if len(rawLimits) > maxCandidateModelLimitsBytes {
+		tokenRoutingError(c, model.ErrTokenRouteInvalid)
+		return
+	}
+	var modelLimits []string
+	if strings.TrimSpace(rawLimits) != "" {
+		for _, part := range strings.Split(rawLimits, ",") {
+			name := strings.TrimSpace(part)
+			if name == "" {
+				continue
+			}
+			modelLimits = append(modelLimits, name)
+			if len(modelLimits) > maxCandidateModelLimitsCount {
+				tokenRoutingError(c, model.ErrTokenRouteInvalid)
+				return
+			}
+		}
+	}
+	var maxRatio *string
+	if rawRatio := strings.TrimSpace(c.Query("max_channel_ratio")); rawRatio != "" {
+		maxRatio = &rawRatio
+	}
+	channels, err := service.TokenRouteCandidateChannels(c.Request.Context(), modelLimits, maxRatio)
 	if err != nil {
 		tokenRoutingError(c, err)
 		return
@@ -118,29 +170,10 @@ func fillTokenRoutingModes(responses []*tokenResponse) error {
 			response.Type = summary.Mode
 			response.SelectedOnly = summary.SelectedOnly
 			response.RouteChannelCount = summary.RouteChannelCount
+			response.EnabledRouteChannelCount = summary.EnabledRouteChannelCount
+			response.RouteScope = summary.RouteScope
+			response.EffectiveMode = summary.EffectiveMode
 		}
 	}
 	return nil
-}
-
-func GetTokenRoutingPreview(c *gin.Context) {
-	id, ok := tokenRoutingID(c)
-	if !ok {
-		return
-	}
-	query := service.TokenRoutePreviewQuery{Model: c.Query("model"), Path: c.Query("path"), Transport: c.Query("transport")}
-	if value := c.Query("stream"); value != "" {
-		stream, err := strconv.ParseBool(value)
-		if err != nil {
-			tokenRoutingError(c, model.ErrTokenRouteInvalid)
-			return
-		}
-		query.Stream = stream
-	}
-	preview, err := service.PreviewTokenRouting(c.Request.Context(), c.GetInt("id"), id, query)
-	if err != nil {
-		tokenRoutingError(c, err)
-		return
-	}
-	common.ApiSuccess(c, preview)
 }

@@ -38,13 +38,23 @@ func TestTokenRouteWebSocketRechecksEachCreate(t *testing.T) {
 		return c
 	}
 	require.Nil(t, session.restoreConnectionContext(newCall(), "route-model"))
-	require.NoError(t, db.Model(&model.TokenRouteEntry{}).Where("token_id = ?", 7).Update("enabled", false).Error)
+	// 全部停用退回全平台后，原渠道仍属于全平台可用渠道，会话可继续。
+	require.NoError(t, db.Model(&model.TokenRouteEntry{}).Where("token_id = ? AND channel_id = ?", 7, 11).Update("enabled", false).Error)
+	require.Nil(t, session.restoreConnectionContext(newCall(), "route-model"))
+	// 若仍有其他启用渠道（22）使范围停留在 selected，则停用的 11 被撤销访问。
+	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 22, Position: 1, Enabled: true}).Error)
 	err := session.restoreConnectionContext(newCall(), "route-model")
 	require.NotNil(t, err)
 	require.Equal(t, http.StatusForbidden, err.StatusCode)
 	require.EqualValues(t, "access_denied", err.GetErrorCode())
 	require.ErrorContains(t, err, "no longer available")
 	require.False(t, service.ShouldRetryRelayError(newCall(), err, 5))
+	// 孤儿态（全部条目被删除，selected_only=true 且 entries=0）同样拒绝继续。
+	require.NoError(t, db.Where("token_id = ?", 7).Delete(&model.TokenRouteEntry{}).Error)
+	err = session.restoreConnectionContext(newCall(), "route-model")
+	require.NotNil(t, err)
+	require.Equal(t, http.StatusForbidden, err.StatusCode)
+	require.EqualValues(t, "access_denied", err.GetErrorCode())
 }
 
 func TestTokenRouteWebSocketStorageFailureIsNotRevocation(t *testing.T) {

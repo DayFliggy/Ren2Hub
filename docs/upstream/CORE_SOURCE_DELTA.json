@@ -3003,7 +3003,7 @@
       "path": "controller/token.go",
       "status": "adapted",
       "upstream_sha256": "cfb50e30d730932168ba9a32ebe81033d4e35360f189ae66b980a54a87408ac4",
-      "local_sha256": "c2eb3070ef5df9f24687b5443d6c162d1c31ea163a5ff3b94ae9e38f18529493",
+      "local_sha256": "ed99517189027976efbc974faa1e1ffa1c4571366e343c18067234c4633fdfde",
       "reasons": [
         "group-removal",
         "token-routing"
@@ -3064,7 +3064,7 @@
       "path": "controller/token_routing.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9ffe049d22dcd808fd5fe3fed2d5acb32617098eeb2faf62e65565a69edfae03",
+      "local_sha256": "5d8349f441e8149279d1c5462716e89e77a46970b2ed7887d713b72762433b78",
       "reasons": [
         "token-routing"
       ],
@@ -3082,13 +3082,13 @@
       "path": "controller/token_routing_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bbf6267da5d184232cc1da7357493e9b06f648ac5ab5022e57eda0e36ee292c5"
+      "local_sha256": "bcad7aca7585169b79bbc3ef92108334e2e7c299478d015aed97836e66fc1f72"
     },
     {
       "path": "controller/token_test.go",
       "status": "adapted",
       "upstream_sha256": "2abc293545ca8a84de350c373741f6362c01ad7305284a375559bf9d5e74ce5e",
-      "local_sha256": "ff0f59511313383d968162d02162998ac68e8aacf8a5bfba94fd8efc730f1e30"
+      "local_sha256": "d3868f06aea6cc40b30a91337dff8c98dab295f33ff2f42f4e0500aab7df2f17"
     },
     {
       "path": "controller/topup.go",
@@ -6080,7 +6080,7 @@
       "path": "model/token_route.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e6676cef922da7c01ff09a2e181bb5f0ec81dd123ca31dea9cc18fdb0f9526ce",
+      "local_sha256": "6775b844f3b49baea7ad9c977c2402306e421fb74a48fb0ba6f4427508078664",
       "reasons": [
         "token-routing"
       ],
@@ -6104,7 +6104,7 @@
       "path": "model/token_route_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8ecafb22b7c8689af8440ae766764eb92738e43a2acd2d50b99c2d8be20f0c52"
+      "local_sha256": "d4f397fe372a34cefaa916eb28a93fea38cbf6f57be2aaaf8dfe2ab99ceabed8"
     },
     {
       "path": "model/token_route_race_test.go",
@@ -6116,7 +6116,7 @@
       "path": "model/token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2e7cd715a8f12797a5127239f6357341fc41d1984dbfc59b746fc85387dde8fb"
+      "local_sha256": "67e9cd069e28bd1b7f345dec09ecc7278b784016b5a98bc8165adb7ace5d258f"
     },
     {
       "path": "model/topup.go",
@@ -10420,7 +10420,7 @@
       "path": "relay/responses_websocket_token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "03a520957c4528c286e1b0cd4e107c7fc13443ff9689812b47c9610041e962bf"
+      "local_sha256": "6583658f6ec0463faacd5144dec0abb752219d4fe720f3d6270b072fba12f75d"
     },
     {
       "path": "relay/task_platform_error_test.go",
@@ -11968,7 +11968,7 @@
       "path": "router/token-routing.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "82a107a1cfdc5d5d29ca9480b1f317d297c07386fb9a347e026e97abedd43fbf",
+      "local_sha256": "df1dba1b1eb59ea15bef8c4f4445ff889ee96dc15c75a12c77592d90b09802f5",
       "reasons": [
         "token-routing"
       ],
@@ -11981,6 +11981,12 @@
           "router/token-routing.go#1"
         ]
       }
+    },
+    {
+      "path": "router/token_routing_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5baa29d2440937358f39004bdd52b9c20616dd1dc0305ad73cb15d6c81b5aba6"
     },
     {
       "path": "router/user_data_boundary_test.go",
@@ -13205,7 +13211,7 @@
       "path": "service/model_catalog_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "eb3e6b911c8729dbf5ae1c8c346631e52223a19cc526848e27c7e5a6517873c6"
+      "local_sha256": "91f5252d7edfbb8be670a1e1927b9a5851fc7622c38a7ad8826e54ad5b46ca83"
     },
     {
       "path": "service/native_restored_missing_test.go",
@@ -13899,7 +13905,7 @@
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bb531284aae566f282b17c40adad0f902ebb962e0e7fab857ae99684e80525ec",
+      "local_sha256": "3c7d8576cded17ff83fdc2441e263814075c27326df1ca85f8f3870accdd505a",
       "reasons": [
         "concurrency",
         "origin-task-continuation",
@@ -13989,7 +13995,7 @@
       "path": "service/route_observation_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "41f64ddc8566ff59ebfe69b6f88acebea017a9e56480abdf263eeb9dd0078f5d"
+      "local_sha256": "47f2dec5891777c9fd65dd2a8fd16cf655f791d91fda7afa4cfa927b0e8a0571"
     },
     {
       "path": "service/route_outcome.go",
@@ -14069,7 +14075,7 @@
       "path": "service/route_request.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aceb87e73fb1fa349c188685e5c16eebe737860768faafbe3b62171f484770cd",
+      "local_sha256": "0e767c99515d7178dc4f81d6cd292f7f55f13c4e25fa3cd1f000d651635fc369",
       "reasons": [
         "token-routing"
       ],
@@ -14087,7 +14093,7 @@
       "path": "service/route_request_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "36f8063625e30fca10a65865e2eedbef8f3d2fe455580825cb1d7b547ff62e48"
+      "local_sha256": "14827aae043f6b97c744efd01cf572bdbc589a141eb669c6dca03a947b7521b0"
     },
     {
       "path": "service/route_scan_rejection.go",
@@ -14188,7 +14194,7 @@
       "path": "service/route_user_view_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "febec4248f37762bc72e7e7b1b9c7bd3c8bf31ae507ceca6dd235d75c259da11"
+      "local_sha256": "0b94319188047fd183e28bb459dcc5e968ebec0838f688f32ea096019c1b2005"
     },
     {
       "path": "service/route_workload_test.go",
@@ -14538,7 +14544,7 @@
       "path": "service/token_route.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c3c0e97c77df8869acc42bf79a69a4210147e67ae966041306fb73a997235443",
+      "local_sha256": "f4e6ccdc7778a135c2862ce6076302f57e029aeafec3f29adc76eb3538e3bb52",
       "reasons": [
         "token-routing"
       ],
@@ -14556,25 +14562,7 @@
       "path": "service/token_route_matching_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7cc7a303709fb3df9c03dea7d99e5c59df4a06d18d00438f2abfc7ca4aac0504"
-    },
-    {
-      "path": "service/token_route_preview.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "455b065d31cc12d613007815acc78a019bada03507357f81090f7e251deab33f",
-      "reasons": [
-        "token-routing"
-      ],
-      "review": {
-        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：service/token_route_preview.go#1",
-        "method": "全后端并集逐段审查，43条原裁定及四轮29条最终审计纠偏覆盖；历史verified_fix不再构成保留理由",
-        "hunk_review": "NATIVE_B388_REVIEW.json",
-        "retained_or_split_hunks": [
-          "service/token_route_preview.go#1"
-        ]
-      }
+      "local_sha256": "e27722c0fe722126472306c3dd09860dd1d50c7bf50aebd163be121205607820"
     },
     {
       "path": "service/token_route_scope_test.go",
@@ -14586,7 +14574,7 @@
       "path": "service/token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "21c4b37ba856ca878fbacb54ee8b78d8c12b642e2a23a93b1bae3fd17fc7399a"
+      "local_sha256": "1ae7b44c7960deaf98e96c6bffc63d40436153e13023ead05e103ff675622e78"
     },
     {
       "path": "service/topup_bonus.go",

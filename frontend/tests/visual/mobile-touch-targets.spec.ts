@@ -332,14 +332,20 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await shot(page, `${theme}-date-range-open`)
   })
 
-  test(`${theme} token routing row actions are 44px targets`, async ({
+  test(`${theme} token routing modal row actions are 44px targets`, async ({
     page,
   }) => {
     await page.setViewportSize(MOBILE)
     await configureStablePage(page, { theme, authenticated: true })
-    await page.goto('/keys/7/routing', { waitUntil: 'domcontentloaded' })
+    await page.goto('/keys', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
-    const row = page.locator('li[data-channel-id="2"]')
+    await page
+      .locator('[data-key-mobile-row] [data-key-route-trigger]')
+      .first()
+      .click()
+    const dialog = page.getByRole('dialog', { name: '编辑令牌', exact: true })
+    await expect(dialog).toBeVisible()
+    const row = dialog.locator('li[data-selected-channel-id="2"]')
     await expect(row).toBeVisible()
     for (const name of ['上移', '下移', '移除'])
       await expectTouchTarget(

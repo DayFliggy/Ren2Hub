@@ -483,37 +483,13 @@ describe('capability route guard', () => {
 
     for (const path of ['/console/keys/11/routing']) {
       await router.push(path)
-      expect(router.currentRoute.value.name, path).toBe('dashboard')
+      expect(router.currentRoute.value.name, path).toBe('not-found')
     }
   })
 
-  // Only root bypasses permissions, so a user and an admin share one matrix.
-  it.each([
-    [1, false, 'dashboard'],
-    [1, true, 'token-routing'],
-    [10, false, 'dashboard'],
-    [10, true, 'token-routing'],
-  ])(
-    'opens token routing for role %i only with routing:read %s',
-    async (role, read, routeName) => {
-      publicApi.status.mockResolvedValue({
-        frontend_capabilities: {
-          dashboard_basic: 'live',
-          token_private_routing: 'live',
-        },
-      })
-      useAuthStore().user!.role = role
-      // authz.Capabilities lists every registered resource for the user.
-      useAuthStore().user!.permissions = {
-        admin_permissions: { routing: { read, write: read } },
-      }
-
-      await router.push('/keys/11/routing')
-
-      expect(router.currentRoute.value.name).toBe(routeName)
-    },
-    15000
-  )
+  it('retires the standalone token-routing subpage route', () => {
+    expect(router.hasRoute('token-routing')).toBe(false)
+  })
 
   it('keeps canonical routes at the root and preserves legacy queries and anchors', async () => {
     for (const [source, target] of [

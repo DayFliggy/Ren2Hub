@@ -150,7 +150,12 @@ func testTokenRoutingSummaries(t *testing.T) {
 		selected bool
 		enabled  []bool
 	}{
-		{"", false, nil}, {TokenRouteAuto, false, nil}, {TokenRouteAuto, true, []bool{true, false}}, {TokenRouteOrdered, true, []bool{true, true, true}},
+		{"", false, nil},
+		{TokenRouteAuto, false, nil},
+		{TokenRouteAuto, true, []bool{true, false}},
+		{TokenRouteOrdered, true, []bool{true, true, true}},
+		{TokenRouteOrdered, true, []bool{false, false}},
+		{TokenRouteOrdered, true, nil},
 	} {
 		token := Token{UserId: 17, Key: fmt.Sprintf("summary-%d", len(ids))}
 		require.NoError(t, token.Insert())
@@ -159,10 +164,23 @@ func testTokenRoutingSummaries(t *testing.T) {
 			continue
 		}
 		require.NoError(t, DB.Create(&TokenRouteProfile{TokenID: token.Id, Mode: tc.mode, SelectedOnly: tc.selected, Version: 1}).Error)
+		enabledCount := 0
 		for i, enabled := range tc.enabled {
+			if enabled {
+				enabledCount++
+			}
 			require.NoError(t, DB.Create(&TokenRouteEntry{TokenID: token.Id, ChannelID: i + 1, Position: i, Enabled: enabled}).Error)
 		}
-		want[token.Id] = TokenRoutingSummary{TokenID: token.Id, Mode: tc.mode, SelectedOnly: tc.selected, RouteChannelCount: len(tc.enabled)}
+		scope := RouteScopeOf(tc.selected, len(tc.enabled), enabledCount)
+		want[token.Id] = TokenRoutingSummary{
+			TokenID:                  token.Id,
+			Mode:                     tc.mode,
+			SelectedOnly:             tc.selected,
+			RouteChannelCount:        len(tc.enabled),
+			EnabledRouteChannelCount: enabledCount,
+			RouteScope:               scope,
+			EffectiveMode:            EffectiveTokenRouteMode(tc.mode, scope),
+		}
 	}
 	got, err := TokenRoutingModes(ids)
 	require.NoError(t, err)

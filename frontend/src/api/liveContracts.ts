@@ -263,11 +263,47 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
   if (!isRecord(value)) invalidResponse(endpoint)
   const type = requiredString(value.type, endpoint)
   if (type !== 'auto' && type !== 'ordered') invalidResponse(endpoint)
+  const selectedOnly = requiredBoolean(value.selected_only, endpoint)
   const routeChannelCount = requiredStrictInteger(
     value.route_channel_count,
     endpoint
   )
   if (routeChannelCount < 0) invalidResponse(endpoint)
+  const enabledRouteChannelCount =
+    value.enabled_route_channel_count === undefined
+      ? routeChannelCount
+      : requiredStrictInteger(value.enabled_route_channel_count, endpoint)
+  if (enabledRouteChannelCount < 0) invalidResponse(endpoint)
+  let routeScope: 'platform' | 'selected' | 'empty'
+  if (value.route_scope === undefined) {
+    routeScope = !selectedOnly
+      ? 'platform'
+      : routeChannelCount === 0
+        ? 'empty'
+        : enabledRouteChannelCount === 0
+          ? 'platform'
+          : 'selected'
+  } else if (
+    value.route_scope === 'platform' ||
+    value.route_scope === 'selected' ||
+    value.route_scope === 'empty'
+  ) {
+    routeScope = value.route_scope
+  } else {
+    invalidResponse(endpoint)
+  }
+  let effectiveMode: 'auto' | 'ordered'
+  if (value.effective_mode === undefined) {
+    effectiveMode =
+      routeScope === 'selected' && type === 'ordered' ? 'ordered' : 'auto'
+  } else if (
+    value.effective_mode === 'auto' ||
+    value.effective_mode === 'ordered'
+  ) {
+    effectiveMode = value.effective_mode
+  } else {
+    invalidResponse(endpoint)
+  }
   const allowIps = value.allow_ips
   if (
     allowIps !== undefined &&
@@ -283,8 +319,11 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
     name: requiredString(value.name, endpoint, false),
     key_preview: requiredString(value.key, endpoint),
     type,
-    selected_only: requiredBoolean(value.selected_only, endpoint),
+    selected_only: selectedOnly,
     route_channel_count: routeChannelCount,
+    enabled_route_channel_count: enabledRouteChannelCount,
+    route_scope: routeScope,
+    effective_mode: effectiveMode,
     allow_user_quota_query:
       value.allow_user_quota_query === undefined
         ? false

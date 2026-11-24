@@ -21,6 +21,26 @@ func TokenRouteChannels(ctx context.Context, userID, tokenID int) ([]RouteChanne
 	return catalogRouteChannels(ctx, userID, tokenID, false)
 }
 
+// TokenRouteCandidateChannels 返回草稿态下的可选平台渠道（无需先创建令牌）：
+// 按请求给出的 modelLimits 与 maxChannelRatio 计算过滤原因与模型列表。
+func TokenRouteCandidateChannels(ctx context.Context, modelLimits []string, maxChannelRatio *string) ([]RouteChannel, error) {
+	route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto}}
+	if maxChannelRatio != nil {
+		normalized, err := model.NormalizeChannelRatio(*maxChannelRatio)
+		if err != nil {
+			return nil, model.ErrTokenRouteInvalid
+		}
+		route.MaxChannelRatio = &normalized
+	}
+	limits := make(map[string]bool, len(modelLimits))
+	for _, name := range modelLimits {
+		if name != "" {
+			limits[name] = true
+		}
+	}
+	return catalogRouteChannelsWithScope(ctx, len(limits) > 0, limits, route, false)
+}
+
 func GetTokenRouting(ctx context.Context, userID, tokenID int) (model.TokenRouting, error) {
 	if _, err := model.GetTokenByIds(tokenID, userID); err != nil {
 		return model.TokenRouting{}, err
@@ -80,7 +100,8 @@ func loadRouteScope(ctx context.Context, tokenID int) (routeScope, error) {
 }
 
 // LoadTokenRouteConstraints runs once per authenticated request (including each
-// response.create). A selected-only route with no enabled entries excludes every channel.
+// response.create). Platform scope (including an all-paused selection) adds no
+// channel filter; an orphaned empty selection excludes every channel.
 func LoadTokenRouteConstraints(c *gin.Context) error {
 	if c == nil {
 		return nil
@@ -97,17 +118,22 @@ func LoadTokenRouteConstraints(c *gin.Context) error {
 		return err
 	}
 	c.Set(ginKeyTokenRouteScope, scope)
-	if !scope.route.SelectedOnly {
+	switch scope.route.Scope() {
+	case model.TokenRouteScopePlatform:
+		return nil
+	case model.TokenRouteScopeEmpty:
+		GetChannelConstraints(c).AddFilter(dto.ChannelFilter{Kind: dto.FilterTokenRoute, ChannelIDs: []int{}})
+		return nil
+	default:
+		ids := make([]int, 0, len(scope.route.Entries))
+		for _, entry := range scope.route.Entries {
+			if entry.Enabled {
+				ids = append(ids, entry.ChannelID)
+			}
+		}
+		GetChannelConstraints(c).AddFilter(dto.ChannelFilter{Kind: dto.FilterTokenRoute, ChannelIDs: ids})
 		return nil
 	}
-	ids := make([]int, 0, len(scope.route.Entries))
-	for _, entry := range scope.route.Entries {
-		if entry.Enabled {
-			ids = append(ids, entry.ChannelID)
-		}
-	}
-	GetChannelConstraints(c).AddFilter(dto.ChannelFilter{Kind: dto.FilterTokenRoute, ChannelIDs: ids})
-	return nil
 }
 
 const ginKeyTokenRouteScope = "token_route_scope"
@@ -135,7 +161,7 @@ func tokenRouteHasNoEnabledChannels(c *gin.Context) bool {
 
 func hasOrderedTokenRoute(c *gin.Context) bool {
 	scope, ok := common.GetContextKeyType[routeScope](c, ginKeyTokenRouteScope)
-	return ok && scope.route.Mode == model.TokenRouteOrdered
+	return ok && scope.route.EffectiveMode() == model.TokenRouteOrdered
 }
 
 // CheckLockedTokenRoute 服务长连接：每次都从库重读路由和模型限制，会话中途的变更立即生效。

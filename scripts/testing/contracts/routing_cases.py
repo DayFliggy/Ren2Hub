@@ -43,7 +43,7 @@ def automatic_selected_channels(e):
     e.route(['c','b'], mode='auto')
     e.check(['b'])
     e.route(['c','b'], mode='auto', disabled=['b','c'])
-    e.check([], status=503, amount=0)
+    e.check(['a'])
 
 
 def route_management(e):
@@ -53,7 +53,7 @@ def route_management(e):
     status, raw = e.user.request('PUT', path, {'mode':'auto', 'version':old['version'], 'entries':[]})
     require(status == 409 and not json.loads(raw).get('success'), 'stale_route_version_not_rejected')
     require(e.user.api('GET', path) == saved, 'stale_route_write_changed_state')
-    for method, suffix, body in [('GET','',None),('GET','/preview?model=route-test',None),
+    for method, suffix, body in [('GET','',None),('GET','/channels',None),
                                  ('PUT','',{'mode':'auto','version':saved['version'],'entries':[]})]:
         status, raw = e.other.request(method, path+suffix, body)
         value = json.loads(raw)
@@ -305,13 +305,10 @@ def endpoint_eligibility(e):
         e.configure('claude',models='claude-sonnet-4-5')
 
 
-def preview_ws(e):
+def responses_websocket_ineligible_channel(e):
     e.route(['a'])
     e.configure('a',setting=json.dumps({'responses_websocket_enabled':False}))
     try:
-        query=urlencode({'model':e.model,'path':'/v1/responses','stream':'true','transport':'websocket'})
-        preview=e.user.api('GET',f'/api/token/{e.token_id}/routing/preview?'+query)
-        require(preview.get('transport')=='websocket', 'preview_ws_transport_missing')
         from .websocket import WebSocket
         cursor,before=e.sim.cursor(),e.balances()
         connection=WebSocket.connect(e.base,e.key)
@@ -320,42 +317,30 @@ def preview_ws(e):
                             'method':'WS','path':'/v1/responses','model':e.model,'status':101,'expected_charge':0}
         e.exchanges.append(evidence)
         try:
-            connection.send({'type':'response.create','response':{'model':e.model,'input':'preview'}})
+            connection.send({'type':'response.create','response':{'model':e.model,'input':'ws-ineligible'}})
             event=connection.receive()
         finally:
             connection.close()
         require(event.get('type')=='error' and not e.sim.records(cursor), 'ws_ineligible_channel_was_used')
         after=e.settled(before,0)
         evidence.update(balances_before=before,balances_after=after,actual_charge=before['wallet']-after['wallet'])
-        actual=next(row for row in preview['entries'] if row['channel_id']==e.channel_map['a'])
-        e.statistics['preview_ws']={'preview_eligible':actual['eligible'],'actual_event':event['type'],
+        e.statistics['responses_websocket_ineligible_channel']={'actual_event':event['type'],
                                     'supplier_hits':len(e.sim.records(cursor))}
-        require(not actual['eligible'],'local_preview_ws_eligibility_mismatch')
         e.configure('a',setting=json.dumps({'responses_websocket_enabled':True}))
-        enabled=e.user.api('GET',f'/api/token/{e.token_id}/routing/preview?'+query)
-        entry=next(row for row in enabled['entries'] if row['channel_id']==e.channel_map['a'])
-        require(enabled.get('transport')=='websocket' and entry['eligible'],
-                'local_preview_enabled_ws_eligibility_mismatch')
         e.websocket()
-        e.statistics['preview_ws']['enabled_preview_eligible']=entry['eligible']
-        e.statistics['preview_ws']['enabled_actual_event']='response.completed'
-        return {'preview_eligible':actual['eligible'],'actual_event':event['type'],
-                'enabled_preview_eligible':entry['eligible'],'enabled_actual_event':'response.completed'}
+        e.statistics['responses_websocket_ineligible_channel']['enabled_actual_event']='response.completed'
+        return {'actual_event':event['type'],'enabled_actual_event':'response.completed'}
     finally:
         e.configure('a',setting=json.dumps({'responses_websocket_enabled':True}))
 
 
-def preview_plugin(e):
+def task_plugin_identity_mismatch(e):
     e.configure('hailuo',models='MiniMax-Hailuo-02,sora-2')
     e.route(['hailuo'])
     try:
-        query=urlencode({'model':'sora-2','path':'/v1/tasks/sora','stream':'false'})
-        preview=e.user.api('GET',f'/api/token/{e.token_id}/routing/preview?'+query)
         e.check([],status=503,amount=0,path='/v1/tasks/sora',
                 body={'model':'sora-2','prompt':'wrong plugin','seconds':4,'size':'1280x720'})
-        entry=next(row for row in preview['entries'] if row['channel_id']==e.channel_map['hailuo'])
-        e.statistics['preview_plugin']={'preview_eligible':entry['eligible'],'actual_status':503,'supplier_hits':0}
-        require(not entry['eligible'],'local_preview_plugin_eligibility_mismatch')
+        e.statistics['task_plugin_identity_mismatch']={'actual_status':503,'supplier_hits':0}
     finally:
         e.configure('hailuo',models='MiniMax-Hailuo-02')
 
@@ -385,5 +370,6 @@ CASES = [('automatic_selected_channels',automatic_selected_channels),('ordered_u
          ('client_disconnect_settles_once_and_releases',client_disconnect_settles_once_and_releases),
          ('automatic_busy_hot_limit',automatic_busy),('automatic_nonfull_load_bucket',automatic_nonfull_load),
          ('endpoint_eligibility',endpoint_eligibility),
-         ('preview_websocket_eligibility',preview_ws),('preview_plugin_eligibility',preview_plugin),
+         ('responses_websocket_ineligible_channel',responses_websocket_ineligible_channel),
+         ('task_plugin_identity_mismatch',task_plugin_identity_mismatch),
          ('error_classification_and_privacy',error_privacy)]

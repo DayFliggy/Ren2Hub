@@ -1,22 +1,16 @@
 package service
 
 import (
-	"errors"
-	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 )
 
-var ErrPreviewPathUnsupported = errors.New("preview_path_unsupported")
-
-// LookupTaskPluginEndpoint uses one immutable generation for both dispatch and
-// static previews. It does not decode the body or execute plugin code.
+// LookupTaskPluginEndpoint resolves endpoint candidates from one immutable
+// routing generation without decoding the request body or executing plugin JS.
 func LookupTaskPluginEndpoint(g *jsplugin.RoutingGeneration, method, path, modelName string) (jsplugin.PinnedEndpoint, bool) {
 	lookupModel, pinModel, mappedModel := modelName, modelName, ""
 	if declared, ok := g.CanonicalModel(modelName); ok {
@@ -89,7 +83,8 @@ func taskPluginIdentities(g *jsplugin.RoutingGeneration, candidates []*jsplugin.
 	return types, keys
 }
 
-// taskPluginEndpointIdentities is shared by dispatch and canonical preview fallback.
+// taskPluginEndpointIdentities derives candidate channel types and plugin keys
+// for shared task-plugin endpoints during dispatch.
 func taskPluginEndpointIdentities(endpoint jsplugin.PinnedEndpoint, expected string) ([]int, []string) {
 	if len(endpoint.Candidates) > 1 {
 		plugins := make([]*jsplugin.LoadedPlugin, 0, len(endpoint.Candidates))
@@ -101,87 +96,4 @@ func taskPluginEndpointIdentities(endpoint jsplugin.PinnedEndpoint, expected str
 		}
 	}
 	return taskPluginIdentities(endpoint.Generation, []*jsplugin.LoadedPlugin{endpoint.Plugin}, expected)
-}
-
-type previewFallback struct {
-	model   string
-	filters []dto.ChannelFilter
-}
-
-func resolvePreviewRequest(query TokenRoutePreviewQuery) (TokenRoutePreviewQuery, []dto.ChannelFilter, previewFallback, error) {
-	if query.Transport == "" {
-		query.Transport = "http"
-	}
-	filters := []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: query.Path}}
-	if query.Transport == "websocket" {
-		if query.Path != "/v1/responses" {
-			return query, nil, previewFallback{}, ErrPreviewPathUnsupported
-		}
-		query.Stream = true
-		return query, append(filters, dto.ChannelFilter{Kind: dto.FilterResponsesWebSocket}), previewFallback{}, nil
-	}
-	if query.Transport != "http" {
-		return query, nil, previewFallback{}, model.ErrTokenRouteInvalid
-	}
-	if strings.HasPrefix(query.Path, "/v1/models/") || strings.HasPrefix(query.Path, "/v1beta/models/") {
-		name, action, err := relayconstant.ParseGeminiModelAction(query.Path)
-		if err != nil {
-			return query, nil, previewFallback{}, ErrPreviewPathUnsupported
-		}
-		query.Model = name
-		query.Stream = action == "streamGenerateContent" || query.Stream
-	}
-	switch query.Path {
-	case "/v1/tools/search":
-		query.Model = constant.DeepSeekSearchModel
-	case "/v1/tools/fetch":
-		query.Model = constant.DeepSeekFetchModel
-	}
-	generation := jsplugin.DefaultRegistry.Generation()
-	if key, task := strings.CutPrefix(query.Path, "/v1/tasks/"); task {
-		plugin, ok := generation.Get(key)
-		if key == "" || strings.Contains(key, "/") || !ok {
-			return query, nil, previewFallback{}, ErrPreviewPathUnsupported
-		}
-		query.Model = NormalizeTaskPluginSubmitModel(generation, plugin, query.Model)
-		types, keys := taskPluginIdentities(generation, []*jsplugin.LoadedPlugin{plugin}, key)
-		return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path, TaskPluginKey: key,
-			TaskPluginChannelTypes: types, TaskPluginKeys: keys}), previewFallback{}, nil
-	}
-	if _, _, host := jsplugin.LookupHostProtocolOperation(http.MethodPost, query.Path); host {
-		if endpoint, ok := LookupTaskPluginEndpoint(generation, http.MethodPost, query.Path, query.Model); ok {
-			// Dispatch tries the original spelling before canonical fallback; an
-			// ordinary relay channel may serve that spelling exactly.
-			filters = append(filters, TaskPluginEndpointFilter(endpoint.Candidates, query.Path))
-			types, keys := taskPluginEndpointIdentities(endpoint, endpoint.Plugin.Meta.Key)
-			fallback := previewFallback{model: endpoint.Model, filters: append(slices.Clone(filters), dto.ChannelFilter{
-				Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path, TaskPluginKey: endpoint.Plugin.Meta.Key,
-				TaskPluginChannelTypes: types, TaskPluginKeys: keys,
-			})}
-			return query, filters, fallback, nil
-		}
-	} else if !ordinaryPreviewPath(query.Path) {
-		return query, nil, previewFallback{}, ErrPreviewPathUnsupported
-	}
-	return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path}), previewFallback{}, nil
-}
-
-// These are body-independent POST entrypoints. Custom plugin routes require
-// decoding, so cannot claim eligibility from only model/path/transport.
-func ordinaryPreviewPath(path string) bool {
-	switch path {
-	case "/v1/chat/completions", "/v1/completions", "/v1/messages", "/v1/messages/count_tokens",
-		"/v1/responses/compact", "/v1/alpha/search", "/v1/tools/search", "/v1/tools/fetch", "/v1/edits",
-		"/v1/embeddings", "/v1/moderations", "/v1/rerank", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations":
-		return true
-	}
-	if strings.HasPrefix(path, "/v1/engines/") {
-		parts := strings.Split(strings.TrimPrefix(path, "/v1/engines/"), "/")
-		return len(parts) == 2 && parts[0] != "" && parts[1] == "embeddings"
-	}
-	if strings.HasPrefix(path, "/v1/models/") || strings.HasPrefix(path, "/v1beta/models/") {
-		_, _, err := relayconstant.ParseGeminiModelAction(path)
-		return err == nil
-	}
-	return false
 }

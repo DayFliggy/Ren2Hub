@@ -38,11 +38,12 @@ for (const theme of ['light', 'dark'] as const) {
         name: '无限额度',
         exact: true,
       })
+      const routingToggle = dialog.locator('[data-key-routing-toggle]')
       const advanced = dialog.getByRole('button', { name: /高级设置/ })
       const expiration = dialog.locator('[name="token-expiration"]')
       const quota = dialog.locator('[name="token-quota"]')
 
-      // Creation has no routing choice; the name is the first field.
+      // Creation starts with routing collapsed; the name is the first field.
       await expect(dialog.getByRole('radio')).toHaveCount(0)
       await dialog.locator('[name="token-name"]').focus()
       await page.keyboard.press('Tab')
@@ -52,6 +53,8 @@ for (const theme of ['light', 'dark'] as const) {
       await expiry.focus()
       await page.keyboard.press('Tab')
       await expect(unlimited).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(routingToggle).toBeFocused()
       await page.keyboard.press('Tab')
       await expect(advanced).toBeFocused()
       await capture(page, info, 'create-collapsed')
@@ -73,6 +76,8 @@ for (const theme of ['light', 'dark'] as const) {
       await expiry.focus()
       await page.keyboard.press('Tab')
       await expect(unlimited).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(routingToggle).toBeFocused()
       await page.keyboard.press('Tab')
       await expect(advanced).toBeFocused()
       await expiry.click()
@@ -276,7 +281,7 @@ for (const theme of ['light', 'dark'] as const) {
           }
           const actions = page.locator('td[headers$="-actions"]')
           const controls = actions.locator('button, a')
-          await expect(controls).toHaveCount(5)
+          await expect(controls).toHaveCount(4)
           const bounds = await controls.evaluateAll((nodes) =>
             nodes.map((node) => {
               const { x, y, width, height } = node.getBoundingClientRect()

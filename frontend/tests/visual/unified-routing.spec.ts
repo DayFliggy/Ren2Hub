@@ -7,13 +7,16 @@ import {
   captureEvidence,
 } from './fixtures'
 
-const nativeToken = {
+const orphanedToken = {
   id: 7,
-  name: 'Native Key',
+  name: 'Orphaned Key',
   key: 'sk-****1234',
   type: 'ordered',
   selected_only: true,
   route_channel_count: 0,
+  enabled_route_channel_count: 0,
+  route_scope: 'empty',
+  effective_mode: 'auto',
   status: 1,
   remain_quota: 500000,
   used_quota: 250000,
@@ -28,7 +31,7 @@ const nativeToken = {
 
 for (const theme of ['light', 'dark'] as const) {
   for (const viewport of ['desktop', 'mobile'] as const) {
-    test(`${theme} ${viewport} key creation and native per-Key routing`, async ({
+    test(`${theme} ${viewport} key creation and integrated modal routing`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize(
@@ -51,361 +54,184 @@ for (const theme of ['light', 'dark'] as const) {
         })
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
+
+      // 1. Create modal starts collapsed on "自动路由 · 全平台渠道" and narrows automatically when channels are chosen.
       const create = page.getByRole('button', { name: '创建令牌', exact: true })
       await create.click()
-      const dialog = page.getByRole('dialog', { name: '创建令牌', exact: true })
-      await expect(dialog.getByRole('radio')).toHaveCount(0)
-      await dialog
+      const createDialog = page.getByRole('dialog', {
+        name: '创建令牌',
+        exact: true,
+      })
+      const routingToggle = createDialog.locator('[data-key-routing-toggle]')
+      await expect(routingToggle).toHaveAttribute('aria-expanded', 'false')
+      await expect(routingToggle).toContainText('自动路由 · 全平台渠道')
+      await createDialog
         .locator('input[name="token-name"]')
         .fill('Native routing key')
       await assertNoHorizontalOverflow(page)
       await captureEvidence(page, {
-        path: testInfo.outputPath('create-key.png'),
+        path: testInfo.outputPath('create-key-default.png'),
       })
-      await dialog.getByRole('button', { name: '确认', exact: true }).click()
-      await expect(dialog).toHaveCount(0)
+
+      // Expand routing section, pick channel #2 -> auto-narrows scope.
+      await routingToggle.click()
+      await createDialog.locator('[data-routing-picker-toggle]').click()
+      await createDialog.locator('[data-candidate-channel-id="2"]').click()
+      await expect(routingToggle).toContainText('已收窄至 1 条渠道')
+      await assertNoHorizontalOverflow(page)
+      await captureEvidence(page, {
+        path: testInfo.outputPath('create-key-routing-selected.png'),
+      })
+
+      await createDialog
+        .getByRole('button', { name: '确认', exact: true })
+        .click()
+      await expect(createDialog).toHaveCount(0)
+      await waitForStablePage(page)
       await expect(create).toBeFocused()
-      const created = fixture.writes.find(
-        (write) =>
-          write.path === '/api/token/' &&
-          (write.body as { name?: string }).name === 'Native routing key'
-      )
-      expect(created?.body).not.toHaveProperty('type')
-      const notice = page.locator('[data-key-created-notice]')
-      await expect(notice).toContainText('新令牌默认使用自动路由和全平台渠道')
-      await assertNoHorizontalOverflow(page)
-      await assertInteractiveCentersVisible(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('keys-created.png'),
-        fullPage: true,
-      })
-
-      await page.goto('/keys/7/routing')
-      await waitForStablePage(page)
-      const routePage = page.locator('[data-handdrawn-page="token-routing"]')
-      await expect(routePage).toBeVisible()
-      if (viewport === 'desktop') {
-        await expect(
-          page
-            .locator('[data-handdrawn="navigation"] a')
-            .filter({ hasText: '令牌' })
-        ).toHaveAttribute('aria-current', 'page')
-      }
-      const routeVisual = await routePage.evaluate(() => {
-        const checkedLabel = document
-          .querySelector<HTMLInputElement>(
-            'input[name="token-route-mode"]:checked'
-          )!
-          .closest('label')!
-        const select = document.querySelector<HTMLSelectElement>('select')!
-        const card = select.closest<HTMLElement>('[data-handdrawn="surface"]')!
-        return {
-          labelBorder: getComputedStyle(checkedLabel).borderColor,
-          selectBg: getComputedStyle(select).backgroundColor,
-          cardBg: getComputedStyle(card).backgroundColor,
-        }
-      })
-      if (theme === 'light') {
-        expect(routeVisual.labelBorder).not.toBe('rgba(56, 55, 43, 0.27)')
-      } else {
-        expect(routeVisual.selectBg).not.toBe(routeVisual.cardBg)
-      }
-      const orderedMode = page.getByRole('radio', {
-        name: '顺序路由',
-        exact: true,
-      })
-      const automatic = page.getByRole('radio', {
-        name: '自动路由',
-        exact: true,
-      })
-      const platform = page.getByRole('radio', {
-        name: '全平台渠道',
-        exact: true,
-      })
-      const selectedScope = page.getByRole('radio', {
-        name: '指定渠道',
-        exact: true,
-      })
-      const save = page.getByRole('button', { name: '保存', exact: true })
-      await expect(orderedMode).toBeChecked()
-      await expect(selectedScope).toBeChecked()
-      await expect(platform).toBeDisabled()
-      await expect(
-        routePage.getByRole('button', { name: '上移', exact: true })
-      ).toBeVisible()
-
-      await automatic.focus()
-      await page.keyboard.press('Space')
-      await expect(automatic).toBeChecked()
-      await expect(selectedScope).toBeChecked()
-      await expect(platform).toBeEnabled()
-      await expect(
-        routePage.getByRole('button', { name: '上移', exact: true })
-      ).toHaveCount(0)
-      await save.click()
-      await expect(
-        page.getByText('路由已保存。', { exact: true })
-      ).toBeVisible()
-      await assertNoHorizontalOverflow(page)
-      await assertInteractiveCentersVisible(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('automatic-selected.png'),
-        fullPage: true,
-      })
-
-      await platform.check()
-      await expect(routePage).toContainText('此 Key 使用全平台渠道')
-      await expect(routePage).toContainText(
-        '以全平台渠道保存会清空已选渠道列表'
-      )
-      await save.click()
-      await expect(save).toBeEnabled()
-      await expect(routePage).not.toContainText('以全平台渠道保存会清空')
-      await assertNoHorizontalOverflow(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('automatic-platform.png'),
-        fullPage: true,
-      })
-
-      await orderedMode.check()
-      await expect(selectedScope).toBeChecked()
-      await expect(platform).toBeDisabled()
-      await save.click()
-      await expect(
-        page.getByRole('alert').filter({ hasText: '请至少添加一个渠道' })
-      ).toBeVisible()
-      await assertNoHorizontalOverflow(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('ordered-empty-blocked.png'),
-        fullPage: true,
-      })
-      await page
-        .getByRole('combobox', { name: '选择平台渠道', exact: true })
-        .selectOption('2')
-      await page.getByRole('button', { name: '添加渠道', exact: true }).click()
-      await page
-        .getByRole('textbox', { name: '渠道倍率上限', exact: true })
-        .fill('1.25')
-      await save.click()
-      await expect(save).toBeEnabled()
-      await page
-        .getByRole('textbox', { name: '模型', exact: true })
-        .fill('gpt-native')
-      await page
-        .getByRole('button', { name: '预览已保存路由', exact: true })
-        .click()
-      await expect(
-        page.getByText('已保存版本 4', { exact: true })
-      ).toBeVisible()
-      await expect(routePage).toContainText(
-        '顺序路由按下方保存的顺序尝试符合条件的渠道。'
-      )
-      await expect(routePage).toContainText('Native channel')
-      await assertNoHorizontalOverflow(page)
-      await assertInteractiveCentersVisible(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('ordered-routing-preview.png'),
-        fullPage: true,
-      })
-      await page
-        .getByRole('combobox', { name: '传输方式', exact: true })
-        .selectOption('websocket')
-      await expect(
-        page.getByRole('combobox', { name: 'API 路径', exact: true })
-      ).toHaveValue('/v1/responses')
-      const response = page.waitForResponse(
-        (response) =>
-          response.url().includes('/routing/preview') &&
-          response.url().includes('transport=websocket')
-      )
-      await page
-        .getByRole('button', { name: '预览已保存路由', exact: true })
-        .click()
-      await response
-      await expect(routePage).toContainText(
-        'gpt-native · /v1/responses · WebSocket'
-      )
-      await assertNoHorizontalOverflow(page)
-      await assertInteractiveCentersVisible(page)
-
-      const writes = fixture.writes.filter(
-        (write) => write.path === '/api/token/7/routing'
-      )
-      expect(writes.map((write) => write.body)).toEqual([
-        expect.objectContaining({
-          mode: 'auto',
-          selected_only: true,
-          entries: [{ channel_id: 2, enabled: true }],
-        }),
-        expect.objectContaining({
-          mode: 'auto',
-          selected_only: false,
-          entries: [],
-        }),
-        expect.objectContaining({
-          mode: 'ordered',
-          selected_only: true,
-          max_channel_ratio: '1.25',
-          entries: [{ channel_id: 2, enabled: true }],
-        }),
-      ])
-    })
-
-    test(`${theme} ${viewport} selected channels removed by an administrator`, async ({
-      page,
-    }, testInfo) => {
-      await page.setViewportSize(
-        viewport === 'desktop'
-          ? { width: 1440, height: 900 }
-          : { width: 390, height: 844 }
-      )
-      await configureStablePage(page, { theme, authenticated: true })
-      await page.route(/\/api\/token\/(?:\?.*)?$/, (route) =>
-        route.request().method() === 'GET'
-          ? route.fulfill({
-              json: {
-                success: true,
-                data: {
-                  page: 1,
-                  page_size: 10,
-                  total: 2,
-                  items: [
-                    nativeToken,
-                    {
-                      ...nativeToken,
-                      id: 8,
-                      name: 'Ordered Key',
-                      route_channel_count: 2,
-                    },
-                  ],
-                },
-              },
-            })
-          : route.fallback()
-      )
-      await page.route('**/api/token/7/routing', (route) =>
-        route.request().method() === 'GET'
-          ? route.fulfill({
-              json: {
-                success: true,
-                data: {
-                  token_id: 7,
-                  mode: 'ordered',
-                  selected_only: true,
-                  max_channel_ratio: null,
-                  version: 3,
-                  entries: [],
-                },
-              },
-            })
-          : route.fallback()
-      )
-      await page.goto('/keys')
-      await waitForStablePage(page)
-      const chip = page
-        .locator('[data-route-warning]')
-        .filter({ visible: true })
-      await expect(chip).toHaveText(/所选渠道已不可用/)
-      await expect(chip).toHaveAttribute('title', /没有可用渠道/)
-      if (theme === 'dark') {
-        // B1 Studio mutes auxiliary route labels on desktop and mobile alike;
-        // the warning for deleted channels keeps its status colour.
-        const paint = (
-          target: typeof chip,
-          color: string,
-          background: string
-        ) =>
-          target.evaluate(
-            (element, tokens) => {
-              const probe = document.createElement('span')
-              probe.style.color = `var(${tokens.color})`
-              probe.style.background = `var(${tokens.background})`
-              document.body.append(probe)
-              const expected = getComputedStyle(probe)
-              const result = {
-                color: getComputedStyle(element).color,
-                background: getComputedStyle(element).backgroundColor,
-                expectedColor: expected.color,
-                expectedBackground: expected.backgroundColor,
-              }
-              probe.remove()
-              return result
-            },
-            { color, background }
-          )
-        const neutral = await paint(
-          page.getByText('顺序 · 2 条渠道', { exact: true }).filter({
-            visible: true,
-          }),
-          '--text-secondary',
-          '--surface-muted'
+      expect(
+        fixture.writes.some(
+          (write) =>
+            write.path === '/api/token/' &&
+            (write.body as { name?: string }).name === 'Native routing key'
         )
-        expect(neutral.color).toBe(neutral.expectedColor)
-        expect(neutral.background).toBe(neutral.expectedBackground)
-        const warning = await paint(
-          chip,
-          '--status-warning-text',
-          '--status-warning-soft'
+      ).toBe(true)
+      expect(
+        fixture.writes.some(
+          (write) =>
+            write.path === '/api/token/99/routing' &&
+            (write.body as { selected_only?: boolean }).selected_only === true
         )
-        expect(warning.color).toBe(warning.expectedColor)
-        expect(warning.background).toBe(warning.expectedBackground)
-      }
-      await assertNoHorizontalOverflow(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('keys-unavailable.png'),
-        fullPage: true,
-      })
-      await page.goto('/keys/7/routing')
-      await waitForStablePage(page)
-      const alert = page.locator('[data-route-orphaned]')
-      await expect(alert).toContainText('所选渠道已不可用')
-      await expect(alert).toContainText('没有可用渠道')
+      ).toBe(true)
+      await expect(page.locator('[data-key-created-notice]')).toHaveCount(0)
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('routing-unavailable.png'),
-        fullPage: true,
+
+      // 2. Click the route chip on row #7 to open edit modal directly on the routing section.
+      await page.locator('[data-key-route-trigger]:visible').first().click()
+      const editDialog = page.getByRole('dialog', {
+        name: '编辑令牌',
+        exact: true,
       })
-      await alert
-        .getByRole('button', { name: '改回全平台渠道', exact: true })
+      await expect(editDialog).toBeVisible()
+      await expect(
+        editDialog.locator('li[data-selected-channel-id="2"]')
+      ).toBeVisible()
+      await assertNoHorizontalOverflow(page)
+
+      // Pause the sole selected channel -> shows automatic all-platform fallback notice and allows saving.
+      await editDialog
+        .locator('li[data-selected-channel-id="2"] [role="switch"]')
         .click()
       await expect(
-        page.getByRole('radio', { name: '自动路由', exact: true })
-      ).toBeChecked()
-      await expect(
-        page.getByRole('radio', { name: '全平台渠道', exact: true })
-      ).toBeChecked()
+        editDialog.locator('[data-routing-all-paused]')
+      ).toContainText('自动退回全平台路由')
+      await captureEvidence(page, {
+        path: testInfo.outputPath('edit-key-all-paused.png'),
+      })
+      await editDialog
+        .getByRole('button', { name: '确认', exact: true })
+        .click()
+      await expect(editDialog).toHaveCount(0)
+
+      const lastRoutingWrite = fixture.writes
+        .filter((write) => write.path === '/api/token/7/routing')
+        .at(-1)
+      expect(lastRoutingWrite?.body).toMatchObject({
+        mode: 'ordered',
+        selected_only: true,
+        entries: [{ channel_id: 2, enabled: false }],
+      })
     })
   }
 }
 
-test('native routing load failure stays visible and can be retried', async ({
-  page,
-}) => {
-  await configureStablePage(page, {
-    theme: 'light',
-    expectedApiErrors: { '/api/token/7/routing': [503] },
-  })
-  let failing = true
-  await page.route('**/api/token/7/routing', (route) =>
-    failing
-      ? route.fulfill({
-          status: 503,
-          json: { success: false, message: 'Routing temporarily unavailable' },
+for (const theme of ['light', 'dark'] as const) {
+  test(`${theme} orphaned selection warning in modal protects against silent fallback`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await configureStablePage(page, {
+      theme,
+      authenticated: true,
+    })
+    let savedRoutingBody: Record<string, unknown> | null = null
+    await page.route('**/api/token/?*', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            items: [orphanedToken],
+            total: 1,
+            page: 1,
+            page_size: 10,
+          },
+        },
+      })
+    )
+    await page.route('**/api/token/7/routing', (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              token_id: 7,
+              mode: 'ordered',
+              selected_only: true,
+              version: 3,
+              max_channel_ratio: null,
+              entries: [],
+              route_scope: 'empty',
+              effective_mode: 'auto',
+              enabled_route_channel_count: 0,
+            },
+          },
         })
-      : route.fallback()
-  )
-  await page.goto('/keys/7/routing')
-  await expect(
-    page.getByText('Routing temporarily unavailable', { exact: true })
-  ).toBeVisible()
-  failing = false
-  await page
-    .getByRole('button', { name: '重新加载', exact: true })
-    .last()
-    .click()
-  await expect(
-    page.getByRole('radio', { name: '顺序路由', exact: true })
-  ).toBeChecked()
-  await assertNoHorizontalOverflow(page)
-})
+      }
+      savedRoutingBody = route.request().postDataJSON()
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            token_id: 7,
+            mode: 'auto',
+            selected_only: false,
+            version: 4,
+            max_channel_ratio: null,
+            entries: [],
+            route_scope: 'platform',
+            effective_mode: 'auto',
+            enabled_route_channel_count: 0,
+          },
+        },
+      })
+    })
+
+    await page.goto('/keys')
+    await waitForStablePage(page)
+    await expect(
+      page.locator('[data-route-warning]:visible').first()
+    ).toContainText('自选渠道已失效')
+
+    await page.locator('[data-key-route-trigger]:visible').first().click()
+    const dialog = page.getByRole('dialog', { name: '编辑令牌', exact: true })
+    await expect(dialog.locator('[data-route-orphaned]')).toBeVisible()
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`orphaned-routing-modal-${theme}.png`),
+    })
+
+    // Explicitly restore all platform channels and save.
+    await dialog
+      .getByRole('button', { name: '恢复为全平台路由', exact: true })
+      .click()
+    await expect(dialog.locator('[data-route-orphaned]')).toHaveCount(0)
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(savedRoutingBody).toMatchObject({
+      mode: 'auto',
+      selected_only: false,
+      entries: [],
+      version: 3,
+    })
+  })
+}

@@ -191,3 +191,53 @@ func TestTokenRoutingInputScope(t *testing.T) {
 		}
 	}
 }
+
+func TestTokenRouteScopeAndEffectiveMode(t *testing.T) {
+	db := tokenRouteTestDB(t)
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name          string
+		mode          string
+		selected      bool
+		entries       []TokenRouteEntry
+		wantScope     TokenRouteScope
+		wantEffective string
+		wantEnabled   int
+	}{
+		{"platform", TokenRouteAuto, false, nil, TokenRouteScopePlatform, TokenRouteAuto, 0},
+		{"auto-selected", TokenRouteAuto, true, []TokenRouteEntry{{ChannelID: 1, Enabled: true}, {ChannelID: 2, Enabled: false}}, TokenRouteScopeSelected, TokenRouteAuto, 1},
+		{"ordered-selected", TokenRouteOrdered, true, []TokenRouteEntry{{ChannelID: 1, Enabled: true}}, TokenRouteScopeSelected, TokenRouteOrdered, 1},
+		{"ordered-all-paused", TokenRouteOrdered, true, []TokenRouteEntry{{ChannelID: 1, Enabled: false}, {ChannelID: 2, Enabled: false}}, TokenRouteScopePlatform, TokenRouteAuto, 0},
+		{"orphan-empty", TokenRouteOrdered, true, nil, TokenRouteScopeEmpty, TokenRouteAuto, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			token := Token{UserId: 17, Key: "scope-" + tc.name}
+			require.NoError(t, token.Insert())
+			if tc.selected {
+				require.NoError(t, db.Create(&TokenRouteProfile{TokenID: token.Id, Mode: tc.mode, SelectedOnly: true, Version: 1}).Error)
+				for i, entry := range tc.entries {
+					entry.TokenID = token.Id
+					entry.Position = i
+					require.NoError(t, db.Create(&entry).Error)
+				}
+			}
+			view, err := ReadTokenRouting(ctx, token.Id)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantScope, view.Scope())
+			require.Equal(t, tc.wantEffective, view.EffectiveMode())
+			require.Equal(t, tc.wantEnabled, view.EnabledCount())
+
+			modes, err := TokenRoutingModes([]int{token.Id})
+			require.NoError(t, err)
+			if !tc.selected {
+				require.Empty(t, modes)
+				return
+			}
+			summary := modes[token.Id]
+			require.Equal(t, len(tc.entries), summary.RouteChannelCount)
+			require.Equal(t, tc.wantEnabled, summary.EnabledRouteChannelCount)
+			require.Equal(t, tc.wantScope, summary.RouteScope)
+			require.Equal(t, tc.wantEffective, summary.EffectiveMode)
+		})
+	}
+}

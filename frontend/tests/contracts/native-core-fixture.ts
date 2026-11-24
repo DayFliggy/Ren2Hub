@@ -470,23 +470,78 @@ export async function nativeCoreFixture(
           token_used: 1200,
         },
       ])
-    if (path === '/api/token/' || path === '/api/token/search')
-      return method === 'GET'
-        ? ok({ ...emptyPage, total: 1, items: [token] })
-        : ok(null)
+    if (path === '/api/token/' || path === '/api/token/search') {
+      if (method === 'GET')
+        return ok({ ...emptyPage, total: 1, items: [token] })
+      if (method === 'POST') return ok({ id: 99 })
+      return ok(token)
+    }
     if (path === '/api/token/7' && method === 'GET') return ok(token)
-    if (path === '/api/token/7/routing') {
+    if (path === '/api/token/routing/channels') {
+      const maxRatio = Number(url.searchParams.get('max_channel_ratio') || '0')
+      const base = [
+        {
+          id: 2,
+          name: 'Native channel',
+          type: 1,
+          status: 1,
+          models: ['gpt-native'],
+          channel_ratio: '1',
+          max_concurrency: 8,
+          eligible: !maxRatio || 1 <= maxRatio,
+          filter_reason:
+            maxRatio && 1 > maxRatio ? 'channel_ratio_exceeded' : '',
+        },
+        {
+          id: 3,
+          name: 'Secondary channel',
+          type: 1,
+          status: 1,
+          models: ['gpt-native'],
+          channel_ratio: '2',
+          max_concurrency: 4,
+          eligible: !maxRatio || 2 <= maxRatio,
+          filter_reason:
+            maxRatio && 2 > maxRatio ? 'channel_ratio_exceeded' : '',
+        },
+      ]
+      return ok(base)
+    }
+    if (path === '/api/token/7/routing' || path === '/api/token/99/routing') {
+      const targetId = path === '/api/token/99/routing' ? 99 : 7
       if (method === 'PUT') {
         const body = req.postDataJSON()
-        routing = {
-          ...routing,
-          ...body,
-          version: routing.version + 1,
-          entries: body.entries.map((entry: unknown, position: number) => ({
+        const entries = body.entries.map(
+          (entry: unknown, position: number) => ({
             ...(entry as object),
             position,
-          })),
+          })
+        )
+        const enabledCount = entries.filter(
+          (entry: { enabled?: boolean }) => entry.enabled
+        ).length
+        const routeScope = !body.selected_only
+          ? 'platform'
+          : entries.length === 0
+            ? 'empty'
+            : enabledCount === 0
+              ? 'platform'
+              : 'selected'
+        const updated = {
+          ...(targetId === 7 ? routing : { token_id: 99, version: 0 }),
+          ...body,
+          token_id: targetId,
+          version: (targetId === 7 ? routing.version : 0) + 1,
+          entries,
+          route_scope: routeScope,
+          effective_mode:
+            routeScope === 'selected' && body.mode === 'ordered'
+              ? 'ordered'
+              : 'auto',
+          enabled_route_channel_count: enabledCount,
         }
+        if (targetId === 7) routing = updated
+        return ok(updated)
       }
       return ok(routing)
     }
@@ -500,32 +555,10 @@ export async function nativeCoreFixture(
           models: ['gpt-native'],
           channel_ratio: '1',
           max_concurrency: 8,
-          in_flight: 2,
           eligible: true,
           filter_reason: '',
         },
       ])
-    if (path === '/api/token/7/routing/preview')
-      return ok({
-        mode: routing.mode,
-        version: routing.version,
-        model: url.searchParams.get('model'),
-        path: url.searchParams.get('path'),
-        stream: url.searchParams.get('stream') === 'true',
-        transport: url.searchParams.get('transport') || 'http',
-        ordering:
-          routing.mode === 'auto' ? 'weighted_random_per_request' : 'ordered',
-        entries: [
-          {
-            channel_id: 2,
-            name: 'Native channel',
-            eligible: true,
-            reason: 'eligible',
-            channel_ratio: '1',
-            in_flight: 2,
-          },
-        ],
-      })
     if (path === '/api/user/topup/info') return ok(topup)
     // Stripe answers a bare payable amount; its bonus comes from the preview.
     if (path === '/api/user/stripe/amount')

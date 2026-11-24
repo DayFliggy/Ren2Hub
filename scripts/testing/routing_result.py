@@ -62,7 +62,7 @@ REQUIRED_CASES = (
     'automatic_breaker_admission', 'prefer_escapes_cooling_channel',
     'expensive_retry_insufficient_reserve', 'delivered_stream_not_replayed',
     'disconnect_retry', 'automatic_busy_hot_limit', 'automatic_nonfull_load_bucket',
-    'endpoint_eligibility', 'preview_websocket_eligibility', 'preview_plugin_eligibility',
+    'endpoint_eligibility', 'responses_websocket_ineligible_channel', 'task_plugin_identity_mismatch',
     'error_classification_and_privacy', 'sora_task_lifecycle', 'hailuo_task_lifecycle',
     'plugin_origin_pin_price_and_capacity', 'mj_continuation_pin_price',
     'upstream_native_remix_probe', 'native_remix_upstream_id', 'native_remix_plugin_action',

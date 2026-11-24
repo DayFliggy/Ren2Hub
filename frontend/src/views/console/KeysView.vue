@@ -7,13 +7,10 @@ import {
   Plus,
   Power,
   PowerOff,
-  Route,
   Trash2,
-  X,
 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 
 import { api } from '@/api/console'
 import { parseTokenPage, parseUserModels } from '@/api/liveContracts'
@@ -75,7 +72,7 @@ const selected = ref<Array<string | number>>([])
 const models = ref<string[]>([])
 
 const formOpen = ref(false)
-const createdNotice = ref(false)
+const formFocus = ref<'routing' | null>(null)
 const editing = ref<TokenSummary | null>(null)
 const deleting = ref<TokenSummary | null>(null)
 const batchDeleting = ref(false)
@@ -87,15 +84,15 @@ const clientConfigTokenId = ref<number | null>(null)
 // ring and the note under each name. Figures are in the ring's popover.
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
-  { key: 'type', label: t('keys.colType'), width: '184px' },
+  { key: 'type', label: t('keys.colType'), width: '216px' },
   { key: 'key', label: t('keys.colKey') },
   { key: 'quota', label: t('keys.colQuota'), align: 'center', width: '88px' },
-  // Five actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding (24px).
+  // Four actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding.
   {
     key: 'actions',
     label: t('keys.colActions'),
     align: 'right',
-    width: '264px',
+    width: '224px',
   },
 ])
 
@@ -237,19 +234,19 @@ async function toggleStatus(row: TokenSummary) {
   }
 }
 
-function onSaved(created: boolean) {
+function onSaved() {
   void load()
-  // Creation stays upstream-shaped (no new id), so the hint names the row action.
-  if (created && routingEnabled.value) createdNotice.value = true
 }
 
 function openCreate() {
   editing.value = null
+  formFocus.value = null
   formOpen.value = true
 }
 
-function openEdit(row: TokenSummary) {
+function openEdit(row: TokenSummary, focus: 'routing' | null = null) {
   editing.value = row
+  formFocus.value = focus
   formOpen.value = true
 }
 
@@ -330,24 +327,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div
-        v-if="createdNotice"
-        role="status"
-        data-key-created-notice
-        class="no-handdrawn mx-4 mb-4 flex items-start gap-2 rounded-xl border border-[var(--status-info)] bg-[var(--status-info-soft)] py-2 pl-4 pr-2 text-sm text-[var(--status-info-text)]"
-      >
-        <span class="min-w-0 flex-1 self-center">{{
-          t('keys.createdRoutingHint')
-        }}</span>
-        <IconButton
-          class="shrink-0"
-          :label="t('keys.dismissHint')"
-          @click="createdNotice = false"
-        >
-          <X :size="16" aria-hidden="true" />
-        </IconButton>
-      </div>
-
       <DataTable
         v-model:selected="selected"
         class="key-list-table"
@@ -359,7 +338,7 @@ onBeforeUnmount(() => {
         :skeleton-rows="pageSize"
         adaptive-scroll
         :page-size="pageSize"
-        min-table-width="896px"
+        min-table-width="888px"
         :scroll-region-label="t('keys.breadcrumb.1')"
         selectable
         checkbox-shape="round"
@@ -373,7 +352,11 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-type="{ row }">
-          <KeyRouteChip :token="row as TokenSummary" />
+          <KeyRouteChip
+            :token="row as TokenSummary"
+            :interactive="routingEnabled"
+            @configure="openEdit(row as TokenSummary, 'routing')"
+          />
         </template>
 
         <template #cell-key="{ row }">
@@ -419,19 +402,6 @@ onBeforeUnmount(() => {
             @click.stop
             @dblclick.stop
           >
-            <RouterLink
-              v-if="routingEnabled"
-              :to="{
-                name: 'token-routing',
-                params: { id: (row as TokenSummary).id },
-              }"
-              class="inline-flex h-11 w-11 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
-              :aria-label="t('keys.routing')"
-              :title="t('keys.routing')"
-              data-handdrawn="control"
-            >
-              <Route :size="16" aria-hidden="true" />
-            </RouterLink>
             <IconButton
               :label="clientText('title')"
               @click="clientConfigTokenId = (row as TokenSummary).id"
@@ -519,6 +489,7 @@ onBeforeUnmount(() => {
           :view-key="copyKey"
           :client-config="(row: TokenSummary) => (clientConfigTokenId = row.id)"
           :edit-key="openEdit"
+          :configure-routing="(row) => openEdit(row, 'routing')"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"
           :now="nowSec"
@@ -548,6 +519,7 @@ onBeforeUnmount(() => {
       :open="formOpen"
       :editing="editing"
       :models="models"
+      :focus="formFocus"
       @close="formOpen = false"
       @saved="onSaved"
     />

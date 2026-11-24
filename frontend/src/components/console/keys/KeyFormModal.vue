@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import TextInput from '@/components/common/TextInput.vue'
-import { computed, reactive, ref, useId, watch } from 'vue'
+import { computed, nextTick, reactive, ref, useId, watch } from 'vue'
+import { getActivePinia } from 'pinia'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
+import { parseCreatedTokenId, tokenRoutingApi } from '@/api/tokenRouting'
 import { ApiError } from '@/api/types'
 import type { TokenSummary } from '@/types/console'
 import ChipPicker from '@/components/common/ChipPicker.vue'
@@ -11,25 +12,52 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
+import TextInput from '@/components/common/TextInput.vue'
+import KeyRoutingSection from '@/components/console/keys/KeyRoutingSection.vue'
 import { useToast } from '@/composables/useToast'
+import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
+import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import { fromDateTimeLocal, toDateTimeLocal } from '@/utils/format'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
 
-const props = defineProps<{
-  open: boolean
-  /** null = create mode */
-  editing: TokenSummary | null
-  models: string[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    /** null = create mode */
+    editing: TokenSummary | null
+    models: string[]
+    focus?: 'routing' | null
+  }>(),
+  { focus: null }
+)
 
 const emit = defineEmits<{
   close: []
-  /** created=true after a new key; routing is configured on its own page. */
-  saved: [created: boolean]
+  saved: []
 }>()
 
 const { t } = useI18n()
 const toast = useToast()
+
+const routingFeatureOn = computed(() => {
+  if (!getActivePinia()) return false
+  return useAppStore().isFeatureEnabled(tokenRoutingAccess.feature)
+})
+const canReadRouting = computed(() => {
+  if (!routingFeatureOn.value || !getActivePinia()) return false
+  return useAuthStore().hasPermission(
+    tokenRoutingAccess.requiresPermission.resource,
+    tokenRoutingAccess.requiresPermission.action
+  )
+})
+const canWriteRouting = computed(() => {
+  if (!canReadRouting.value || !getActivePinia()) return false
+  return useAuthStore().hasPermission('routing', 'write')
+})
+
+const routingRef = ref<InstanceType<typeof KeyRoutingSection> | null>(null)
+
 const form = reactive({
   allow_user_quota_query: true,
   name: '',
@@ -42,20 +70,53 @@ const form = reactive({
 /** The datetime-local text backfilled from the token being edited. */
 let loadedExpireAt = ''
 let loadedQuota: { amount: string; quota: number } | null = null
+let baseBaseline = ''
+
 const saving = ref(false)
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
+
+/** Tracks a token created during step 1 when step 2 routing PUT failed. */
+const createdTokenId = ref<number | null>(null)
+const routingSaveError = ref('')
+const routingConflict = ref(false)
+const routingPartialNotice = ref('')
+
+const effectiveTokenId = computed(
+  () => props.editing?.id ?? createdTokenId.value
+)
 
 /** Which optional sections are expanded (hidden by default). */
 const vis = reactive({
   expiry: false,
 })
 
+function baseSnapshotKey(): string {
+  return JSON.stringify({
+    name: form.name,
+    allow_user_quota_query: form.allow_user_quota_query,
+    model_limits: form.model_limits,
+    unlimited: form.unlimited,
+    quotaDollars: form.unlimited ? '' : form.quotaDollars,
+    ipText: form.ipText.trim(),
+    expiry: vis.expiry,
+    expireAt: vis.expiry ? form.expireAt : '',
+  })
+}
+
+function clearRoutingErrors(): void {
+  routingSaveError.value = ''
+  routingConflict.value = false
+  routingPartialNotice.value = ''
+}
+
 watch(
   () => props.open,
   (open) => {
     if (!open) return
     const e = props.editing
+    createdTokenId.value = null
+    clearRoutingErrors()
     form.allow_user_quota_query = e ? (e.allow_user_quota_query ?? false) : true
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
@@ -77,6 +138,10 @@ watch(
         form.ipText.trim().length > 0 ||
         form.allow_user_quota_query === false)
     )
+    baseBaseline = baseSnapshotKey()
+    if (props.focus === 'routing' && canReadRouting.value) {
+      void nextTick(() => routingRef.value?.scrollIntoView())
+    }
   },
   { immediate: true }
 )
@@ -101,40 +166,166 @@ const advancedConfiguredCount = computed(() => {
   return count
 })
 
-async function save() {
-  if (saving.value) return
+function buildBasePayload(): Record<string, unknown> {
+  let remainQuota = 0
+  if (!form.unlimited) {
+    // Some runtime scales have no exact six-decimal dollar representation.
+    // Editing another field must preserve the original integer budget.
+    remainQuota =
+      loadedQuota?.amount === form.quotaDollars
+        ? loadedQuota.quota
+        : Number(decimalToQuota(form.quotaDollars || '0'))
+  }
+  if (!Number.isSafeInteger(remainQuota) || remainQuota < 0)
+    throw new Error(t('common.invalidInput'))
+  return {
+    name: form.name,
+    allow_user_quota_query: form.allow_user_quota_query,
+    model_limits_enabled: form.model_limits.length > 0,
+    model_limits: form.model_limits.join(','),
+    unlimited_quota: form.unlimited,
+    remain_quota: remainQuota,
+    allow_ips: form.ipText.trim(),
+    expired_time: expiredTime(),
+  }
+}
+
+async function saveRoutingOnly(
+  tokenId: number,
+  stage: 'created' | 'updated' | 'standalone'
+): Promise<boolean> {
+  const routingState = routingRef.value?.getState()
+  if (!routingState || !canWriteRouting.value) return true
+  if (routingState.validationError) {
+    routingSaveError.value = routingState.validationError
+    return false
+  }
+  try {
+    const saved = await tokenRoutingApi.save(tokenId, routingState.payload)
+    routingRef.value?.markSaved(saved)
+    clearRoutingErrors()
+    return true
+  } catch (error) {
+    const message = error instanceof ApiError ? error.message : String(error)
+    const isConflict = error instanceof ApiError && error.status === 409
+    routingConflict.value = isConflict
+    if (isConflict) {
+      routingSaveError.value = t('keys.routingPanel.conflict')
+      routingPartialNotice.value = ''
+    } else if (stage === 'created') {
+      routingPartialNotice.value = t('keys.routingPanel.partialCreated', {
+        error: message,
+      })
+      routingSaveError.value = ''
+    } else if (stage === 'updated') {
+      routingPartialNotice.value = t('keys.routingPanel.partialUpdated', {
+        error: message,
+      })
+      routingSaveError.value = ''
+    } else {
+      routingSaveError.value = message
+      routingPartialNotice.value = ''
+    }
+    return false
+  }
+}
+
+async function retryRouting(): Promise<void> {
+  if (saving.value || effectiveTokenId.value === null) return
   saving.value = true
   try {
-    let remainQuota = 0
-    if (!form.unlimited) {
-      // Some runtime scales have no exact six-decimal dollar representation.
-      // Editing another field must preserve the original integer budget.
-      remainQuota =
-        loadedQuota?.amount === form.quotaDollars
-          ? loadedQuota.quota
-          : Number(decimalToQuota(form.quotaDollars || '0'))
-    }
-    if (!Number.isSafeInteger(remainQuota) || remainQuota < 0)
-      throw new Error(t('common.invalidInput'))
-    const payload: Record<string, unknown> = {
-      name: form.name,
-      allow_user_quota_query: form.allow_user_quota_query,
-      model_limits_enabled: form.model_limits.length > 0,
-      model_limits: form.model_limits.join(','),
-      unlimited_quota: form.unlimited,
-      remain_quota: remainQuota,
-      allow_ips: form.ipText.trim(),
-      expired_time: expiredTime(),
-    }
-    if (props.editing) {
-      payload.id = props.editing.id
-      await api.put('/api/token/', payload)
-      toast.success(t('keys.updated'))
-    } else {
-      await api.post('/api/token/', payload)
+    const ok = await saveRoutingOnly(
+      effectiveTokenId.value,
+      createdTokenId.value !== null ? 'created' : 'standalone'
+    )
+    if (!ok) return
+    toast.success(props.editing ? t('keys.updated') : t('keys.created'))
+    emit('saved')
+    emit('close')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function save() {
+  if (saving.value) return
+  const routingState = canWriteRouting.value
+    ? routingRef.value?.getState()
+    : undefined
+  if (routingState?.loading) return
+  if (routingState?.validationError) {
+    routingSaveError.value = routingState.validationError
+    return
+  }
+
+  saving.value = true
+  clearRoutingErrors()
+  try {
+    const baseDirty = baseSnapshotKey() !== baseBaseline
+    const routingDirty = Boolean(routingState?.dirty)
+
+    // Create flow (or retry after partial create)
+    if (props.editing === null) {
+      let tokenId = createdTokenId.value
+      const justCreated = tokenId === null
+      if (justCreated) {
+        const payload = buildBasePayload()
+        const response = await api.post<unknown>('/api/token/', payload)
+        tokenId = parseCreatedTokenId(response)
+        baseBaseline = baseSnapshotKey()
+      } else if (baseDirty) {
+        const payload = buildBasePayload()
+        payload.id = tokenId
+        await api.put('/api/token/', payload)
+        baseBaseline = baseSnapshotKey()
+      }
+
+      const needsRoutingSave =
+        Boolean(routingState) &&
+        canWriteRouting.value &&
+        (!routingState!.isDefault || routingDirty)
+      if (needsRoutingSave) {
+        if (tokenId === null) {
+          throw new Error(t('common.failed'))
+        }
+        createdTokenId.value = tokenId
+        const ok = await saveRoutingOnly(tokenId, 'created')
+        if (!ok) {
+          emit('saved')
+          return
+        }
+      }
+
       toast.success(t('keys.created'))
+      emit('saved')
+      emit('close')
+      return
     }
-    emit('saved', !props.editing)
+
+    // Edit flow: save base fields first so backend model_limits match routing PUT.
+    const tokenId = props.editing.id
+    let baseSaved = false
+    if (baseDirty || !routingDirty) {
+      const payload = buildBasePayload()
+      payload.id = tokenId
+      await api.put('/api/token/', payload)
+      baseBaseline = baseSnapshotKey()
+      baseSaved = true
+    }
+
+    if (routingDirty && canWriteRouting.value) {
+      const ok = await saveRoutingOnly(
+        tokenId,
+        baseSaved ? 'updated' : 'standalone'
+      )
+      if (!ok) {
+        if (baseSaved) emit('saved')
+        return
+      }
+    }
+
+    toast.success(t('keys.updated'))
+    emit('saved')
     emit('close')
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
@@ -147,7 +338,11 @@ async function save() {
 <template>
   <ConsoleModal
     :open="open"
-    :title="editing ? t('keys.editTitle') : t('keys.createTitle')"
+    :title="
+      editing || createdTokenId !== null
+        ? t('keys.editTitle')
+        : t('keys.createTitle')
+    "
     size="lg"
     @close="emit('close')"
   >
@@ -239,6 +434,22 @@ async function save() {
           </div>
         </div>
       </div>
+
+      <KeyRoutingSection
+        ref="routingRef"
+        :open="open"
+        :editing-id="editing?.id ?? null"
+        :model-limits="form.model_limits"
+        :can-read="canReadRouting"
+        :can-write="canWriteRouting"
+        :auto-expand="focus === 'routing'"
+        :disabled="saving"
+        :save-error="routingSaveError"
+        :conflict="routingConflict"
+        :partial-notice="routingPartialNotice"
+        @clear-error="clearRoutingErrors"
+        @retry-routing="retryRouting"
+      />
 
       <section
         class="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
@@ -376,7 +587,7 @@ async function save() {
         <ConsoleButton
           size="lg"
           :loading="saving"
-          :disabled="!form.name.trim()"
+          :disabled="!form.name.trim() || routingConflict"
           @click="save"
         >
           {{ t('common.confirm') }}

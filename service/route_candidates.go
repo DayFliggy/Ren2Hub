@@ -63,7 +63,7 @@ func routePolicyReason(channel *model.Channel, route model.TokenRouting, applyLi
 			return "channel_ratio_exceeded"
 		}
 	}
-	if applyList && route.SelectedOnly {
+	if applyList && route.Scope() != model.TokenRouteScopePlatform {
 		for _, entry := range route.Entries {
 			if entry.ChannelID == channel.Id {
 				if entry.Enabled {
@@ -90,7 +90,7 @@ func routeCandidates(ctx context.Context, scope routeScope, modelName string, fi
 	if err != nil {
 		return nil, err
 	}
-	if route.Mode == model.TokenRouteOrdered {
+	if route.EffectiveMode() == model.TokenRouteOrdered {
 		positions := make(map[int]int, len(route.Entries))
 		for i, e := range route.Entries {
 			positions[e.ChannelID] = i
@@ -106,10 +106,10 @@ func CatalogRouteChannels(ctx context.Context, userID, tokenID int) ([]RouteChan
 
 func catalogRouteChannels(ctx context.Context, userID, tokenID int, applyList bool) ([]RouteChannel, error) {
 	route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto}}
-	var token *model.Token
+	limitsEnabled := false
+	var limits map[string]bool
 	if tokenID > 0 {
-		var err error
-		token, err = model.GetTokenByIds(tokenID, userID)
+		token, err := model.GetTokenByIds(tokenID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +117,15 @@ func catalogRouteChannels(ctx context.Context, userID, tokenID int, applyList bo
 		if err != nil {
 			return nil, err
 		}
+		limitsEnabled = token.ModelLimitsEnabled
+		if limitsEnabled {
+			limits = token.GetModelLimitsMap()
+		}
 	}
+	return catalogRouteChannelsWithScope(ctx, limitsEnabled, limits, route, applyList)
+}
+
+func catalogRouteChannelsWithScope(ctx context.Context, limitsEnabled bool, limits map[string]bool, route model.TokenRouting, applyList bool) ([]RouteChannel, error) {
 	rows, err := model.RouteChannelRows(ctx, "", nil)
 	if err != nil {
 		return nil, err
@@ -134,12 +142,17 @@ func catalogRouteChannels(ctx context.Context, userID, tokenID int, applyList bo
 	for _, row := range rows {
 		item := RouteChannel{ID: row.Id, Name: row.Name, Type: row.Type, Status: row.Status, Models: []string{}, SupportedEndpoints: map[string][]constant.EndpointType{}, ChannelRatio: row.ChannelRatio, MaxConcurrency: row.MaxConcurrency}
 		names := advertised[row.Id]
-		if token != nil && token.ModelLimitsEnabled {
+		if limitsEnabled {
 			abilities := make(map[string]bool, len(names))
 			for _, ability := range names {
 				abilities[ability] = true
 			}
-			requests := token.GetModelLimitsMap()
+			requests := make(map[string]bool, len(limits))
+			for name, allowed := range limits {
+				if allowed {
+					requests[name] = true
+				}
+			}
 			for _, ability := range names {
 				if TokenModelLimitAllows(requests, ability) {
 					requests[ability] = true
@@ -253,7 +266,7 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 		return nil, err
 	}
 	pin, pinned, _ := GetChannelConstraints(c).ResolvedPin()
-	ordered := scope.route.Mode == model.TokenRouteOrdered
+	ordered := scope.route.EffectiveMode() == model.TokenRouteOrdered
 	var scan routeScan
 	started := time.Now()
 	rows, err := routeCandidates(c.Request.Context(), scope, modelName, GetChannelConstraints(c).Filters)
@@ -544,40 +557,6 @@ func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel
 	c.Set("route_selected_channel", channel)
 	c.Set("channel_ratio", channel.ChannelRatio)
 	return channel, nil
-}
-
-// previewRouteReason 只给路由预览用：预览列出全部渠道，所以要逐个说明不可选的原因，
-// 包括渠道是否服务该模型。选路走 routeCandidates，不经过这里。
-// previewRouteReason 判单个渠道；exact 表示它以精确模型名可选。精确一档的取舍由
-// PreviewTokenRouting 在所有渠道判完后统一处理，与 routeCandidates 一致。
-// 先判渠道是否声明了该模型（declared 含禁用的能力行），不服务该模型的渠道不报可用性和倍率；
-// 声明了的再按渠道可用性、Key 策略、能力行启用状态和过滤器说明原因。
-func previewRouteReason(row *model.Channel, scope routeScope, modelName string, declared map[string]bool, filters []dto.ChannelFilter) (reason string, exact bool) {
-	if row == nil {
-		return routeReasonChannelUnavailable, false
-	}
-	if !scope.allowsModel(modelName) {
-		return "model_not_allowed", false
-	}
-	exactEnabled, exactDeclared := declared[modelName]
-	routingEnabled, routingDeclared := declared[ratio_setting.RoutingMatchModelName(modelName)]
-	if !exactDeclared && !routingDeclared {
-		return "model_unavailable", false
-	}
-	if reason := routeChannelReason(row, scope.route, true); reason != "" {
-		return reason, false
-	}
-	// 渠道可用但匹配的能力行都已禁用：与选路和目录一致，按不服务该模型处理。
-	if !exactEnabled && !routingEnabled {
-		return "model_unavailable", false
-	}
-	if ok, kind := model.ChannelSatisfiesFilters(row, modelName, filters); !ok {
-		if kind == dto.FilterRequestPath || kind == dto.FilterResponsesWebSocket {
-			return "protocol_unavailable", false
-		}
-		return string(kind), false
-	}
-	return "", exactEnabled
 }
 
 func routeOperation(c *gin.Context) int {

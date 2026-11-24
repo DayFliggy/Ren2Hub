@@ -11,21 +11,16 @@ import { useI18n } from 'vue-i18n'
 
 import type { CatalogChannel } from '@/api/modelCatalog'
 import { labDisplayName } from '@/constants/adminChannels'
-import { tokenRoutingMessages } from '@/i18n/tokenRouting'
 
 const props = withDefaults(
   defineProps<{ entry: CatalogChannel; compact?: boolean }>(),
   { compact: false }
 )
-const { t } = useI18n()
-const { t: routingText, te: hasRoutingText } = useI18n({
-  useScope: 'local',
-  messages: tokenRoutingMessages,
-})
+const { t, te } = useI18n()
 const exclusionReason = computed(() => {
-  const key = `routing.reasons.${props.entry.filter_reason}`
-  return hasRoutingText(key)
-    ? routingText(key)
+  const key = `keys.routingPanel.reasons.${props.entry.filter_reason}`
+  return props.entry.filter_reason && te(key)
+    ? t(key)
     : t('dashboard.autoRoute.excluded')
 })
 // The user catalog carries the configured limit only; live occupancy is admin data.
