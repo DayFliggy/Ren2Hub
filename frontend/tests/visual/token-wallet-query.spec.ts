@@ -52,8 +52,8 @@ for (const [theme, width] of [
       .filter({ visible: true })
       .first()
       .click()
-    // Routing is configured on its own page, so the form has no type choice.
-    await expect(page.getByRole('dialog').getByRole('radio')).toHaveCount(0)
+    // Routing scope selection is integrated into the key modal.
+    await expect(page.getByRole('dialog').getByRole('radio')).toHaveCount(2)
     await page.getByRole('button', { name: /Advanced settings/i }).click()
     await expect(toggle).toHaveAttribute('aria-checked', 'true')
     await toggle.click()

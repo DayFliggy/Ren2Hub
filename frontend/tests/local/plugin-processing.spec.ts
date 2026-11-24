@@ -210,10 +210,11 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       models: 'fixture-model',
       model_mapping: '',
       other: '',
-      settings: '{}',
+      settings: JSON.stringify({
+        plugin_config: { region: 'old' },
+      }),
       setting: JSON.stringify({
         task_plugin_key: 'local-provider',
-        plugin_config: { region: 'old' },
       }),
     }
     const options = [
@@ -381,6 +382,8 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       if (route.request().method() === 'PUT') {
         saved = route.request().postDataJSON()
         if (typeof saved?.setting === 'string') channel.setting = saved.setting
+        if (typeof saved?.settings === 'string')
+          channel.settings = saved.settings
         return route.fulfill({ json: { success: true, data: null } })
       }
       return route.fulfill({
@@ -493,8 +496,8 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       await dialog
         .getByRole('button', { name: '保存渠道', exact: true })
         .click()
-      await expect.poll(() => saved?.setting).toBeTruthy()
-      expect(JSON.parse(String(saved?.setting)).plugin_config).toEqual({
+      await expect.poll(() => saved?.settings).toBeTruthy()
+      expect(JSON.parse(String(saved?.settings)).plugin_config).toEqual({
         region: 'local-region',
       })
       expect(JSON.parse(String(saved?.setting)).request_plugins).toEqual([

@@ -96,10 +96,16 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
   context.on('page', (page) => {
     page.on('pageerror', (error) => violations.push('pageerror: ' + error.name))
     page.on('response', (response) => {
+      const pathname = new URL(response.url()).pathname
+      // Loopback-only namespace has no outbound internet, so Root's background
+      // GitHub release check legitimately returns 502.
+      if (
+        response.status() === 502 &&
+        pathname === '/api/admin/system/check-updates'
+      )
+        return
       if (response.status() >= 500 || response.status() === 429)
-        violations.push(
-          `HTTP ${response.status()}: ${new URL(response.url()).pathname}`
-        )
+        violations.push(`HTTP ${response.status()}: ${pathname}`)
     })
   })
   const page = await context.newPage()

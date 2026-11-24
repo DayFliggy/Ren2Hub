@@ -199,10 +199,36 @@ test.describe('coarse pointer control targets', () => {
           page.getByRole('button', { name: '编辑令牌', exact: true }),
           'edit icons'
         )
-        await checkTargets(
-          page.getByRole('link', { name: '路由配置', exact: true }),
-          'routing icons'
+        const routeTriggers = page
+          .locator('[data-key-route-trigger]')
+          .locator('visible=true')
+        expect(await routeTriggers.count(), 'routing triggers').toBeGreaterThan(
+          0
         )
+        for (const trigger of await routeTriggers.all()) {
+          await trigger.scrollIntoViewIfNeeded()
+          const hotspot = await trigger.evaluate((el) => {
+            const rect = el.getBoundingClientRect()
+            const style = getComputedStyle(el, '::after')
+            const width = parseFloat(style.width)
+            const height = parseFloat(style.height)
+            const x = rect.x + rect.width / 2
+            const y = rect.y + rect.height / 2
+            const hit = document.elementFromPoint(x, y)
+            return {
+              width,
+              height,
+              hitsTrigger: hit === el || el.contains(hit),
+            }
+          })
+          measurements.push({
+            context: `${theme} ${width}px routing trigger hotspot`,
+            ...hotspot,
+          })
+          expect.soft(hotspot.width).toBeGreaterThanOrEqual(44)
+          expect.soft(hotspot.height).toBeGreaterThanOrEqual(44)
+          expect(hotspot.hitsTrigger).toBe(true)
+        }
         const pageSize = page
           .getByRole('combobox', { name: /^每页条数 / })
           .locator('visible=true')
