@@ -5,19 +5,11 @@ import { useI18n } from 'vue-i18n'
 import type { TokenSummary } from '@/types/console'
 import { tokenMeterNote, type TokenMeter } from '@/utils/tokenMeter'
 
-/**
- * A key's state line; only the part that needs attention is coloured.
- * `warningsOnly` keeps just those parts, for places that already show the
- * status and the expiry date elsewhere.
- */
-const props = withDefaults(
-  defineProps<{
-    token: TokenSummary
-    meter: TokenMeter
-    warningsOnly?: boolean
-  }>(),
-  { warningsOnly: false }
-)
+/** A key's state line; only the part that needs attention is coloured. */
+const props = defineProps<{
+  token: TokenSummary
+  meter: TokenMeter
+}>()
 
 const { t } = useI18n()
 
@@ -27,12 +19,10 @@ const TONE_COLOR = {
 } as const
 
 const parts = computed(() =>
-  tokenMeterNote(props.token, props.meter)
-    .filter((part) => !props.warningsOnly || part.tone === 'warning')
-    .map((part) => ({
-      text: t(part.key, part.params ?? {}),
-      color: part.tone ? TONE_COLOR[part.tone] : undefined,
-    }))
+  tokenMeterNote(props.token, props.meter).map((part) => ({
+    text: t(part.key, part.params ?? {}),
+    color: part.tone ? TONE_COLOR[part.tone] : undefined,
+  }))
 )
 </script>
 

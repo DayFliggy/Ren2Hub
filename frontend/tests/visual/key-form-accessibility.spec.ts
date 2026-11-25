@@ -38,13 +38,13 @@ for (const theme of ['light', 'dark'] as const) {
         name: '无限额度',
         exact: true,
       })
-      const routingToggle = dialog.locator('[data-key-routing-toggle]')
       const advanced = dialog.getByRole('button', { name: /高级设置/ })
       const expiration = dialog.locator('[name="token-expiration"]')
       const quota = dialog.locator('[name="token-quota"]')
 
-      // Creation starts with routing collapsed; the name is the first field.
+      // Creation has no routing controls; the name is the first field.
       await expect(dialog.getByRole('radio')).toHaveCount(0)
+      await expect(dialog.locator('[data-key-routing-modal]')).toHaveCount(0)
       await dialog.locator('[name="token-name"]').focus()
       await page.keyboard.press('Tab')
       await expect(expiry).toBeFocused()
@@ -53,8 +53,6 @@ for (const theme of ['light', 'dark'] as const) {
       await expiry.focus()
       await page.keyboard.press('Tab')
       await expect(unlimited).toBeFocused()
-      await page.keyboard.press('Tab')
-      await expect(routingToggle).toBeFocused()
       await page.keyboard.press('Tab')
       await expect(advanced).toBeFocused()
       await capture(page, info, 'create-collapsed')
@@ -76,8 +74,6 @@ for (const theme of ['light', 'dark'] as const) {
       await expiry.focus()
       await page.keyboard.press('Tab')
       await expect(unlimited).toBeFocused()
-      await page.keyboard.press('Tab')
-      await expect(routingToggle).toBeFocused()
       await page.keyboard.press('Tab')
       await expect(advanced).toBeFocused()
       await expiry.click()
@@ -262,22 +258,28 @@ for (const theme of ['light', 'dark'] as const) {
           expect(nameBox!.x + nameBox!.width).toBeLessThanOrEqual(
             nameCellBox!.x + nameCellBox!.width
           )
+          await expect(
+            page.locator('td[headers$="-quota"] [data-key-quota-figures]')
+          ).toBeVisible()
+          await expect(
+            page.locator('td[headers$="-quota"] button')
+          ).toHaveCount(0)
           if (width < 1024 || hasTouch) {
-            const ringHit = await page
-              .locator('td[headers$="-quota"] [data-key-quota-ring]')
+            const routeHit = await page
+              .locator('td[headers$="-type"] [data-key-route-trigger]')
               .first()
               .evaluate((el) => {
                 const r = el.getBoundingClientRect()
-                const before = getComputedStyle(el, '::before')
+                const after = getComputedStyle(el, '::after')
                 const inset = (side: string) =>
-                  parseFloat(before.getPropertyValue(side)) || 0
+                  parseFloat(after.getPropertyValue(side)) || 0
                 return {
                   w: r.width - inset('left') - inset('right'),
                   h: r.height - inset('top') - inset('bottom'),
                 }
               })
-            expect(ringHit.w).toBeGreaterThanOrEqual(44)
-            expect(ringHit.h).toBeGreaterThanOrEqual(44)
+            expect(routeHit.w).toBeGreaterThanOrEqual(44)
+            expect(routeHit.h).toBeGreaterThanOrEqual(44)
           }
           const actions = page.locator('td[headers$="-actions"]')
           const controls = actions.locator('button, a')

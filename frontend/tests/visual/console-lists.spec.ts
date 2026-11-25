@@ -9,11 +9,13 @@ import {
 } from './fixtures'
 
 // The key table needs a 60rem card. The sidebar appears at 1024px, so a
-// 1024px viewport has a narrower card (cards) than a 1023px one (table).
+// 1024px viewport has a narrower card (cards) than a 1023px one (table), and
+// ~1248px is the narrowest table viewport with the sidebar expanded.
 const layouts = [
   { width: 768, height: 1024, table: false },
   { width: 1023, height: 768, table: true },
   { width: 1024, height: 768, table: false },
+  { width: 1248, height: 900, table: true },
   { width: 1440, height: 900, table: true },
 ] as const
 
@@ -30,6 +32,29 @@ for (const layout of layouts) {
     const cards = page.locator('[data-key-mobile-row]')
     await expect(layout.table ? table : cards).toBeVisible()
     await expect(layout.table ? cards : table).toBeHidden()
+    if (layout.table) {
+      const tableMetrics = await page.evaluate(() => {
+        const nameCell = document.querySelector<HTMLElement>(
+          'td[headers$="-name"]'
+        )!
+        const cs = getComputedStyle(nameCell)
+        const contentWidth =
+          nameCell.getBoundingClientRect().width -
+          parseFloat(cs.paddingLeft) -
+          parseFloat(cs.paddingRight)
+        const scroller = document.querySelector<HTMLElement>(
+          '[data-key-page] .data-table-shell .overflow-x-auto'
+        )
+        return {
+          contentWidth,
+          tableOverflow: scroller
+            ? scroller.scrollWidth - scroller.clientWidth
+            : 0,
+        }
+      })
+      expect(tableMetrics.contentWidth).toBeGreaterThanOrEqual(130)
+      expect(tableMetrics.tableOverflow).toBeLessThanOrEqual(0)
+    }
     await assertNoHorizontalOverflow(page)
     await assertInteractiveCentersVisible(page)
   })
@@ -76,20 +101,8 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
   })
 }
 
-function overlaps(
-  a: { x: number; y: number; width: number; height: number },
-  b: { x: number; y: number; width: number; height: number }
-) {
-  return (
-    a.x < b.x + b.width &&
-    b.x < a.x + a.width &&
-    a.y < b.y + b.height &&
-    b.y < a.y + a.height
-  )
-}
-
 for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
-  test(`${theme} desktop key detail clears the hovered row and its actions`, async ({
+  test(`${theme} desktop key row renders inline quota figures with zero hover popovers`, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -98,52 +111,19 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await waitForStablePage(page)
 
     const row = page.locator('[data-key-page] tbody tr').first()
-    const ring = row.locator('[data-key-quota-ring]')
-    const edit = row.getByRole('button', { name: '编辑令牌', exact: true })
-    const popover = page.locator('[data-key-quota-popover]')
+    const quota = row.locator('td[headers$="-quota"]')
+    await expect(quota.locator('[data-key-remaining]')).toHaveText('$1.000')
+    await expect(quota.locator('[data-key-used]')).toContainText('已用')
+    await expect(quota.locator('button')).toHaveCount(0)
+
     await row.locator('td[headers$="-name"]').hover()
-    await expect(popover).toBeVisible()
-    await expect(popover).toContainText('Native Key')
-    await expect(ring).toHaveAttribute('aria-expanded', 'true')
-
-    const [rowBox, ringBox, editBox, box] = await Promise.all([
-      row.boundingBox(),
-      ring.boundingBox(),
-      edit.boundingBox(),
-      popover.boundingBox(),
-    ])
-    // Right of the ring, off the hovered row, so its buttons stay in view.
-    expect(box!.x).toBeGreaterThanOrEqual(ringBox!.x + ringBox!.width)
-    expect(overlaps(box!, rowBox!)).toBe(false)
-    expect(overlaps(box!, editBox!)).toBe(false)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(1440 - 15)
-    expect(box!.y + box!.height).toBeLessThanOrEqual(900 - 15)
-
-    // Opened by hover it lets the pointer through to the rows it covers.
-    const hitsPopover = () =>
-      popover.evaluate((el) => {
-        const { x, y, width, height } = el.getBoundingClientRect()
-        return el.contains(
-          document.elementFromPoint(x + width / 2, y + height / 2)
-        )
-      })
-    expect(await hitsPopover()).toBe(false)
-
-    // Reaching the actions column closes it.
-    await edit.hover()
-    await expect(popover).toBeHidden()
-
-    // Pinned from the keyboard it takes the pointer, so a click on it cannot
-    // land on a button it hides.
-    await ring.focus()
-    await page.keyboard.press('Enter')
-    await expect(popover).toHaveAttribute('data-pinned', 'true')
-    expect(await hitsPopover()).toBe(true)
-    await page.keyboard.press('Escape')
-    await expect(popover).toBeHidden()
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-key-quota-popover]')).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    await assertInteractiveCentersVisible(page)
   })
 
-  test(`${theme} mobile key detail expands inside its card`, async ({
+  test(`${theme} mobile key quota bar is a static readout without an accordion`, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -152,23 +132,13 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await waitForStablePage(page)
 
     const card = page.locator('[data-key-mobile-row]').first()
-    const bar = card.locator('button[data-key-quota-ring]')
+    const bar = card.locator('.key-quota-bar')
     await expect(bar.locator('[data-key-remaining]')).toHaveText('$1.000')
-    const barBox = (await bar.boundingBox())!
-    expect(barBox.height).toBeGreaterThanOrEqual(44)
-
-    await bar.click()
-    await expect(bar).toHaveAttribute('aria-expanded', 'true')
-    const region = card.getByRole('region')
-    await expect(region).toBeVisible()
-    await expect(region).toContainText('查询账户额度')
+    await expect(bar.locator('[data-key-used]')).toContainText('已用')
+    await expect(card.locator('button[data-key-quota-ring]')).toHaveCount(0)
     await expect(page.locator('[data-key-quota-popover]')).toHaveCount(0)
-    // Nothing floats over the card, so every control stays reachable.
     await assertNoHorizontalOverflow(page)
     await assertInteractiveCentersVisible(page)
-
-    await bar.click()
-    await expect(region).toBeHidden()
   })
 }
 
@@ -226,7 +196,7 @@ test('light mobile cards preserve semantic quota borders and straight row divide
   expect(styles.barBorderColor).not.toBe('rgba(56, 55, 43, 0.27)')
 })
 
-test('dark route chip matches in table and popover, and en route chip stays single-line', async ({
+test('dark route chip matches in table and mobile cards, and en route chip stays single-line', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -274,30 +244,31 @@ test('dark route chip matches in table and popover, and en route chip stays sing
   await page.goto('/keys', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 
-  const row = page.locator('[data-key-page] tbody tr').first()
-  await row.locator('td[headers$="-name"]').hover()
-  const popover = page.locator('[data-key-quota-popover]')
-  await expect(popover).toBeVisible()
-
-  const metrics = await page.evaluate(() => {
+  const tableMetrics = await page.evaluate(() => {
     const tableChip = document.querySelector<HTMLElement>(
       'td[headers$="-type"] [data-handdrawn="chip"]'
     )!
-    const pop = document.querySelector<HTMLElement>('[data-key-quota-popover]')!
-    const popChip = pop.querySelector<HTMLElement>('.key-route-chip')!
     const tcs = getComputedStyle(tableChip)
-    const pcs = getComputedStyle(popChip)
     return {
       tableHeight: Math.round(tableChip.getBoundingClientRect().height),
       tableBg: tcs.backgroundColor,
       tableColor: tcs.color,
-      popBg: pcs.backgroundColor,
-      popColor: pcs.color,
-      popOverflow: pop.scrollWidth - pop.clientWidth,
     }
   })
-  expect(metrics.tableHeight).toBeLessThanOrEqual(26)
-  expect(metrics.popBg).toBe(metrics.tableBg)
-  expect(metrics.popColor).toBe(metrics.tableColor)
-  expect(metrics.popOverflow).toBeLessThanOrEqual(0)
+  expect(tableMetrics.tableHeight).toBeLessThanOrEqual(26)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await waitForStablePage(page)
+  const cardMetrics = await page.evaluate(() => {
+    const cardChip = document.querySelector<HTMLElement>(
+      '[data-key-mobile-row] .key-route-chip'
+    )!
+    const ccs = getComputedStyle(cardChip)
+    return {
+      cardBg: ccs.backgroundColor,
+      cardColor: ccs.color,
+    }
+  })
+  expect(cardMetrics.cardBg).toBe(tableMetrics.tableBg)
+  expect(cardMetrics.cardColor).toBe(tableMetrics.tableColor)
 })

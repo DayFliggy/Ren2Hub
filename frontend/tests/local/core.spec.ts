@@ -219,16 +219,16 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         fullPage: true,
       })
     })
-    await test.step('每 Key 路由通过编辑弹窗保存并在刷新后保持', async () => {
+    await test.step('每 Key 路由通过独立路由弹窗保存并在刷新后保持', async () => {
       await page.locator('[data-key-route-trigger]:visible').first().click()
-      const dialog = page.getByRole('dialog', { name: '编辑令牌', exact: true })
+      const dialog = page.getByRole('dialog', { name: /^路由 · / })
       await expect(dialog).toBeVisible()
       // The empty install has no channels, so this flow checks the default
       // automatic all-platform state, the client-side block on an empty
-      // ordered list, and saving a ratio cap via the modal.
+      // ordered list, and saving a ratio cap via the standalone modal.
       const orderedMode = dialog.getByRole('radio', { name: /顺序路由/ })
       const automatic = dialog.getByRole('radio', { name: /自动路由/ })
-      const confirm = dialog.getByRole('button', { name: '确认', exact: true })
+      const save = dialog.getByRole('button', { name: '保存', exact: true })
       await expect(automatic).toHaveAttribute('aria-checked', 'true')
       const writes: string[] = []
       const recordWrite = (request: import('@playwright/test').Request) => {
@@ -244,13 +244,12 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         await expect(
           dialog.locator('[data-routing-ordered-empty]')
         ).toBeVisible()
-        await confirm.click()
+        await expect(save).toBeDisabled()
         expect(writes).toEqual([])
       } finally {
         page.off('request', recordWrite)
       }
       await automatic.click()
-      await dialog.getByRole('button', { name: /渠道倍率上限/ }).click()
       await dialog.locator('input[name="token-max-channel-ratio"]').fill('2')
       const saved = page.waitForResponse(
         (response) =>
@@ -258,7 +257,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
             `/api/token/${tokenId}/routing` &&
           response.request().method() === 'PUT'
       )
-      await confirm.click()
+      await save.click()
       const response = await saved
       expect(response.status()).toBe(200)
       const body = await response.json()
@@ -273,21 +272,17 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       await expect(dialog).toHaveCount(0)
       await page.reload()
       await page.locator('[data-key-route-trigger]:visible').first().click()
+      const reopened = page.getByRole('dialog', { name: /^路由 · / })
+      await expect(reopened).toBeVisible()
       await expect(
-        page.getByRole('dialog', { name: '编辑令牌', exact: true })
-      ).toBeVisible()
-      await expect(
-        page.locator('input[name="token-max-channel-ratio"]')
+        reopened.locator('input[name="token-max-channel-ratio"]')
       ).toHaveValue('2')
       await layout(page, 'Key 路由弹窗')
       await page.screenshot({
         path: info.outputPath('token-routing.png'),
         fullPage: true,
       })
-      await page
-        .getByRole('dialog', { name: '编辑令牌', exact: true })
-        .getByRole('button', { name: '取消', exact: true })
-        .click()
+      await reopened.getByRole('button', { name: '取消', exact: true }).click()
     })
     await test.step('钱包使用原生信息，空安装不创建支付订单', async () => {
       const infoResponse = page.waitForResponse(

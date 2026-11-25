@@ -116,9 +116,9 @@ const ariaLabel = computed(() =>
 </template>
 
 <style scoped>
-/* B1 Studio: route-type labels are auxiliary and stay neutral across the table,
-   mobile cards, and teleported popover; deleted-channel warnings keep status
-   colour. !important overrides the chip's inline tone style. */
+/* B1 Studio: route-type labels are auxiliary and stay neutral across the table
+   and mobile cards; deleted-channel warnings keep status colour. !important
+   overrides the chip's inline tone style. */
 :global(html.dark .key-route-chip:not([data-route-warning])) {
   background: var(--surface-muted) !important;
   color: var(--text-secondary) !important;
@@ -131,7 +131,7 @@ const ariaLabel = computed(() =>
   .key-route-chip-trigger::after {
     content: '';
     position: absolute;
-    inset: -10px -6px;
+    inset: -12px -6px;
     min-height: 44px;
     min-width: 44px;
   }

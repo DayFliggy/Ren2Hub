@@ -18,6 +18,7 @@ import type { TokenSummary } from '@/types/console'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
+import KeyRoutingModal from '@/components/console/keys/KeyRoutingModal.vue'
 import KeysView from '@/views/console/KeysView.vue'
 
 // Platform auto, ordered list, automatic list, all-paused fallback, and orphaned empty selection.
@@ -214,7 +215,7 @@ describe('KeysView token routing entry', () => {
     }
   )
 
-  it('labels each key by effective routing mode and channel scope and opens the modal focused on routing', async () => {
+  it('labels each key by effective routing mode and channel scope and opens the standalone routing modal', async () => {
     await mountWithAccess('live', true)
     const labels = wrapper!
       .findAll('td[headers$="-type"]')
@@ -234,15 +235,16 @@ describe('KeysView token routing entry', () => {
     ).toBe(i18n.global.t('keys.route.unavailableHint'))
 
     await unavailable.get('[data-key-route-trigger]').trigger('click')
-    const form = wrapper!.findComponent(KeyFormModal)
-    expect(form.props('open')).toBe(true)
-    expect(form.props('editing')?.id).toBe(5)
-    expect(form.props('focus')).toBe('routing')
+    const routingModal = wrapper!.findComponent(KeyRoutingModal)
+    const formModal = wrapper!.findComponent(KeyFormModal)
+    expect(routingModal.props('open')).toBe(true)
+    expect(routingModal.props('token')?.id).toBe(5)
+    expect(formModal.props('open')).toBe(false)
     expect(wrapper!.find('[data-key-created-notice]').exists()).toBe(false)
   })
 })
 
-describe('KeysView key detail popover', () => {
+describe('KeysView inline quota readout and restrictions', () => {
   async function mountList(items: object[] = backendTokens) {
     vi.spyOn(api, 'get').mockImplementation((path: string) => {
       if (path === '/api/user/models') return Promise.resolve({ models: [] })
@@ -266,205 +268,45 @@ describe('KeysView key detail popover', () => {
     return wrapper
   }
 
-  const popovers = () =>
-    document.body.querySelectorAll<HTMLElement>('[data-key-quota-popover]')
-  const tableRow = (index: number) =>
-    wrapper!.findAll('tbody tr')[index]!.element as HTMLElement
-  const tableRing = (index: number) =>
-    tableRow(index).querySelector<HTMLElement>('[data-key-quota-ring]')!
-
-  async function settle() {
-    await nextTick()
-    await nextTick()
-  }
-
-  function point(target: Element, type: string, pointerType = 'mouse') {
-    target.dispatchEvent(
-      new PointerEvent(type, { bubbles: type !== 'pointerleave', pointerType })
-    )
-  }
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('opens one popover after a short hover and switches rows at once', async () => {
-    await mountList()
-    vi.useFakeTimers()
-    const typeCell = (index: number) =>
-      tableRow(index).querySelector('td[headers$="-type"]')!
-
-    point(typeCell(0), 'pointerover')
-    vi.advanceTimersByTime(149)
-    await settle()
-    expect(popovers()).toHaveLength(0)
-    vi.advanceTimersByTime(1)
-    await settle()
-    expect(popovers()).toHaveLength(1)
-    expect(popovers()[0]!.textContent).toContain('Token 1')
-    expect(tableRing(0).getAttribute('aria-expanded')).toBe('true')
-    expect(tableRing(0).getAttribute('aria-controls')).toBe(popovers()[0]!.id)
-
-    point(typeCell(1), 'pointerover')
-    await settle()
-    expect(popovers()).toHaveLength(1)
-    expect(popovers()[0]!.textContent).toContain('Token 2')
-    expect(tableRing(0).getAttribute('aria-expanded')).toBe('false')
-
-    point(wrapper!.get('.key-list-table').element, 'pointerleave')
-    vi.advanceTimersByTime(119)
-    await settle()
-    expect(popovers()).toHaveLength(1)
-    vi.advanceTimersByTime(1)
-    await settle()
-    expect(popovers()).toHaveLength(0)
-  })
-
-  it('gets out of the way of the actions next to the ring', async () => {
-    await mountList()
-    vi.useFakeTimers()
-    point(tableRow(0).querySelector('td[headers$="-name"]')!, 'pointerover')
-    vi.advanceTimersByTime(150)
-    await settle()
-    expect(popovers()).toHaveLength(1)
-
-    point(
-      tableRow(0).querySelector('td[headers$="-actions"] button')!,
-      'pointerover'
-    )
-    await settle()
-    expect(popovers()).toHaveLength(0)
-  })
-
-  it('leaves cards to expand inline instead of hovering a popover', async () => {
-    await mountList()
-    vi.useFakeTimers()
-    point(wrapper!.findAll('[data-key-mobile-row]')[0]!.element, 'pointerover')
-    vi.advanceTimersByTime(500)
-    await settle()
-    expect(popovers()).toHaveLength(0)
-  })
-
-  it('ignores touch hover and toggles from the ring instead', async () => {
-    await mountList()
-    vi.useFakeTimers()
-
-    point(tableRow(2), 'pointerover', 'touch')
-    vi.advanceTimersByTime(500)
-    await settle()
-    expect(popovers()).toHaveLength(0)
-
-    tableRing(2).click()
-    await settle()
-    expect(popovers()).toHaveLength(1)
-    expect(popovers()[0]!.textContent).toContain('Token 3')
-    tableRing(2).click()
-    await settle()
-    expect(popovers()).toHaveLength(0)
-  })
-
-  it('absorbs the tap that dismisses a pinned popover', async () => {
-    await mountList()
-    tableRing(2).click()
-    await settle()
-    const panel = popovers()[0]!
-    // A tapped-open popover covers buttons; it must take the tap itself.
-    expect(panel.dataset.pinned).toBe('true')
-    expect(panel.classList.contains('pointer-events-auto')).toBe(true)
-
-    panel.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
-    await settle()
-    expect(popovers()).toHaveLength(1)
-    panel.click()
-    await settle()
-    expect(popovers()).toHaveLength(0)
-  })
-
-  it('closes on Escape and leaves focus on the ring', async () => {
-    await mountList()
-    const ring = tableRing(0)
-    ring.focus()
-    ring.click()
-    await settle()
-    expect(popovers()).toHaveLength(1)
-
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await settle()
-    expect(popovers()).toHaveLength(0)
-    expect(document.activeElement).toBe(ring)
-  })
-
-  it('closes a pinned popover once focus leaves its ring', async () => {
-    await mountList()
-    const ring = tableRing(0)
-    ring.focus()
-    ring.click()
-    await settle()
-    expect(popovers()[0]!.dataset.pinned).toBe('true')
-
-    ring.blur()
-    await settle()
-    expect(popovers()).toHaveLength(0)
-  })
-
-  it('adds only the warning to the popover header, not the status again', async () => {
-    await mountList([
-      { ...backendTokens[0]!, remain_quota: 50, used_quota: 950 },
-      { ...backendTokens[1]!, status: 2 },
-    ])
-    const header = () => popovers()[0]!.querySelector('header')!
-    tableRing(0).click()
-    await settle()
-    expect(header().querySelector('[data-key-quota-note]')!.textContent).toBe(
-      '仅剩 5%'
-    )
-
-    tableRing(1).click()
-    await settle()
-    expect(header().querySelector('[data-key-quota-note]')).toBeNull()
-    expect(header().textContent).toContain('禁用')
-  })
-
-  it('shows the full key detail with long limits shortened', async () => {
+  it('shows remaining/used figures and compact restriction markers inline with zero hover popovers', async () => {
     await mountList([
       {
         ...backendTokens[0]!,
         name: 'Detailed key',
-        allow_user_quota_query: true,
+        remain_quota: 1_500_000,
+        used_quota: 500_000,
+        allow_user_quota_query: false,
         model_limits_enabled: true,
-        model_limits: 'gpt-a,gpt-b,gpt-c,gpt-d',
-        allow_ips: '10.0.0.1\n10.0.0.2\n10.0.0.3',
+        model_limits: 'gpt-a,gpt-b,gpt-c',
+        allow_ips: '10.0.0.1\n10.0.0.2',
       },
-      { ...backendTokens[1]!, unlimited_quota: true },
+      { ...backendTokens[1]!, unlimited_quota: true, used_quota: 250_000 },
     ])
-    const detailRows = () =>
-      Object.fromEntries(
-        [...popovers()[0]!.querySelectorAll('dt')].map((dt) => [
-          dt.textContent!.trim(),
-          dt.nextElementSibling!.textContent!.trim(),
-        ])
-      )
+    const rows = wrapper!.findAll('tbody tr')
 
-    tableRing(0).click()
-    await settle()
-    expect(popovers()[0]!.querySelector('header')!.textContent).toContain(
-      'Detailed key'
+    // Hovering a table row never spawns a floating popover.
+    rows[0]!.element.dispatchEvent(
+      new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' })
     )
-    expect(detailRows()).toMatchObject({
-      已用占比: '10%',
-      查询账户额度: '允许',
-      过期时间: '永不过期',
-      模型限制: 'gpt-a, gpt-b, gpt-c +1',
-      'IP 限制': '10.0.0.1, 10.0.0.2 +1',
-    })
+    await nextTick()
+    expect(document.body.querySelector('[data-key-quota-popover]')).toBeNull()
 
-    tableRing(1).click()
-    await settle()
-    expect(detailRows()).toMatchObject({
-      可用额度: '无限额度',
-      模型限制: '不限制',
-    })
-    expect(detailRows()).not.toHaveProperty('已用占比')
+    // Inline quota readout renders directly in the table cell.
+    const quota0 = rows[0]!.get('td[headers$="-quota"]')
+    expect(quota0.get('[data-key-remaining]').text()).toBe('$3.000')
+    expect(quota0.get('[data-key-used]').text()).toBe('已用 $1.000')
+    expect(quota0.find('button').exists()).toBe(false)
+
+    const quota1 = rows[1]!.get('td[headers$="-quota"]')
+    expect(quota1.get('[data-key-remaining]').text()).toBe('无限额度')
+    expect(quota1.get('[data-key-used]').text()).toBe('已用 $0.500')
+
+    // Restriction summary sits cleanly in the name subline with full title tooltip.
+    const name0 = rows[0]!.get('td[headers$="-name"]')
+    expect(name0.get('[data-key-restrictions]').text()).toContain('限 3 个模型')
+    expect(name0.get('[data-key-restrictions]').text()).toContain('限 IP')
+    expect(name0.get('[data-key-restrictions]').text()).toContain('禁查额度')
+    expect(name0.find('p').attributes('title')).toContain('gpt-a, gpt-b, gpt-c')
   })
 
   it('dims blocked desktop rows, aligns reveal label, and uses solid ring for blocked unlimited keys', async () => {

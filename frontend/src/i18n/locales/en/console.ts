@@ -710,17 +710,7 @@ export default {
     },
     routingPanel: {
       title: 'Routing',
-      configure: 'Choose channels',
-      collapse: 'Collapse',
-      summaryPlatform: 'Automatic · all platform channels',
-      summaryPlatformCount:
-        'Automatic · all platform channels ({count} available)',
-      summarySelectedAuto:
-        'Automatic · narrowed to {count} channel | Automatic · narrowed to {count} channels',
-      summarySelectedOrdered:
-        'Ordered · tries {count} channel in order | Ordered · tries {count} channels in order',
-      summaryAllPaused: 'Automatic · all paused (using all platform)',
-      summaryOrphaned: 'Selected channels unavailable (calls return 503)',
+      modalTitle: 'Routing · {name}',
       modeLabel: 'Routing mode',
       modes: {
         auto: 'Automatic routing',
@@ -745,12 +735,15 @@ export default {
         'Select at least one channel or restore all platform channels before saving.',
       usePlatform: 'Use all platform channels',
       selectedTitle: 'Selected channels',
+      emptyAuto:
+        'Currently routing automatically across all platform channels. Select channels below to narrow the scope.',
+      emptyOrdered:
+        'Ordered routing requires at least one channel. Select channels from the list below.',
       orderedListHint: 'Drag or use the arrow buttons to set priority order',
       autoListHint:
         'Automatic routing picks among enabled channels below; order is ignored',
       clearToPlatform: 'Clear to all platform',
-      pickChannels: 'Choose channels',
-      hideCandidates: 'Hide candidates',
+      candidateTitle: 'Candidate channels',
       searchPlaceholder: 'Search by name, #ID, or model…',
       filterEligible: 'Eligible only',
       sortByRatio: 'Lowest multiplier',
@@ -764,11 +757,8 @@ export default {
       loadFailed: 'Failed to load routing: {error}',
       candidatesFailed: 'Failed to load candidate channels: {error}',
       reload: 'Reload',
-      readOnlyCreate:
-        'New keys use automatic routing across all platform channels (read-only permission).',
       readOnlyEdit:
         'You can view this key’s routing configuration, but cannot edit it.',
-      moreOptions: 'Channel multiplier cap',
       maxRatio: 'Maximum channel multiplier',
       maxRatioHint:
         'Applies to both all-platform and selected scopes. Leave empty for no limit (max 1000, up to 18 decimals).',
@@ -778,16 +768,14 @@ export default {
       channelMetrics: '×{ratio} · {models} models · concurrency {limit}',
       selectedMetrics: 'Multiplier ×{ratio} · concurrency limit {limit}',
       unavailableChannel: 'Channel #{id} unavailable',
+      unavailableByModels:
+        'Channel #{id} does not match model limits or is unavailable',
       enabled: 'Enabled',
       up: 'Move up',
       down: 'Move down',
       remove: 'Remove',
       conflict: 'Routing changed elsewhere. Reload before saving.',
-      partialCreated:
-        'Key created (automatic · all platform), but routing was not saved: {error}. Retry saving routing below.',
-      partialUpdated:
-        'Key settings saved, but routing was not saved: {error}. Retry saving routing below.',
-      retryRouting: 'Retry saving routing',
+      saved: 'Routing saved',
       reasons: {
         eligible: 'Eligible',
         channel_unavailable: 'Unavailable',
@@ -797,6 +785,14 @@ export default {
         entry_disabled: 'Paused',
         not_in_manual_route: 'Not selected',
       },
+    },
+    createdAt: 'Created {time}',
+    modelLimitsRoutingHint:
+      'Selected channels among the {count} configured that do not serve the updated models will be skipped at runtime. Review them in Routing after saving.',
+    limits: {
+      models: '{count} model | {count} models',
+      ips: 'IP limit',
+      noQuotaQuery: 'No balance query',
     },
     advancedTitle: 'Advanced settings',
     advancedSummary: 'Balance queries, model and IP restrictions',
@@ -848,18 +844,6 @@ export default {
       expiresOn: 'Expires {date}',
       expiresInDays: 'Expires in {days}d',
       expiredOn: 'Expired · {date}',
-      ringLabel: '"{name}": {remaining} available, {used} used',
-      detailLabel: 'Quota details for "{name}"',
-      remaining: 'Available',
-      usedTotal: 'Used',
-      usedShare: 'Used share',
-      quotaQuery: 'Balance query',
-      allowed: 'Allowed',
-      denied: 'Not allowed',
-      models: 'Models',
-      ips: 'IP allowlist',
-      noLimit: 'No limit',
-      more: '+{count}',
     },
   },
 

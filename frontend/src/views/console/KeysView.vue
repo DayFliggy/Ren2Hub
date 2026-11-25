@@ -9,34 +9,33 @@ import {
   PowerOff,
   Trash2,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { parseTokenPage, parseUserModels } from '@/api/liveContracts'
 import { ApiError, type PageResult } from '@/api/types'
 import type { TokenSummary } from '@/types/console'
-import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
+import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
 import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
+import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeyIdentity from '@/components/console/keys/KeyIdentity.vue'
 import KeyMobileList from '@/components/console/keys/KeyMobileList.vue'
-import KeyQuotaPopover from '@/components/console/keys/KeyQuotaPopover.vue'
-import KeyQuotaTrigger from '@/components/console/keys/KeyQuotaTrigger.vue'
-import { useKeyQuotaDetail } from '@/components/console/keys/useKeyQuotaDetail'
-import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
+import KeyQuotaFigures from '@/components/console/keys/KeyQuotaFigures.vue'
 import KeyRevealModal from '@/components/console/keys/KeyRevealModal.vue'
-import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
+import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
+import KeyRoutingModal from '@/components/console/keys/KeyRoutingModal.vue'
 import { clientConfigMessages } from '@/i18n/clientConfig'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
-import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
+import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
@@ -72,21 +71,21 @@ const selected = ref<Array<string | number>>([])
 const models = ref<string[]>([])
 
 const formOpen = ref(false)
-const formFocus = ref<'routing' | null>(null)
 const editing = ref<TokenSummary | null>(null)
+const routingToken = ref<TokenSummary | null>(null)
 const deleting = ref<TokenSummary | null>(null)
 const batchDeleting = ref(false)
 const deleteLoading = ref(false)
 const revealTokenId = ref<number | null>(null)
 const clientConfigTokenId = ref<number | null>(null)
 
-// The quota ring replaces the balance figures; status and expiry live in the
-// ring and the note under each name. Figures are in the ring's popover.
+// Fixed columns sum to 628px (44 selection + 216 type + 144 quota + 224 actions),
+// leaving ~142px content each for name and key at the 960px table breakpoint.
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
   { key: 'type', label: t('keys.colType'), width: '216px' },
   { key: 'key', label: t('keys.colKey') },
-  { key: 'quota', label: t('keys.colQuota'), align: 'center', width: '88px' },
+  { key: 'quota', label: t('keys.colQuota'), width: '144px' },
   // Four actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding.
   {
     key: 'actions',
@@ -97,7 +96,7 @@ const columns = computed<TableColumn[]>(() => [
 ])
 
 // Mirror KeyMobileList: only keys that cannot serve fade back; spent keys stay
-// at full strength so their red quota ring keeps calling for action.
+// at full strength so their red quota readout keeps calling for action.
 function rowClass(row: TokenSummary): string | undefined {
   const state = tokenMeter(row, nowSec.value).state
   return state === 'disabled' || state === 'expired'
@@ -123,46 +122,8 @@ function toggleSelected(row: TokenSummary) {
 
 const listRequest = useLatestRequest()
 
-// One clock per load, so every ring on the page judges expiry alike.
+// One clock per load, so every row on the page judges expiry alike.
 const nowSec = ref(Math.floor(Date.now() / 1000))
-const detail = useKeyQuotaDetail()
-const detailId = useId()
-
-/**
- * Mouse hover anywhere on a table row opens the detail by its ring — except
- * over the actions, which the popover hanging below the row would otherwise
- * cover for the rows underneath. Cards expand their detail inline instead.
- */
-function hoverRow(event: PointerEvent) {
-  if (event.pointerType !== 'mouse') return
-  const target = event.target as Element
-  if (target.closest('td[headers$="-actions"]')) {
-    detail.leave(true)
-    return
-  }
-  const row = target.closest('tbody tr')
-  const ring = row?.querySelector<HTMLElement>('[data-key-quota-ring]')
-  const token = ring
-    ? rows.value.find((item) => String(item.id) === ring.dataset.tokenId)
-    : undefined
-  if (!ring || !token) {
-    detail.leave()
-    return
-  }
-  detail.hover(token, ring)
-}
-
-/** A mouse click keeps the hover popover; touch and keyboard toggle it. */
-function openDetail(
-  token: TokenSummary,
-  anchor: HTMLElement,
-  pointerType: string
-) {
-  if (pointerType === 'mouse') detail.show(token, anchor)
-  else detail.toggle(token, anchor)
-}
-
-watch(rows, () => detail.hide())
 
 async function load() {
   loading.value = true
@@ -240,14 +201,16 @@ function onSaved() {
 
 function openCreate() {
   editing.value = null
-  formFocus.value = null
   formOpen.value = true
 }
 
-function openEdit(row: TokenSummary, focus: 'routing' | null = null) {
+function openEdit(row: TokenSummary) {
   editing.value = row
-  formFocus.value = focus
   formOpen.value = true
+}
+
+function openRouting(row: TokenSummary) {
+  routingToken.value = row
 }
 
 function copyKey(row: TokenSummary) {
@@ -344,8 +307,6 @@ onBeforeUnmount(() => {
         checkbox-shape="round"
         :empty-title="t('keys.emptyTitle')"
         empty-illustration="empty-keys"
-        @pointerover="hoverRow"
-        @pointerleave="detail.leave()"
       >
         <template #cell-name="{ row }">
           <KeyIdentity :token="row as TokenSummary" :now="nowSec" />
@@ -355,7 +316,7 @@ onBeforeUnmount(() => {
           <KeyRouteChip
             :token="row as TokenSummary"
             :interactive="routingEnabled"
-            @configure="openEdit(row as TokenSummary, 'routing')"
+            @configure="openRouting(row as TokenSummary)"
           />
         </template>
 
@@ -382,21 +343,10 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-quota="{ row }">
-          <KeyQuotaTrigger
-            :token="row as TokenSummary"
-            :now="nowSec"
-            :expanded="detail.token.value?.id === (row as TokenSummary).id"
-            :detail-id="detailId"
-            @detail="
-              (anchor, pointerType) =>
-                openDetail(row as TokenSummary, anchor, pointerType)
-            "
-            @blur="detail.hide(row as TokenSummary)"
-          />
+          <KeyQuotaFigures :token="row as TokenSummary" :now="nowSec" compact />
         </template>
 
         <template #cell-actions="{ row }">
-          <!-- Action buttons must not trigger the inline panel. -->
           <div
             class="flex items-center justify-end gap-1"
             @click.stop
@@ -489,7 +439,7 @@ onBeforeUnmount(() => {
           :view-key="copyKey"
           :client-config="(row: TokenSummary) => (clientConfigTokenId = row.id)"
           :edit-key="openEdit"
-          :configure-routing="(row) => openEdit(row, 'routing')"
+          :configure-routing="openRouting"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"
           :now="nowSec"
@@ -504,23 +454,20 @@ onBeforeUnmount(() => {
       </div>
     </ConsoleCard>
 
-    <KeyQuotaPopover
-      :id="detailId"
-      :token="detail.token.value"
-      :anchor="detail.anchor.value"
-      :pinned="detail.pinned.value"
-      :now="nowSec"
-      @close="detail.hide()"
-    />
-
     <!-- create / edit -->
-
     <KeyFormModal
       :open="formOpen"
       :editing="editing"
       :models="models"
-      :focus="formFocus"
       @close="formOpen = false"
+      @saved="onSaved"
+    />
+
+    <!-- standalone token channel routing -->
+    <KeyRoutingModal
+      :open="routingToken !== null"
+      :token="routingToken"
+      @close="routingToken = null"
       @saved="onSaved"
     />
 

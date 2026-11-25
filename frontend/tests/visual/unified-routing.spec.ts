@@ -31,7 +31,7 @@ const orphanedToken = {
 
 for (const theme of ['light', 'dark'] as const) {
   for (const viewport of ['desktop', 'mobile'] as const) {
-    test(`${theme} ${viewport} key creation and integrated modal routing`, async ({
+    test(`${theme} ${viewport} key creation and standalone routing modal`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize(
@@ -55,32 +55,22 @@ for (const theme of ['light', 'dark'] as const) {
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
 
-      // 1. Create modal starts collapsed on "自动路由 · 全平台渠道" and narrows automatically when channels are chosen.
+      // 1. Create modal has no channel picker; it creates a default auto-platform key in one POST.
       const create = page.getByRole('button', { name: '创建令牌', exact: true })
       await create.click()
       const createDialog = page.getByRole('dialog', {
         name: '创建令牌',
         exact: true,
       })
-      const routingToggle = createDialog.locator('[data-key-routing-toggle]')
-      await expect(routingToggle).toHaveAttribute('aria-expanded', 'false')
-      await expect(routingToggle).toContainText('自动路由 · 全平台渠道')
+      await expect(
+        createDialog.locator('[data-routing-candidate-picker]')
+      ).toHaveCount(0)
       await createDialog
         .locator('input[name="token-name"]')
         .fill('Native routing key')
       await assertNoHorizontalOverflow(page)
       await captureEvidence(page, {
-        path: testInfo.outputPath('create-key-default.png'),
-      })
-
-      // Expand routing section, pick channel #2 -> auto-narrows scope.
-      await routingToggle.click()
-      await createDialog.locator('[data-routing-picker-toggle]').click()
-      await createDialog.locator('[data-candidate-channel-id="2"]').click()
-      await expect(routingToggle).toContainText('已收窄至 1 条渠道')
-      await assertNoHorizontalOverflow(page)
-      await captureEvidence(page, {
-        path: testInfo.outputPath('create-key-routing-selected.png'),
+        path: testInfo.outputPath('create-key-clean.png'),
       })
 
       await createDialog
@@ -97,42 +87,44 @@ for (const theme of ['light', 'dark'] as const) {
         )
       ).toBe(true)
       expect(
-        fixture.writes.some(
-          (write) =>
-            write.path === '/api/token/99/routing' &&
-            (write.body as { selected_only?: boolean }).selected_only === true
-        )
-      ).toBe(true)
+        fixture.writes.some((write) => write.path === '/api/token/99/routing')
+      ).toBe(false)
       await expect(page.locator('[data-key-created-notice]')).toHaveCount(0)
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
 
-      // 2. Click the route chip on row #7 to open edit modal directly on the routing section.
+      // 2. Click the route chip on row #7 to open the standalone KeyRoutingModal directly.
       await page.locator('[data-key-route-trigger]:visible').first().click()
-      const editDialog = page.getByRole('dialog', {
-        name: '编辑令牌',
+      const routingDialog = page.getByRole('dialog', {
+        name: '路由 · Native Key',
         exact: true,
       })
-      await expect(editDialog).toBeVisible()
+      await expect(routingDialog).toBeVisible()
       await expect(
-        editDialog.locator('li[data-selected-channel-id="2"]')
+        routingDialog.locator('li[data-selected-channel-id="2"]')
+      ).toBeVisible()
+      await expect(
+        routingDialog.locator('[data-routing-candidate-picker]')
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
+      await captureEvidence(page, {
+        path: testInfo.outputPath('routing-modal-open.png'),
+      })
 
-      // Pause the sole selected channel -> shows automatic all-platform fallback notice and allows saving.
-      await editDialog
+      // Pause the sole selected channel -> shows automatic all-platform fallback notice and saves cleanly.
+      await routingDialog
         .locator('li[data-selected-channel-id="2"] [role="switch"]')
         .click()
       await expect(
-        editDialog.locator('[data-routing-all-paused]')
+        routingDialog.locator('[data-routing-all-paused]')
       ).toContainText('自动退回全平台路由')
       await captureEvidence(page, {
-        path: testInfo.outputPath('edit-key-all-paused.png'),
+        path: testInfo.outputPath('routing-modal-all-paused.png'),
       })
-      await editDialog
-        .getByRole('button', { name: '确认', exact: true })
+      await routingDialog
+        .getByRole('button', { name: '保存', exact: true })
         .click()
-      await expect(editDialog).toHaveCount(0)
+      await expect(routingDialog).toHaveCount(0)
 
       const lastRoutingWrite = fixture.writes
         .filter((write) => write.path === '/api/token/7/routing')
@@ -147,7 +139,7 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`${theme} orphaned selection warning in modal protects against silent fallback`, async ({
+  test(`${theme} orphaned selection warning in standalone routing modal protects against silent fallback`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -214,7 +206,10 @@ for (const theme of ['light', 'dark'] as const) {
     ).toContainText('自选渠道已失效')
 
     await page.locator('[data-key-route-trigger]:visible').first().click()
-    const dialog = page.getByRole('dialog', { name: '编辑令牌', exact: true })
+    const dialog = page.getByRole('dialog', {
+      name: '路由 · Orphaned Key',
+      exact: true,
+    })
     await expect(dialog.locator('[data-route-orphaned]')).toBeVisible()
     await captureEvidence(page, {
       path: testInfo.outputPath(`orphaned-routing-modal-${theme}.png`),
@@ -225,7 +220,7 @@ for (const theme of ['light', 'dark'] as const) {
       .getByRole('button', { name: '恢复为全平台路由', exact: true })
       .click()
     await expect(dialog.locator('[data-route-orphaned]')).toHaveCount(0)
-    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await dialog.getByRole('button', { name: '保存', exact: true }).click()
     await expect(dialog).toHaveCount(0)
     expect(savedRoutingBody).toMatchObject({
       mode: 'auto',

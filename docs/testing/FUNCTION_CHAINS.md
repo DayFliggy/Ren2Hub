@@ -84,11 +84,11 @@
 ## Token 与私有路由
 
 - 入口与权限：经真实 `SetApiRouter` 的 `--go 'router:^(TestTokenRoutingRoutesPermissionsAndCandidateEndpoint|TestModelCatalogForAKeyRequiresRoutingReadScope)$'`（覆盖 `POST /api/token/` 仅需 `api_key:write` 并返回 `data.id`、`GET /api/token/routing/channels` 与 `GET /api/token/:id/routing` 需要 `routing:read`、`PUT /api/token/:id/routing` 需要 `routing:write`、全部停用退回全平台的范围投影、以及退役的 `/routing/preview` 返回 404）；真实 `UserAuth` 与 `RequirePermission` 手工挂载的 `--go 'controller:^(TestAccessTokenCommonUserRoutingGrantAndEnforcement|TestTokenCreationRequiresOnlyKeyWrite)$'`；中继侧经真实路由的 `--go 'router:^TestNativeCountReusesManualRoutesAndRejectsUnsupportedChannels$'`。
-- 合同两侧：缺口，没有生产侧夹具，`tokenRouting.spec.ts`、`KeyFormModalRouting.spec.ts`、`KeysView.spec.ts` 和 `unified-routing.spec.ts` 用手写模拟。
+- 合同两侧：缺口，没有生产侧夹具，`tokenRouting.spec.ts`、`KeyRoutingModal.spec.ts`、`KeysView.spec.ts` 和 `unified-routing.spec.ts` 用手写模拟。
 - 三库矩阵：`--db TestTokenRoutingDatabases TestTokenRouteChannelMutationLockOrderDatabases TestDeletedSelectedChannelsDatabaseMatrix`，含 `TokenRoutingModes` 的 `enabled_route_channel_count`/`route_scope`/`effective_mode` 投影、保存与删除渠道、删除 Token、硬删除用户之间的屏障竞争和锁顺序。
 - 并发：缺口，race 选择里没有 Token 路由组，竞争只在上面的三库测试里；`--go 'service:^TestBusyManualChannelScansNextAndAllBusyReturns429$'`。
 - 负向与重复：`--go 'controller:^(TestAccessTokenCommonUserRoutingGrantAndEnforcement|TestTokenCreationRequiresOnlyKeyWrite|TestAddTokenReturnsCreatedID|TestGetTokenRoutingCandidateChannelsFiltersDraftPolicy|TestTokenListAndDetailRoutingScope|TestTokenRoutingAPIIsolationConflictAndPublicProjection|TestUpdateTokenRoutingReadFailureIsAnError)$' 'model:^(TestTokenRouteScopeAndEffectiveMode|TestSaveTokenRoutingRejectsDeletedChannels|TestTokenRouteVersionOwnershipAndEmptyManual|TestHardDeleteUserRemovesTokenRouting)$' 'service/authz:^TestTokenRoutingUserPermissionDoesNotGrantAdministration$' 'service:^(TestRouteCandidateDatabaseErrorIsNotEmptyAvailability|TestAllDisabledSelectionFallsBackToPlatformWithPolicyAndCatalog)$' 'relay:^(TestTokenRouteWebSocketPinnedAbilityRevocation|TestTokenRouteWebSocketRechecksEachCreate)$'`。
-- 真实后端：`core.spec.ts` 的“每 Key 路由通过令牌编辑弹窗保存并在刷新后保持”，验证弹窗内渠道选择、顺序路由保存与刷新保持；`run.py routing` 的路由合同。
+- 真实后端：`core.spec.ts` 的“每 Key 路由通过独立路由弹窗保存并在刷新后保持”，验证独立路由弹窗配置保存与刷新保持；`run.py routing` 的路由合同。
 
 ## 渠道选择与倍率
 

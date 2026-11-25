@@ -343,7 +343,10 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
       .locator('[data-key-mobile-row] [data-key-route-trigger]')
       .first()
       .click()
-    const dialog = page.getByRole('dialog', { name: '编辑令牌', exact: true })
+    const dialog = page.getByRole('dialog', {
+      name: '路由 · Native Key',
+      exact: true,
+    })
     await expect(dialog).toBeVisible()
     const row = dialog.locator('li[data-selected-channel-id="2"]')
     await expect(row).toBeVisible()

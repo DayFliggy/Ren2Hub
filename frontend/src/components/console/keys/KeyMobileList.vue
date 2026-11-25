@@ -8,16 +8,15 @@ import {
   PowerOff,
   Trash2,
 } from 'lucide-vue-next'
-import { ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/common/IconButton.vue'
-import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
 import KeyIdentity from '@/components/console/keys/KeyIdentity.vue'
 import KeyQuotaBar from '@/components/console/keys/KeyQuotaBar.vue'
+import KeyRouteChip from '@/components/console/keys/KeyRouteChip.vue'
+import { clientConfigMessages } from '@/i18n/clientConfig'
 import type { TokenSummary } from '@/types/console'
 import { tokenMeter } from '@/utils/tokenMeter'
-import { clientConfigMessages } from '@/i18n/clientConfig'
 
 const props = withDefaults(
   defineProps<{
@@ -55,23 +54,6 @@ function isBlocked(token: TokenSummary): boolean {
   const state = tokenMeter(token, props.now).state
   return state === 'disabled' || state === 'expired'
 }
-
-// Cards expand independently; a new page starts collapsed.
-const detailBaseId = useId()
-const expandedIds = ref<Set<number>>(new Set())
-
-function toggleDetail(token: TokenSummary) {
-  const next = new Set(expandedIds.value)
-  if (!next.delete(token.id)) next.add(token.id)
-  expandedIds.value = next
-}
-
-watch(
-  () => props.tokens,
-  () => {
-    expandedIds.value = new Set()
-  }
-)
 </script>
 
 <template>
@@ -120,43 +102,40 @@ watch(
           </div>
         </header>
 
-        <KeyQuotaBar
-          class="mt-3"
-          :token="token"
-          :now="now"
-          :expanded="expandedIds.has(token.id)"
-          :detail-id="`${detailBaseId}-${token.id}`"
-          @toggle="toggleDetail(token)"
-        />
+        <KeyQuotaBar class="mt-3" :token="token" :now="now" />
 
-        <!-- From 640px the key and the actions share one row. -->
+        <!-- Key reveal stays paired with its masked preview; CRUD actions sit together. -->
         <footer
           class="mt-3 flex flex-col gap-2 border-t border-[var(--border-subtle)] pt-2.5 sm:flex-row sm:items-center sm:justify-between"
         >
-          <p class="flex min-w-0 items-center gap-2 text-xs">
+          <div class="flex min-w-0 items-center gap-1.5 text-xs">
             <span class="shrink-0 text-[var(--text-tertiary)]">
               {{ t('keys.colKey') }}
             </span>
             <span
-              class="truncate font-mono text-[0.6875rem] text-[var(--text-secondary)]"
+              class="min-w-0 truncate font-mono text-[0.6875rem] text-[var(--text-secondary)]"
               :title="token.key_preview"
             >
               {{ token.key_preview }}
             </span>
-          </p>
-          <div class="flex flex-wrap items-center justify-end gap-1">
-            <IconButton :label="t('keys.viewKey')" @click="viewKey(token)">
-              <Eye :size="16" />
+            <IconButton
+              class="shrink-0"
+              :label="t('keys.viewKey')"
+              @click="viewKey(token)"
+            >
+              <Eye :size="16" aria-hidden="true" />
             </IconButton>
+          </div>
+          <div class="flex items-center justify-end gap-1">
             <IconButton
               v-if="clientConfig"
               :label="configT('title')"
               @click="clientConfig(token)"
             >
-              <FileCode2 :size="16" />
+              <FileCode2 :size="16" aria-hidden="true" />
             </IconButton>
             <IconButton :label="t('keys.editKey')" @click="editKey(token)">
-              <Pencil :size="16" />
+              <Pencil :size="16" aria-hidden="true" />
             </IconButton>
             <IconButton
               :label="t('keys.toggleKey')"
@@ -167,16 +146,21 @@ watch(
                 v-if="isToggling(token)"
                 :size="16"
                 class="animate-spin"
+                aria-hidden="true"
               />
-              <PowerOff v-else-if="token.status === 1" :size="16" />
-              <Power v-else :size="16" />
+              <PowerOff
+                v-else-if="token.status === 1"
+                :size="16"
+                aria-hidden="true"
+              />
+              <Power v-else :size="16" aria-hidden="true" />
             </IconButton>
             <IconButton
               :label="t('keys.deleteKey')"
               tone="danger"
               @click="deleteKey(token)"
             >
-              <Trash2 :size="16" />
+              <Trash2 :size="16" aria-hidden="true" />
             </IconButton>
           </div>
         </footer>

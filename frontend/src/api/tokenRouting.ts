@@ -208,15 +208,4 @@ export const tokenRoutingApi = {
     )
     return parseRouteChannels(value, candidatesEndpoint)
   },
-  async channels(
-    id: number,
-    signal?: AbortSignal
-  ): Promise<TokenRouteChannel[]> {
-    const value = await api.get<unknown>(
-      `${endpoint(id)}/channels`,
-      undefined,
-      { signal }
-    )
-    return parseRouteChannels(value, `${endpoint(id)}/channels`)
-  },
 }

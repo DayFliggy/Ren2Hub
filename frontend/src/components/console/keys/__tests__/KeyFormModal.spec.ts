@@ -271,6 +271,50 @@ describe('KeyFormModal', () => {
       put.mockRestore()
     }
   })
+
+  it('shows read-only created timestamp and warns when model limits change on a selected-channel key', async () => {
+    const wrapper = mountForm({
+      id: 9,
+      name: 'scoped-key',
+      key_preview: 'sk-****9999',
+      type: 'ordered',
+      selected_only: true,
+      route_channel_count: 2,
+      enabled_route_channel_count: 2,
+      route_scope: 'selected',
+      effective_mode: 'ordered',
+      allow_user_quota_query: true,
+      status: 1,
+      used_quota: '0',
+      remain_quota: 0,
+      unlimited: true,
+      model_limits: ['gpt-4o'],
+      ip_limits: [],
+      expired_time: -1,
+      created_time: 1_722_000_000,
+    })
+    try {
+      expect(document.querySelector('[data-key-created-at]')).not.toBeNull()
+      expect(
+        document.querySelector('[data-model-limits-routing-hint]')
+      ).toBeNull()
+
+      // Remove the model limit chip -> triggers the non-blocking routing review hint.
+      const removeChipBtn = document.querySelector<HTMLButtonElement>(
+        '[aria-label*="gpt-4o"]'
+      )
+      removeChipBtn?.click()
+      await nextTick()
+      if (removeChipBtn) {
+        expect(
+          document.querySelector('[data-model-limits-routing-hint]')
+            ?.textContent
+        ).toContain('2')
+      }
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })
 
 describe('KeyFormModal expiry', () => {

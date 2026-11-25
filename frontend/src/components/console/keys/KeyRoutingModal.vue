@@ -4,16 +4,15 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
-  ChevronDown,
   GripVertical,
   Info,
-  Plus,
+  Lock,
   RefreshCw,
-  Route,
   Search,
   Trash2,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { getActivePinia } from 'pinia'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -21,60 +20,59 @@ import {
   type TokenRoute,
   type TokenRouteChannel,
   type TokenRouteMode,
-  type TokenRouteScope,
 } from '@/api/tokenRouting'
+import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
+import { useToast } from '@/composables/useToast'
+import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
+import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
+import type { TokenSummary } from '@/types/console'
 import { isValidChannelRatio } from '@/utils/channelRatio'
-
-export interface RoutingSaveState {
-  loading: boolean
-  loadError: string
-  validationError: string
-  dirty: boolean
-  isDefault: boolean
-  version: number
-  payload: Pick<
-    TokenRoute,
-    'mode' | 'selected_only' | 'version' | 'entries' | 'max_channel_ratio'
-  >
-}
 
 const props = defineProps<{
   open: boolean
-  editingId: number | null
-  createdTokenId?: number | null
-  modelLimits: string[]
-  canRead: boolean
-  canWrite: boolean
-  autoExpand: boolean
-  disabled: boolean
-  saveError: string
-  conflict: boolean
-  partialNotice: string
+  token: TokenSummary | null
 }>()
 
 const emit = defineEmits<{
-  'clear-error': []
-  'retry-routing': []
+  close: []
+  saved: []
 }>()
 
 const { t, te } = useI18n()
-const sectionId = useId()
-const sectionEl = ref<HTMLElement | null>(null)
+const toast = useToast()
 
-const expanded = ref(false)
-const pickerOpen = ref(false)
-const ratioOpen = ref(false)
-const revertedNote = ref(false)
+const routingFeatureOn = computed(() => {
+  if (!getActivePinia()) return false
+  return useAppStore().isFeatureEnabled(tokenRoutingAccess.feature)
+})
+const canRead = computed(() => {
+  if (!routingFeatureOn.value || !getActivePinia()) return false
+  return useAuthStore().hasPermission(
+    tokenRoutingAccess.requiresPermission.resource,
+    tokenRoutingAccess.requiresPermission.action
+  )
+})
+const canWrite = computed(() => {
+  if (!canRead.value || !getActivePinia()) return false
+  return useAuthStore().hasPermission('routing', 'write')
+})
 
 const loading = ref(false)
 const loadError = ref('')
+const saving = ref(false)
+const saveError = ref('')
+const conflict = ref(false)
+const revertedNote = ref(false)
+
 const candidatesLoading = ref(false)
 const candidatesError = ref('')
 const channels = ref<TokenRouteChannel[]>([])
@@ -88,6 +86,7 @@ const draggingChannelId = ref<number | null>(null)
 const routeRequest = useLatestRequest()
 const candidatesRequest = useLatestRequest()
 let candidateDebounceTimer = 0
+let lastCandidateFilterKey = ''
 
 interface DraftEntry {
   channel_id: number
@@ -109,7 +108,6 @@ const draft = reactive({
 })
 
 const version = ref(0)
-let baselineRatioRaw = ''
 let baseline: NormalizedSnapshot = defaultSnapshot()
 
 function defaultSnapshot(): NormalizedSnapshot {
@@ -167,6 +165,7 @@ function snapshotsEqual(a: NormalizedSnapshot, b: NormalizedSnapshot): boolean {
   return true
 }
 
+const modelLimits = computed(() => props.token?.model_limits ?? [])
 const derivedSelectedOnly = computed(
   () => draft.entries.length > 0 || draft.orphan
 )
@@ -182,42 +181,29 @@ const validRatio = computed(() => {
   return !value || isValidChannelRatio(value)
 })
 
-const effectiveScope = computed<TokenRouteScope>(() => {
-  if (!derivedSelectedOnly.value) return 'platform'
-  if (draft.entries.length === 0) return 'empty'
-  if (enabledCount.value === 0) return 'platform'
-  return 'selected'
-})
-
 const currentSnapshot = computed(() =>
   buildSnapshot(
     draft.mode,
     derivedSelectedOnly.value,
-    draft.maxRatio === baselineRatioRaw ? baselineRatioRaw : draft.maxRatio,
+    draft.maxRatio,
     draft.entries
   )
 )
 
 const dirty = computed(() => !snapshotsEqual(currentSnapshot.value, baseline))
-const isDefault = computed(() =>
-  snapshotsEqual(currentSnapshot.value, defaultSnapshot())
-)
 
 const canInteract = computed(
   () =>
-    props.canRead &&
-    props.canWrite &&
-    !props.disabled &&
+    canRead.value &&
+    canWrite.value &&
+    !saving.value &&
     !loading.value &&
     !loadError.value &&
-    !props.conflict
+    !conflict.value
 )
 
 const validationError = computed(() => {
-  if (!props.canWrite) return ''
-  // In edit mode, untouched routing is not submitted so an existing orphan
-  // state must not block unrelated edits (e.g. renaming or quota changes).
-  if (props.editingId !== null && !dirty.value) return ''
+  if (!canWrite.value || !dirty.value) return ''
   if (!validRatio.value) return t('keys.routingPanel.invalidRatio')
   if (draft.orphan) return t('keys.routingPanel.orphanedRequired')
   if (draft.mode === 'ordered' && draft.entries.length === 0) {
@@ -226,56 +212,35 @@ const validationError = computed(() => {
   return ''
 })
 
+const canSave = computed(
+  () =>
+    canInteract.value &&
+    dirty.value &&
+    validationError.value === '' &&
+    validRatio.value
+)
+
 const channelById = computed(
   () => new Map(channels.value.map((channel) => [channel.id, channel]))
 )
 const selectedIds = computed(
   () => new Set(draft.entries.map((entry) => entry.channel_id))
 )
-const eligiblePlatformCount = computed(
-  () => channels.value.filter((channel) => channel.eligible).length
-)
 
-const summaryText = computed(() => {
-  if (draft.orphan) return t('keys.routingPanel.summaryOrphaned')
-  if (isAllPaused.value) return t('keys.routingPanel.summaryAllPaused')
-  if (effectiveScope.value === 'selected') {
-    return ordered.value
-      ? t(
-          'keys.routingPanel.summarySelectedOrdered',
-          { count: enabledCount.value },
-          enabledCount.value
-        )
-      : t(
-          'keys.routingPanel.summarySelectedAuto',
-          { count: enabledCount.value },
-          enabledCount.value
-        )
-  }
-  if (
-    !candidatesLoading.value &&
-    !candidatesError.value &&
-    channels.value.length > 0
-  ) {
-    return t('keys.routingPanel.summaryPlatformCount', {
-      count: eligiblePlatformCount.value,
-    })
-  }
-  return t('keys.routingPanel.summaryPlatform')
-})
-
-const filteredChannels = computed(() => {
-  const kw = searchQuery.value.trim().toLowerCase()
-  let list = channels.value.filter((channel) => {
+const filteredCandidates = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  const list = channels.value.filter((channel) => {
     if (onlyEligible.value && !channel.eligible) return false
-    if (!kw) return true
-    if (channel.name.toLowerCase().includes(kw)) return true
-    if (`#${channel.id}`.includes(kw) || String(channel.id).includes(kw))
-      return true
-    return channel.models.some((model) => model.toLowerCase().includes(kw))
+    if (!query) return true
+    return (
+      channel.name.toLowerCase().includes(query) ||
+      String(channel.id).includes(query) ||
+      `#${channel.id}`.includes(query) ||
+      channel.models.some((model) => model.toLowerCase().includes(query))
+    )
   })
   if (sortByRatio.value) {
-    list = [...list].sort(
+    return [...list].sort(
       (a, b) => Number(a.channel_ratio) - Number(b.channel_ratio) || a.id - b.id
     )
   }
@@ -283,21 +248,31 @@ const filteredChannels = computed(() => {
 })
 
 const visibleChannels = computed(() =>
-  filteredChannels.value.slice(0, visibleLimit.value)
+  filteredCandidates.value.slice(0, visibleLimit.value)
 )
 const remainingCount = computed(() =>
-  Math.max(0, filteredChannels.value.length - visibleChannels.value.length)
+  Math.max(0, filteredCandidates.value.length - visibleChannels.value.length)
 )
 
 function reasonLabel(reason?: string): string {
   if (!reason) return t('keys.routingPanel.reasons.channel_unavailable')
-  return te(`keys.routingPanel.reasons.${reason}`)
-    ? t(`keys.routingPanel.reasons.${reason}`)
-    : reason
+  const key = `keys.routingPanel.reasons.${reason}`
+  return te(key) ? t(key) : reason
 }
 
 function channelFor(entry: DraftEntry): TokenRouteChannel | undefined {
   return channelById.value.get(entry.channel_id)
+}
+
+function missingChannelText(id: number): string {
+  return modelLimits.value.length > 0
+    ? t('keys.routingPanel.unavailableByModels', { id })
+    : t('keys.routingPanel.unavailableChannel', { id })
+}
+
+function clearErrors(): void {
+  saveError.value = ''
+  conflict.value = false
 }
 
 function applyRoute(route: TokenRoute): void {
@@ -308,55 +283,26 @@ function applyRoute(route: TokenRoute): void {
     enabled: entry.enabled,
   }))
   draft.maxRatio = route.max_channel_ratio ?? ''
-  baselineRatioRaw = draft.maxRatio
   draft.orphan = route.selected_only && route.entries.length === 0
   baseline = buildSnapshot(
-    route.mode,
+    draft.mode,
     route.selected_only,
     draft.maxRatio,
     draft.entries
   )
   revertedNote.value = false
-  if (draft.maxRatio) ratioOpen.value = true
-  if (
-    props.autoExpand ||
-    draft.orphan ||
-    draft.entries.length > 0 ||
-    draft.mode === 'ordered' ||
-    Boolean(draft.maxRatio)
-  ) {
-    expanded.value = true
-  }
 }
-
-function resetForCreate(): void {
-  version.value = 0
-  draft.mode = 'auto'
-  draft.entries = []
-  draft.maxRatio = ''
-  baselineRatioRaw = ''
-  draft.orphan = false
-  baseline = defaultSnapshot()
-  revertedNote.value = false
-  ratioOpen.value = false
-  pickerOpen.value = false
-  expanded.value = props.autoExpand
-  loadError.value = ''
-  loading.value = false
-}
-
-let lastCandidateFilterKey = ''
 
 function candidateFilterKey(limits: readonly string[], ratio: string): string {
   return `${limits.join('\u0000')}|${ratio}`
 }
 
 async function fetchCandidates(): Promise<void> {
-  if (!props.open || !props.canRead) return
+  if (!props.open || !props.token || !canRead.value) return
   candidatesLoading.value = true
   candidatesError.value = ''
   const ratio = validRatio.value ? draft.maxRatio.trim() : ''
-  const limits = [...props.modelLimits]
+  const limits = [...modelLimits.value]
   lastCandidateFilterKey = candidateFilterKey(limits, ratio)
   const result = await candidatesRequest.run((signal) =>
     tokenRoutingApi.candidates(
@@ -379,7 +325,7 @@ async function fetchCandidates(): Promise<void> {
 
 function scheduleCandidatesFetch(): void {
   const ratio = validRatio.value ? draft.maxRatio.trim() : ''
-  if (candidateFilterKey(props.modelLimits, ratio) === lastCandidateFilterKey) {
+  if (candidateFilterKey(modelLimits.value, ratio) === lastCandidateFilterKey) {
     return
   }
   window.clearTimeout(candidateDebounceTimer)
@@ -393,6 +339,7 @@ async function loadAll(): Promise<void> {
   routeRequest.cancel()
   candidatesRequest.cancel()
   lastCandidateFilterKey = ''
+  clearErrors()
   searchQuery.value = ''
   onlyEligible.value = false
   sortByRatio.value = false
@@ -402,22 +349,16 @@ async function loadAll(): Promise<void> {
   candidatesError.value = ''
   loadError.value = ''
 
-  if (!props.open || !props.canRead) {
+  if (!props.open || !props.token || !canRead.value) {
     loading.value = false
     candidatesLoading.value = false
     return
   }
 
-  const id = props.editingId ?? props.createdTokenId ?? null
-  if (id === null) {
-    resetForCreate()
-    await fetchCandidates()
-    return
-  }
-
   loading.value = true
   candidatesLoading.value = true
-  const limits = [...props.modelLimits]
+  const id = props.token.id
+  const limits = [...modelLimits.value]
 
   const routeResult = await routeRequest.run((signal) =>
     tokenRoutingApi.get(id, signal)
@@ -433,7 +374,6 @@ async function loadAll(): Promise<void> {
     return
   }
   applyRoute(routeResult.value)
-  emit('clear-error')
 
   const ratio = routeResult.value.max_channel_ratio ?? ''
   lastCandidateFilterKey = candidateFilterKey(limits, ratio)
@@ -458,34 +398,31 @@ async function loadAll(): Promise<void> {
 
 function setMode(mode: TokenRouteMode): void {
   if (!canInteract.value) return
-  emit('clear-error')
+  clearErrors()
   draft.mode = mode
   revertedNote.value = false
-  if (mode === 'ordered' && draft.entries.length === 0) {
-    pickerOpen.value = true
-  }
 }
 
 function usePlatform(): void {
   if (!canInteract.value) return
-  emit('clear-error')
+  clearErrors()
   draft.mode = 'auto'
   draft.entries = []
   draft.orphan = false
-  revertedNote.value = false
+  revertedNote.value = true
 }
 
 function toggleCandidate(channel: TokenRouteChannel): void {
   if (!canInteract.value) return
-  emit('clear-error')
-  const idx = draft.entries.findIndex(
+  const index = draft.entries.findIndex(
     (entry) => entry.channel_id === channel.id
   )
-  if (idx >= 0) {
-    removeEntry(idx)
+  if (index >= 0) {
+    removeEntry(index)
     return
   }
   if (!channel.eligible) return
+  clearErrors()
   draft.orphan = false
   revertedNote.value = false
   draft.entries.push({ channel_id: channel.id, enabled: true })
@@ -493,7 +430,7 @@ function toggleCandidate(channel: TokenRouteChannel): void {
 
 function removeEntry(index: number): void {
   if (!canInteract.value) return
-  emit('clear-error')
+  clearErrors()
   draft.entries.splice(index, 1)
   if (draft.entries.length === 0 && draft.mode === 'auto') {
     draft.orphan = false
@@ -501,8 +438,8 @@ function removeEntry(index: number): void {
   }
 }
 
-function moveEntry(index: number, offset: number): void {
-  const target = index + offset
+function moveEntry(index: number, delta: number): void {
+  const target = index + delta
   if (
     !canInteract.value ||
     !ordered.value ||
@@ -511,7 +448,7 @@ function moveEntry(index: number, offset: number): void {
   ) {
     return
   }
-  emit('clear-error')
+  clearErrors()
   const [entry] = draft.entries.splice(index, 1)
   if (entry) draft.entries.splice(target, 0, entry)
 }
@@ -538,20 +475,23 @@ function dropEntry(target: DraftEntry): void {
   moveEntry(from, to - from)
 }
 
-function markSaved(saved: TokenRoute): void {
-  applyRoute(saved)
-}
+async function save(): Promise<void> {
+  if (!props.token || !canWrite.value || saving.value) return
+  if (loading.value || conflict.value) return
+  if (validationError.value) {
+    saveError.value = validationError.value
+    return
+  }
+  if (!dirty.value) {
+    emit('close')
+    return
+  }
 
-function getState(): RoutingSaveState {
-  const selectedOnly = derivedSelectedOnly.value
-  return {
-    loading: loading.value,
-    loadError: loadError.value,
-    validationError: validationError.value,
-    dirty: dirty.value,
-    isDefault: isDefault.value,
-    version: version.value,
-    payload: {
+  saving.value = true
+  clearErrors()
+  try {
+    const selectedOnly = derivedSelectedOnly.value
+    const saved = await tokenRoutingApi.save(props.token.id, {
       mode: draft.mode,
       selected_only: selectedOnly,
       version: version.value,
@@ -563,26 +503,28 @@ function getState(): RoutingSaveState {
             position,
           }))
         : [],
-    },
+    })
+    applyRoute(saved)
+    toast.success(t('keys.routingPanel.saved'))
+    emit('saved')
+    emit('close')
+  } catch (error) {
+    const isConflict = error instanceof ApiError && error.status === 409
+    conflict.value = isConflict
+    saveError.value = isConflict
+      ? t('keys.routingPanel.conflict')
+      : error instanceof ApiError
+        ? error.message
+        : String(error)
+  } finally {
+    saving.value = false
   }
 }
 
-function scrollIntoView(): void {
-  expanded.value = true
-  sectionEl.value?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
-}
-
-defineExpose({
-  getState,
-  reload: loadAll,
-  markSaved,
-  scrollIntoView,
-})
-
 watch(
-  [() => props.open, () => props.editingId, () => props.canRead],
+  [() => props.open, () => props.token?.id, canRead],
   ([open]) => {
-    if (!open) {
+    if (!open || !props.token) {
       window.clearTimeout(candidateDebounceTimer)
       routeRequest.cancel()
       candidatesRequest.cancel()
@@ -594,33 +536,11 @@ watch(
 )
 
 watch(
-  () => props.autoExpand,
-  (val) => {
-    if (val && props.open) expanded.value = true
-  }
-)
-
-watch(
-  () => [props.saveError, props.partialNotice, props.conflict],
-  ([err, partial, conflict]) => {
-    if (err || partial || conflict) expanded.value = true
-  }
-)
-
-watch(
-  () => props.modelLimits.join(','),
-  () => {
-    if (!props.open || !props.canRead || loading.value) return
-    scheduleCandidatesFetch()
-  }
-)
-
-watch(
   () => draft.maxRatio,
   () => {
-    emit('clear-error')
-    if (!props.open || !props.canRead || loading.value || !validRatio.value)
-      return
+    clearErrors()
+    if (!props.open || !props.token || !canRead.value || loading.value) return
+    if (!validRatio.value) return
     scheduleCandidatesFetch()
   }
 )
@@ -637,79 +557,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section
-    v-if="canRead"
-    ref="sectionEl"
-    data-key-routing-section
-    class="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+  <ConsoleModal
+    :open="open && token != null"
+    :title="t('keys.routingPanel.modalTitle', { name: token?.name ?? '' })"
+    size="lg"
+    @close="emit('close')"
   >
-    <button
-      type="button"
-      data-key-routing-toggle
-      class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-muted)] focus-ring"
-      :aria-expanded="expanded"
-      :aria-controls="sectionId"
-      @click="expanded = !expanded"
-    >
-      <span
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-        :class="
-          draft.orphan
-            ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]'
-            : 'bg-[var(--accent-soft)] text-[var(--accent-text)]'
-        "
-        aria-hidden="true"
-      >
-        <Route :size="16" />
-      </span>
-      <span class="min-w-0 flex-1">
-        <span class="block text-sm font-semibold text-[var(--text-primary)]">
-          {{ t('keys.routingPanel.title') }}
-        </span>
-        <span class="block truncate text-xs text-[var(--text-tertiary)]">
-          {{ loading ? t('keys.routingPanel.loading') : summaryText }}
-        </span>
-      </span>
-      <span
-        v-if="!expanded && canWrite"
-        class="shrink-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]"
-      >
-        {{ t('keys.routingPanel.configure') }}
-      </span>
-      <ChevronDown
-        :size="16"
-        class="shrink-0 text-[var(--text-tertiary)] transition-transform"
-        :class="{ 'rotate-180': expanded }"
-        aria-hidden="true"
-      />
-    </button>
-
     <div
-      v-if="expanded"
-      :id="sectionId"
-      class="sibling-space-y-4 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)]/50 px-4 py-4"
+      v-if="token"
+      class="sibling-space-y-5 text-left"
+      data-key-routing-modal
     >
-      <!-- Partial create/update failure alert -->
-      <div
-        v-if="partialNotice"
-        role="alert"
-        data-routing-partial-error
-        class="no-handdrawn flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-3 text-xs text-[var(--status-warning-text)]"
-      >
-        <span class="min-w-0 flex-1 leading-relaxed">{{ partialNotice }}</span>
-        <ConsoleButton
-          variant="secondary"
-          size="sm"
-          :disabled="disabled"
-          @click="emit('retry-routing')"
-        >
-          {{ t('keys.routingPanel.retryRouting') }}
-        </ConsoleButton>
-      </div>
-
       <!-- Save error or 409 conflict -->
       <div
-        v-else-if="saveError"
+        v-if="saveError"
         role="alert"
         data-routing-save-error
         class="no-handdrawn flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-xs"
@@ -735,7 +596,7 @@ onBeforeUnmount(() => {
       <p
         v-if="loading"
         role="status"
-        class="py-4 text-center text-xs text-[var(--text-tertiary)]"
+        class="py-8 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
       >
         {{ t('keys.routingPanel.loading') }}
       </p>
@@ -755,16 +616,14 @@ onBeforeUnmount(() => {
 
       <template v-else>
         <!-- Read-only notice -->
-        <p
+        <div
           v-if="!canWrite"
-          class="no-handdrawn rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3.5 py-2.5 text-xs text-[var(--text-secondary)]"
+          data-routing-readonly
+          class="no-handdrawn flex items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-xs text-[var(--text-secondary)]"
         >
-          {{
-            editingId === null
-              ? t('keys.routingPanel.readOnlyCreate')
-              : t('keys.routingPanel.readOnlyEdit')
-          }}
-        </p>
+          <Lock :size="14" class="shrink-0" aria-hidden="true" />
+          <span>{{ t('keys.routingPanel.readOnlyEdit') }}</span>
+        </div>
 
         <!-- Orphaned empty-selection warning -->
         <div
@@ -788,15 +647,6 @@ onBeforeUnmount(() => {
               variant="secondary"
               size="sm"
               :disabled="!canInteract"
-              @click="pickerOpen = true"
-            >
-              <Plus :size="14" aria-hidden="true" />
-              {{ t('keys.routingPanel.pickChannels') }}
-            </ConsoleButton>
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :disabled="!canInteract"
               @click="usePlatform"
             >
               {{ t('keys.routingPanel.usePlatform') }}
@@ -804,12 +654,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Mode segmented control (hidden on read-only create) -->
-        <fieldset
-          v-if="canWrite || editingId !== null"
-          :disabled="!canInteract"
-          class="min-w-0"
-        >
+        <!-- Mode segmented control -->
+        <fieldset :disabled="!canInteract" class="min-w-0">
           <legend class="mb-2 text-xs font-medium text-[var(--text-secondary)]">
             {{ t('keys.routingPanel.modeLabel') }}
           </legend>
@@ -860,6 +706,35 @@ onBeforeUnmount(() => {
           </div>
         </fieldset>
 
+        <!-- Multiplier cap (route-level policy: applies to both platform & selected scopes) -->
+        <div
+          v-if="canWrite || draft.maxRatio"
+          class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3.5 py-3"
+        >
+          <FormField
+            :label="t('keys.routingPanel.maxRatio')"
+            :hint="t('keys.routingPanel.maxRatioHint')"
+          >
+            <TextInput
+              v-model="draft.maxRatio"
+              name="token-max-channel-ratio"
+              inputmode="decimal"
+              maxlength="24"
+              :aria-label="t('keys.routingPanel.maxRatio')"
+              :aria-invalid="!validRatio"
+              :placeholder="t('keys.routingPanel.maxRatioPlaceholder')"
+              :disabled="!canInteract"
+            />
+          </FormField>
+          <p
+            v-if="!validRatio"
+            role="alert"
+            class="mt-1.5 text-xs text-[var(--status-danger-text)]"
+          >
+            {{ t('keys.routingPanel.invalidRatio') }}
+          </p>
+        </div>
+
         <!-- Ordered empty validation hint -->
         <div
           v-if="ordered && draft.entries.length === 0 && !draft.orphan"
@@ -900,17 +775,13 @@ onBeforeUnmount(() => {
         <p
           v-if="revertedNote && draft.entries.length === 0 && !draft.orphan"
           role="status"
-          class="text-xs text-[var(--text-tertiary)]"
+          class="text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
         >
           {{ t('keys.routingPanel.revertedToPlatform') }}
         </p>
 
-        <!-- Selected channels list -->
-        <div
-          v-if="draft.entries.length > 0"
-          class="space-y-2"
-          data-routing-selected-list
-        >
+        <!-- Selected channels list (active scope first) -->
+        <div class="space-y-2" data-routing-selected-list>
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 class="text-xs font-semibold text-[var(--text-secondary)]">
@@ -918,7 +789,10 @@ onBeforeUnmount(() => {
                   draft.entries.length
                 }})
               </h3>
-              <p class="text-[0.6875rem] text-[var(--text-tertiary)]">
+              <p
+                v-if="draft.entries.length > 0"
+                class="text-[0.6875rem] text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+              >
                 {{
                   ordered
                     ? t('keys.routingPanel.orderedListHint')
@@ -927,17 +801,29 @@ onBeforeUnmount(() => {
               </p>
             </div>
             <button
-              v-if="canInteract"
+              v-if="canInteract && draft.entries.length > 0"
               type="button"
-              class="min-h-[32px] rounded-lg px-2 py-1 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-solid)] hover:text-[var(--text-primary)] focus-ring"
+              class="min-h-[32px] rounded-lg px-2 py-1 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] focus-ring"
               @click="usePlatform"
             >
               {{ t('keys.routingPanel.clearToPlatform') }}
             </button>
           </div>
 
+          <p
+            v-if="draft.entries.length === 0 && !draft.orphan"
+            class="rounded-xl border border-dashed border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+          >
+            {{
+              ordered
+                ? t('keys.routingPanel.emptyOrdered')
+                : t('keys.routingPanel.emptyAuto')
+            }}
+          </p>
+
           <component
             :is="ordered ? 'ol' : 'ul'"
+            v-else-if="draft.entries.length > 0"
             class="space-y-2"
             :aria-label="t('keys.routingPanel.selectedTitle')"
           >
@@ -988,11 +874,7 @@ onBeforeUnmount(() => {
                       class="text-[var(--status-danger-text)]"
                       data-unavailable-channel
                     >
-                      {{
-                        t('keys.routingPanel.unavailableChannel', {
-                          id: entry.channel_id,
-                        })
-                      }}
+                      {{ missingChannelText(entry.channel_id) }}
                     </span>
                   </p>
                   <div
@@ -1001,6 +883,9 @@ onBeforeUnmount(() => {
                     <StatusChip
                       v-if="channelFor(entry)"
                       class="routing-aux-chip"
+                      :data-aux-eligible="
+                        channelFor(entry)!.eligible ? '' : undefined
+                      "
                       :tone="
                         channelFor(entry)!.eligible ? 'success' : 'warning'
                       "
@@ -1035,7 +920,7 @@ onBeforeUnmount(() => {
                     :label="`${t('keys.routingPanel.enabled')} #${entry.channel_id}`"
                     size="sm"
                     :disabled="!canInteract"
-                    @update:model-value="emit('clear-error')"
+                    @update:model-value="clearErrors"
                   />
                   {{ t('keys.routingPanel.enabled') }}
                 </label>
@@ -1070,34 +955,21 @@ onBeforeUnmount(() => {
           </component>
         </div>
 
-        <!-- Inline candidate channel picker (no second modal, no nested scroll) -->
-        <div v-if="canWrite" class="space-y-3">
+        <!-- Candidate channel picker (always open when writable; 1 col <640px, 2 cols >=640px) -->
+        <div
+          v-if="canWrite"
+          data-routing-candidate-picker
+          class="space-y-3 border-t border-[var(--border-subtle)] pt-4"
+        >
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              data-routing-picker-toggle
-              :disabled="!canInteract"
-              @click="pickerOpen = !pickerOpen"
-            >
-              <Plus v-if="!pickerOpen" :size="14" aria-hidden="true" />
-              <ChevronDown
-                v-else
-                :size="14"
-                class="rotate-180"
-                aria-hidden="true"
-              />
-              {{
-                pickerOpen
-                  ? t('keys.routingPanel.hideCandidates')
-                  : t('keys.routingPanel.pickChannels')
-              }}
-            </ConsoleButton>
+            <h3 class="text-xs font-semibold text-[var(--text-secondary)]">
+              {{ t('keys.routingPanel.candidateTitle') }}
+            </h3>
             <div
               v-if="
                 modelLimits.length > 0 || (validRatio && draft.maxRatio.trim())
               "
-              class="flex flex-wrap gap-1.5 text-[0.6875rem] text-[var(--text-tertiary)]"
+              class="flex flex-wrap gap-1.5 text-[0.6875rem] text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
             >
               <span v-if="modelLimits.length > 0">{{
                 t('keys.routingPanel.filteredByModels')
@@ -1110,96 +982,96 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div
-            v-if="pickerOpen"
-            data-routing-candidate-picker
-            class="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-3"
-          >
-            <!-- Search & filter bar -->
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div class="relative min-w-0 flex-1">
-                <Search
-                  :size="14"
-                  class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]"
-                  aria-hidden="true"
-                />
-                <input
-                  v-model="searchQuery"
-                  type="search"
-                  name="routing-channel-search"
-                  :aria-label="t('keys.routingPanel.searchPlaceholder')"
-                  :placeholder="t('keys.routingPanel.searchPlaceholder')"
-                  class="h-11 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] pl-8 pr-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-strong)] focus-ring sm:h-9"
-                />
-              </div>
-              <div class="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  :aria-pressed="onlyEligible"
-                  class="no-handdrawn min-h-[36px] rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors focus-ring"
-                  :class="
-                    onlyEligible
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
-                      : 'border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
-                  "
-                  @click="onlyEligible = !onlyEligible"
-                >
-                  {{ t('keys.routingPanel.filterEligible') }}
-                </button>
-                <button
-                  type="button"
-                  :aria-pressed="sortByRatio"
-                  class="no-handdrawn min-h-[36px] rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors focus-ring"
-                  :class="
-                    sortByRatio
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
-                      : 'border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
-                  "
-                  @click="sortByRatio = !sortByRatio"
-                >
-                  {{ t('keys.routingPanel.sortByRatio') }}
-                </button>
-              </div>
+          <!-- Search & filter bar -->
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div class="relative min-w-0 flex-1">
+              <Search
+                :size="14"
+                class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[var(--text-tertiary)]"
+                aria-hidden="true"
+              />
+              <input
+                v-model="searchQuery"
+                type="search"
+                name="routing-channel-search"
+                :aria-label="t('keys.routingPanel.searchPlaceholder')"
+                :placeholder="t('keys.routingPanel.searchPlaceholder')"
+                class="h-11 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] pr-3 pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-strong)] focus-ring sm:h-9"
+              />
             </div>
-
-            <p
-              v-if="candidatesLoading"
-              role="status"
-              class="py-4 text-center text-xs text-[var(--text-tertiary)]"
-            >
-              {{ t('keys.routingPanel.loadingCandidates') }}
-            </p>
-            <div
-              v-else-if="candidatesError"
-              role="alert"
-              class="no-handdrawn flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--status-danger)] bg-[var(--status-danger-soft)] p-2.5 text-xs text-[var(--status-danger-text)]"
-            >
-              <span>{{
-                t('keys.routingPanel.candidatesFailed', {
-                  error: candidatesError,
-                })
-              }}</span>
-              <ConsoleButton
-                variant="secondary"
-                size="sm"
-                @click="fetchCandidates"
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                :aria-pressed="onlyEligible"
+                class="no-handdrawn min-h-[36px] rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors focus-ring"
+                :class="
+                  onlyEligible
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
+                    : 'border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+                "
+                @click="onlyEligible = !onlyEligible"
               >
-                {{ t('keys.routingPanel.reload') }}
-              </ConsoleButton>
+                {{ t('keys.routingPanel.filterEligible') }}
+              </button>
+              <button
+                type="button"
+                :aria-pressed="sortByRatio"
+                class="no-handdrawn min-h-[36px] rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors focus-ring"
+                :class="
+                  sortByRatio
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
+                    : 'border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+                "
+                @click="sortByRatio = !sortByRatio"
+              >
+                {{ t('keys.routingPanel.sortByRatio') }}
+              </button>
             </div>
-            <p
-              v-else-if="channels.length === 0"
-              class="py-4 text-center text-xs text-[var(--text-tertiary)]"
+          </div>
+
+          <p
+            v-if="candidatesLoading"
+            role="status"
+            class="py-4 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+          >
+            {{ t('keys.routingPanel.loadingCandidates') }}
+          </p>
+          <div
+            v-else-if="candidatesError"
+            role="alert"
+            class="no-handdrawn flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--status-danger)] bg-[var(--status-danger-soft)] p-2.5 text-xs text-[var(--status-danger-text)]"
+          >
+            <span>{{
+              t('keys.routingPanel.candidatesFailed', {
+                error: candidatesError,
+              })
+            }}</span>
+            <ConsoleButton
+              variant="secondary"
+              size="sm"
+              @click="fetchCandidates"
             >
-              {{ t('keys.routingPanel.noChannels') }}
-            </p>
-            <p
-              v-else-if="visibleChannels.length === 0"
-              class="py-4 text-center text-xs text-[var(--text-tertiary)]"
+              {{ t('keys.routingPanel.reload') }}
+            </ConsoleButton>
+          </div>
+          <p
+            v-else-if="channels.length === 0"
+            class="py-4 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+          >
+            {{ t('keys.routingPanel.noChannels') }}
+          </p>
+          <p
+            v-else-if="visibleChannels.length === 0"
+            class="py-4 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+          >
+            {{ t('keys.routingPanel.noMatches') }}
+          </p>
+          <div v-else class="space-y-2">
+            <div
+              class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              role="group"
+              :aria-label="t('keys.routingPanel.candidateTitle')"
             >
-              {{ t('keys.routingPanel.noMatches') }}
-            </p>
-            <div v-else class="space-y-1.5" role="group">
               <button
                 v-for="channel in visibleChannels"
                 :key="channel.id"
@@ -1211,7 +1083,7 @@ onBeforeUnmount(() => {
                   (!channel.eligible && !selectedIds.has(channel.id))
                 "
                 :data-candidate-channel-id="channel.id"
-                class="no-handdrawn flex min-h-[44px] w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-55"
+                class="no-handdrawn flex min-h-[44px] w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-55"
                 :class="
                   selectedIds.has(channel.id)
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
@@ -1220,7 +1092,7 @@ onBeforeUnmount(() => {
                 @click="toggleCandidate(channel)"
               >
                 <span
-                  class="grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border transition-colors"
+                  class="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border transition-colors"
                   :class="
                     selectedIds.has(channel.id)
                       ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
@@ -1264,82 +1136,56 @@ onBeforeUnmount(() => {
                   </span>
                 </span>
               </button>
-
-              <ConsoleButton
-                v-if="remainingCount > 0"
-                variant="secondary"
-                size="sm"
-                block
-                @click="visibleLimit += 20"
-              >
-                {{ t('keys.routingPanel.showMore', { count: remainingCount }) }}
-              </ConsoleButton>
             </div>
-          </div>
-        </div>
 
-        <!-- Collapsible multiplier cap -->
-        <div
-          v-if="canWrite || draft.maxRatio"
-          class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
-        >
-          <button
-            type="button"
-            class="flex min-h-[44px] w-full items-center justify-between gap-2 px-3.5 py-2 text-left text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)] focus-ring sm:min-h-[38px]"
-            :aria-expanded="ratioOpen"
-            @click="ratioOpen = !ratioOpen"
-          >
-            <span>
-              {{ t('keys.routingPanel.moreOptions') }}
-              <span
-                v-if="draft.maxRatio.trim()"
-                class="ml-1.5 font-mono text-[var(--accent-text)]"
-              >
-                ≤ ×{{ draft.maxRatio.trim() }}
-              </span>
-            </span>
-            <ChevronDown
-              :size="14"
-              class="shrink-0 text-[var(--text-tertiary)] transition-transform"
-              :class="{ 'rotate-180': ratioOpen }"
-              aria-hidden="true"
-            />
-          </button>
-          <div
-            v-if="ratioOpen"
-            class="border-t border-[var(--border-subtle)] px-3.5 py-3"
-          >
-            <FormField
-              :label="t('keys.routingPanel.maxRatio')"
-              :hint="t('keys.routingPanel.maxRatioHint')"
+            <ConsoleButton
+              v-if="remainingCount > 0"
+              variant="secondary"
+              size="sm"
+              block
+              @click="visibleLimit += 20"
             >
-              <TextInput
-                v-model="draft.maxRatio"
-                name="token-max-channel-ratio"
-                inputmode="decimal"
-                maxlength="24"
-                :aria-label="t('keys.routingPanel.maxRatio')"
-                :aria-invalid="!validRatio"
-                :placeholder="t('keys.routingPanel.maxRatioPlaceholder')"
-                :disabled="!canInteract"
-              />
-            </FormField>
-            <p
-              v-if="!validRatio"
-              role="alert"
-              class="mt-1.5 text-xs text-[var(--status-danger-text)]"
-            >
-              {{ t('keys.routingPanel.invalidRatio') }}
-            </p>
+              {{ t('keys.routingPanel.showMore', { count: remainingCount }) }}
+            </ConsoleButton>
           </div>
         </div>
       </template>
     </div>
-  </section>
+
+    <template #footer>
+      <div v-if="canWrite" class="grid grid-cols-2 gap-3">
+        <ConsoleButton
+          variant="secondary"
+          size="lg"
+          :disabled="saving"
+          @click="emit('close')"
+        >
+          {{ t('common.cancel') }}
+        </ConsoleButton>
+        <ConsoleButton
+          size="lg"
+          :loading="saving"
+          :disabled="!canSave"
+          @click="save"
+        >
+          {{ t('common.save') }}
+        </ConsoleButton>
+      </div>
+      <ConsoleButton
+        v-else
+        size="lg"
+        block
+        variant="secondary"
+        @click="emit('close')"
+      >
+        {{ t('common.close') }}
+      </ConsoleButton>
+    </template>
+  </ConsoleModal>
 </template>
 
 <style scoped>
-:global(html.dark .routing-aux-chip[data-tone='success']) {
+:global(html.dark .routing-aux-chip[data-aux-eligible]) {
   background: var(--surface-muted) !important;
   color: var(--text-secondary) !important;
   border-left-color: var(--border-default) !important;

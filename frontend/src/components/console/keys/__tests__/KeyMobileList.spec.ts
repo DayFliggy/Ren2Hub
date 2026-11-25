@@ -159,27 +159,28 @@ describe('KeyMobileList', () => {
     expect(exhausted!.find('[data-ring-state] path').exists()).toBe(false)
   })
 
-  it('shows the balance on the quota bar and expands the rest in place', async () => {
-    const { wrapper } = await mountList([token, { ...token, id: 8 }])
-    const [first, second] = wrapper.findAll('[data-key-mobile-row]')
-    const bar = first!.get('button[data-key-quota-ring]')
+  it('renders the quota bar as a static readout without an accordion button', async () => {
+    const { wrapper } = await mountList([
+      {
+        ...token,
+        model_limits: ['gpt-4o', 'claude-4'],
+        ip_limits: ['10.0.0.1'],
+        allow_user_quota_query: false,
+      },
+      { ...token, id: 8 },
+    ])
+    const [first] = wrapper.findAll('[data-key-mobile-row]')
+    const bar = first!.get('.key-quota-bar')
 
-    // No hover on touch: the figures the desktop ring hides are shown here.
     expect(bar.get('[data-key-remaining]').text()).toBe('$3.000')
     expect(bar.text()).toContain('已用 $1.000')
-    expect(bar.attributes('aria-expanded')).toBe('false')
-
-    await bar.trigger('click')
-    const region = first!.get(`#${bar.attributes('aria-controls')}`)
-    expect(bar.attributes('aria-expanded')).toBe('true')
-    expect(region.attributes('role')).toBe('region')
-    // The bar already carries the balance; the detail adds the rest.
-    expect(region.text()).toContain('查询账户额度')
-    expect(region.text()).not.toContain('可用额度')
-    expect(second!.find('[role="region"]').exists()).toBe(false)
-
-    await bar.trigger('click')
-    expect(first!.find('[role="region"]').exists()).toBe(false)
+    expect(first!.find('button[data-key-quota-ring]').exists()).toBe(false)
+    expect(first!.find('[aria-expanded]').exists()).toBe(false)
+    expect(first!.get('[data-key-restrictions]').text()).toContain(
+      '限 2 个模型'
+    )
+    expect(first!.get('[data-key-restrictions]').text()).toContain('限 IP')
+    expect(first!.get('[data-key-restrictions]').text()).toContain('禁查额度')
   })
 
   it('tints the quota bar by urgency, never for a blocked key', async () => {
