@@ -43,6 +43,7 @@ export const VISUAL_ROUTES: VisualRoute[] = [
   })),
   { name: 'drawing-logs', path: '/usage-logs/drawing' },
   { name: 'task-logs', path: '/usage-logs/task' },
+  { name: 'quota-logs', path: '/usage-logs/quota' },
   { name: 'dashboard', path: '/dashboard' },
   { name: 'activity', path: '/activity' },
   { name: 'models', path: '/models' },

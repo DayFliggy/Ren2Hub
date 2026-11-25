@@ -48,7 +48,7 @@ MATRIX_TESTS = {
         "TestVendorManagementDatabaseMatrix", "TestModelDeletionDatabaseMatrix",
         "TestSharedModelPluginPricingDatabaseMatrix", "TestDeleteRedemptionBatch",
         "TestAuditDatabaseMatrix", "TestPreConsumePolicyDatabaseMatrix",
-        "TestRequestPolicyRoutingDatabaseMatrix", "TestLogExportDatabaseMatrix", "TestLogExportKeysetDatabaseMatrix", "TestSelfLogStatIdentityDatabaseMatrix", "TestChannelCredentialPreservationDatabaseMatrix",
+        "TestRequestPolicyRoutingDatabaseMatrix", "TestLogExportDatabaseMatrix", "TestLogClassificationFilterDatabaseMatrix", "TestLogExportKeysetDatabaseMatrix", "TestSelfLogStatIdentityDatabaseMatrix", "TestChannelCredentialPreservationDatabaseMatrix",
         "TestAPITokenAuditDatabaseMatrix", "TestDeletedSelectedChannelsDatabaseMatrix",
     ),
     "pkg/perf_metrics": ("TestPerformanceAggregationAndFlush",),

@@ -15,12 +15,17 @@ import (
 
 // logFilterFromQuery reads the log search shared by the log list and the log
 // export. Username and channel are read only for administrators.
-func logFilterFromQuery(c *gin.Context, admin bool) model.LogFilter {
+func logFilterFromQuery(c *gin.Context, admin bool) (model.LogFilter, error) {
 	logType, _ := strconv.Atoi(c.Query("type"))
+	logTypes, err := model.ParseLogTypesParam(c.Query("types"))
+	if err != nil {
+		return model.LogFilter{}, err
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	filter := model.LogFilter{
 		Type:              logType,
+		Types:             logTypes,
 		StartTimestamp:    startTimestamp,
 		EndTimestamp:      endTimestamp,
 		ModelName:         c.Query("model_name"),
@@ -32,7 +37,7 @@ func logFilterFromQuery(c *gin.Context, admin bool) model.LogFilter {
 		filter.Username = c.Query("username")
 		filter.Channel, _ = strconv.Atoi(c.Query("channel"))
 	}
-	return filter
+	return filter, nil
 }
 
 // limitLogTimeRange returns the start of a log or dashboard search kept within
@@ -55,7 +60,12 @@ func limitLogTimeRange(startTimestamp int64, endTimestamp int64) (int64, error) 
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	logs, total, err := model.GetAllLogs(logFilterFromQuery(c, true), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	filter, err := logFilterFromQuery(c, true)
+	if err != nil {
+		common.ApiErrorMsg(c, "Invalid log types")
+		return
+	}
+	logs, total, err := model.GetAllLogs(filter, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -73,7 +83,11 @@ func GetAllLogs(c *gin.Context) {
 
 func GetUserLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	filter := logFilterFromQuery(c, false)
+	filter, err := logFilterFromQuery(c, false)
+	if err != nil {
+		common.ApiErrorMsg(c, "Invalid log types")
+		return
+	}
 	if c.GetInt("role") < common.RoleAdminUser {
 		startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
 		if err != nil {
@@ -111,7 +125,11 @@ func ExportUserLogs(c *gin.Context) {
 // response object: success with the log count, or the failure. Each user runs
 // one export at a time; exports have no total duration or time-range limit.
 func exportLogs(c *gin.Context, all bool) {
-	filter := logFilterFromQuery(c, all)
+	filter, err := logFilterFromQuery(c, all)
+	if err != nil {
+		common.ApiErrorMsg(c, "Invalid log types")
+		return
+	}
 
 	userId := c.GetInt("id")
 	release, ok, err := service.AcquireLogExportLock(userId)

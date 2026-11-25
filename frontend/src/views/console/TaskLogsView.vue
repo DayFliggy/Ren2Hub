@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink, routeLocationKey, routerKey } from 'vue-router'
 
 import { api } from '@/api/console'
 import { parseTaskLogPage } from '@/api/liveContracts'
@@ -12,12 +13,18 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
+import AsyncTaskSubTabs from '@/components/console/log-ui/AsyncTaskSubTabs.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
+import {
+  TASK_PLATFORM_PRESETS,
+  taskPlatformLabel,
+} from '@/components/console/log-ui/logClassification'
 import {
   relayTaskDurationSeconds,
   relayTaskStatusMeta,
@@ -28,6 +35,7 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { getLocale } from '@/i18n'
 import { translateServerText } from '@/i18n/serverMessages'
+import { useAuthStore } from '@/stores/auth'
 import {
   formatQuota,
   formatTime,
@@ -36,12 +44,25 @@ import {
 } from '@/utils/format'
 
 const { t } = useI18n()
+const auth = useAuthStore()
+const route = inject(routeLocationKey, null)
+const router = inject(routerKey, null)
+const hasRouter = Boolean(router)
+
+const canReadAll = computed(() => auth.isAdmin)
+
+function queryStringParam(name: string): string {
+  const value = route?.query?.[name]
+  return typeof value === 'string' ? value : ''
+}
 
 /** Gateway fail reasons are fixed English sentences; provider text passes through. */
 function failReason(row: { fail_reason: string }): string {
   return translateServerText(getLocale(), row.fail_reason)
 }
 const toast = useToast()
+
+const CUSTOM_PLATFORM_VALUE = '__custom__'
 
 const rows = ref<RelayTaskLogItem[]>([])
 const total = ref(0)
@@ -50,18 +71,70 @@ const pageSize = ref(10)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
-const taskId = ref('')
-const platform = ref('')
+const taskId = ref(queryStringParam('task_id'))
+const platformPreset = ref('')
+const customPlatform = ref('')
+const status = ref('')
+const channelId = ref('')
+const scope = ref<'self' | 'all'>(
+  queryStringParam('scope') === 'all' && canReadAll.value ? 'all' : 'self'
+)
+const readingAll = computed(() => scope.value === 'all' && canReadAll.value)
 const startDate = ref('')
 const endDate = ref('')
 
 const failureRow = ref<RelayTaskLogItem | null>(null)
 
+const scopeOptions = computed(() => [
+  { value: 'self', label: t('relayLogs.scopeSelf') },
+  { value: 'all', label: t('relayLogs.scopeAll') },
+])
+
+const platformOptions = computed(() => [
+  { value: '', label: t('relayLogs.platformAll') },
+  ...TASK_PLATFORM_PRESETS.map((item) => ({
+    value: item.value,
+    label: item.label,
+  })),
+  { value: CUSTOM_PLATFORM_VALUE, label: t('relayLogs.platformCustom') },
+])
+
+const statusOptions = computed(() => [
+  { value: '', label: t('relayLogs.statusAll') },
+  {
+    value: 'SUCCESS',
+    label: t('relayLogs.statusSuccess'),
+    tone: 'success' as const,
+  },
+  {
+    value: 'IN_PROGRESS',
+    label: t('relayLogs.statusInProgress'),
+    tone: 'info' as const,
+  },
+  {
+    value: 'QUEUED',
+    label: t('relayLogs.statusQueued'),
+    tone: 'warning' as const,
+  },
+  {
+    value: 'NOT_START',
+    label: t('relayLogs.statusNotStart'),
+  },
+  {
+    value: 'FAILURE',
+    label: t('relayLogs.statusFailed'),
+    tone: 'danger' as const,
+  },
+])
+
 const columns = computed<TableColumn[]>(() => [
   { key: 'submitted', label: t('relayLogs.colSubmitted'), width: '170px' },
-  { key: 'task', label: t('relayLogs.colTask'), width: '210px' },
-  { key: 'platform', label: t('relayLogs.colPlatform'), width: '110px' },
-  { key: 'progress', label: t('relayLogs.colProgress'), width: '130px' },
+  ...(readingAll.value
+    ? [{ key: 'account', label: t('relayLogs.colAccount'), width: '140px' }]
+    : []),
+  { key: 'task', label: t('relayLogs.colTask'), width: '216px' },
+  { key: 'platform', label: t('relayLogs.colPlatform'), width: '128px' },
+  { key: 'progress', label: t('relayLogs.colProgress'), width: '124px' },
   { key: 'result', label: t('relayLogs.colResult') },
   {
     key: 'cost',
@@ -70,6 +143,17 @@ const columns = computed<TableColumn[]>(() => [
     align: 'right',
   },
 ])
+
+const resolvedPlatform = computed(() => {
+  if (platformPreset.value === CUSTOM_PLATFORM_VALUE) {
+    return customPlatform.value.trim()
+  }
+  return platformPreset.value.trim()
+})
+
+function endpoint(): '/api/task/self' | '/api/task' {
+  return readingAll.value ? '/api/task' : '/api/task/self'
+}
 
 function currentParams() {
   // /api/task filters compare against second-precision submit_time values;
@@ -80,13 +164,16 @@ function currentParams() {
   const endTimestamp = endDate.value
     ? Math.floor(localDayEndMs(endDate.value) / 1000)
     : undefined
+  const platformVal = resolvedPlatform.value
+  const statusVal = status.value.trim()
+  const channelVal = readingAll.value ? channelId.value.trim() : ''
   return {
     p: page.value,
     page_size: pageSize.value,
     task_id: taskId.value.trim(),
-    // Stored platforms are task plugin keys or channel type numbers, so the
-    // filter is free text matched exactly; an empty one is omitted.
-    platform: platform.value.trim() || undefined,
+    platform: platformVal || undefined,
+    status: statusVal || undefined,
+    ...(channelVal ? { channel_id: channelVal } : {}),
     start_timestamp: startTimestamp,
     end_timestamp: endTimestamp,
   }
@@ -104,9 +191,11 @@ function clearResults() {
 async function load() {
   window.clearTimeout(searchTimer)
   clearResults()
+  const target = endpoint()
   const result = await listRequest.run(async (signal) =>
     parseTaskLogPage(
-      await api.get<unknown>('/api/task/self', currentParams(), { signal })
+      await api.get<unknown>(target, currentParams(), { signal }),
+      target
     )
   )
   if (result.stale) return
@@ -130,14 +219,37 @@ function reload() {
   if (page.value === 1) load()
   else page.value = 1
 }
-watch([taskId, platform], () => {
+watch([taskId, customPlatform, channelId], () => {
   // The input already describes a new query during the debounce interval.
   listRequest.cancel()
   clearResults()
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
-watch([startDate, endDate], reload)
+watch([platformPreset, status, startDate, endDate], reload)
+watch(scope, (value) => {
+  if (router && route) {
+    void router.replace({
+      query: { ...route.query, scope: value === 'all' ? 'all' : undefined },
+    })
+  }
+  reload()
+})
+if (route) {
+  watch(
+    () => route.query.scope,
+    (value) => {
+      scope.value = value === 'all' && canReadAll.value ? 'all' : 'self'
+    }
+  )
+  watch(
+    () => route.query.task_id,
+    (value) => {
+      const next = typeof value === 'string' ? value : ''
+      if (next !== taskId.value) taskId.value = next
+    }
+  )
+}
 watch(pageSize, reload)
 watch(page, load)
 onMounted(load)
@@ -163,6 +275,8 @@ function formatDuration(row: RelayTaskLogItem): string {
       </template>
     </PageBreadcrumb>
 
+    <AsyncTaskSubTabs active="general" :scope-all="readingAll" />
+
     <!-- filter toolbar -->
     <div
       class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
@@ -172,14 +286,45 @@ function formatDuration(row: RelayTaskLogItem): string {
         :placeholder="t('relayLogs.taskIdPlaceholder')"
         :aria-label="t('relayLogs.taskIdPlaceholder')"
         name="task-log-search"
-        class="w-full sm:w-64"
+        class="w-full sm:w-56"
+      />
+      <FilterSelect
+        v-if="canReadAll"
+        v-model="scope"
+        :options="scopeOptions"
+        :label="t('relayLogs.scopeLabel')"
+        :prefix-label="t('relayLogs.scopeLabel') + ':'"
+        class="w-full sm:w-48"
+      />
+      <FilterSelect
+        v-model="platformPreset"
+        :options="platformOptions"
+        :label="t('relayLogs.platformLabel')"
+        :prefix-label="t('relayLogs.platformLabel') + ':'"
+        class="w-full sm:w-52"
       />
       <SearchInput
-        v-model="platform"
+        v-if="platformPreset === CUSTOM_PLATFORM_VALUE"
+        v-model="customPlatform"
         :placeholder="t('relayLogs.platformPlaceholder')"
-        :aria-label="t('relayLogs.platformLabel')"
+        :aria-label="t('relayLogs.platformPlaceholder')"
         name="task-log-platform"
-        class="w-full sm:w-56"
+        class="w-full sm:w-52"
+      />
+      <FilterSelect
+        v-model="status"
+        :options="statusOptions"
+        :label="t('relayLogs.statusLabel')"
+        :prefix-label="t('relayLogs.statusLabel') + ':'"
+        class="w-full sm:w-44"
+      />
+      <SearchInput
+        v-if="readingAll"
+        v-model="channelId"
+        :placeholder="t('relayLogs.channelIdPlaceholder')"
+        :aria-label="t('relayLogs.channelIdPlaceholder')"
+        name="task-log-channel"
+        class="w-full sm:w-36"
       />
       <DateRangePicker
         v-model:start="startDate"
@@ -209,7 +354,7 @@ function formatDuration(row: RelayTaskLogItem): string {
         :skeleton-rows="pageSize"
         adaptive-scroll
         :page-size="pageSize"
-        min-table-width="900px"
+        min-table-width="940px"
         :scroll-region-label="t('relayLogs.tasksBreadcrumb')"
         :empty-title="t('relayLogs.emptyTitle')"
         :empty-hint="t('relayLogs.emptyHint')"
@@ -231,10 +376,48 @@ function formatDuration(row: RelayTaskLogItem): string {
             </StatusChip>
           </div>
         </template>
+        <template #cell-account="{ row }">
+          <div class="flex min-w-0 flex-col items-start gap-0.5">
+            <span
+              class="block max-w-full truncate text-xs font-semibold text-[var(--text-primary)]"
+            >
+              {{
+                (row as RelayTaskLogItem).username ||
+                ((row as RelayTaskLogItem).user_id
+                  ? t('relayLogs.userIdBadge', {
+                      id: (row as RelayTaskLogItem).user_id,
+                    })
+                  : '-')
+              }}
+            </span>
+            <span
+              v-if="(row as RelayTaskLogItem).channel_id"
+              class="font-mono text-[0.6875rem] text-[var(--text-tertiary)]"
+            >
+              {{
+                t('relayLogs.channelIdBadge', {
+                  id: (row as RelayTaskLogItem).channel_id,
+                })
+              }}
+            </span>
+          </div>
+        </template>
         <template #cell-task="{ row }">
           <div class="flex min-w-0 flex-col items-start gap-1">
             <span
-              class="text-xs font-semibold text-[var(--text-primary)]"
+              v-if="(row as RelayTaskLogItem).origin_model_name"
+              class="block max-w-full truncate font-mono text-xs font-semibold text-[var(--text-primary)]"
+              :title="(row as RelayTaskLogItem).origin_model_name"
+            >
+              {{ (row as RelayTaskLogItem).origin_model_name }}
+            </span>
+            <span
+              class="text-xs"
+              :class="
+                (row as RelayTaskLogItem).origin_model_name
+                  ? 'text-[var(--text-secondary)]'
+                  : 'font-semibold text-[var(--text-primary)]'
+              "
               :title="(row as RelayTaskLogItem).action"
             >
               {{ (row as RelayTaskLogItem).action || '-' }}
@@ -245,11 +428,29 @@ function formatDuration(row: RelayTaskLogItem): string {
             >
               {{ (row as RelayTaskLogItem).task_id || '-' }}
             </span>
+            <RouterLink
+              v-if="
+                hasRouter && (row as RelayTaskLogItem).admin_info?.request_id
+              "
+              :to="{
+                name: 'logs',
+                query: {
+                  request_id: (row as RelayTaskLogItem).admin_info!.request_id!,
+                  ...(readingAll ? { scope: 'all' } : {}),
+                },
+              }"
+              class="text-[0.6875rem] text-[var(--accent-text)] underline-offset-2 hover:underline"
+            >
+              {{ t('relayLogs.openCallLog') }}
+            </RouterLink>
           </div>
         </template>
         <template #cell-platform="{ row }">
-          <StatusChip tone="info">
-            {{ (row as RelayTaskLogItem).platform || '-' }}
+          <StatusChip
+            tone="info"
+            :title="(row as RelayTaskLogItem).platform || '-'"
+          >
+            {{ taskPlatformLabel((row as RelayTaskLogItem).platform) }}
           </StatusChip>
         </template>
         <template #cell-progress="{ row }">
@@ -326,17 +527,42 @@ function formatDuration(row: RelayTaskLogItem): string {
           class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
         >
           <div class="flex items-center justify-between gap-2">
-            <StatusChip :tone="relayTaskStatusMeta(row.status).tone">
-              {{ t(relayTaskStatusMeta(row.status).labelKey) }}
-            </StatusChip>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <StatusChip :tone="relayTaskStatusMeta(row.status).tone">
+                {{ t(relayTaskStatusMeta(row.status).labelKey) }}
+              </StatusChip>
+              <StatusChip tone="info" :title="row.platform || '-'">
+                {{ taskPlatformLabel(row.platform) }}
+              </StatusChip>
+            </div>
             <span class="text-xs text-[var(--text-tertiary)]">
               {{ formatTime(row.submit_time) }}
             </span>
           </div>
           <p
-            class="mt-2 truncate font-mono text-xs text-[var(--text-tertiary)]"
+            v-if="readingAll && (row.username || row.user_id || row.channel_id)"
+            class="mt-1.5 truncate text-xs text-[var(--text-secondary)]"
           >
-            {{ row.platform || '-' }} · {{ row.action || '-' }} ·
+            {{
+              row.username ||
+              (row.user_id
+                ? t('relayLogs.userIdBadge', { id: row.user_id })
+                : '')
+            }}
+            <template v-if="row.channel_id">
+              · {{ t('relayLogs.channelIdBadge', { id: row.channel_id }) }}
+            </template>
+          </p>
+          <p
+            v-if="row.origin_model_name"
+            class="mt-2 truncate font-mono text-sm font-semibold text-[var(--text-primary)]"
+          >
+            {{ row.origin_model_name }}
+          </p>
+          <p
+            class="mt-1 truncate font-mono text-xs text-[var(--text-tertiary)]"
+          >
+            {{ taskPlatformLabel(row.platform) }} · {{ row.action || '-' }} ·
             {{ row.task_id || '-' }}
           </p>
           <button

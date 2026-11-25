@@ -125,8 +125,8 @@ it('exports with the same request_id filter as the list', async () => {
   expect(URL.createObjectURL).toHaveBeenCalledOnce()
 })
 
-it('offers only the categories model.ValidAuditCategory accepts', async () => {
-  const { wrapper } = await mountAuditLogs()
+it('offers valid audit categories including combined login,security and hides operation for non-admins', async () => {
+  const { wrapper, lastParams } = await mountAuditLogs()
   const category = wrapper
     .findAllComponents(FilterSelect)
     .find((select) => select.props('label') === 'Event category')!
@@ -134,7 +134,68 @@ it('offers only the categories model.ValidAuditCategory accepts', async () => {
     (category.props('options') as { value: string }[]).map(
       (option) => option.value
     )
-  ).toEqual(['all', 'operation', 'security', 'login', 'access_token'])
+  ).toEqual([
+    'all',
+    'login,security',
+    'operation',
+    'security',
+    'login',
+    'access_token',
+  ])
+
+  category.vm.$emit('update:modelValue', 'login,security')
+  await flushPromises()
+  expect(lastParams()).toMatchObject({
+    category: '',
+    categories: 'login,security',
+  })
+
+  // Common members cannot trigger management operations, so operation is hidden.
+  useAuthStore().persist({
+    id: 9,
+    username: 'member',
+    display_name: '',
+    email: '',
+    role: 1,
+    status: 1,
+    quota: 0,
+    used_quota: 0,
+    request_count: 0,
+    permissions: { admin_permissions: {} },
+  })
+  await flushPromises()
+  expect(
+    (category.props('options') as { value: string }[]).map(
+      (option) => option.value
+    )
+  ).toEqual(['all', 'login,security', 'security', 'login', 'access_token'])
+})
+
+it('labels payment webhook rejections as Payment risk and forwards username in all-accounts scope', async () => {
+  const { wrapper, lastParams } = await mountAuditLogs(() =>
+    auditPage({
+      event_id: 'evt-pay-risk',
+      user_id: 0,
+      username: '',
+      actor_role: 0,
+      created_at: 1_700_000_000,
+      category: 'security',
+      action: 'payment.callback_rejected',
+      auth_method: 'webhook',
+      content: 'Rejected verified payment receipt',
+      status: 200,
+      success: false,
+    })
+  )
+  expect(new Set(categoryChipTones(wrapper, 'Payment risk'))).toEqual(
+    new Set(['danger'])
+  )
+  expect(wrapper.find('[data-audit-retention-notice]').exists()).toBe(true)
+
+  await wrapper.get('[name="audit-log-username"]').setValue('alice')
+  await vi.waitFor(() =>
+    expect(lastParams()).toHaveProperty('username', 'alice')
+  )
 })
 
 function categoryChipTones(wrapper: VueWrapper, label: string) {

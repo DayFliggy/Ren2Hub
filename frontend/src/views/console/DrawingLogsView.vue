@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { routeLocationKey, routerKey } from 'vue-router'
 
 import { api } from '@/api/console'
 import { parseDrawingLogPage } from '@/api/liveContracts'
@@ -12,11 +13,13 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
+import AsyncTaskSubTabs from '@/components/console/log-ui/AsyncTaskSubTabs.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
   relayTaskDurationSeconds,
@@ -26,6 +29,7 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { getLocale } from '@/i18n'
 import { translateServerText } from '@/i18n/serverMessages'
+import { useAuthStore } from '@/stores/auth'
 import {
   formatQuota,
   formatTime,
@@ -36,6 +40,16 @@ import { safeExternalUrl } from '@/utils/safeUrl'
 
 const { t } = useI18n()
 const toast = useToast()
+const auth = useAuthStore()
+const route = inject(routeLocationKey, null)
+const router = inject(routerKey, null)
+
+const canReadAll = computed(() => auth.isAdmin)
+
+function queryStringParam(name: string): string {
+  const value = route?.query?.[name]
+  return typeof value === 'string' ? value : ''
+}
 
 const rows = ref<DrawingLogItem[]>([])
 const total = ref(0)
@@ -44,14 +58,61 @@ const pageSize = ref(10)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
-const taskId = ref('')
+const taskId = ref(queryStringParam('mj_id'))
+const status = ref('')
+const channelId = ref('')
+const scope = ref<'self' | 'all'>(
+  queryStringParam('scope') === 'all' && canReadAll.value ? 'all' : 'self'
+)
+const readingAll = computed(() => scope.value === 'all' && canReadAll.value)
 const startDate = ref('')
 const endDate = ref('')
 
 const detailRow = ref<DrawingLogItem | null>(null)
 
+const scopeOptions = computed(() => [
+  { value: 'self', label: t('relayLogs.scopeSelf') },
+  { value: 'all', label: t('relayLogs.scopeAll') },
+])
+
+const statusOptions = computed(() => [
+  { value: '', label: t('relayLogs.statusAll') },
+  {
+    value: 'SUCCESS',
+    label: t('relayLogs.statusSuccess'),
+    tone: 'success' as const,
+  },
+  {
+    value: 'IN_PROGRESS',
+    label: t('relayLogs.statusInProgress'),
+    tone: 'info' as const,
+  },
+  {
+    value: 'QUEUED',
+    label: t('relayLogs.statusQueued'),
+    tone: 'warning' as const,
+  },
+  {
+    value: 'MODAL',
+    label: t('relayLogs.statusWaiting'),
+    tone: 'warning' as const,
+  },
+  {
+    value: 'NOT_START',
+    label: t('relayLogs.statusNotStart'),
+  },
+  {
+    value: 'FAILURE',
+    label: t('relayLogs.statusFailed'),
+    tone: 'danger' as const,
+  },
+])
+
 const columns = computed<TableColumn[]>(() => [
   { key: 'submitted', label: t('relayLogs.colSubmitted'), width: '170px' },
+  ...(readingAll.value
+    ? [{ key: 'account', label: t('relayLogs.colAccount'), width: '140px' }]
+    : []),
   { key: 'task', label: t('relayLogs.colTask'), width: '190px' },
   { key: 'prompt', label: t('relayLogs.colPrompt') },
   { key: 'progress', label: t('relayLogs.colProgress'), width: '130px' },
@@ -64,6 +125,10 @@ const columns = computed<TableColumn[]>(() => [
   },
 ])
 
+function endpoint(): '/api/mj/self' | '/api/mj/' {
+  return readingAll.value ? '/api/mj/' : '/api/mj/self'
+}
+
 function currentParams() {
   // /api/mj filters compare against millisecond submit_time values and treat
   // any sent value, including 0, as a bound; an unset date is omitted.
@@ -71,10 +136,14 @@ function currentParams() {
     ? localDayStartMs(startDate.value)
     : undefined
   const endTimestamp = endDate.value ? localDayEndMs(endDate.value) : undefined
+  const statusVal = status.value.trim()
+  const channelVal = readingAll.value ? channelId.value.trim() : ''
   return {
     p: page.value,
     page_size: pageSize.value,
     mj_id: taskId.value.trim(),
+    ...(statusVal ? { status: statusVal } : {}),
+    ...(channelVal ? { channel_id: channelVal } : {}),
     start_timestamp: startTimestamp,
     end_timestamp: endTimestamp,
   }
@@ -92,9 +161,11 @@ function clearResults() {
 async function load() {
   window.clearTimeout(searchTimer)
   clearResults()
+  const target = endpoint()
   const result = await listRequest.run(async (signal) =>
     parseDrawingLogPage(
-      await api.get<unknown>('/api/mj/self', currentParams(), { signal })
+      await api.get<unknown>(target, currentParams(), { signal }),
+      target
     )
   )
   if (result.stale) return
@@ -118,14 +189,37 @@ function reload() {
   if (page.value === 1) load()
   else page.value = 1
 }
-watch(taskId, () => {
+watch([taskId, channelId], () => {
   // The input already describes a new query during the debounce interval.
   listRequest.cancel()
   clearResults()
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
-watch([startDate, endDate], reload)
+watch([status, startDate, endDate], reload)
+watch(scope, (value) => {
+  if (router && route) {
+    void router.replace({
+      query: { ...route.query, scope: value === 'all' ? 'all' : undefined },
+    })
+  }
+  reload()
+})
+if (route) {
+  watch(
+    () => route.query.scope,
+    (value) => {
+      scope.value = value === 'all' && canReadAll.value ? 'all' : 'self'
+    }
+  )
+  watch(
+    () => route.query.mj_id,
+    (value) => {
+      const next = typeof value === 'string' ? value : ''
+      if (next !== taskId.value) taskId.value = next
+    }
+  )
+}
 watch(pageSize, reload)
 watch(page, load)
 onMounted(load)
@@ -164,9 +258,11 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
       :crumbs="[t('logs.breadcrumb.0'), t('relayLogs.drawingBreadcrumb')]"
     >
       <template #action>
-        <LogsNavTabs active="drawing" />
+        <LogsNavTabs active="tasks" />
       </template>
     </PageBreadcrumb>
+
+    <AsyncTaskSubTabs active="midjourney" :scope-all="readingAll" />
 
     <!-- filter toolbar -->
     <div
@@ -177,7 +273,30 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
         :placeholder="t('relayLogs.taskIdPlaceholder')"
         :aria-label="t('relayLogs.taskIdPlaceholder')"
         name="drawing-task-search"
-        class="w-full sm:w-64"
+        class="w-full sm:w-56"
+      />
+      <FilterSelect
+        v-if="canReadAll"
+        v-model="scope"
+        :options="scopeOptions"
+        :label="t('relayLogs.scopeLabel')"
+        :prefix-label="t('relayLogs.scopeLabel') + ':'"
+        class="w-full sm:w-48"
+      />
+      <FilterSelect
+        v-model="status"
+        :options="statusOptions"
+        :label="t('relayLogs.statusLabel')"
+        :prefix-label="t('relayLogs.statusLabel') + ':'"
+        class="w-full sm:w-44"
+      />
+      <SearchInput
+        v-if="readingAll"
+        v-model="channelId"
+        :placeholder="t('relayLogs.channelIdPlaceholder')"
+        :aria-label="t('relayLogs.channelIdPlaceholder')"
+        name="drawing-log-channel"
+        class="w-full sm:w-36"
       />
       <DateRangePicker
         v-model:start="startDate"
@@ -207,7 +326,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
         :skeleton-rows="pageSize"
         adaptive-scroll
         :page-size="pageSize"
-        min-table-width="900px"
+        min-table-width="920px"
         :scroll-region-label="t('relayLogs.drawingBreadcrumb')"
         :empty-title="t('relayLogs.emptyTitle')"
         :empty-hint="t('relayLogs.emptyHint')"
@@ -229,6 +348,29 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
                 t(relayTaskStatusMeta((row as DrawingLogItem).status).labelKey)
               }}
             </StatusChip>
+          </div>
+        </template>
+        <template #cell-account="{ row }">
+          <div class="flex min-w-0 flex-col items-start gap-0.5">
+            <span class="text-xs font-semibold text-[var(--text-primary)]">
+              {{
+                (row as DrawingLogItem).user_id
+                  ? t('relayLogs.userIdBadge', {
+                      id: (row as DrawingLogItem).user_id,
+                    })
+                  : '-'
+              }}
+            </span>
+            <span
+              v-if="(row as DrawingLogItem).channel_id"
+              class="font-mono text-[0.6875rem] text-[var(--text-tertiary)]"
+            >
+              {{
+                t('relayLogs.channelIdBadge', {
+                  id: (row as DrawingLogItem).channel_id,
+                })
+              }}
+            </span>
           </div>
         </template>
         <template #cell-task="{ row }">
@@ -348,6 +490,17 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
               {{ formatTime(Math.floor(row.submit_time / 1000)) }}
             </span>
           </div>
+          <p
+            v-if="readingAll && (row.user_id || row.channel_id)"
+            class="mt-1.5 truncate text-xs text-[var(--text-secondary)]"
+          >
+            {{
+              row.user_id ? t('relayLogs.userIdBadge', { id: row.user_id }) : ''
+            }}
+            <template v-if="row.channel_id">
+              · {{ t('relayLogs.channelIdBadge', { id: row.channel_id }) }}
+            </template>
+          </p>
           <p
             class="mt-2 truncate font-mono text-xs text-[var(--text-tertiary)]"
           >

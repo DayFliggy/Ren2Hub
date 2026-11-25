@@ -10,6 +10,8 @@ type Translate = (key: string, params?: Record<string, unknown>) => string
 export const AUDIT_LOG_ACTION_LABEL_KEYS: Record<string, string> = {
   login: 'auditLogs.actions.login',
   'access_token.generate': 'auditLogs.actions.accessTokenGenerate',
+  'access_token.rename': 'auditLogs.actions.accessTokenRename',
+  'access_token.update': 'auditLogs.actions.accessTokenUpdate',
   'access_token.revoke': 'auditLogs.actions.accessTokenRevoke',
   'token.create': 'auditLogs.actions.tokenCreate',
   'token.update': 'auditLogs.actions.tokenUpdate',
@@ -57,7 +59,14 @@ export const AUDIT_LOG_ACTION_LABEL_KEYS: Record<string, string> = {
   'user.inviter_bonus': 'auditLogs.actions.userInviterBonus',
   'affiliate.code.reset': 'auditLogs.actions.affiliateCodeReset',
   'affiliate.user.update': 'auditLogs.actions.affiliateUserUpdate',
+  'user.affiliate_update': 'auditLogs.actions.affiliateUserUpdate',
   'topup.affiliate_reverse': 'auditLogs.actions.topupAffiliateReverse',
+  'topup_bonus.config.update': 'auditLogs.actions.topupBonusConfigUpdate',
+  'payment.gmpay_config_update': 'auditLogs.actions.paymentGmpayConfigUpdate',
+  'payment.callback_rejected': 'auditLogs.actions.paymentCallbackRejected',
+  'system.update': 'auditLogs.actions.systemUpdate',
+  'system.rollback': 'auditLogs.actions.systemRollback',
+  'system.restart': 'auditLogs.actions.systemRestart',
   'gateway.config.update': 'auditLogs.actions.gatewayConfigUpdate',
   'gateway.user.update': 'auditLogs.actions.gatewayUserUpdate',
   'option.update': 'auditLogs.actions.optionUpdate',
@@ -109,10 +118,16 @@ export const AUDIT_LOG_ACTION_LABEL_KEYS: Record<string, string> = {
   'vendor.create': 'auditLogs.actions.vendorCreate',
   'vendor.update': 'auditLogs.actions.vendorUpdate',
   'vendor.delete': 'auditLogs.actions.vendorDelete',
+  'vendor.metadata.save': 'auditLogs.actions.vendorUpdate',
+  'vendor.metadata.delete': 'auditLogs.actions.vendorDelete',
+  'vendor.merge': 'auditLogs.actions.vendorMerge',
   'model.create': 'auditLogs.actions.modelCreate',
   'model.update': 'auditLogs.actions.modelUpdate',
   'model.delete': 'auditLogs.actions.modelDelete',
+  'model.delete_batch': 'auditLogs.actions.modelDeleteBatch',
   'model.sync_upstream': 'auditLogs.actions.modelSyncUpstream',
+  'model.metadata.sync': 'auditLogs.actions.modelSyncUpstream',
+  'model.pricing.update': 'auditLogs.actions.modelPricingUpdate',
   'ticket.reply': 'auditLogs.actions.ticketReply',
   'ticket.status_update': 'auditLogs.actions.ticketStatusUpdate',
   'ticket.assign': 'auditLogs.actions.ticketAssign',
@@ -199,11 +214,40 @@ export function auditLogCategoryLabel(category: string, t: Translate): string {
 
 export function auditLogCategoryTone(
   category: string
-): 'accent' | 'info' | 'warning' | 'neutral' {
+): 'accent' | 'info' | 'warning' | 'danger' | 'neutral' {
   if (category === 'operation') return 'accent'
   if (category === 'login') return 'info'
   if (isKnownAuditLogCategory(category)) return 'warning'
   return 'neutral'
+}
+
+/**
+ * Payment webhook rejections are recorded under `security` without an owning
+ * user (`actor.role === null`). Surface them with a distinct risk label so
+ * root operators do not mistake them for personal account security events.
+ */
+export function isPaymentRiskAudit(
+  log: Pick<AuditLogItem, 'action' | 'actor'>
+): boolean {
+  return (
+    log.action === 'payment.callback_rejected' ||
+    log.actor.auth_method === 'webhook'
+  )
+}
+
+export function auditLogDisplayCategoryLabel(
+  log: Pick<AuditLogItem, 'category' | 'action' | 'actor'>,
+  t: Translate
+): string {
+  if (isPaymentRiskAudit(log)) return t('auditLogs.category.paymentRisk')
+  return auditLogCategoryLabel(log.category, t)
+}
+
+export function auditLogDisplayCategoryTone(
+  log: Pick<AuditLogItem, 'category' | 'action' | 'actor'>
+): 'accent' | 'info' | 'warning' | 'danger' | 'neutral' {
+  if (isPaymentRiskAudit(log)) return 'danger'
+  return auditLogCategoryTone(log.category)
 }
 
 export function auditLogResultKey(log: AuditLogItem): string {
@@ -229,6 +273,7 @@ export function auditLogAuthMethodKey(method: string): string | null {
   if (method === 'password') return 'auditLogs.auth.password'
   if (method === '2fa') return 'auditLogs.auth.twoFactor'
   if (method === 'passkey') return 'auditLogs.auth.passkey'
+  if (method === 'webhook') return 'auditLogs.auth.webhook'
   if (method.startsWith('oauth:')) return 'auditLogs.auth.oauth'
   return null
 }

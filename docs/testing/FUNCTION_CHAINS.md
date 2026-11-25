@@ -145,6 +145,8 @@
 
 日志导出中间件合同：`router:^TestLogExportRealRoutesStreamAndStopStalledClients$` 经 SetApiRouter 覆盖 gzip 请求、session/PAT 审计包装、首批流式响应、客户端停读后释放和再次导出；相邻 notice 路由仍压缩。
 
+日志中心四分类与权限边界：`--go 'router:^TestLogClassificationRoutesAndPermissions$'` 经真实路由验证普通用户拒绝访问全站日志接口，自查接口与管理员全站接口正确执行 `types` 多类型、`status` 状态与 `categories` 多类别筛选并拒绝非法参数；`--db TestLogClassificationFilterDatabaseMatrix` 覆盖 SQLite/MySQL/PostgreSQL 三库筛选与流式导出一致性；前端由 `logClassification.spec.ts`、`LogsNavTabs.spec.ts`、`QuotaLogsView.spec.ts`、`LogsView.spec.ts`、`AuditLogsView.spec.ts`、`RelayTaskLogsDates.spec.ts` 及 `logs-classification.spec.ts` 视觉回归覆盖。
+
 ## 后台版本更新
 
 真实路由和 root 会话由 `router.TestSystemUpdateRoutesRequireRootSession` 覆盖。更新、回滚、重启共用的互斥与响应后重启分别由 `controller.TestSystemUpdateMutationsDoNotQueue` 和 `controller.TestSystemUpdateRestartAfterResponse` 覆盖。Release 选择、归档校验、替换与失败还原由 service 的 `TestSystemUpdate` 系列覆盖。

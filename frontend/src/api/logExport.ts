@@ -122,19 +122,22 @@ export async function parseLogExportStream(
 }
 
 /**
- * Streams the caller's own logs to `onLog` and resolves with the row count
- * once the server confirms it. Fails with LOG_EXPORT_STALLED after
- * `idleTimeoutMs` without data.
+ * Streams logs from `endpoint` (`/api/log/self/export` or `/api/log/export`)
+ * to `onLog` and resolves with the row count once the server confirms it.
+ * Fails with LOG_EXPORT_STALLED after `idleTimeoutMs` without data.
  */
-export async function exportUserLogs(
+export async function exportLogsFromEndpoint(
+  endpoint: '/api/log/self/export' | '/api/log/export',
   filters: Record<string, unknown>,
   signal: AbortSignal,
   onLog: (log: LogItem) => void,
   idleTimeoutMs = LOG_EXPORT_IDLE_TIMEOUT_MS
 ): Promise<number> {
   const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(filters))
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined) continue
     query.set(key, String(value))
+  }
   const controller = new AbortController()
   const forwardAbort = () => controller.abort(signal.reason)
   if (signal.aborted) forwardAbort()
@@ -151,7 +154,7 @@ export async function exportUserLogs(
   resetIdle()
   try {
     if (controller.signal.aborted) throw abortError()
-    const stream = await api.getStream(`/api/log/self/export?${query}`, {
+    const stream = await api.getStream(`${endpoint}?${query}`, {
       signal: controller.signal,
     })
     return await parseLogExportStream(
@@ -168,4 +171,24 @@ export async function exportUserLogs(
     clearTimeout(timer)
     signal.removeEventListener('abort', forwardAbort)
   }
+}
+
+/**
+ * Streams the caller's own logs to `onLog` and resolves with the row count
+ * once the server confirms it. Fails with LOG_EXPORT_STALLED after
+ * `idleTimeoutMs` without data.
+ */
+export async function exportUserLogs(
+  filters: Record<string, unknown>,
+  signal: AbortSignal,
+  onLog: (log: LogItem) => void,
+  idleTimeoutMs = LOG_EXPORT_IDLE_TIMEOUT_MS
+): Promise<number> {
+  return exportLogsFromEndpoint(
+    '/api/log/self/export',
+    filters,
+    signal,
+    onLog,
+    idleTimeoutMs
+  )
 }

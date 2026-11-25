@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  inject,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -10,6 +11,7 @@ import {
 } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { RouterLink, routeLocationKey, routerKey } from 'vue-router'
 
 import { api } from '@/api/console'
 import { LOG_EXPORT_STALLED } from '@/api/logExport'
@@ -39,6 +41,12 @@ import { useAuthStore } from '@/stores/auth'
 import LogModelMismatch from '@/components/console/log-ui/LogModelMismatch.vue'
 import LogMobileCard from '@/components/console/log-ui/LogMobileCard.vue'
 import {
+  CALL_LOG_TYPES_PARAM,
+  logCallSubkind,
+  logLinkedTask,
+  type CallLogSubkind,
+} from '@/components/console/log-ui/logClassification'
+import {
   logContentText,
   logTokenName,
 } from '@/components/console/log-ui/logContent'
@@ -64,10 +72,20 @@ import {
 const { t } = useI18n()
 const auth = useAuthStore()
 const app = useAppStore()
+const route = inject(routeLocationKey, null)
+const router = inject(routerKey, null)
+const hasRouter = Boolean(router)
+
+const canReadAll = computed(() => auth.isAdmin)
 const canExport = computed(
   () => auth.isAdmin || app.status.log_export_enabled !== false
 )
 const toast = useToast()
+
+function queryStringParam(name: string): string {
+  const value = route?.query?.[name]
+  return typeof value === 'string' ? value : ''
+}
 
 const rows = ref<LogItem[]>([])
 const total = ref(0)
@@ -76,14 +94,24 @@ const pageSize = ref(10)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
-const keyword = ref('')
+const keyword = ref(queryStringParam('request_id'))
+const modelFilter = ref('')
+const tokenFilter = ref('')
+const usernameFilter = ref('')
+const channelFilter = ref('')
+const upstreamRequestId = ref('')
 const type = ref('')
+const scope = ref<'self' | 'all'>(
+  queryStringParam('scope') === 'all' && canReadAll.value ? 'all' : 'self'
+)
+const readingAll = computed(() => scope.value === 'all' && canReadAll.value)
 const startDate = ref('')
 const endDate = ref('')
 const exportOpen = ref(false)
 const exportType = ref<LogExportType>('csv')
 const exportStartDate = ref('')
 const exportEndDate = ref('')
+
 function openExport() {
   exportStartDate.value = startDate.value
   exportEndDate.value = endDate.value
@@ -205,13 +233,16 @@ function updateOpenColSettingsPanelMetrics() {
 
 onClickOutside(colSettingsRef, () => closeColSettings())
 
-// ---------- business log type options ----------
+// ---------- call log filter options ----------
+
+const scopeOptions = computed(() => [
+  { value: 'self', label: t('logs.scopeSelf') },
+  { value: 'all', label: t('logs.scopeAll') },
+])
 
 const typeOptions = computed(() => [
-  { value: '', label: t('common.all') },
+  { value: '', label: t('logs.typeAllCalls') },
   { value: 'consume', label: t('logs.typeConsume'), tone: 'accent' as const },
-  { value: 'topup', label: t('logs.typeTopup'), tone: 'success' as const },
-  { value: 'refund', label: t('logs.typeRefund'), tone: 'warning' as const },
   { value: 'error', label: t('logs.typeError'), tone: 'danger' as const },
 ])
 
@@ -222,8 +253,8 @@ const COL_META: Record<
   { labelKey: string; width?: string; align?: 'left' | 'right' | 'center' }
 > = {
   created: { labelKey: 'logs.colTime', width: '130px' },
-  identity: { labelKey: 'logs.colIdentity', width: '136px' },
-  route: { labelKey: 'logs.colRoute', width: '146px' },
+  identity: { labelKey: 'logs.colIdentity', width: '148px' },
+  route: { labelKey: 'logs.colRoute', width: '152px' },
   reasoning: { labelKey: 'logs.colReasoning', width: '84px' },
   performance: { labelKey: 'logs.colPerformance', width: '144px' },
   usage: { labelKey: 'logs.colUsage', width: '162px' },
@@ -251,7 +282,7 @@ const minTableWidth = computed(() => {
   return `${Math.max(720, width)}px`
 })
 
-// ---------- type tones ----------
+// ---------- type tones & subkinds ----------
 
 const typeTone: Record<
   LogType,
@@ -276,22 +307,57 @@ const typeLabelKey: Record<LogType, string> = {
   login: 'logs.typeLogin',
 }
 
+const subkindLabelKey: Record<Exclude<CallLogSubkind, null>, string> = {
+  violation_fee: 'logs.callSubtypeViolationFee',
+  channel_test: 'logs.callSubtypeChannelTest',
+  task_billing: 'logs.callSubtypeTaskBilling',
+}
+
+const subkindTone: Record<
+  Exclude<CallLogSubkind, null>,
+  'danger' | 'neutral' | 'info'
+> = {
+  violation_fee: 'danger',
+  channel_test: 'neutral',
+  task_billing: 'info',
+}
+
 // ---------- data fetching ----------
+
+function listEndpoint(): '/api/log/self' | '/api/log/' {
+  return readingAll.value ? '/api/log/' : '/api/log/self'
+}
+
+function exportEndpoint(): '/api/log/self/export' | '/api/log/export' {
+  return readingAll.value ? '/api/log/export' : '/api/log/self/export'
+}
 
 function currentParams(start = startDate.value, end = endDate.value) {
   const typeMap: Record<string, number> = {
-    topup: 1,
     consume: 2,
     error: 5,
-    refund: 6,
   }
+  const singleType = type.value ? (typeMap[type.value] ?? 0) : 0
   const requestedStart = start ? Math.floor(localDayStartMs(start) / 1000) : 0
   const endTimestamp = end ? Math.floor(localDayEndMs(end) / 1000) : 0
+  const modelName = modelFilter.value.trim()
+  const tokenName = tokenFilter.value.trim()
+  const username = readingAll.value ? usernameFilter.value.trim() : ''
+  const channelText = readingAll.value ? channelFilter.value.trim() : ''
+  const channel = /^\d+$/.test(channelText) ? Number(channelText) : 0
+  const upstreamId = readingAll.value ? upstreamRequestId.value.trim() : ''
+
   return {
     p: page.value,
     page_size: pageSize.value,
-    request_id: keyword.value,
-    type: type.value ? (typeMap[type.value] ?? 0) : 0,
+    request_id: keyword.value.trim(),
+    type: singleType,
+    ...(singleType === 0 ? { types: CALL_LOG_TYPES_PARAM } : {}),
+    ...(modelName ? { model_name: modelName } : {}),
+    ...(tokenName ? { token_name: tokenName } : {}),
+    ...(username ? { username } : {}),
+    ...(channel > 0 ? { channel } : {}),
+    ...(upstreamId ? { upstream_request_id: upstreamId } : {}),
     start_timestamp: requestedStart,
     end_timestamp: endTimestamp,
   }
@@ -302,9 +368,11 @@ const listRequest = useLatestRequest()
 async function load() {
   loading.value = true
   loadError.value = null
+  const endpoint = listEndpoint()
   const result = await listRequest.run(async (signal) =>
     parseLogPage(
-      await api.get<unknown>('/api/log/self', currentParams(), { signal })
+      await api.get<unknown>(endpoint, currentParams(), { signal }),
+      endpoint
     )
   )
   if (result.stale) return
@@ -330,11 +398,44 @@ function reload() {
   if (page.value === 1) load()
   else page.value = 1
 }
-watch([keyword], () => {
-  window.clearTimeout(searchTimer)
-  searchTimer = window.setTimeout(reload, 300)
-})
+watch(
+  [
+    keyword,
+    modelFilter,
+    tokenFilter,
+    usernameFilter,
+    channelFilter,
+    upstreamRequestId,
+  ],
+  () => {
+    window.clearTimeout(searchTimer)
+    searchTimer = window.setTimeout(reload, 300)
+  }
+)
 watch([type, startDate, endDate], reload)
+watch(scope, (value) => {
+  if (router && route) {
+    void router.replace({
+      query: { ...route.query, scope: value === 'all' ? 'all' : undefined },
+    })
+  }
+  reload()
+})
+if (route) {
+  watch(
+    () => route.query.scope,
+    (value) => {
+      scope.value = value === 'all' && canReadAll.value ? 'all' : 'self'
+    }
+  )
+  watch(
+    () => route.query.request_id,
+    (value) => {
+      const next = typeof value === 'string' ? value : ''
+      if (next !== keyword.value) keyword.value = next
+    }
+  )
+}
 watch(pageSize, reload)
 watch(page, load)
 
@@ -382,6 +483,7 @@ async function doExport() {
     } = currentParams(exportStartDate.value, exportEndDate.value)
     const { count, files } = await exportLogFiles({
       filters,
+      endpoint: exportEndpoint(),
       range: { start: exportStartDate.value, end: exportEndDate.value },
       type: exportType.value,
       headers: LOG_EXPORT_HEADERS.map((key) => t(`logs.exportHeaders.${key}`)),
@@ -396,8 +498,6 @@ async function doExport() {
       },
     })
     exportOpen.value = false
-    // The multi-file message asks the user to check the download list, so it
-    // stays long enough to read.
     if (files > 1)
       toast.push(
         'success',
@@ -406,7 +506,6 @@ async function doExport() {
       )
     else toast.success(t('logs.exported', { count }))
   } catch (error) {
-    // Files already saved hold only part of the range; say so either way.
     if (controller.signal.aborted) {
       if (savedFiles > 0)
         toast.warning(t('logs.exportCancelledPartial', { files: savedFiles }))
@@ -451,9 +550,11 @@ onBeforeUnmount(() => {
 
 <template>
   <div data-log-page class="mx-auto max-w-[var(--console-list-width)]">
-    <PageBreadcrumb :crumbs="[t('logs.breadcrumb.0'), t('logs.breadcrumb.1')]">
+    <PageBreadcrumb
+      :crumbs="[t('logs.breadcrumb.0'), t('relayLogs.tabConsume')]"
+    >
       <template #action>
-        <LogsNavTabs active="consume" />
+        <LogsNavTabs active="calls" />
       </template>
     </PageBreadcrumb>
 
@@ -466,20 +567,65 @@ onBeforeUnmount(() => {
         :placeholder="t('logs.keywordPlaceholder')"
         :aria-label="t('logs.keywordPlaceholder')"
         name="log-search"
-        class="w-full sm:w-56"
+        class="w-full sm:w-52"
+      />
+      <FilterSelect
+        v-if="canReadAll"
+        v-model="scope"
+        :options="scopeOptions"
+        :label="t('logs.scopeLabel')"
+        :prefix-label="t('logs.scopeLabel') + ':'"
+        class="w-full sm:w-48"
       />
       <FilterSelect
         v-model="type"
         :options="typeOptions"
         :label="t('logs.typeLabel')"
         :prefix-label="t('logs.typeLabel') + ':'"
+        class="w-full sm:w-44"
+      />
+      <SearchInput
+        v-model="modelFilter"
+        :placeholder="t('logs.modelPlaceholder')"
+        :aria-label="t('logs.modelPlaceholder')"
+        name="log-model-search"
         class="w-full sm:w-48"
+      />
+      <SearchInput
+        v-model="tokenFilter"
+        :placeholder="t('logs.tokenPlaceholder')"
+        :aria-label="t('logs.tokenPlaceholder')"
+        name="log-token-search"
+        class="w-full sm:w-44"
       />
       <DateRangePicker
         v-model:start="startDate"
         v-model:end="endDate"
         class="w-full sm:w-64"
       />
+      <template v-if="readingAll">
+        <SearchInput
+          v-model="usernameFilter"
+          :placeholder="t('logs.usernamePlaceholder')"
+          :aria-label="t('logs.usernamePlaceholder')"
+          name="log-username-search"
+          class="w-full sm:w-44"
+        />
+        <SearchInput
+          v-model="channelFilter"
+          :placeholder="t('logs.channelIdPlaceholder')"
+          :aria-label="t('logs.channelIdPlaceholder')"
+          name="log-channel-search"
+          class="w-full sm:w-36"
+        />
+        <SearchInput
+          v-model="upstreamRequestId"
+          :placeholder="t('logs.upstreamRequestIdPlaceholder')"
+          :aria-label="t('logs.upstreamRequestIdPlaceholder')"
+          name="log-upstream-request-search"
+          class="w-full sm:w-48"
+        />
+      </template>
       <div class="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
         <div
           ref="colSettingsRef"
@@ -613,7 +759,7 @@ onBeforeUnmount(() => {
         adaptive-scroll
         :page-size="pageSize"
         :min-table-width="minTableWidth"
-        :scroll-region-label="t('logs.breadcrumb.1')"
+        :scroll-region-label="t('relayLogs.tabConsume')"
         :empty-title="t(loadError ? 'logs.loadFailed' : 'logs.emptyTitle')"
         :empty-hint="loadError || t('logs.emptyHint')"
         empty-illustration="empty-logs"
@@ -624,16 +770,31 @@ onBeforeUnmount(() => {
           </span>
         </template>
         <template #cell-identity="{ row }">
-          <div class="flex min-w-0 flex-col items-start gap-1.5">
+          <div class="flex min-w-0 flex-col items-start gap-1">
+            <span
+              v-if="readingAll && (row as LogItem).username"
+              class="block max-w-full truncate text-xs font-semibold text-[var(--text-primary)]"
+              :title="(row as LogItem).username"
+            >
+              {{ (row as LogItem).username }}
+            </span>
             <span
               class="block max-w-full truncate font-mono text-xs text-[var(--text-secondary)]"
               :title="logTokenName(row as LogItem, getLocale())"
             >
               {{ logTokenName(row as LogItem, getLocale()) }}
             </span>
-            <StatusChip :tone="typeTone[(row as LogItem).type]">
-              {{ t(typeLabelKey[(row as LogItem).type]) }}
-            </StatusChip>
+            <div class="flex flex-wrap items-center gap-1">
+              <StatusChip :tone="typeTone[(row as LogItem).type]">
+                {{ t(typeLabelKey[(row as LogItem).type]) }}
+              </StatusChip>
+              <StatusChip
+                v-if="logCallSubkind(row as LogItem)"
+                :tone="subkindTone[logCallSubkind(row as LogItem)!]"
+              >
+                {{ t(subkindLabelKey[logCallSubkind(row as LogItem)!]) }}
+              </StatusChip>
+            </div>
           </div>
         </template>
         <template #cell-route="{ row }">
@@ -647,11 +808,23 @@ onBeforeUnmount(() => {
             </p>
             <LogModelMismatch :log="row as LogItem" />
             <p
+              v-if="(row as LogItem).channel"
               class="mt-0.5 truncate text-xs text-[var(--text-tertiary)]"
               :title="(row as LogItem).channel"
             >
               {{ (row as LogItem).channel }}
             </p>
+            <RouterLink
+              v-if="hasRouter && logLinkedTask(row as LogItem)"
+              :to="{
+                name: logLinkedTask(row as LogItem)!.routeName,
+                query: logLinkedTask(row as LogItem)!.query,
+              }"
+              class="mt-0.5 inline-block truncate font-mono text-[0.6875rem] text-[var(--accent-text)] underline-offset-2 hover:underline"
+              :title="t('logs.openLinkedTask')"
+            >
+              {{ logLinkedTask(row as LogItem)!.taskId }}
+            </RouterLink>
           </div>
         </template>
         <template #cell-reasoning="{ row }">
@@ -699,7 +872,7 @@ onBeforeUnmount(() => {
       </DataTable>
     </ConsoleCard>
 
-    <section class="lg:hidden" :aria-label="t('logs.breadcrumb.1')">
+    <section class="lg:hidden" :aria-label="t('relayLogs.tabConsume')">
       <div v-if="loading" class="sibling-space-y-3" aria-busy="true">
         <SkeletonBlock
           v-for="index in Math.min(pageSize, 5)"
@@ -715,6 +888,7 @@ onBeforeUnmount(() => {
           v-for="row in rows"
           :key="row.id"
           :log="row"
+          :show-account="readingAll"
           @view-details="openLogDetails"
         />
       </div>

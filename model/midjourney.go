@@ -32,6 +32,7 @@ type Midjourney struct {
 type TaskQueryParams struct {
 	ChannelID      string
 	MjID           string
+	Status         string
 	StartTimestamp string
 	EndTimestamp   string
 }
@@ -45,6 +46,9 @@ func GetAllUserTask(userId int, startIdx int, num int, queryParams TaskQueryPara
 
 	if queryParams.MjID != "" {
 		query = query.Where("mj_id = ?", queryParams.MjID)
+	}
+	if queryParams.Status != "" {
+		query = query.Where("status = ?", queryParams.Status)
 	}
 	if queryParams.StartTimestamp != "" {
 		// 假设您已将前端传来的时间戳转换为数据库所需的时间格式，并处理了时间戳的验证和解析
@@ -76,6 +80,9 @@ func GetAllTasks(startIdx int, num int, queryParams TaskQueryParams) []*Midjourn
 	}
 	if queryParams.MjID != "" {
 		query = query.Where("mj_id = ?", queryParams.MjID)
+	}
+	if queryParams.Status != "" {
+		query = query.Where("status = ?", queryParams.Status)
 	}
 	if queryParams.StartTimestamp != "" {
 		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
@@ -221,6 +228,9 @@ func CountAllTasks(queryParams TaskQueryParams) int64 {
 	if queryParams.MjID != "" {
 		query = query.Where("mj_id = ?", queryParams.MjID)
 	}
+	if queryParams.Status != "" {
+		query = query.Where("status = ?", queryParams.Status)
+	}
 	if queryParams.StartTimestamp != "" {
 		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
 	}
@@ -237,6 +247,9 @@ func CountAllUserTask(userId int, queryParams TaskQueryParams) int64 {
 	query := DB.Model(&Midjourney{}).Where("user_id = ?", userId)
 	if queryParams.MjID != "" {
 		query = query.Where("mj_id = ?", queryParams.MjID)
+	}
+	if queryParams.Status != "" {
+		query = query.Where("status = ?", queryParams.Status)
 	}
 	if queryParams.StartTimestamp != "" {
 		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)

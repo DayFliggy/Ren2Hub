@@ -48,7 +48,7 @@ afterEach(() => {
 })
 
 describe('LogsView business log filters', () => {
-  it('does not expose operation log types in the consume log filter', async () => {
+  it('scopes the call logs tab to call types (2,5) and excludes non-call/account types', async () => {
     wrapper = mount(LogsView, {
       attachTo: document.body,
       global: {
@@ -57,6 +57,11 @@ describe('LogsView business log filters', () => {
       },
     })
     await flushPromises()
+
+    const calls = vi
+      .mocked(api.get)
+      .mock.calls.filter((call) => call[0] === '/api/log/self')
+    expect(calls[0]?.[1]).toMatchObject({ type: 0, types: '2,5' })
 
     await wrapper
       .findAll('[data-control-container]')
@@ -67,10 +72,32 @@ describe('LogsView business log filters', () => {
       (item) => item.textContent?.trim()
     )
 
-    expect(options).toEqual(['全部', '消费', '充值', '退款', '错误'])
+    expect(options).toEqual(['全部调用', '正常调用', '调用失败'])
+    expect(options).not.toContain('充值')
+    expect(options).not.toContain('退款')
     expect(options).not.toContain('管理')
     expect(options).not.toContain('系统')
     expect(options).not.toContain('登录')
+  })
+
+  it('forwards model_name and token_name filters cleanly', async () => {
+    wrapper = mount(LogsView, {
+      global: { plugins: [createPinia(), i18n], stubs: { LogsNavTabs: true } },
+    })
+    await flushPromises()
+    await wrapper.get('input[name="log-model-search"]').setValue('gpt-4%')
+    await wrapper.get('input[name="log-token-search"]').setValue('prod-key')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await flushPromises()
+
+    const calls = vi
+      .mocked(api.get)
+      .mock.calls.filter((call) => call[0] === '/api/log/self')
+    expect(calls.at(-1)?.[1]).toMatchObject({
+      model_name: 'gpt-4%',
+      token_name: 'prod-key',
+      types: '2,5',
+    })
   })
 })
 

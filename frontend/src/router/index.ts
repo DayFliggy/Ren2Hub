@@ -232,6 +232,18 @@ const router = createRouter({
           },
         },
         {
+          path: '/usage-logs/quota',
+          name: 'logs-quota',
+          component: () => import('@/views/console/QuotaLogsView.vue'),
+          meta: {
+            wide: true,
+            noPageScroll: true,
+            feature: 'logs',
+            nav: 'logs',
+            tabGroup: 'logs',
+          },
+        },
+        {
           // Members read their own events here; reading other accounts needs
           // the audit permission and is enforced by the server.
           path: '/usage-logs/audit',

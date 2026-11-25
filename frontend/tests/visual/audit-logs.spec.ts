@@ -144,11 +144,9 @@ test('consume logs keep account events on the audit tab', async ({ page }) => {
 
   await page.getByRole('combobox', { name: '类型' }).click()
   await expect(page.getByRole('option')).toHaveText([
-    '全部',
-    '消费',
-    '充值',
-    '退款',
-    '错误',
+    '全部调用',
+    '正常调用',
+    '调用失败',
   ])
   await page.keyboard.press('Escape')
 

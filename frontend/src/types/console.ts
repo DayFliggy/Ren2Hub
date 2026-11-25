@@ -217,6 +217,12 @@ export interface LogItem {
   id: number
   /** Stable gateway request identity; absent on historical or non-request rows. */
   request_id?: string
+  /** Upstream provider request identity when available. */
+  upstream_request_id?: string
+  /** Populated on admin all-account log endpoints. */
+  username?: string
+  /** Channel ID populated on admin log endpoints (0 when unset). */
+  channel_id?: number
   type: LogType
   /** 0 marks a row written without a token, such as a channel test. */
   token_id?: number
@@ -296,9 +302,11 @@ export interface AuditLogItem extends Record<string, unknown> {
  */
 export type RelayTaskStatus = string
 
-/** One row from /api/mj/self. Timestamps are in milliseconds. */
+/** One row from /api/mj(/self). Timestamps are in milliseconds. */
 export interface DrawingLogItem {
   id: number
+  user_id?: number
+  channel_id?: number
   mj_id: string
   action: string
   prompt: string
@@ -314,11 +322,15 @@ export interface DrawingLogItem {
 }
 
 /**
- * One row from /api/task/self. Timestamps are in seconds. Results are not
+ * One row from /api/task(/self). Timestamps are in seconds. Results are not
  * part of the row; they are read on demand from /api/task/:task_id/artifacts.
  */
 export type RelayTaskLogItem = {
   id: number
+  user_id?: number
+  username?: string
+  channel_id?: number
+  origin_model_name?: string
   task_id: string
   platform: string
   action: string
@@ -332,6 +344,15 @@ export type RelayTaskLogItem = {
   legacy_video_available: boolean
   /** A synchronous result returned inline and never persisted. */
   result_discarded: boolean
+  admin_info?: {
+    request_id?: string
+    request_path?: string
+    task_plugin?: { key: string; name?: string; version?: string }
+  } | null
+  root_info?: {
+    upstream_task_id?: string
+    node_name?: string
+  } | null
 }
 
 export type TaskArtifactType = 'image' | 'video' | 'audio' | 'file'

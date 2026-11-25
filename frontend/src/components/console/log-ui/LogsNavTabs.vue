@@ -1,26 +1,23 @@
 <script setup lang="ts">
 /**
- * Shared switcher for the log pages. Rendered inside the PageBreadcrumb action
- * slot so the breadcrumb and the tabs share one row. Every tab is self-service:
- * the audit tab shows the viewer's own events unless the server grants more.
+ * Shared switcher for the log center. Rendered inside the PageBreadcrumb action
+ * slot so the breadcrumb and the four primary categories share one row:
+ * Calls (/usage-logs), Async tasks (/usage-logs/task & /usage-logs/drawing),
+ * Quota ledger (/usage-logs/quota), and Audit logs (/usage-logs/audit).
  */
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 
-defineProps<{ active: 'consume' | 'drawing' | 'tasks' | 'audit' }>()
+defineProps<{ active: 'calls' | 'tasks' | 'quota' | 'audit' }>()
 
 const { t } = useI18n()
 const app = useAppStore()
 
 const tabs = [
-  { key: 'consume', routeName: 'logs', labelKey: 'relayLogs.tabConsume' },
-  {
-    key: 'drawing',
-    routeName: 'logs-drawing',
-    labelKey: 'relayLogs.tabDrawing',
-  },
+  { key: 'calls', routeName: 'logs', labelKey: 'relayLogs.tabConsume' },
   { key: 'tasks', routeName: 'logs-tasks', labelKey: 'relayLogs.tabTasks' },
+  { key: 'quota', routeName: 'logs-quota', labelKey: 'relayLogs.tabQuota' },
   {
     key: 'audit',
     routeName: 'logs-audit',

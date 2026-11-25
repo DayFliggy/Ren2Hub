@@ -348,7 +348,12 @@ func GetAuditLogs(c *gin.Context) {
 		common.ApiErrorMsg(c, "Invalid audit pagination")
 		return
 	}
-	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id")}
+	categories, err := model.ParseAuditCategoriesParam(c.Query("categories"))
+	if err != nil {
+		common.ApiErrorMsg(c, "Invalid audit filters")
+		return
+	}
+	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), Categories: categories, TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id")}
 	viewerRole := c.GetInt("role")
 	if c.FullPath() == "/api/audit/self" {
 		filter.UserId = c.GetInt("id")

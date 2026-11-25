@@ -2,7 +2,7 @@ import {
   getAuthSessionSnapshot,
   isAuthSessionIdentityCurrent,
 } from '@/api/authSession'
-import { exportUserLogs } from '@/api/logExport'
+import { exportLogsFromEndpoint, exportUserLogs } from '@/api/logExport'
 import { ApiError } from '@/api/types'
 import type { LocaleCode } from '@/i18n'
 import type { LogItem } from '@/types/console'
@@ -90,6 +90,10 @@ export interface LogExportRequest {
   /** Called at most once per animation frame while the export runs. */
   onProgress?: (progress: LogExportProgress) => void
   volumeBytes?: number
+  /** Defaults to the personal export stream; admins may export `/api/log/export`. */
+  endpoint?: '/api/log/self/export' | '/api/log/export'
+  /** Filename prefix; defaults to `ren2hub-logs`. */
+  filenamePrefix?: string
 }
 
 function compactLocalDay(date: Date): string {
@@ -97,17 +101,18 @@ function compactLocalDay(date: Date): string {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
 }
 
-/** ren2hub-logs-<start|all>-<end|today>[-partN].<ext>, in local dates. */
+/** <prefix>-<start|all>-<end|today>[-partN].<ext>, in local dates. */
 export function logExportFilename(
   range: LogExportRange,
   ext: string,
   part: number | null,
-  today = new Date()
+  today = new Date(),
+  prefix = 'ren2hub-logs'
 ): string {
   const start = range.start ? range.start.replaceAll('-', '') : 'all'
   const end = range.end ? range.end.replaceAll('-', '') : compactLocalDay(today)
   const suffix = part === null ? '' : `-part${part}`
-  return `ren2hub-logs-${start}-${end}${suffix}.${ext}`
+  return `${prefix}-${start}-${end}${suffix}.${ext}`
 }
 
 /**
@@ -182,20 +187,35 @@ export async function exportLogFiles(
         throw new ApiError('Sign-in changed during the log export', {
           code: LOG_EXPORT_SESSION_CHANGED,
         })
-      request.save(blob, logExportFilename(request.range, ext, part, today))
+      request.save(
+        blob,
+        logExportFilename(
+          request.range,
+          ext,
+          part,
+          today,
+          request.filenamePrefix ?? 'ren2hub-logs'
+        )
+      )
       progress.file()
     },
     request.volumeBytes
   )
   try {
-    const count = await exportUserLogs(
-      request.filters,
-      request.signal,
-      (log) => {
-        volumes.append(row(log, request.locale))
-        progress.row()
-      }
-    )
+    const endpoint = request.endpoint ?? '/api/log/self/export'
+    const onRow = (log: LogItem) => {
+      volumes.append(row(log, request.locale))
+      progress.row()
+    }
+    const count =
+      endpoint === '/api/log/self/export'
+        ? await exportUserLogs(request.filters, request.signal, onRow)
+        : await exportLogsFromEndpoint(
+            endpoint,
+            request.filters,
+            request.signal,
+            onRow
+          )
     return { count, files: volumes.finish() }
   } finally {
     progress.stop()

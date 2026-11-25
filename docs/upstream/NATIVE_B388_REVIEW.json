@@ -35393,42 +35393,57 @@
       ]
     },
     "controller/log.go": {
-      "local_sha256": "78864fc71f911856594ecfe52b5e9c744d98776ae57fe8db234a818a0970bbd4",
+      "local_sha256": "0129aeee8cec2ebc5c22b89e9b88c2b551f0bc07cf907fc252868ac9783f3544",
       "hunks": [
         {
-          "header": "@@ -25,7 +25,6 @@",
-          "sha256": "75a6b6872f5c654060d74d122629a14f853da9e8c9d27d8d7dfda6af0ee36fb5",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -15,17 +15,21 @@",
+          "sha256": "7fc269c7044a3d6e985bcf5bb737fab94c53dffa871c196e775fed009aa650ce",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -110,16 +109,9 @@",
-          "sha256": "76177c621b1f7d9062184caffae12d758a87c2f32a3b0e5f83501ccde36bf1fa",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -33,7 +37,7 @@",
+          "sha256": "09eaf9a4b460ccbacf482d806f0ece41b51d73052838b3a7beae4981224654fc",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -133,24 +125,19 @@",
-          "sha256": "0d2e4589f3ea09d1eea8a45e90fcbcfb1ce073664d55ea9e365193bd2d1e5602",
-          "basis": "AUTH-7：每个用户同时只能运行一个导出，不设全局并发上限。获取用户锁后预检写截止，再发送流响应头并流式写入日志。"
+          "header": "@@ -56,7 +60,12 @@",
+          "sha256": "3b7afdcc48acfd8990443e54f6a4c49d840acda82958178bef54bf8b83115ae9",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -166,7 +153,7 @@",
-          "sha256": "5547039b4a64b5eefd7ca595dbcfcf84e174c5ac65fe4d0331d8b19af697f00e",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -74,7 +83,11 @@",
+          "sha256": "eba37c1802c74d2b405860af2375d08d7534afea942a123387c0d1566362a275",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -208,8 +195,7 @@",
-          "sha256": "9b15d78b6a22118844d2bb7b9bc4bdd5e43df6393431ebd7020dabfa9053d63d",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -110,16 +123,13 @@",
+          "sha256": "7fc8d37bc66388fa22ce5a2836f9bc43285ec5b3c3698bdb3ed273cfaec295d4",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -228,7 +214,6 @@",
-          "sha256": "8f536da6e0b84f0d6ee28b2339824b1779d1f82921b5c349d44aa65ce100698c",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -133,24 +143,19 @@",
+          "sha256": "1b14edf2717b5ecbdb32e6bcab86dc067839b407ded85e7de948754eaef98f82",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -242,8 +227,7 @@",
-          "sha256": "223c8bc9305b90a2d80d5e1540f5b61669d36779586c872e2a7b5c2deecd37bd",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -166,7 +171,7 @@",
+          "sha256": "df10865a921759218e45d92726e5218b600c08f2c1a3bf891febdb4ac6f52123",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
+        },
+        {
+          "header": "@@ -208,8 +213,7 @@",
+          "sha256": "1f5c7db4960c35c039d1452c3af25d9cc0691b780cc5527940f7be66816ada65",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
+        },
+        {
+          "header": "@@ -228,7 +232,6 @@",
+          "sha256": "fdb0228b7ada0e31da05715748d9af417bb5443a6bb09af3a733d93184fda0ec",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
+        },
+        {
+          "header": "@@ -242,8 +245,7 @@",
+          "sha256": "cd9973b693e0537cb2d470ea75d300b8d05a69bfc059b96f2ede910d7f404825",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         }
       ]
     },
@@ -35593,7 +35608,7 @@
       ]
     },
     "model/log.go": {
-      "local_sha256": "f0bf5779011e5d697ea696576e723231dff3da4eeab78b0db4673382778ee176",
+      "local_sha256": "33733ccf7289cbd2d06fd36d515dd2b604a38f5d530eb428402721f2d4a3fbee",
       "hunks": [
         {
           "header": "@@ -72,7 +72,6 @@",
@@ -35641,29 +35656,34 @@
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         },
         {
-          "header": "@@ -487,7 +479,6 @@",
-          "sha256": "e59707343bb13b8a4d1f7f413930ae3791a08add8919974d6a376f8d2b40d61d",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -481,13 +473,13 @@",
+          "sha256": "3ab3b8e1cf4a4e0766c15b15ba6d613055b455185bdefc5f5058b8a99ed0db34",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -520,9 +511,6 @@",
-          "sha256": "aef225251d02a65d8d4f35e7fa0f3e321cae099fa43fbf1deadaf03e54142b94",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -496,6 +488,8 @@",
+          "sha256": "79319c59a9270dda7624ee8382672f4ebdc4278288b3414db5f6a30e07daf645",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -664,9 +652,13 @@",
-          "sha256": "f9a34f5d78230fe61ca0651e8341516fc6ea8312b54e6944187bfea02b5a08f1",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -520,9 +514,6 @@",
+          "sha256": "9b29a2bc7ba1de75f7f247e3abab8d11fac81247a38c2a66f4cd0b7f07b03d76",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -690,11 +682,15 @@",
-          "sha256": "f915eae4443c86af2348a4680eecde1910f8f3338f20ada30c7a68d0d9a4d682",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -664,9 +655,13 @@",
+          "sha256": "93334ecce497c18bdf962bd58c94f803ef24ecb042d02ef8348e805478e1e6cd",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         },
         {
-          "header": "@@ -721,10 +717,6 @@",
-          "sha256": "0fc36df45b66d9c1840693a41391a022e731193fe379f66dea87fadd94c6cbfc",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -690,11 +685,15 @@",
+          "sha256": "91f3e4e868ebdaa987bae17d8ce45ed1615eb07ba4ecab6bcc4a85bb044f6302",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
+        },
+        {
+          "header": "@@ -721,10 +720,6 @@",
+          "sha256": "ee8d12b070020cd11fd4f2c1bea3442708dbc4abcc28bf32de310aed16692b26",
+          "basis": "日志中心四分类扩展：支持 logs 多类型筛选（types）与严格参数校验，零表结构迁移。"
         }
       ]
     },

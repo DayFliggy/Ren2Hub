@@ -12,6 +12,7 @@ import {
 
 import { api } from '@/api/console'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import DrawingLogsView from '@/views/console/DrawingLogsView.vue'
 import TaskLogsView from '@/views/console/TaskLogsView.vue'
@@ -55,7 +56,7 @@ async function mountWithDates(
   wrapper = mount(view, {
     global: {
       plugins: [createPinia(), i18n],
-      stubs: { LogsNavTabs: true },
+      stubs: { LogsNavTabs: true, AsyncTaskSubTabs: true },
     },
   })
   await flushPromises()
@@ -105,32 +106,51 @@ describe('relay task log date filters', () => {
   })
 })
 
-describe('task log platform filter', () => {
-  async function typePlatform(value: string) {
+describe('task log platform & status filters', () => {
+  async function selectFilter(label: string, value: string) {
+    const select = wrapper!
+      .findAllComponents(FilterSelect)
+      .find((item) => item.props('label') === label)!
+    select.vm.$emit('update:modelValue', value)
+    await flushPromises()
+  }
+
+  async function typeCustomPlatform(value: string) {
     await wrapper!.find('input[name="task-log-platform"]').setValue(value)
     vi.advanceTimersByTime(300)
     await flushPromises()
   }
 
-  it('sends the typed platform trimmed and exact, and omits an empty one', async () => {
+  it('supports preset platform selection, custom manual platform keys/numbers, and status filtering', async () => {
     vi.useFakeTimers()
     try {
       const get = await mountWithDates(TaskLogsView, '/api/task/self')
-      // Axios drops undefined params, so no platform is sent.
       expect(lastParams(get).platform).toBeUndefined()
+      expect(lastParams(get).status).toBeUndefined()
 
-      // A task plugin key and a channel type number are both stored values.
-      await typePlatform(' sunoapi ')
+      await selectFilter('平台', 'sunoapi')
       expect(lastParams(get).platform).toBe('sunoapi')
-      await typePlatform('45')
+
+      await selectFilter('状态', 'FAILURE')
+      expect(lastParams(get).status).toBe('FAILURE')
+
+      await selectFilter('平台', '__custom__')
+      await typeCustomPlatform(' 45 ')
       expect(lastParams(get).platform).toBe('45')
-      await typePlatform('Kling')
+      await typeCustomPlatform('Kling')
       expect(lastParams(get).platform).toBe('Kling')
 
-      await typePlatform('  ')
+      await typeCustomPlatform('  ')
       expect(lastParams(get).platform).toBeUndefined()
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('sends status filter on Midjourney drawing logs', async () => {
+    const get = await mountWithDates(DrawingLogsView, '/api/mj/self')
+    expect(lastParams(get).status).toBeUndefined()
+    await selectFilter('状态', 'FAILURE')
+    expect(lastParams(get).status).toBe('FAILURE')
   })
 })

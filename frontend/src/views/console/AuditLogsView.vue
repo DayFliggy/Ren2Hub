@@ -24,8 +24,8 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
   auditLogAuthMethodKey,
-  auditLogCategoryLabel,
-  auditLogCategoryTone,
+  auditLogDisplayCategoryLabel,
+  auditLogDisplayCategoryTone,
   auditLogParamLabel,
   auditLogParamValue,
   auditLogRequestText,
@@ -65,7 +65,8 @@ const loading = ref(true)
 const loadError = ref(false)
 
 const requestId = ref('')
-const category = ref<'all' | AuditLogCategory>('all')
+const usernameFilter = ref('')
+const category = ref<'all' | 'login,security' | AuditLogCategory>('all')
 const outcome = ref<'all' | 'true' | 'false'>('all')
 const tokenRef = ref('')
 const scope = ref<'self' | 'all'>(
@@ -101,10 +102,19 @@ const columns = computed<TableColumn[]>(() => [
 const categoryOptions = computed(() => [
   { value: 'all', label: t('auditLogs.category.all') },
   {
-    value: 'operation',
-    label: t('auditLogs.category.operation'),
-    tone: 'accent' as const,
+    value: 'login,security',
+    label: t('auditLogs.category.loginSecurity'),
+    tone: 'info' as const,
   },
+  ...(auth.isAdmin
+    ? [
+        {
+          value: 'operation',
+          label: t('auditLogs.category.operation'),
+          tone: 'accent' as const,
+        },
+      ]
+    : []),
   {
     value: 'security',
     label: t('auditLogs.category.security'),
@@ -154,13 +164,16 @@ function endpoint(): string {
 }
 
 function currentParams() {
+  const isMultiCategory = category.value === 'login,security'
   return {
     p: page.value,
     page_size: pageSize.value,
-    category: category.value === 'all' ? '' : category.value,
+    category: category.value === 'all' || isMultiCategory ? '' : category.value,
+    ...(isMultiCategory ? { categories: category.value } : {}),
     success: outcome.value === 'all' ? '' : outcome.value,
-    // The token filter is only shown on the all-accounts view; a value left
-    // over from it must not silently narrow the personal view.
+    // Admin-only filters are shown only on the all-accounts view; leftover
+    // values must not silently narrow the personal view.
+    username: readingAll.value ? usernameFilter.value.trim() : '',
     token_ref: readingAll.value ? tokenRef.value.trim() : '',
     // The audit API matches request_id exactly (varchar 64); it has no keyword.
     request_id: requestId.value.trim(),
@@ -208,10 +221,18 @@ function reload(): void {
   else page.value = 1
 }
 
-watch([requestId, tokenRef], () => {
+watch([requestId, tokenRef, usernameFilter], () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
+watch(
+  () => auth.isAdmin,
+  (isAdmin) => {
+    if (!isAdmin && category.value === 'operation') {
+      category.value = 'all'
+    }
+  }
+)
 watch([category, outcome, startDate, endDate], reload)
 watch(scope, (value) => {
   void router.replace({
@@ -289,7 +310,7 @@ function exportValues(log: AuditLogItem): readonly unknown[] {
     formatTime(log.created_at),
     actorName(log),
     t(auditLogRoleKey(log.actor.role)),
-    auditLogCategoryLabel(log.category, t),
+    auditLogDisplayCategoryLabel(log, t),
     t(auditLogResultKey(log)),
     auditLogSummary(log, t),
     log.ip,
@@ -412,7 +433,7 @@ onBeforeUnmount(() => {
         :options="scopeOptions"
         :label="t('auditLogs.scopeLabel')"
         :prefix-label="t('auditLogs.scopeLabel') + ':'"
-        class="w-full sm:w-44"
+        class="w-full sm:w-48"
       />
       <FilterSelect
         v-model="category"
@@ -435,6 +456,14 @@ onBeforeUnmount(() => {
       />
       <SearchInput
         v-if="canReadAll && scope === 'all'"
+        v-model="usernameFilter"
+        :placeholder="t('auditLogs.usernamePlaceholder')"
+        :aria-label="t('auditLogs.usernamePlaceholder')"
+        name="audit-log-username"
+        class="w-full sm:w-44"
+      />
+      <SearchInput
+        v-if="canReadAll && scope === 'all'"
         v-model="tokenRef"
         maxlength="64"
         :placeholder="t('auditLogs.tokenRefPlaceholder')"
@@ -451,6 +480,13 @@ onBeforeUnmount(() => {
         {{ t('common.export') }}
       </ConsoleButton>
     </div>
+
+    <p
+      data-audit-retention-notice
+      class="mb-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3.5 py-2 text-xs text-[var(--text-secondary)]"
+    >
+      {{ t('auditLogs.retentionNotice') }}
+    </p>
 
     <ConsoleCard v-if="loadError && !loading" :padded="false">
       <EmptyState :title="t('auditLogs.loadFailed')" illustration="empty-logs">
@@ -496,9 +532,9 @@ onBeforeUnmount(() => {
         <template #cell-result="{ row }">
           <div class="flex flex-wrap items-center gap-1.5">
             <StatusChip
-              :tone="auditLogCategoryTone((row as AuditLogItem).category)"
+              :tone="auditLogDisplayCategoryTone(row as AuditLogItem)"
             >
-              {{ auditLogCategoryLabel((row as AuditLogItem).category, t) }}
+              {{ auditLogDisplayCategoryLabel(row as AuditLogItem, t) }}
             </StatusChip>
             <StatusChip :tone="auditLogResultTone(row as AuditLogItem)">
               {{ t(auditLogResultKey(row as AuditLogItem)) }}
@@ -586,8 +622,8 @@ onBeforeUnmount(() => {
           "
         >
           <div class="flex flex-wrap items-center gap-1.5">
-            <StatusChip :tone="auditLogCategoryTone(row.category)">
-              {{ auditLogCategoryLabel(row.category, t) }}
+            <StatusChip :tone="auditLogDisplayCategoryTone(row)">
+              {{ auditLogDisplayCategoryLabel(row, t) }}
             </StatusChip>
             <StatusChip :tone="auditLogResultTone(row)">
               {{ t(auditLogResultKey(row)) }}
@@ -693,8 +729,8 @@ onBeforeUnmount(() => {
             {{ t('auditLogs.sections.operation') }}
           </h3>
           <div class="mt-3 flex flex-wrap items-center gap-1.5">
-            <StatusChip :tone="auditLogCategoryTone(detailLog.category)">
-              {{ auditLogCategoryLabel(detailLog.category, t) }}
+            <StatusChip :tone="auditLogDisplayCategoryTone(detailLog)">
+              {{ auditLogDisplayCategoryLabel(detailLog, t) }}
             </StatusChip>
           </div>
           <p

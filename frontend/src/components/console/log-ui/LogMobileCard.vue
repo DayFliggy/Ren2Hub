@@ -1,11 +1,18 @@
 <script setup lang="ts">
+import { computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink, routerKey } from 'vue-router'
 
 import StatusChip from '@/components/common/StatusChip.vue'
 import { getLocale } from '@/i18n'
 import type { LogItem, LogType } from '@/types/console'
 import { formatQuota, formatTime } from '@/utils/format'
 
+import {
+  logCallSubkind,
+  logLinkedTask,
+  type CallLogSubkind,
+} from './logClassification'
 import { logContentText, logTokenName } from './logContent'
 import LogDetailTrigger from './LogDetailTrigger.vue'
 import LogModelMismatch from './LogModelMismatch.vue'
@@ -13,8 +20,9 @@ import LogPerformanceCell from './LogPerformanceCell.vue'
 import LogReasoningEffort from './LogReasoningEffort.vue'
 import LogUsageCell from './LogUsageCell.vue'
 
-defineProps<{
+const props = defineProps<{
   log: LogItem
+  showAccount?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const hasRouter = Boolean(inject(routerKey, null))
 
 const typeTone: Record<
   LogType,
@@ -45,6 +54,24 @@ const typeLabelKey: Record<LogType, string> = {
   system: 'logs.typeSystem',
   login: 'logs.typeLogin',
 }
+
+const subkindLabelKey: Record<Exclude<CallLogSubkind, null>, string> = {
+  violation_fee: 'logs.callSubtypeViolationFee',
+  channel_test: 'logs.callSubtypeChannelTest',
+  task_billing: 'logs.callSubtypeTaskBilling',
+}
+
+const subkindTone: Record<
+  Exclude<CallLogSubkind, null>,
+  'danger' | 'neutral' | 'info'
+> = {
+  violation_fee: 'danger',
+  channel_test: 'neutral',
+  task_billing: 'info',
+}
+
+const subkind = computed(() => logCallSubkind(props.log))
+const linkedTask = computed(() => logLinkedTask(props.log))
 </script>
 
 <template>
@@ -66,10 +93,17 @@ const typeLabelKey: Record<LogType, string> = {
           <StatusChip :tone="typeTone[log.type]">
             {{ t(typeLabelKey[log.type]) }}
           </StatusChip>
+          <StatusChip v-if="subkind" :tone="subkindTone[subkind]">
+            {{ t(subkindLabelKey[subkind]) }}
+          </StatusChip>
         </div>
         <LogModelMismatch :log="log" />
         <p class="mt-1 truncate text-xs text-[var(--text-tertiary)]">
-          {{ log.channel }} · {{ formatTime(log.created) }}
+          <template v-if="showAccount && log.username">
+            {{ log.username }} ·
+          </template>
+          <template v-if="log.channel">{{ log.channel }} · </template>
+          {{ formatTime(log.created) }}
         </p>
       </div>
       <p
@@ -116,6 +150,17 @@ const typeLabelKey: Record<LogType, string> = {
         <dd class="mt-1">
           <LogUsageCell :log="log" mobile />
         </dd>
+      </div>
+      <div
+        v-if="linkedTask && hasRouter"
+        class="col-span-2 min-w-0 border-t border-[var(--border-subtle)] pt-3"
+      >
+        <RouterLink
+          :to="{ name: linkedTask.routeName, query: linkedTask.query }"
+          class="inline-flex min-h-8 items-center text-xs font-medium text-[var(--accent-text)] underline-offset-2 hover:underline"
+        >
+          {{ t('logs.openLinkedTask') }} · {{ linkedTask.taskId }}
+        </RouterLink>
       </div>
       <div
         class="col-span-2 min-w-0 border-t border-[var(--border-subtle)] pt-3"

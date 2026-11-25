@@ -496,7 +496,9 @@ describe('capability route guard', () => {
       ['/console/token', '/keys'],
       ['/console/wallet', '/wallet'],
       ['/console/logs/drawing', '/usage-logs/drawing'],
+      ['/console/logs/quota', '/usage-logs/quota'],
       ['/usage-logs?tab=tasks', '/usage-logs/task?tab=tasks'],
+      ['/usage-logs?tab=quota', '/usage-logs/quota?tab=quota'],
       ['/console/personal', '/profile'],
     ]) {
       await router.push(

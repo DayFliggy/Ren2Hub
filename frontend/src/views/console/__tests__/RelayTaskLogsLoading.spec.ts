@@ -95,7 +95,11 @@ describe.each(views)('$name log query lifecycle', (config) => {
     wrapper = mount(config.view, {
       global: {
         plugins: [createPinia(), i18n],
-        stubs: { LogsNavTabs: true, TaskArtifactsCell: true },
+        stubs: {
+          LogsNavTabs: true,
+          AsyncTaskSubTabs: true,
+          TaskArtifactsCell: true,
+        },
       },
     })
     await flushPromises()

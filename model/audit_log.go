@@ -50,6 +50,7 @@ type AuditLogFilter struct {
 	UserId          int
 	Username        string
 	Category        string
+	Categories      []string
 	TokenRef        string
 	ExcludeTokenRef string
 	RequestId       string
@@ -157,6 +158,8 @@ func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*Audit
 	}
 	if filter.Category != "" {
 		query = query.Where("category = ?", filter.Category)
+	} else if len(filter.Categories) > 0 {
+		query = query.Where("category IN ?", filter.Categories)
 	}
 	if filter.TokenRef != "" {
 		query = query.Where("token_ref = ?", filter.TokenRef)

@@ -20,6 +20,7 @@ const aliases: Record<string, string> = {
   '/logs': '/usage-logs',
   '/logs/drawing': '/usage-logs/drawing',
   '/logs/tasks': '/usage-logs/task',
+  '/logs/quota': '/usage-logs/quota',
   '/logs/operations': '/usage-logs/audit',
   '/usage-logs/operations': '/usage-logs/audit',
   '/audit': '/usage-logs/audit',
@@ -104,6 +105,7 @@ export function canonicalLegacyPath(
     const tab = query.get('tab')
     if (tab === 'drawing' || tab === 'midjourney') path += '/drawing'
     if (tab === 'task' || tab === 'tasks') path += '/task'
+    if (tab === 'quota' || tab === 'ledger') path += '/quota'
   }
   const section = path.replace(/^\/system-settings\//, '')
   if (section !== path && settingsSections[section]) {

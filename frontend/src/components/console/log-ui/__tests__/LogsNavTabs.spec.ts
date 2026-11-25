@@ -13,7 +13,7 @@ const EmptyRoute = defineComponent({ template: '<div />' })
 
 async function mountTabs(
   capabilities: Record<string, string>,
-  active: 'consume' | 'audit' = 'consume'
+  active: 'calls' | 'tasks' | 'quota' | 'audit' = 'calls'
 ) {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -24,13 +24,13 @@ async function mountTabs(
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/logs', name: 'logs', component: EmptyRoute },
-      { path: '/logs/drawing', name: 'logs-drawing', component: EmptyRoute },
-      { path: '/logs/tasks', name: 'logs-tasks', component: EmptyRoute },
-      { path: '/logs/audit', name: 'logs-audit', component: EmptyRoute },
+      { path: '/usage-logs', name: 'logs', component: EmptyRoute },
+      { path: '/usage-logs/task', name: 'logs-tasks', component: EmptyRoute },
+      { path: '/usage-logs/quota', name: 'logs-quota', component: EmptyRoute },
+      { path: '/usage-logs/audit', name: 'logs-audit', component: EmptyRoute },
     ],
   })
-  await router.push('/logs')
+  await router.push('/usage-logs')
   await router.isReady()
 
   return mount(LogsNavTabs, {
@@ -44,13 +44,18 @@ beforeAll(async () => {
   await loadMessageDomain('console')
 })
 
-describe('audit log navigation tab', () => {
-  it('shows the audit tab whenever the audit capability is live', async () => {
+describe('log center navigation tabs', () => {
+  it('renders the four primary categories when audit capability is live', async () => {
     const wrapper = await mountTabs({ logs: 'live', audit: 'live' })
-    const audit = wrapper.find('a[href="/logs/audit"]')
-    expect(wrapper.findAll('a')).toHaveLength(4)
-    expect(audit.exists()).toBe(true)
-    expect(audit.text()).toBe('审计日志')
+    const links = wrapper.findAll('a')
+    expect(links.map((item) => item.text())).toEqual([
+      '调用日志',
+      '异步任务',
+      '额度变动',
+      '审计日志',
+    ])
+    expect(wrapper.find('a[href="/usage-logs/quota"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="/usage-logs/audit"]').exists()).toBe(true)
   })
 
   it.each<Record<string, string>>([{ audit: 'disabled' }, {}])(
@@ -58,14 +63,23 @@ describe('audit log navigation tab', () => {
     async (extra) => {
       const wrapper = await mountTabs({ logs: 'live', ...extra })
       expect(wrapper.findAll('a')).toHaveLength(3)
-      expect(wrapper.find('a[href="/logs/audit"]').exists()).toBe(false)
+      expect(wrapper.find('a[href="/usage-logs/audit"]').exists()).toBe(false)
     }
   )
 
-  it('marks the audit tab as the current page', async () => {
-    const wrapper = await mountTabs({ audit: 'live' }, 'audit')
+  it('marks the active tab as the current page', async () => {
+    const auditWrapper = await mountTabs({ audit: 'live' }, 'audit')
     expect(
-      wrapper.find('a[href="/logs/audit"]').attributes('aria-current')
+      auditWrapper
+        .find('a[href="/usage-logs/audit"]')
+        .attributes('aria-current')
+    ).toBe('page')
+
+    const quotaWrapper = await mountTabs({ audit: 'live' }, 'quota')
+    expect(
+      quotaWrapper
+        .find('a[href="/usage-logs/quota"]')
+        .attributes('aria-current')
     ).toBe('page')
   })
 })

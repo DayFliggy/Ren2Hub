@@ -531,12 +531,31 @@ function parseLog(value: unknown, endpoint: string): LogItem {
   const promptTokens = requiredInteger(value.prompt_tokens, endpoint)
   const completionTokens = requiredInteger(value.completion_tokens, endpoint)
   const latency = requiredInteger(value.use_time, endpoint)
+  const isCallLog = type === 'consume' || type === 'error'
+  const username =
+    typeof value.username === 'string' && value.username.trim()
+      ? value.username
+      : undefined
+  const channelId =
+    typeof value.channel === 'number' &&
+    Number.isInteger(value.channel) &&
+    value.channel > 0
+      ? value.channel
+      : undefined
+  const upstreamRequestId =
+    typeof value.upstream_request_id === 'string' &&
+    value.upstream_request_id.trim()
+      ? value.upstream_request_id
+      : undefined
   return {
     id: requiredInteger(value.id, endpoint),
     type,
     ...(value.request_id == null || value.request_id === ''
       ? {}
       : { request_id: requiredString(value.request_id, endpoint, false) }),
+    ...(upstreamRequestId ? { upstream_request_id: upstreamRequestId } : {}),
+    ...(username ? { username } : {}),
+    ...(channelId !== undefined ? { channel_id: channelId } : {}),
     ...(value.token_id == null
       ? {}
       : { token_id: requiredInteger(value.token_id, endpoint) }),
@@ -554,12 +573,15 @@ function parseLog(value: unknown, endpoint: string): LogItem {
       : {}),
     quota: requiredQuota(value.quota, endpoint),
     latency,
-    first_token_latency: Number.isFinite(firstToken) ? firstToken / 1000 : null,
-    request_mode: optionalBoolean(value.is_stream, endpoint)
-      ? 'stream'
-      : 'sync',
+    first_token_latency:
+      isCallLog && Number.isFinite(firstToken) ? firstToken / 1000 : null,
+    request_mode: isCallLog
+      ? optionalBoolean(value.is_stream, endpoint)
+        ? 'stream'
+        : 'sync'
+      : null,
     tps:
-      latency > 0 && completionTokens > 0
+      isCallLog && latency > 0 && completionTokens > 0
         ? Math.round((completionTokens / latency) * 100) / 100
         : 0,
     content: requiredString(value.content, endpoint),
@@ -567,8 +589,10 @@ function parseLog(value: unknown, endpoint: string): LogItem {
   }
 }
 
-export function parseLogPage(value: unknown): PageResult<LogItem> {
-  const endpoint = '/api/log/self'
+export function parseLogPage(
+  value: unknown,
+  endpoint = '/api/log/self'
+): PageResult<LogItem> {
   return parsePage(value, endpoint, parseLog)
 }
 
@@ -626,8 +650,22 @@ export function parseAuditLogPage(value: unknown): PageResult<AuditLogItem> {
 
 function parseDrawingLog(value: unknown, endpoint: string): DrawingLogItem {
   if (!isRecord(value)) invalidResponse(endpoint)
+  const userId =
+    typeof value.user_id === 'number' &&
+    Number.isInteger(value.user_id) &&
+    value.user_id > 0
+      ? value.user_id
+      : undefined
+  const channelId =
+    typeof value.channel_id === 'number' &&
+    Number.isInteger(value.channel_id) &&
+    value.channel_id > 0
+      ? value.channel_id
+      : undefined
   return {
     id: requiredInteger(value.id, endpoint),
+    ...(userId !== undefined ? { user_id: userId } : {}),
+    ...(channelId !== undefined ? { channel_id: channelId } : {}),
     mj_id: requiredString(value.mj_id ?? '', endpoint),
     action: requiredString(value.action ?? '', endpoint),
     prompt: requiredString(value.prompt ?? '', endpoint),
@@ -644,16 +682,49 @@ function parseDrawingLog(value: unknown, endpoint: string): DrawingLogItem {
 }
 
 export function parseDrawingLogPage(
-  value: unknown
+  value: unknown,
+  endpoint = '/api/mj/self'
 ): PageResult<DrawingLogItem> {
-  const endpoint = '/api/mj/self'
   return parsePage(value, endpoint, parseDrawingLog)
 }
 
 function parseRelayTaskLog(value: unknown, endpoint: string): RelayTaskLogItem {
   if (!isRecord(value)) invalidResponse(endpoint)
+  const userId =
+    typeof value.user_id === 'number' &&
+    Number.isInteger(value.user_id) &&
+    value.user_id > 0
+      ? value.user_id
+      : undefined
+  const username =
+    typeof value.username === 'string' && value.username.trim()
+      ? value.username
+      : undefined
+  const channelId =
+    typeof value.channel_id === 'number' &&
+    Number.isInteger(value.channel_id) &&
+    value.channel_id > 0
+      ? value.channel_id
+      : undefined
+  const propsRecord = isRecord(value.properties) ? value.properties : null
+  const originModelName =
+    propsRecord &&
+    typeof propsRecord.origin_model_name === 'string' &&
+    propsRecord.origin_model_name.trim()
+      ? propsRecord.origin_model_name.trim()
+      : undefined
+  const adminInfo = isRecord(value.admin_info)
+    ? (value.admin_info as RelayTaskLogItem['admin_info'])
+    : null
+  const rootInfo = isRecord(value.root_info)
+    ? (value.root_info as RelayTaskLogItem['root_info'])
+    : null
   return {
     id: requiredInteger(value.id, endpoint),
+    ...(userId !== undefined ? { user_id: userId } : {}),
+    ...(username ? { username } : {}),
+    ...(channelId !== undefined ? { channel_id: channelId } : {}),
+    ...(originModelName ? { origin_model_name: originModelName } : {}),
     task_id: requiredString(value.task_id ?? '', endpoint),
     platform: requiredString(value.platform ?? '', endpoint),
     action: requiredString(value.action ?? '', endpoint),
@@ -672,11 +743,15 @@ function parseRelayTaskLog(value: unknown, endpoint: string): RelayTaskLogItem {
       value.result_discarded ?? false,
       endpoint
     ),
+    ...(adminInfo ? { admin_info: adminInfo } : {}),
+    ...(rootInfo ? { root_info: rootInfo } : {}),
   }
 }
 
-export function parseTaskLogPage(value: unknown): PageResult<RelayTaskLogItem> {
-  const endpoint = '/api/task/self'
+export function parseTaskLogPage(
+  value: unknown,
+  endpoint = '/api/task/self'
+): PageResult<RelayTaskLogItem> {
   return parsePage(value, endpoint, parseRelayTaskLog)
 }
 

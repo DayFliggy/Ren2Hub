@@ -290,6 +290,7 @@ func GetAllMidjourney(c *gin.Context) {
 	queryParams := model.TaskQueryParams{
 		ChannelID:      c.Query("channel_id"),
 		MjID:           c.Query("mj_id"),
+		Status:         c.Query("status"),
 		StartTimestamp: c.Query("start_timestamp"),
 		EndTimestamp:   c.Query("end_timestamp"),
 	}
@@ -315,6 +316,7 @@ func GetUserMidjourney(c *gin.Context) {
 
 	queryParams := model.TaskQueryParams{
 		MjID:           c.Query("mj_id"),
+		Status:         c.Query("status"),
 		StartTimestamp: c.Query("start_timestamp"),
 		EndTimestamp:   c.Query("end_timestamp"),
 	}

@@ -44,6 +44,7 @@
   "Invalid email address": "无效的邮箱地址",
   "Invalid input": "输入不合法",
   "Invalid input {{error}}": "输入不合法 {{error}}",
+  "Invalid log types": "日志类型筛选无效",
   "Invalid personal access token ID": "个人访问令牌 ID 无效",
   "Invalid personal access token input": "个人访问令牌参数无效",
   "Invalid token type": "无效的令牌类型",
