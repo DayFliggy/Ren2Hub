@@ -448,3 +448,95 @@ func TestObservationRedisFailureIsNotZeroOrHealthy(t *testing.T) {
 	require.Equal(t, "unavailable", storage.Redis.Reason)
 	require.Nil(t, storage.Redis.LatencyMs)
 }
+
+func TestObservationSamplesAndAggregatesGatewayInFlight(t *testing.T) {
+	previous := gatewayConcurrency
+	gatewayConcurrency = NewConcurrencyManager()
+	t.Cleanup(func() { gatewayConcurrency = previous })
+
+	pUser, err := AcquireUserConcurrency(context.Background(), 7, 10)
+	require.NoError(t, err)
+	defer pUser.Release()
+	pChan1, err := AcquireChannelConcurrency(context.Background(), &model.Channel{Id: 11, MaxConcurrency: 10})
+	require.NoError(t, err)
+	defer pChan1.Release()
+	pChan2, err := AcquireChannelConcurrency(context.Background(), &model.Channel{Id: 11, MaxConcurrency: 10})
+	require.NoError(t, err)
+	defer pChan2.Release()
+
+	sampler := newObservationSampler(4)
+	sampler.sample(context.Background())
+	// Read with the sample's own timestamp so a minute rollover between sample()
+	// and read() can never move the point into the previous bucket.
+	sampler.mu.RLock()
+	require.NotNil(t, sampler.latest)
+	require.NotNil(t, sampler.latest.SampledAt)
+	sampledAt := time.Unix(*sampler.latest.SampledAt, 0)
+	sampler.mu.RUnlock()
+
+	got, err := sampler.read("1h", sampledAt)
+	require.NoError(t, err)
+	last := got.Series.Points[len(got.Series.Points)-1]
+	require.NotNil(t, last.UserInFlight)
+	require.NotNil(t, last.ChannelInFlight)
+	require.Equal(t, 1.0, *last.UserInFlight)
+	require.Equal(t, 2.0, *last.ChannelInFlight)
+	require.Nil(t, got.Series.Points[0].UserInFlight, "unsampled history stays null")
+
+	// Stale read preserves timestamped history without mutating the cached ring.
+	stale, err := sampler.read("1h", sampledAt.Add(observationMaxAge+time.Second))
+	require.NoError(t, err)
+	require.True(t, stale.Stale)
+	gotAgain, err := sampler.read("1h", sampledAt)
+	require.NoError(t, err)
+	require.False(t, gotAgain.Stale)
+	require.Equal(t, 1.0, *gotAgain.Series.Points[len(gotAgain.Series.Points)-1].UserInFlight)
+
+	// Releasing permits drops O(1) totals cleanly to real zero.
+	pUser.Release()
+	pChan1.Release()
+	pChan2.Release()
+	uTotal, cTotal := gatewayInFlightTotals()
+	require.Equal(t, 0, uTotal)
+	require.Equal(t, 0, cTotal)
+
+	now := time.Unix(1800000030, 0)
+	series := buildObservationSeries([]ObservationSeriesPoint{
+		{Ts: now.Unix() - 20, UserInFlight: observationPtr(2.), ChannelInFlight: observationPtr(4.)},
+		{Ts: now.Unix() - 10, UserInFlight: observationPtr(4.), ChannelInFlight: observationPtr(6.)},
+	}, "1h", now.Unix()-3600, now.Unix(), 60)
+	bucket := series.Points[len(series.Points)-1]
+	require.NotNil(t, bucket.UserInFlight)
+	require.NotNil(t, bucket.ChannelInFlight)
+	require.Equal(t, 3.0, *bucket.UserInFlight)
+	require.Equal(t, 5.0, *bucket.ChannelInFlight)
+
+	// Concurrent acquire/release beside sampler.sample() must not deadlock or go negative.
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := 1; i <= 4; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				p, acqErr := AcquireUserConcurrency(context.Background(), id, 10)
+				if acqErr == nil {
+					p.Release()
+				}
+			}
+		}(i)
+	}
+	for range 8 {
+		sampler.sample(context.Background())
+	}
+	close(stop)
+	wg.Wait()
+	uFinal, cFinal := gatewayInFlightTotals()
+	require.Equal(t, 0, uFinal)
+	require.Equal(t, 0, cFinal)
+}

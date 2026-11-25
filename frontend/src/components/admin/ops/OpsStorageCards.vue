@@ -56,6 +56,13 @@ const pools = computed(() => {
     })
   return rows
 })
+
+function probeLatencyLabel(latencyMs: number | null | undefined): string {
+  if (latencyMs == null) return ''
+  const formatted = formatLatencyMs(latencyMs, locale.value)
+  return formatted.value === '--' ? '' : `${formatted.value} ${formatted.unit}`
+}
+
 function poolMetrics(pool: DBPoolStat) {
   const count = (key: string, value: number) => ({
     key,
@@ -76,6 +83,7 @@ function poolMetrics(pool: DBPoolStat) {
     },
   ]
 }
+
 const cacheMetrics = computed(() => {
   const stats = props.overview?.cache
   if (!stats) return []
@@ -97,6 +105,7 @@ const cacheMetrics = computed(() => {
     count('disk_cache_hits'),
   ]
 })
+
 const target = ref<PerformanceAction | null>(null)
 const pending = ref(false)
 const actionError = ref('')
@@ -152,25 +161,29 @@ async function executeAction() {
       :error="error"
       :updated-at="updatedAt"
       :retryable="false"
+      :stretch="false"
       :data-ops-storage="pool.key"
     >
-      <template #action
-        ><StatusChip :tone="STATUS_TONES[pool.probe?.status ?? 'unknown']">{{
-          t(`status.${pool.probe?.status ?? 'unknown'}`)
-        }}</StatusChip></template
-      >
+      <template #action>
+        <div class="ops-storage-action">
+          <span
+            v-if="probeLatencyLabel(pool.probe?.latency_ms)"
+            class="ops-probe-latency font-mono"
+            :title="t('storage.latency')"
+            >{{ probeLatencyLabel(pool.probe?.latency_ms) }}</span
+          >
+          <StatusChip :tone="STATUS_TONES[pool.probe?.status ?? 'unknown']">{{
+            t(`status.${pool.probe?.status ?? 'unknown'}`)
+          }}</StatusChip>
+        </div>
+      </template>
       <p v-if="pool.probe?.reason" class="ops-note">
         {{ t(`observationReasons.${pool.probe.reason}`) }}
       </p>
-      <OpsMetric
-        :label="t('storage.latency')"
-        v-bind="formatLatencyMs(pool.probe?.latency_ms ?? null, locale)"
-        size="sm"
-      />
       <p v-if="pool.stats === null" class="ops-empty" data-ops-pool-unavailable>
         {{ t('native.poolUnavailable') }}
       </p>
-      <dl v-else class="ops-metric-grid ops-metric-grid--fit">
+      <dl v-else class="ops-metric-grid ops-metric-grid--3">
         <OpsMetric
           v-for="metric in poolMetrics(pool.stats)"
           :key="metric.key"
@@ -187,6 +200,7 @@ async function executeAction() {
         {{ t('storage.sharedLogDatabase') }}
       </p>
     </OpsCard>
+
     <OpsCard
       :title="t('storage.redis')"
       :scope="t('scope.instant')"
@@ -195,17 +209,26 @@ async function executeAction() {
       :error="error"
       :updated-at="updatedAt"
       :retryable="false"
+      :stretch="false"
       data-ops-storage="redis"
     >
-      <template #action
-        ><StatusChip :tone="STATUS_TONES[redis?.status ?? 'unknown']">{{
-          t(`status.${redis?.status ?? 'unknown'}`)
-        }}</StatusChip></template
-      >
+      <template #action>
+        <div class="ops-storage-action">
+          <span
+            v-if="probeLatencyLabel(redis?.latency_ms)"
+            class="ops-probe-latency font-mono"
+            :title="t('storage.latency')"
+            >{{ probeLatencyLabel(redis?.latency_ms) }}</span
+          >
+          <StatusChip :tone="STATUS_TONES[redis?.status ?? 'unknown']">{{
+            t(`status.${redis?.status ?? 'unknown'}`)
+          }}</StatusChip>
+        </div>
+      </template>
       <p v-if="redis?.reason" class="ops-note">
         {{ t(`observationReasons.${redis.reason}`) }}
       </p>
-      <dl class="ops-metric-grid ops-metric-grid--fit">
+      <dl v-else class="ops-metric-grid ops-metric-grid--fit">
         <OpsMetric
           :label="t('storage.latency')"
           v-bind="formatLatencyMs(redis?.latency_ms ?? null, locale)"
@@ -213,6 +236,7 @@ async function executeAction() {
         />
       </dl>
     </OpsCard>
+
     <OpsCard
       :title="t('native.cache')"
       :scope="t('scope.instant')"
@@ -222,10 +246,11 @@ async function executeAction() {
       :error="error"
       :updated-at="updatedAt"
       :retryable="false"
+      :stretch="false"
       data-ops-storage="cache"
     >
       <template v-if="overview?.cache">
-        <dl class="ops-metric-grid ops-metric-grid--fit">
+        <dl class="ops-metric-grid ops-metric-grid--3">
           <OpsMetric
             v-for="metric in cacheMetrics"
             :key="metric.key"
@@ -246,7 +271,7 @@ async function executeAction() {
             >{{ t(`native.actions.${action}`) }}</ConsoleButton
           >
         </div>
-        <p v-if="result" class="ops-note" role="status">{{ result }}</p>
+        <p v-if="result" class="ops-result" role="status">{{ result }}</p>
       </template>
     </OpsCard>
   </section>

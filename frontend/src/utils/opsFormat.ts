@@ -96,7 +96,9 @@ export function formatRelative(
   locale: string
 ): string {
   if (!seconds) return '--'
-  const delta = Math.round((seconds * 1000 - nowMs) / 1000)
+  // Past event timestamps ("updated X ago"): clamp slight server/client clock
+  // skew instead of rendering future tense ("in 84 days").
+  const delta = Math.min(0, Math.round((seconds * 1000 - nowMs) / 1000))
   const magnitude = Math.abs(delta)
   const [unit, divisor] =
     magnitude < 60
@@ -169,5 +171,15 @@ export const STATUS_COLORS: Record<OpsStatus, string> = {
   critical: 'var(--status-danger)',
   unknown: 'var(--text-tertiary)',
   stale: 'var(--status-warning)',
+  disabled: 'var(--text-tertiary)',
+}
+
+/** Accessible foreground tokens (>= 4.5:1 on page and card surfaces in both themes). */
+export const STATUS_TEXT_COLORS: Record<OpsStatus, string> = {
+  ok: 'var(--status-success-text)',
+  warning: 'var(--status-warning-text)',
+  critical: 'var(--status-danger-text)',
+  unknown: 'var(--text-tertiary)',
+  stale: 'var(--status-warning-text)',
   disabled: 'var(--text-tertiary)',
 }

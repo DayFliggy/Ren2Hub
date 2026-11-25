@@ -267,6 +267,7 @@ func (s *routeObservationStore) releaseProbe(probe *routeProbe) {
 
 type RouteBreakerSnapshot struct {
 	ChannelID     int    `json:"channel_id"`
+	ChannelName   string `json:"channel_name,omitempty"`
 	Model         string `json:"model"`
 	State         string `json:"state"`
 	OpenUntil     int64  `json:"open_until"`
@@ -278,9 +279,10 @@ type RouteBreakerSnapshot struct {
 	Reopens       int    `json:"reopens"`
 }
 type RouteCooldownSnapshot struct {
-	ChannelID int    `json:"channel_id"`
-	Until     int64  `json:"until"`
-	Source    string `json:"source"`
+	ChannelID   int    `json:"channel_id"`
+	ChannelName string `json:"channel_name,omitempty"`
+	Until       int64  `json:"until"`
+	Source      string `json:"source"`
 }
 
 func (s *routeObservationStore) healthSnapshot() ([]RouteBreakerSnapshot, []RouteCooldownSnapshot) {

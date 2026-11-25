@@ -10,6 +10,7 @@ declare module 'vue-router' {
     requiresPermission?: { resource: string; action: string }
     noPageScroll?: boolean
     wide?: boolean
+    fullscreenable?: boolean
     protected?: boolean
     feature?: string
     nav?: string

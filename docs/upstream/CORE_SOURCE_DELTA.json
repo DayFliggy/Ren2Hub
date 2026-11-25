@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 830,
-    "adapted": 334,
-    "extension": 540,
+    "upstream_equal": 827,
+    "adapted": 337,
+    "extension": 543,
     "removed": 47
   },
   "files": [
@@ -912,9 +912,17 @@
     },
     {
       "path": "controller/access_token.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "f8e407a7c593231cc670a690b6289b526ca93bd568f7db1e03df844617e26b59",
-      "local_sha256": "f8e407a7c593231cc670a690b6289b526ca93bd568f7db1e03df844617e26b59"
+      "local_sha256": "c1f59abf21850f7408726ff286ed29d77ec9739addcc78ed8a592c339dd55124",
+      "reasons": [
+        "vue-frontend"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "日志中心四分类接点：GetAuditLogs 支持 categories 多类别筛选（如 login,security），兼容既有单 category 参数与严格参数拒绝。",
+        "method": "最小接点调用扩展解析函数，经三库矩阵与真实路由回归验证。"
+      }
     },
     {
       "path": "controller/access_token_audit_test.go",
@@ -1459,7 +1467,7 @@
       "path": "controller/dashboard_summary.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8ab481e6af1a21176f2542e026ba3e351f101682be0016339f339048b1192582",
+      "local_sha256": "c88a779a62668ddd39617ef5dcc587b775b1c65be152054d07b8ad894b4f042a",
       "reasons": [
         "dashboard-scope"
       ],
@@ -1616,7 +1624,7 @@
       "path": "controller/log.go",
       "status": "adapted",
       "upstream_sha256": "045aca343d8014a7be9175c3cd0dcf839316e1d8020c3748e3a6d7495ed1c991",
-      "local_sha256": "78864fc71f911856594ecfe52b5e9c744d98776ae57fe8db234a818a0970bbd4",
+      "local_sha256": "0129aeee8cec2ebc5c22b89e9b88c2b551f0bc07cf907fc252868ac9783f3544",
       "reasons": [
         "audit-local-safety",
         "group-removal"
@@ -1627,6 +1635,12 @@
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
+    },
+    {
+      "path": "controller/log_classification_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c2daf1dee0e67a5a08d0103509366f78eb5794332aacd3ce1666b1dd4cdf5bca"
     },
     {
       "path": "controller/log_export_failure_test.go",
@@ -1682,7 +1696,7 @@
       "path": "controller/midjourney.go",
       "status": "adapted",
       "upstream_sha256": "b814f33d539bdc8c68989e225aef312bbafb08e5e56d58d9b0de6ee0e58889ea",
-      "local_sha256": "613c0469c94cf22aea979139860d62f551b3e52e9af626ba3a7d818508bfb2b8",
+      "local_sha256": "774aeda94e297d44209721a4d75de4492908c75b0d3599d3a7aa39e25d17b76f",
       "reasons": [
         "concurrency"
       ],
@@ -4550,9 +4564,17 @@
     },
     {
       "path": "model/audit_log.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "1b9db892b78a45b6ea86f425aab1aef4678c5bef5f36363d1ac173551672b554",
-      "local_sha256": "1b9db892b78a45b6ea86f425aab1aef4678c5bef5f36363d1ac173551672b554"
+      "local_sha256": "e80cb82c80d6b59ac300ed94f8c95552602d6b5d559ad707ea840d81c288e57f",
+      "reasons": [
+        "vue-frontend"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "日志中心四分类接点：AuditLogFilter.Categories 支持多类别 IN 查询，单 Category 优先保持原语义。",
+        "method": "最小查询接点，经 SQLite/MySQL/PostgreSQL 三库矩阵验证。"
+      }
     },
     {
       "path": "model/audit_log_test.go",
@@ -5225,7 +5247,7 @@
       "path": "model/log.go",
       "status": "adapted",
       "upstream_sha256": "405448720fdbfc44ea01d16d67ad5ae465f16ea6b1a1c8e302b6485b7e207bb9",
-      "local_sha256": "f0bf5779011e5d697ea696576e723231dff3da4eeab78b0db4673382778ee176",
+      "local_sha256": "33733ccf7289cbd2d06fd36d515dd2b604a38f5d530eb428402721f2d4a3fbee",
       "reasons": [
         "audit-local-safety",
         "group-removal"
@@ -5249,6 +5271,20 @@
         "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
         "basis": "AUTH-1/7：本人统计按不可变用户 ID 共用查询；导出无总量、时间跨度或总时长上限。controller/log_export_protection.go 提供两个进程内名额、短写检查、逐行和刷新前续期 60 秒写截止及最终复位；model/log_export_batches.go 提供 500 行键集短查询与 30 秒查询截止；ClickHouse 无唯一全序键保留原生流查询。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。"
+      }
+    },
+    {
+      "path": "model/log_filter_types.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4987011f3cd312f982d7556a93ad9bc273381c0e4b8d3b9069c173f13bcccd07",
+      "reasons": [
+        "vue-frontend"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "日志中心四分类扩展：解析并严格校验 logs.types 多类型与 audit.categories 多类别查询参数，独立扩展文件，零表结构变更。",
+        "method": "审阅参数校验与边界，经三库矩阵与真实路由回归验证。"
       }
     },
     {
@@ -5334,9 +5370,17 @@
     },
     {
       "path": "model/midjourney.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "dbc5463811866fafab927d4b96c177907834d01d4d2655b1cdd94dd9ee3e30f1",
-      "local_sha256": "dbc5463811866fafab927d4b96c177907834d01d4d2655b1cdd94dd9ee3e30f1"
+      "local_sha256": "9a95507f3361f71ba1cd8f0f99ff203f4ae540eb7498c0a585f77ef1119d8416",
+      "reasons": [
+        "vue-frontend"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "日志中心四分类接点：Midjourney TaskQueryParams 支持按已建索引的 status 精确筛选，供统一异步任务视图使用。",
+        "method": "最小查询接点，经 SQLite/MySQL/PostgreSQL 三库矩阵验证。"
+      }
     },
     {
       "path": "model/migration_dialector.go",
@@ -11822,6 +11866,12 @@
       "local_sha256": "0356b3962f48099aaafbbe165a03101f9892e0e5851d8d047c0ef97bf9ae5463"
     },
     {
+      "path": "router/log_classification_route_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "41a1fc0d2f82e95aed481805672ec2762d8a38f97a225e64acfaa3f49b429b95"
+    },
+    {
       "path": "router/log_export_stream_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -12916,7 +12966,7 @@
       "path": "service/concurrency.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "16036e9aff47b161dc5eaa43b4a5ed168b9cde68c5d4dea072fa1b256452d097",
+      "local_sha256": "7866eac1cb64526163bef09bb8375117df23bdba72a213d96f72dbdc62e8875b",
       "reasons": [
         "concurrency"
       ],
@@ -12934,7 +12984,7 @@
       "path": "service/concurrency_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b13e63715f1987fa59ff4dd69954275723a7c6b05138ff6e9bf9deaf5fc539f9"
+      "local_sha256": "4934fcd621cf757f18532e74dc00c0d19aabf56fc8468f47b5c608b121631c66"
     },
     {
       "path": "service/convert.go",
@@ -13507,7 +13557,7 @@
       "path": "service/performance_observation.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "01e678b91160fc44c369107fece01e189141998e661bf02bb92a1850411f6ea5",
+      "local_sha256": "bd390d8a2bc490d3bb6bae677b3d028ceecc3c19d1ff34280bf58bcd08aad182",
       "reasons": [
         "ops-metrics"
       ],
@@ -13561,7 +13611,7 @@
       "path": "service/performance_observation_series.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2ed9e938d0d042774065903cf4078d8d5f266c1a58d750d6097d4ae5eeacb7cc",
+      "local_sha256": "edefd9a8208b7c96d61da7e8e4eb5eb38d41efd8efde2744afad824a7c0b6488",
       "reasons": [
         "ops-metrics"
       ],
@@ -13579,13 +13629,13 @@
       "path": "service/performance_observation_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4acb99fdcae9dfafa79100d18792794b5cc1966975b88dcfb5131db2914912dc"
+      "local_sha256": "e6b117969ddb6336175c99b6e911bf3ae0809d992e817d1b29eb7242cb409782"
     },
     {
       "path": "service/performance_observation_types.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9cc83f44382dc4c5b4b5447d60d2ea191757bdd5c6ecc0414fb1cee4cec08bae",
+      "local_sha256": "3490b5df4bffc135aafb15ad109ad3dd8ee7ef93cd5ca14eb34b5aeead9fd457",
       "reasons": [
         "ops-metrics"
       ],
@@ -14001,7 +14051,7 @@
       "path": "service/route_breaker.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2e670bbb8c50ca1128b4eaa7196bafac60a3e03ada6143c4ad6b4564fa9bea13",
+      "local_sha256": "f5c9f91a509807557e8930786110a3cca5a1fc832b31f0ba758792dcf6e7d23f",
       "reasons": [
         "concurrency",
         "token-routing"

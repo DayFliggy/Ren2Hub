@@ -3,19 +3,19 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   OPS_WINDOWS,
-  appendOpsSample,
-  concurrencyTotal,
+  QUALITY_HOURS,
   opsMonitorApi,
   projectOpsOverview,
-  type RoutingSnapshot,
-  type OpsSeriesPoint,
+  type OpsQualityHours,
   type OpsWindow,
 } from '@/api/opsMonitor'
 import { getModelCatalog } from '@/api/modelCatalog'
 import OpsGatewayCard from '@/components/admin/ops/OpsGatewayCard.vue'
 import OpsQualityCard from '@/components/admin/ops/OpsQualityCard.vue'
 import OpsResourcesCard from '@/components/admin/ops/OpsResourcesCard.vue'
-import OpsStatusHeader from '@/components/admin/ops/OpsStatusHeader.vue'
+import OpsStatusHeader, {
+  type PollingIntervalChoice,
+} from '@/components/admin/ops/OpsStatusHeader.vue'
 import OpsStorageCards from '@/components/admin/ops/OpsStorageCards.vue'
 import OpsSystemTasksCard from '@/components/admin/ops/OpsSystemTasksCard.vue'
 import OpsUpstreamCard from '@/components/admin/ops/OpsUpstreamCard.vue'
@@ -26,120 +26,141 @@ import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import { useAuthStore } from '@/stores/auth'
 import '@/components/admin/ops/ops.css'
 
-const OVERVIEW_INTERVAL_MS = 30_000
-
 const auth = useAuthStore()
 const { t } = useI18n({ useScope: 'local', messages: opsMonitorMessages })
+
 const selectedWindow = ref<OpsWindow>('1h')
+const qualityHours = ref<OpsQualityHours>(QUALITY_HOURS)
+const refreshIntervalSeconds = ref<PollingIntervalChoice>(30)
+const pollingPaused = ref(false)
+
 const windowOptions = computed(() =>
   OPS_WINDOWS.map((value) => ({ value, label: t(`window.${value}`) }))
 )
-const routingPoints = ref<OpsSeriesPoint[]>([])
-// Each feed owns its timeline. A peer completing in a different second must
-// neither insert a false gap nor republish an old measurement on this line.
-function sampleFeed<T>(
-  fetch: (signal: AbortSignal) => Promise<T>,
-  record: (data: T | null) => void
-) {
-  return usePolledFeed(
-    async (signal) => {
-      try {
-        const value = await fetch(signal)
-        if (!signal.aborted) record(value)
-        return value
-      } catch (cause) {
-        if (!signal.aborted) record(null)
-        throw cause
-      }
-    },
-    () => OVERVIEW_INTERVAL_MS
-  )
-}
-function recordRouting(data: RoutingSnapshot | null) {
-  const now = Math.floor(Date.now() / 1000)
-  routingPoints.value = appendOpsSample(routingPoints.value, {
-    ts: now,
-    cpu: null,
-    memory: null,
-    disk: null,
-    users: data ? concurrencyTotal(data.users) : null,
-    channels: data ? concurrencyTotal(data.channels) : null,
-  })
-}
+
+const pollDelayMs = () =>
+  pollingPaused.value ? null : refreshIntervalSeconds.value * 1000
+
 const performance = usePolledFeed(
   (signal) => opsMonitorApi.stats(signal, selectedWindow.value),
-  () => OVERVIEW_INTERVAL_MS
+  pollDelayMs
 )
+const routing = usePolledFeed(
+  (signal) => opsMonitorApi.routing(signal),
+  pollDelayMs
+)
+const quality = usePolledFeed(
+  (signal) => opsMonitorApi.quality(signal, qualityHours.value),
+  pollDelayMs
+)
+const catalog = usePolledFeed(
+  (signal) => getModelCatalog(undefined, signal),
+  pollDelayMs
+)
+
 watch(selectedWindow, () => {
   // A different window owns different server buckets; do not relabel old data.
   performance.data.value = null
   void performance.refresh()
 })
-const routing = sampleFeed(opsMonitorApi.routing, recordRouting)
-const quality = usePolledFeed(
-  (signal) => opsMonitorApi.quality(signal),
-  () => OVERVIEW_INTERVAL_MS
+
+watch(qualityHours, () => {
+  quality.data.value = null
+  void quality.refresh()
+})
+
+watch(pollingPaused, (paused) => {
+  if (!paused) void refreshAll()
+})
+
+watch(refreshIntervalSeconds, () => {
+  if (!pollingPaused.value) void refreshAll()
+})
+
+const channelNames = computed<Record<number, string>>(() => {
+  const map: Record<number, string> = {}
+  for (const ch of catalog.data.value?.channels ?? []) {
+    if (ch.name) map[ch.id] = ch.name
+  }
+  for (const ch of routing.data.value?.channels ?? []) {
+    if (ch.name && !map[ch.id]) map[ch.id] = ch.name
+  }
+  return map
+})
+
+const serverSampledAt = computed(
+  () =>
+    performance.data.value?.observability.sampled_at ??
+    Math.floor(
+      Math.max(performance.updatedAt.value, routing.updatedAt.value) / 1000
+    )
 )
-const catalog = usePolledFeed(
-  (signal) => getModelCatalog(undefined, signal),
-  () => OVERVIEW_INTERVAL_MS
-)
-const sampledAt = computed(() =>
-  Math.floor(
-    Math.max(performance.updatedAt.value, routing.updatedAt.value) / 1000
-  )
-)
+
 const overview = computed(() =>
   projectOpsOverview(
     performance.data.value,
     routing.data.value,
     selectedWindow.value,
     [],
-    sampledAt.value
+    serverSampledAt.value
   )
 )
+
 const overviewState = computed(() => ({
   overview: overview.value,
+  quality: quality.data.value,
+  qualityHours: qualityHours.value,
+  channelNames: channelNames.value,
   loading: performance.loading.value || routing.loading.value,
   error: [performance.error.value, routing.error.value]
     .filter(Boolean)
     .join(' · '),
   updatedAt: Math.min(performance.updatedAt.value, routing.updatedAt.value),
 }))
+
 const performanceState = computed(() => ({
   overview: projectOpsOverview(
     performance.data.value,
     null,
     selectedWindow.value,
     [],
-    Math.floor(performance.updatedAt.value / 1000)
+    performance.data.value?.observability.sampled_at ??
+      Math.floor(performance.updatedAt.value / 1000)
   ),
   loading: performance.loading.value,
   error: performance.error.value,
   updatedAt: performance.updatedAt.value,
 }))
+
 const gatewayState = computed(() => ({
-  overview: projectOpsOverview(
-    null,
-    routing.data.value,
-    selectedWindow.value,
-    routingPoints.value,
-    routingPoints.value.at(-1)?.ts ?? 0
-  ),
+  overview: routing.data.value
+    ? projectOpsOverview(
+        performance.data.value,
+        routing.data.value,
+        selectedWindow.value,
+        [],
+        serverSampledAt.value
+      )
+    : null,
+  channelNames: channelNames.value,
   loading: routing.loading.value,
   error: routing.error.value,
   updatedAt: routing.updatedAt.value,
 }))
+
 const qualityState = computed(() => ({
   quality: quality.data.value,
   snapshot: routing.data.value,
+  hours: qualityHours.value,
   loading: quality.loading.value || routing.loading.value,
   error: [quality.error.value, routing.error.value].filter(Boolean).join(' · '),
   updatedAt: Math.min(quality.updatedAt.value, routing.updatedAt.value),
 }))
+
 function refreshQuality() {
   return Promise.all([quality.refresh(), routing.refresh()])
 }
+
 const catalogState = computed(() => ({
   catalog: catalog.data.value,
   snapshot: routing.data.value,
@@ -147,6 +168,7 @@ const catalogState = computed(() => ({
   error: [catalog.error.value, routing.error.value].filter(Boolean).join(' · '),
   updatedAt: Math.min(catalog.updatedAt.value, routing.updatedAt.value),
 }))
+
 async function refreshAll() {
   await Promise.all([
     performance.refresh(),
@@ -155,6 +177,7 @@ async function refreshAll() {
     catalog.refresh(),
   ])
 }
+
 // The user-readable model catalog is shared with routing views; channel-read
 // permission controls the detailed upstream card on this Root-only page.
 const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
@@ -165,14 +188,18 @@ const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
     <OpsStatusHeader
       class="ops-area ops-area--full"
       v-bind="overviewState"
-      :refresh-interval-seconds="OVERVIEW_INTERVAL_MS / 1000"
+      :refresh-interval-seconds="refreshIntervalSeconds"
+      :paused="pollingPaused"
       @refresh="refreshAll"
+      @update:refresh-interval-seconds="refreshIntervalSeconds = $event"
+      @update:paused="pollingPaused = $event"
     />
     <OpsQualityCard
       class="ops-area ops-area--quality"
       :class="{ 'ops-area--full': !canReadChannels }"
       v-bind="qualityState"
       @retry="refreshQuality"
+      @update:hours="qualityHours = $event"
     />
     <OpsUpstreamCard
       v-if="canReadChannels"
@@ -182,7 +209,7 @@ const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
     />
     <div class="ops-area ops-area--full ops-runtime-heading">
       <SectionHeading>{{ t('runtime') }}</SectionHeading>
-      <div class="ops-window">
+      <div class="ops-window" data-ops-runtime-window>
         <span class="ops-window-note">{{ t('window.note') }}</span>
         <SegmentedToggle
           v-model="selectedWindow"

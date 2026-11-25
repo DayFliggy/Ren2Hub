@@ -17,6 +17,20 @@ const isDisabled = computed(() => featureStatus.value === 'disabled')
 const isScrolling = ref(false)
 const scrollZone = ref<HTMLElement | null>(null)
 let scrollTimer: ReturnType<typeof setTimeout> | null = null
+const nativeFullscreen = ref(false)
+
+function syncNativeFullscreen() {
+  nativeFullscreen.value =
+    typeof document !== 'undefined' && Boolean(document.fullscreenElement)
+}
+
+const isOpsFullscreen = computed(
+  () =>
+    Boolean(route.meta.fullscreenable) &&
+    (route.query.fullscreen === '1' ||
+      route.query.fullscreen === 'true' ||
+      nativeFullscreen.value)
+)
 
 function onScroll() {
   isScrolling.value = true
@@ -48,11 +62,18 @@ watch(
 // Scope rem sizing to the console, including overlays teleported to body.
 onBeforeMount(() => {
   document.documentElement.setAttribute('data-console-layout', '')
+  syncNativeFullscreen()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('fullscreenchange', syncNativeFullscreen)
+  }
 })
 
 onBeforeUnmount(() => {
   stopTrackingSwap()
   document.documentElement.removeAttribute('data-console-layout')
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('fullscreenchange', syncNativeFullscreen)
+  }
   if (scrollTimer) clearTimeout(scrollTimer)
 })
 </script>
@@ -62,10 +83,11 @@ onBeforeUnmount(() => {
     class="flex h-screen h-dvh overflow-hidden"
     data-handdrawn-scope="console"
     :data-feature-status="featureStatus"
+    :data-ops-fullscreen="isOpsFullscreen ? 'true' : undefined"
   >
-    <ConsoleSidebar />
+    <ConsoleSidebar v-if="!isOpsFullscreen" />
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <ConsoleTopbar data-console-scroll-boundary />
+      <ConsoleTopbar v-if="!isOpsFullscreen" data-console-scroll-boundary />
       <div
         ref="scrollZone"
         data-console-scroll-zone
@@ -80,10 +102,16 @@ onBeforeUnmount(() => {
         >
           {{ $t('nav.disabledMode') }} · {{ $t('nav.disabledModeHint') }}
         </div>
-        <main class="min-w-0 px-4 py-8 sm:px-6 lg:px-8">
+        <main
+          class="min-w-0 px-4 sm:px-6 lg:px-8"
+          :class="isOpsFullscreen ? 'py-5' : 'py-8'"
+        >
           <div
             class="console-content mx-auto"
-            :class="{ 'console-content--wide': route.meta.wide }"
+            :class="{
+              'console-content--wide': route.meta.wide,
+              'max-w-none': isOpsFullscreen,
+            }"
             :data-page-swap="pageSwap"
           >
             <RouterView v-slot="{ Component }">

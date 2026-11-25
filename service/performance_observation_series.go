@@ -30,8 +30,8 @@ func buildObservationSeries(points []ObservationSeriesPoint, window string, sinc
 	last := until - until%bucket
 	series := ObservationSeries{Window: window, BucketSeconds: bucket, Points: make([]ObservationSeriesPoint, (last-first)/bucket+1)}
 	type aggregate struct {
-		sums   [7]float64
-		counts [7]int
+		sums   [9]float64
+		counts [9]int
 	}
 	aggregates := make([]aggregate, len(series.Points))
 	for i := range series.Points {
@@ -42,7 +42,12 @@ func buildObservationSeries(points []ObservationSeriesPoint, window string, sinc
 			continue
 		}
 		i := int((point.Ts - first) / bucket)
-		values := [7]*float64{point.CPU, point.Memory, point.Disk, point.InboundMbps, point.OutboundMbps, point.Goroutines, point.HeapAllocBytes}
+		values := [9]*float64{
+			point.CPU, point.Memory, point.Disk,
+			point.InboundMbps, point.OutboundMbps,
+			point.Goroutines, point.HeapAllocBytes,
+			point.UserInFlight, point.ChannelInFlight,
+		}
 		for field, value := range values {
 			if value != nil {
 				aggregates[i].sums[field] += *value
@@ -52,7 +57,12 @@ func buildObservationSeries(points []ObservationSeriesPoint, window string, sinc
 	}
 	for i, aggregate := range aggregates {
 		point := &series.Points[i]
-		fields := [7]**float64{&point.CPU, &point.Memory, &point.Disk, &point.InboundMbps, &point.OutboundMbps, &point.Goroutines, &point.HeapAllocBytes}
+		fields := [9]**float64{
+			&point.CPU, &point.Memory, &point.Disk,
+			&point.InboundMbps, &point.OutboundMbps,
+			&point.Goroutines, &point.HeapAllocBytes,
+			&point.UserInFlight, &point.ChannelInFlight,
+		}
 		for field, count := range aggregate.counts {
 			if count > 0 {
 				*fields[field] = observationPtr(aggregate.sums[field] / float64(count))

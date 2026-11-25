@@ -24,8 +24,9 @@ const props = withDefaults(
     error: string
     updatedAt: number
     retryable?: boolean
+    stretch?: boolean
   }>(),
-  { scope: '', scopeHint: '', retryable: true }
+  { scope: '', scopeHint: '', retryable: true, stretch: true }
 )
 const emit = defineEmits<{ retry: [] }>()
 const { t, locale } = useI18n({
@@ -44,7 +45,7 @@ const lastSuccess = computed(() =>
     class="ops-card"
     :title="title"
     :padded="false"
-    stretch
+    :stretch="stretch"
     :aria-busy="loading"
     :data-ops-stale="loaded && error ? 'true' : undefined"
   >
@@ -93,8 +94,15 @@ const lastSuccess = computed(() =>
       >
         <slot />
       </div>
-      <p v-else-if="error" class="ops-empty">{{ t('unavailable') }}</p>
-      <div v-else class="ops-skeleton" role="status" :aria-label="t('loading')">
+      <p v-else-if="error && !retryable" class="ops-empty">
+        {{ t('unavailable') }}
+      </p>
+      <div
+        v-else-if="!error"
+        class="ops-skeleton"
+        role="status"
+        :aria-label="t('loading')"
+      >
         <SkeletonBlock rounded="lg" class="h-16" />
         <SkeletonBlock rounded="lg" class="h-24" />
       </div>

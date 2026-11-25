@@ -32,6 +32,14 @@ function overview(window: '1h' | '6h' | '24h' = '1h') {
   const data = performanceFixture()
   data.observability.resources.cpu = measuredResource(36.2)
   data.observability.resources.memory = measuredResource(58.9)
+  for (const id of ['cpu', 'memory'] as const) {
+    const check = data.observability.checks.find((item) => item.id === id)
+    if (check) {
+      check.status = 'ok'
+      check.reason = ''
+    }
+  }
+  data.observability.coverage = { measured: 3, total: 4 }
   data.observability.status = 'warning'
   data.observability.series.window = window
   return data
@@ -150,7 +158,11 @@ for (const [theme, mobile] of [
         page.locator('[data-console-mobile-navigation]')
       ).toHaveCount(0)
     }
-    await expect(section(page, 'status')).toContainText('用户在途请求')
+    await expect(section(page, 'status')).toContainText('在途并发')
+    await expect(section(page, 'status')).toContainText('熔断与冷却')
+    await expect(
+      section(page, 'status').locator('[data-ops-infra-strip]')
+    ).toBeVisible()
     const countdown = section(page, 'status').locator('.ops-countdown-badge')
     await expect(countdown).toHaveAttribute('title', '30s')
     await page.clock.runFor(1000)
@@ -163,6 +175,71 @@ for (const [theme, mobile] of [
       'data-status',
       'warning'
     )
+    // Verify WCAG AA contrast (>= 4.5:1) on the coverage score inside MiniRing.
+    const healthScoreContrast = await page
+      .locator('.ops-health-score')
+      .evaluate((el) => {
+        const ctx = document.createElement('canvas').getContext('2d')!
+        const paint = (colors: string[]) => {
+          ctx.clearRect(0, 0, 1, 1)
+          for (const c of colors) {
+            if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') continue
+            ctx.fillStyle = c
+            ctx.fillRect(0, 0, 1, 1)
+          }
+          return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+        }
+        const pageBg = getComputedStyle(document.documentElement)
+          .getPropertyValue('--page-background')
+          .trim()
+        const layers: string[] = []
+        for (
+          let n: HTMLElement | null = el as HTMLElement;
+          n;
+          n = n.parentElement
+        )
+          layers.unshift(getComputedStyle(n).backgroundColor)
+        const bg = paint([pageBg, ...layers])
+        const fg = paint([`rgb(${bg.join(',')})`, getComputedStyle(el).color])
+        return { fg, bg }
+      })
+    expect(
+      contrastRatio(
+        relativeLuminance(healthScoreContrast.fg),
+        relativeLuminance(healthScoreContrast.bg)
+      )
+    ).toBeGreaterThanOrEqual(4.5)
+
+    // Verify maintenance buttons never collide with 0px gap.
+    const maintBoxes = await page
+      .locator('.ops-maintenance-actions button')
+      .evaluateAll((buttons) =>
+        buttons.map((b) => {
+          const r = b.getBoundingClientRect()
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+        })
+      )
+    for (let i = 1; i < maintBoxes.length; i++) {
+      const prev = maintBoxes[i - 1]!
+      const curr = maintBoxes[i]!
+      const sameRow = Math.abs(curr.top - prev.top) < 8
+      if (sameRow) expect(curr.left - prev.right).toBeGreaterThanOrEqual(4)
+      else expect(curr.top - prev.bottom).toBeGreaterThanOrEqual(4)
+    }
+
+    // Verify Redis card does not stretch into a tall empty void.
+    const redisBox = await page
+      .locator('[data-ops-storage="redis"]')
+      .boundingBox()
+    expect(redisBox!.height).toBeLessThan(180)
+
+    // Verify night-mode 3px glow on measured resource rings (flat by day).
+    const diskRingFilter = await page
+      .locator('[data-ops-gauge="disk"] circle[stroke-linecap]')
+      .evaluate((el) => getComputedStyle(el).filter)
+    if (theme === 'dark') expect(diskRingFilter).toContain('drop-shadow')
+    else expect(diskRingFilter).toBe('none')
+
     await assertNoHorizontalOverflow(page)
     const boxes = await Promise.all(
       SECTIONS.map((name) => section(page, name).boundingBox())
@@ -181,10 +258,17 @@ for (const [theme, mobile] of [
       expect(storage!.y).toBe(resources!.y)
       expect(tasks!.width).toBeGreaterThan(quality!.width)
     }
+    await captureEvidence(page, { path: testInfo.outputPath('ops-top.png') })
     const history = page.locator('[data-ops-task-history]')
     await history.getByRole('button', { name: '展开' }).click()
     await expect(history.getByText('清理任务历史')).toBeVisible()
-    await captureEvidence(page, { path: testInfo.outputPath('ops-top.png') })
+    if (mobile) {
+      const toggleBox = await history
+        .locator('button.task-toggle')
+        .boundingBox()
+      expect(toggleBox!.height).toBeGreaterThanOrEqual(44)
+      expect(toggleBox!.height).toBeLessThanOrEqual(52)
+    }
     await page
       .locator('[data-console-scroll-zone]')
       .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight / 2))
@@ -444,8 +528,8 @@ test('overview failure shows an inline retry while other sections load', async (
   await expect(status.getByRole('alert')).toContainText('overview unavailable')
   await expect(status.getByRole('alert')).toContainText('尚未成功加载')
   await expect(section(page, 'quality')).toContainText('样本最多的观察')
-  await expect(section(page, 'quality')).toContainText('quality-model')
-  await expect(section(page, 'quality')).toContainText('探索占比')
+  await expect(section(page, 'gateway')).toContainText('quality-model')
+  await expect(section(page, 'gateway')).toContainText('探索占比')
   failing = false
   await status.getByRole('button', { name: '重试', exact: true }).click()
   await expect(status.getByRole('alert')).toHaveCount(0)
@@ -601,9 +685,65 @@ test('the window selector reloads native server resource history', async ({
   })
   await gotoOps(page)
   await expect(page.locator('[data-ops-gauge="cpu"]')).toBeVisible()
-  await page.getByRole('radio', { name: '6 小时' }).click()
+  await page
+    .locator('[data-ops-runtime-window]')
+    .getByRole('radio', { name: '6 小时' })
+    .click()
   await expect.poll(() => windows.at(-1)).toBe('6h')
   await expect(section(page, 'resources')).toContainText('趋势：6 小时')
+})
+
+test('focus fullscreen mode hides console chrome and diagnosis modal lists active breakers', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await configureStablePage(page, { theme: 'dark' })
+  await mockOps(page)
+  await page.route('**/api/performance/routing', (route) =>
+    route.fulfill(
+      ok({
+        ...routing(),
+        breakers: [
+          {
+            channel_id: 11,
+            channel_name: '雾桥中转',
+            model: 'claude-sonnet-4-5',
+            state: 'open',
+            open_until: new Date('2026-07-27T04:02:00Z').getTime(),
+            probe_in_flight: false,
+            trigger: 'consecutive_errors',
+            last_status: 502,
+            last_error_code: 'upstream_error',
+            opened_at: new Date('2026-07-27T04:00:00Z').getTime(),
+            reopens: 2,
+          },
+        ],
+        cooldowns: [
+          {
+            channel_id: 12,
+            channel_name: '原生专线',
+            until: new Date('2026-07-27T04:01:00Z').getTime(),
+            source: 'retry_after',
+          },
+        ],
+      })
+    )
+  )
+  await page.goto('/ops?fullscreen=1')
+  await expect(section(page, 'status')).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('[data-ops-fullscreen="true"]')).toBeVisible()
+  await expect(page.locator('[data-top-nav="desktop"]')).toHaveCount(0)
+  await expect(page.locator('[data-ops-breakers]')).toContainText('雾桥中转')
+  await expect(page.locator('[data-ops-breakers]')).toContainText('原生专线')
+  await page.locator('[data-ops-diagnosis-trigger]').click()
+  await expect(page.locator('[data-ops-diagnosis-modal]')).toContainText(
+    'upstream_error'
+  )
+  // Verify no future-tense relative timestamp ("84天后") leaks under clock skew.
+  expect(await page.locator('[data-ops-page]').innerText()).not.toMatch(
+    /\d+\s*(?:天后|小时后|分钟后|秒后)/
+  )
+  await assertNoHorizontalOverflow(page)
 })
 
 test('english labels render without raw keys', async ({ page }) => {

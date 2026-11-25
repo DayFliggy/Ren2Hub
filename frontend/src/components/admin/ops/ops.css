@@ -1,6 +1,7 @@
-/* Ops monitor. Status colour stays dot-sized; surfaces stay semantic.
-   Source order is the reading order on every width: status, requests and
-   upstream, then the runtime band (load, resources, storage), then tasks. */
+/* Ops monitor — Desert Ledger (day) & B1 Studio (night) semantic styling.
+   Source order is the reading order on every width: status command bar,
+   request quality & upstream health, runtime band (gateway, resources,
+   storage), then system tasks. */
 .ops-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -45,6 +46,7 @@
   flex: 1 1 8rem;
 }
 
+/* ===== Band 1: Command Header, Infra Health Strip & Diagnosis ===== */
 .ops-header {
   display: grid;
   gap: 0.75rem;
@@ -70,18 +72,17 @@
 }
 .ops-health-score {
   font-size: 0.8125rem;
-  font-weight: 800;
   line-height: 1;
 }
 .ops-header-title-block {
   display: grid;
-  gap: 0.125rem;
+  gap: 0.25rem;
   min-width: 0;
 }
 .ops-header-title-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem 0.625rem;
   flex-wrap: wrap;
 }
 .ops-header-title-row h1 {
@@ -89,28 +90,149 @@
   font-weight: 700;
   line-height: 1.2;
 }
+html.dark .ops-header-title-row h1 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.ops-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.125rem 0.75rem;
+}
 .ops-header-subtitle {
   font-size: 0.75rem;
   color: var(--text-tertiary);
   margin: 0;
   overflow-wrap: anywhere;
 }
+.ops-uptime-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.ops-diagnosis-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid var(--status-warning);
+  background: var(--status-warning-soft);
+  color: var(--status-warning-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ops-diagnosis-trigger--critical {
+  border-color: var(--status-danger);
+  background: var(--status-danger-soft);
+  color: var(--status-danger-text);
+}
+@media (max-width: 1023px), (pointer: coarse) {
+  .ops-diagnosis-trigger {
+    min-height: 2.75rem;
+  }
+}
 .ops-countdown-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.125rem 0.375rem;
+  padding: 0.125rem 0.4375rem;
   border-radius: 9999px;
   font-size: 0.6875rem;
   font-weight: 600;
   background: var(--surface-muted);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.ops-interval-select {
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control, 8px);
+  background: var(--surface-solid);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+html.dark .ops-interval-select {
+  color-scheme: dark;
+  border-color: var(--outline);
+  background: var(--studio-control-track);
+  color: var(--text-primary);
+}
+@media (max-width: 1023px), (pointer: coarse) {
+  .ops-interval-select {
+    min-height: 2.75rem;
+  }
 }
 .ops-header-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.375rem 0.5rem;
+  gap: 0.375rem 0.625rem;
+}
+.ops-header-status-meta,
+.ops-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.ops-infra-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.ops-infra-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control, 10px);
+  background: var(--surface-solid);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.ops-infra-chip:hover {
+  background: var(--state-hover-layer);
+  border-color: var(--border-default);
+}
+html.dark .ops-infra-chip {
+  border-color: var(--outline-variant);
+  background: var(--surface-container-low);
+}
+html.dark .ops-infra-chip:hover {
+  background: var(--state-hover-layer);
+  border-color: var(--outline);
+}
+@media (max-width: 1023px), (pointer: coarse) {
+  .ops-infra-chip {
+    min-height: 2.75rem;
+  }
+}
+.ops-infra-chip-label {
+  color: var(--text-tertiary);
+}
+.ops-infra-chip-value {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 .ops-window {
   display: flex;
@@ -154,6 +276,17 @@
   height: 0.5rem;
   border-radius: 9999px;
 }
+.ops-line-swatch {
+  display: inline-block;
+  flex: none;
+  width: 0.875rem;
+  height: 0;
+  border-top-width: 2px;
+  border-top-style: solid;
+}
+.ops-line-swatch--dashed {
+  border-top-style: dashed;
+}
 @media (max-width: 639px) {
   .ops-header-top {
     align-items: flex-start;
@@ -166,9 +299,66 @@
   }
   .ops-header-controls {
     width: 100%;
-    justify-content: flex-end;
+    justify-content: space-between;
   }
 }
+
+/* ===== Diagnosis Modal ===== */
+.ops-diagnosis-groups {
+  display: grid;
+  gap: 1.125rem;
+}
+.ops-diagnosis-group {
+  display: grid;
+  gap: 0.5rem;
+}
+.ops-diagnosis-list {
+  display: grid;
+  gap: 0.5rem;
+}
+.ops-diagnosis-item {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control, 10px);
+  background: var(--surface-muted);
+}
+.ops-diagnosis-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.ops-diagnosis-item-head strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ops-diagnosis-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+.ops-diagnosis-item-detail {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.ops-diagnosis-item-impact {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+.ops-diagnosis-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ===== Card Shell, Error & Empty States ===== */
 .ops-scope {
   display: inline-flex;
   align-items: center;
@@ -193,7 +383,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 0.25rem 0.5rem;
   min-width: 0;
+}
+.ops-card-title .ops-scope,
+.ops-card-title .ops-stale-chip {
+  margin-left: 0;
 }
 .ops-card-title h2 {
   font-size: 0.875rem;
@@ -223,19 +418,29 @@
   white-space: nowrap;
 }
 .ops-card-stale {
-  opacity: 0.6;
+  opacity: 0.65;
 }
 .ops-inline-error {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.625rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.625rem 0.75rem 0.625rem 0.9375rem;
   border: 1px solid var(--border-default);
-  border-left: 3px solid var(--status-danger);
-  border-radius: 0.75rem;
-  background: var(--surface-muted);
+  border-radius: var(--shape-control, 10px);
+  background: var(--status-danger-soft);
   color: var(--status-danger-text);
+  overflow: hidden;
+}
+.ops-inline-error::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--status-danger);
 }
 .ops-inline-error > svg {
   flex: none;
@@ -247,7 +452,7 @@
 }
 .ops-inline-error-detail {
   font-size: 0.75rem;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 .ops-stale-note,
@@ -256,14 +461,32 @@
   font-size: 0.75rem;
   color: var(--text-tertiary);
 }
-.ops-empty,
-.ops-all-clear {
+.ops-empty {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control, 10px);
+  background: var(--surface-muted);
   font-size: 0.8125rem;
   color: var(--text-secondary);
+}
+.ops-state-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control, 10px);
+  background: var(--surface-muted);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.ops-state-banner--ok {
+  border-color: color-mix(in srgb, var(--status-success) 32%, transparent);
+  background: var(--status-success-soft);
+  color: var(--status-success-text);
 }
 .ops-skeleton {
   display: grid;
@@ -273,25 +496,29 @@
   padding: 0.5rem 0.75rem;
   border-left: 3px solid var(--status-success);
   border-radius: 0.5rem;
-  background: var(--surface-muted);
+  background: var(--status-success-soft);
   color: var(--status-success-text);
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
+
+/* ===== Metrics ===== */
 .ops-metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem 1rem;
 }
-@media (min-width: 640px) {
+@container (min-width: 22rem) {
   .ops-metric-grid--3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+@media (min-width: 640px) {
   .ops-metric-grid--4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-/* Four readings: one row once the card is wide enough, otherwise 2 × 2. */
+/* Four readings: one row once the card is wide enough, otherwise 2 x 2. */
 @container (min-width: 24rem) {
   .ops-metric-grid--fit {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -309,7 +536,6 @@
 }
 .ops-metric-value {
   margin-top: 0.125rem;
-  font-weight: 700;
   line-height: 1.15;
   color: var(--text-primary);
   white-space: nowrap;
@@ -324,7 +550,9 @@
 }
 .ops-metric--sm .ops-metric-value {
   font-size: 0.9375rem;
-  font-weight: 600;
+}
+.ops-metric-value--warning {
+  color: var(--status-warning-text);
 }
 .ops-metric-value--critical {
   color: var(--status-danger-text);
@@ -341,15 +569,23 @@
   color: var(--text-tertiary);
   overflow-wrap: anywhere;
 }
+
+/* ===== Resources Gauges (aligned with SystemStatusCard night glow) ===== */
 .ops-gauges {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.875rem 0.75rem;
+}
+@container (min-width: 28rem) {
+  .ops-gauges {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .ops-gauge {
   display: grid;
   justify-items: center;
-  gap: 0.125rem;
+  align-content: start;
+  gap: 0.1875rem;
   min-width: 0;
   text-align: center;
 }
@@ -357,7 +593,6 @@
   display: inline-flex;
   align-items: baseline;
   font-size: 0.875rem;
-  font-weight: 700;
 }
 .ops-gauge-value .ops-unit {
   margin-left: 0.0625rem;
@@ -374,42 +609,66 @@
 .ops-gauge-detail {
   max-width: 100%;
   font-size: 0.6875rem;
+  line-height: 1.35;
   color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+/* Night-theme 3px glow matching SystemStatusCard (THEMES.md). */
+html.dark [data-ops-gauge] circle[stroke-linecap] {
+  filter: drop-shadow(
+    0 0 3px color-mix(in srgb, var(--mark-glow) 40%, transparent)
+  );
 }
 
+/* ===== Trends, Subbars & Quality Strip ===== */
 .ops-trend {
   display: grid;
+  align-content: start;
   gap: 0.375rem;
   min-width: 0;
+}
+.ops-subbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 .ops-trend-title {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 0;
+  gap: 0.25rem 0.375rem;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);
 }
-.ops-trend-title .ops-scope + .ops-scope,
-.ops-trend-title > [data-handdrawn='chip'] {
-  margin-left: 0.5rem;
+.ops-trend-title .ops-scope {
+  margin-left: 0.25rem;
 }
 .ops-chart {
   min-width: 0;
 }
+.ops-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.ops-table-scroll:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .ops-model-table {
   width: 100%;
+  min-width: 24rem;
   border-collapse: collapse;
   font-size: 0.75rem;
 }
 .ops-model-table th,
 .ops-model-table td {
-  padding: 0.375rem 0.25rem;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.4375rem 0.375rem;
+  border-bottom: 1px var(--row-divider-style, dashed) var(--border-subtle);
   text-align: right;
   white-space: nowrap;
 }
@@ -422,7 +681,7 @@
   color: var(--text-tertiary);
 }
 .ops-model-table tbody th {
-  width: 45%;
+  width: 48%;
   max-width: 0;
 }
 .ops-model-name {
@@ -444,20 +703,45 @@
   height: 100%;
   background: var(--signal);
 }
+.ops-cell--ok {
+  color: var(--status-success-text);
+  font-weight: 600;
+}
+.ops-cell--warning {
+  color: var(--status-warning-text);
+  font-weight: 600;
+}
+.ops-cell--danger {
+  color: var(--status-danger-text);
+  font-weight: 600;
+}
 
+/* Matches OpsTrendChart grid.left=40*scale (2.5rem) and grid.right=8*scale
+   (0.5rem) or 44*scale (2.75rem) for dual-axis charts at any rem scale. */
+.ops-strip-wrapper {
+  width: 100%;
+  padding-left: 2.5rem;
+  padding-right: 0.5rem;
+}
+.ops-strip-wrapper--dual {
+  padding-right: 2.75rem;
+}
 .ops-strip {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 2px;
-  height: 1.75rem;
+  height: 1.5rem;
+}
+.ops-strip--dense {
+  gap: 1px;
 }
 .ops-strip-cell {
   border-radius: 2px;
   min-width: 0;
 }
 .ops-strip-cell[data-tone='idle'] {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 .ops-legend {
   display: flex;
@@ -471,8 +755,10 @@
   align-items: center;
   gap: 0.3125rem;
 }
+
+/* ===== Upstream Channels, Breakers & Cooling ===== */
 .ops-channel-progress {
-  margin: 0.25rem 0 0.5rem;
+  margin: 0.25rem 0 0.25rem;
 }
 .ops-channel-progress-bar {
   display: flex;
@@ -501,7 +787,7 @@
 .ops-cooling {
   display: grid;
   gap: 0.5rem;
-  max-height: 16rem;
+  max-height: 15rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: 0.5rem;
@@ -515,7 +801,7 @@
   gap: 0.25rem;
   padding: 0.5rem 0.625rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.625rem;
+  border-radius: var(--shape-control, 10px);
   background: var(--surface-muted);
 }
 .ops-cooling-head {
@@ -533,7 +819,6 @@
   font-size: 0.8125rem;
   font-weight: 600;
 }
-/* A long channel name truncates; the state chip keeps its one-line width. */
 .ops-cooling-head > :last-child {
   flex: none;
 }
@@ -549,138 +834,112 @@
   overflow-wrap: anywhere;
 }
 
-/* Stores share the row on narrow layouts and stack beside the resources card
-   on wide ones; rows split the column height evenly. */
-.ops-storage {
+/* ===== Gateway Concurrency & Routing Matrix ===== */
+.ops-gateway-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-  grid-auto-rows: 1fr;
   gap: 1rem;
 }
-@media (min-width: 1280px) {
-  .ops-storage {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.ops-storage-kind {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-.ops-storage-kind > [data-ops-log-shared] {
-  color: var(--text-tertiary);
-}
-
-/* Gateway load: stacked, 2 × 2 on a mid-width card, one row when wide. */
-.ops-gateway-grid {
+.ops-gateway-split {
   display: grid;
-  gap: 1.25rem 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
 }
-@container (min-width: 36rem) {
-  .ops-gateway-grid {
+@container (min-width: 52rem) {
+  .ops-gateway-split {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@container (min-width: 66rem) {
-  .ops-gateway-grid {
-    grid-template-columns: 1fr 1fr 1.4fr 0.8fr;
+.ops-gateway-concurrency {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+@container (min-width: 30rem) {
+  .ops-gateway-concurrency {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-.ops-histogram {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 2px;
-  align-items: end;
+.ops-counter-list--scroll {
+  max-height: 15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
 }
-.ops-histogram li {
+.ops-counter-list--scroll:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ops-counter-row {
   display: grid;
-  justify-items: center;
   gap: 0.25rem;
-  min-width: 0;
-}
-.ops-histogram-track {
-  display: flex;
-  align-items: flex-end;
-  width: 100%;
-  height: 4.5rem;
-  border-bottom: 1px solid var(--border-default);
-}
-.ops-histogram-track > span {
-  display: block;
-  width: 100%;
-  border-radius: 2px 2px 0 0;
-  background: var(--signal);
-}
-.ops-histogram-count,
-.ops-histogram-label {
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  font-size: 0.625rem;
-  color: var(--text-tertiary);
-}
-.ops-histogram-count {
-  color: var(--text-secondary);
-}
-.ops-counter-list > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.375rem 0;
+  padding: 0.4375rem 0;
   border-bottom: 1px var(--row-divider-style, dashed) var(--border-subtle);
   font-size: 0.75rem;
 }
-.ops-counter-list dt {
+.ops-counter-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.ops-counter-row dt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-secondary);
 }
-.ops-counter-list dd {
+.ops-counter-row dd {
+  flex: none;
   font-weight: 600;
+  white-space: nowrap;
+}
+.ops-capacity-bar {
+  height: 4px;
+  width: 100%;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  overflow: hidden;
+}
+.ops-capacity-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.25s ease;
+}
+
+/* ===== Storage & Maintenance ===== */
+.ops-storage {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+.ops-storage-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+}
+.ops-probe-latency {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.ops-maintenance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.125rem;
 }
 .ops-storage-error {
   font-weight: 600;
   color: var(--status-danger-text);
 }
 
-.ops-task-types {
-  display: grid;
-  gap: 0.375rem;
-}
-.ops-task-types li {
-  display: grid;
-  gap: 0.125rem;
-  padding: 0.375rem 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.ops-task-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-}
-.ops-task-head strong {
-  font-weight: 600;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.ops-task-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.125rem 0.75rem;
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-}
-.ops-task-error {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.6875rem;
-  color: var(--status-danger-text);
-}
+/* ===== System Tasks ===== */
 .ops-task-detail-error {
   margin-top: 1.25rem;
   font-size: 0.875rem;
@@ -708,8 +967,11 @@
   width: 2.75rem;
   height: 2.75rem;
   cursor: pointer;
-  border-radius: 0.5rem;
+  border-radius: var(--shape-control, 8px);
   list-style: none;
+}
+.ops-menu summary:hover {
+  background: var(--state-hover-layer);
 }
 .ops-menu summary::-webkit-details-marker {
   display: none;
@@ -723,12 +985,12 @@
   position: absolute;
   right: 0;
   top: calc(100% + 0.375rem);
-  z-index: 20;
-  min-width: 10rem;
+  z-index: var(--z-popover, 100);
+  min-width: 10.5rem;
   padding: 0.25rem;
-  background: var(--surface-solid);
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
+  background: var(--surface-overlay);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--shape-overlay, 12px);
   box-shadow: var(--overlay-shadow);
 }
 .ops-menu-content button {
@@ -736,7 +998,9 @@
   width: 100%;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.625rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--shape-control, 8px);
   color: var(--status-danger-text);
   font-size: 0.8125rem;
   text-align: start;
@@ -757,11 +1021,4 @@
   .ops-spin {
     animation: none;
   }
-}
-
-:fullscreen .ops-page {
-  padding: 1.5rem 2rem;
-  background: var(--page-background);
-  min-height: 100vh;
-  overflow-y: auto;
 }

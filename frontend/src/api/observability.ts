@@ -67,6 +67,8 @@ export interface ObservationPoint {
   outbound_mbps: number | null
   goroutines: number | null
   heap_alloc_bytes: number | null
+  user_in_flight: number | null
+  channel_in_flight: number | null
 }
 export interface Observability {
   scope: 'instance'
@@ -270,6 +272,14 @@ export function parseObservability(value: unknown): Observability {
           outbound_mbps: nullable(row.outbound_mbps),
           goroutines: nullable(row.goroutines),
           heap_alloc_bytes: nullable(row.heap_alloc_bytes),
+          user_in_flight:
+            row.user_in_flight === undefined
+              ? null
+              : nullable(row.user_in_flight),
+          channel_in_flight:
+            row.channel_in_flight === undefined
+              ? null
+              : nullable(row.channel_in_flight),
         }
       }),
     },

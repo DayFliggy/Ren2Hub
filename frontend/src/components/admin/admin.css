@@ -264,10 +264,30 @@ html.dark .admin-table tbody tr[data-active='true'] td {
   background: var(--state-press-layer);
 }
 
+html.dark .admin-field input:not([type='checkbox']),
+html.dark .admin-field select,
+html.dark .admin-field textarea,
+html.dark .admin-input {
+  color-scheme: dark;
+  border-color: var(--outline);
+  border-radius: var(--shape-control);
+  background: var(--studio-control-track);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+html.dark .admin-field input:not([type='checkbox']):hover,
+html.dark .admin-field select:hover,
+html.dark .admin-field textarea:hover,
+html.dark .admin-input:hover {
+  border-color: color-mix(in srgb, var(--outline) 72%, var(--text-secondary));
+}
+
 html.dark .admin-field input:focus-visible,
 html.dark .admin-field select:focus-visible,
 html.dark .admin-field textarea:focus-visible,
 html.dark .admin-input:focus-visible,
 html.dark .admin-tabs a:focus-visible {
+  border-color: var(--accent);
   box-shadow: var(--focus-halo);
 }

@@ -16,8 +16,9 @@ withDefaults(
     hint?: string
     status?: OpsStatus | null
     size?: 'lg' | 'md' | 'sm'
+    color?: string
   }>(),
-  { unit: '', hint: '', status: null, size: 'md' }
+  { unit: '', hint: '', status: null, size: 'md', color: '' }
 )
 const { t } = useI18n({ useScope: 'local', messages: opsMonitorMessages })
 </script>
@@ -38,8 +39,12 @@ const { t } = useI18n({ useScope: 'local', messages: opsMonitorMessages })
       >
     </dt>
     <dd
-      class="ops-metric-value"
-      :class="{ 'ops-metric-value--critical': status === 'critical' }"
+      class="ops-metric-value display-number"
+      :class="{
+        'ops-metric-value--critical': status === 'critical',
+        'ops-metric-value--warning': status === 'warning',
+      }"
+      :style="color ? { color } : undefined"
     >
       {{ value
       }}<span v-if="unit && value !== '--'" class="ops-unit">{{ unit }}</span>

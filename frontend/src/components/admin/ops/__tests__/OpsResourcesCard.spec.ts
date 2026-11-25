@@ -29,6 +29,8 @@ describe('resource history scale', () => {
           outbound_mbps: null,
           goroutines: null,
           heap_alloc_bytes: null,
+          user_in_flight: null,
+          channel_in_flight: null,
         },
       ]
       const wrapper = mount(OpsResourcesCard, {

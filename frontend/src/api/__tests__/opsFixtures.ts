@@ -181,6 +181,8 @@ export function observationFixture(): Observability {
         outbound_mbps: 6 + i * 0.1,
         goroutines: 32,
         heap_alloc_bytes: 1_048_576,
+        user_in_flight: 1,
+        channel_in_flight: 2,
       })),
     },
   }

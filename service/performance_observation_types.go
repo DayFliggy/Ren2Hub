@@ -85,12 +85,14 @@ type ObservationSeries struct {
 }
 
 type ObservationSeriesPoint struct {
-	Ts             int64    `json:"ts"`
-	CPU            *float64 `json:"cpu"`
-	Memory         *float64 `json:"memory"`
-	Disk           *float64 `json:"disk"`
-	InboundMbps    *float64 `json:"inbound_mbps"`
-	OutboundMbps   *float64 `json:"outbound_mbps"`
-	Goroutines     *float64 `json:"goroutines"`
-	HeapAllocBytes *float64 `json:"heap_alloc_bytes"`
+	Ts              int64    `json:"ts"`
+	CPU             *float64 `json:"cpu"`
+	Memory          *float64 `json:"memory"`
+	Disk            *float64 `json:"disk"`
+	InboundMbps     *float64 `json:"inbound_mbps"`
+	OutboundMbps    *float64 `json:"outbound_mbps"`
+	Goroutines      *float64 `json:"goroutines"`
+	HeapAllocBytes  *float64 `json:"heap_alloc_bytes"`
+	UserInFlight    *float64 `json:"user_in_flight"`
+	ChannelInFlight *float64 `json:"channel_in_flight"`
 }

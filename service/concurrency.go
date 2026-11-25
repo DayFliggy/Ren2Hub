@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,8 +43,10 @@ type concurrencyResource struct {
 
 // Resource identities survive limit changes, including changes to and from unlimited.
 type ConcurrencyManager struct {
-	mu        sync.Mutex
-	resources map[concurrencyKey]*concurrencyResource
+	mu            sync.Mutex
+	resources     map[concurrencyKey]*concurrencyResource
+	userActive    atomic.Int64
+	channelActive atomic.Int64
 	// An unconfirmed publication blocks this resource's new admission until an
 	// authoritative database read succeeds. Reads use only the short state lock.
 	pending     map[concurrencyKey]uint64
@@ -57,9 +61,10 @@ type ConcurrencyPermit struct {
 }
 
 type ConcurrencySnapshot struct {
-	ID       int `json:"id"`
-	Limit    int `json:"limit"`
-	InFlight int `json:"in_flight"`
+	ID       int    `json:"id"`
+	Name     string `json:"name,omitempty"`
+	Limit    int    `json:"limit"`
+	InFlight int    `json:"in_flight"`
 }
 
 func NewConcurrencyManager() *ConcurrencyManager {
@@ -106,7 +111,17 @@ func (m *ConcurrencyManager) tryAcquire(ctx context.Context, kind string, id, in
 		return nil, ErrConcurrencyFull
 	}
 	r.active++
+	m.addActive(kind, 1)
 	return &ConcurrencyPermit{manager: m, key: key, resource: r}, nil
+}
+
+func (m *ConcurrencyManager) addActive(kind string, delta int64) {
+	switch kind {
+	case "user":
+		m.userActive.Add(delta)
+	case "channel":
+		m.channelActive.Add(delta)
+	}
 }
 
 func (p *ConcurrencyPermit) Release() {
@@ -120,6 +135,7 @@ func (m *ConcurrencyManager) release(key concurrencyKey, r *concurrencyResource)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r.active--
+	m.addActive(key.kind, -1)
 	if r.retired && r.active == 0 && m.resources[key] == r {
 		delete(m.resources, key)
 	}
@@ -221,11 +237,158 @@ func (m *ConcurrencyManager) snapshot(kind string) []ConcurrencySnapshot {
 	rows := make([]ConcurrencySnapshot, 0)
 	for key, r := range m.resources {
 		if key.kind == kind {
-			rows = append(rows, ConcurrencySnapshot{key.id, r.limit, r.active})
+			rows = append(rows, ConcurrencySnapshot{ID: key.id, Limit: r.limit, InFlight: r.active})
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	return rows
+}
+
+func (m *ConcurrencyManager) totalInFlight() (users, channels int) {
+	return int(m.userActive.Load()), int(m.channelActive.Load())
+}
+
+func gatewayInFlightTotals() (users, channels int) {
+	return gatewayConcurrency.totalInFlight()
+}
+
+const routingNameLookupBatchSize = 500
+
+// EnrichRoutingSnapshotNames fills display names for users and channels in a
+// Root routing snapshot using bounded read-only batch queries outside the
+// hot concurrency lock. Lookup errors are logged and leave Name empty rather
+// than blocking the observability snapshot.
+func EnrichRoutingSnapshotNames(ctx context.Context, snap *RoutingRuntimeSnapshot) {
+	if snap == nil || model.DB == nil {
+		return
+	}
+	userIDSet := make(map[int]struct{}, len(snap.Users))
+	for _, row := range snap.Users {
+		if row.ID > 0 {
+			userIDSet[row.ID] = struct{}{}
+		}
+	}
+	channelIDSet := make(map[int]struct{}, len(snap.Channels)+len(snap.Breakers)+len(snap.Cooldowns))
+	for _, row := range snap.Channels {
+		if row.ID > 0 {
+			channelIDSet[row.ID] = struct{}{}
+		}
+	}
+	for _, row := range snap.Breakers {
+		if row.ChannelID > 0 {
+			channelIDSet[row.ChannelID] = struct{}{}
+		}
+	}
+	for _, row := range snap.Cooldowns {
+		if row.ChannelID > 0 {
+			channelIDSet[row.ChannelID] = struct{}{}
+		}
+	}
+	if len(userIDSet) == 0 && len(channelIDSet) == 0 {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	if len(userIDSet) > 0 {
+		names := lookupRoutingUserNames(queryCtx, sortedMapKeys(userIDSet))
+		for i := range snap.Users {
+			if name := names[snap.Users[i].ID]; name != "" {
+				snap.Users[i].Name = name
+			}
+		}
+	}
+	if len(channelIDSet) > 0 {
+		names := lookupRoutingChannelNames(queryCtx, sortedMapKeys(channelIDSet))
+		for i := range snap.Channels {
+			if name := names[snap.Channels[i].ID]; name != "" {
+				snap.Channels[i].Name = name
+			}
+		}
+		for i := range snap.Breakers {
+			if name := names[snap.Breakers[i].ChannelID]; name != "" {
+				snap.Breakers[i].ChannelName = name
+			}
+		}
+		for i := range snap.Cooldowns {
+			if name := names[snap.Cooldowns[i].ChannelID]; name != "" {
+				snap.Cooldowns[i].ChannelName = name
+			}
+		}
+	}
+}
+
+func sortedMapKeys(set map[int]struct{}) []int {
+	ids := make([]int, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
+}
+
+func lookupRoutingUserNames(ctx context.Context, ids []int) map[int]string {
+	type userNameRow struct {
+		Id          int
+		Username    string
+		DisplayName string
+	}
+	names := make(map[int]string, len(ids))
+	for start := 0; start < len(ids); start += routingNameLookupBatchSize {
+		end := min(start+routingNameLookupBatchSize, len(ids))
+		var rows []userNameRow
+		err := model.DB.WithContext(ctx).Unscoped().Model(&model.User{}).
+			Select("id, username, display_name").
+			Where("id IN ?", ids[start:end]).
+			Find(&rows).Error
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				common.SysError(common.LogText("failed to resolve routing snapshot user names: %v", err))
+			}
+			return names
+		}
+		for _, row := range rows {
+			name := strings.TrimSpace(row.Username)
+			if name == "" {
+				name = strings.TrimSpace(row.DisplayName)
+			}
+			if name != "" {
+				names[row.Id] = name
+			}
+		}
+	}
+	return names
+}
+
+func lookupRoutingChannelNames(ctx context.Context, ids []int) map[int]string {
+	type channelNameRow struct {
+		Id   int
+		Name string
+	}
+	names := make(map[int]string, len(ids))
+	for start := 0; start < len(ids); start += routingNameLookupBatchSize {
+		end := min(start+routingNameLookupBatchSize, len(ids))
+		var rows []channelNameRow
+		err := model.DB.WithContext(ctx).Model(&model.Channel{}).
+			Select("id, name").
+			Where("id IN ?", ids[start:end]).
+			Find(&rows).Error
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				common.SysError(common.LogText("failed to resolve routing snapshot channel names: %v", err))
+			}
+			return names
+		}
+		for _, row := range rows {
+			if name := strings.TrimSpace(row.Name); name != "" {
+				names[row.Id] = name
+			}
+		}
+	}
+	return names
 }
 
 type RoutingRuntimeSnapshot struct {

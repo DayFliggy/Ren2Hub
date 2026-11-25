@@ -89,8 +89,12 @@ func (s *observationSampler) sample(ctx context.Context) {
 	observation.Resources = observationResources(status, monitor, started)
 	observation.Process = observationProcess(mem, runtime.NumGoroutine())
 	observation.Storage = s.probeStorage(ctx)
+	usersInFlight, channelsInFlight := gatewayInFlightTotals()
 	if ctx.Err() == nil {
-		s.record(observation)
+		point := observationPoint(observation)
+		point.UserInFlight = observationPtr(float64(usersInFlight))
+		point.ChannelInFlight = observationPtr(float64(channelsInFlight))
+		s.recordSample(observation, point)
 	}
 }
 
@@ -193,7 +197,10 @@ func makeObservationResource(status common.SystemStatus, enabled, available bool
 }
 
 func (s *observationSampler) record(observation PerformanceObservation) {
-	point := observationPoint(observation)
+	s.recordSample(observation, observationPoint(observation))
+}
+
+func (s *observationSampler) recordSample(observation PerformanceObservation, point ObservationSeriesPoint) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.latest = &observation

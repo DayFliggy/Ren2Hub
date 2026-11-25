@@ -16,6 +16,8 @@ const SERIES_COLORS = {
   info: 'var(--status-info)',
   warning: 'var(--status-warning)',
   danger: 'var(--status-danger)',
+  textPrimary: 'var(--text-primary)',
+  textTertiary: 'var(--text-tertiary)',
 } as const
 
 export interface OpsTrendSeries {
@@ -23,6 +25,19 @@ export interface OpsTrendSeries {
   /** Index into the live chart palette; follows the theme. */
   color: keyof typeof SERIES_COLORS
   points: Array<{ ts: number; value: number | null }>
+  /** Overrides chart-level kind for mixed bar+line dual-axis charts. */
+  kind?: 'line' | 'bar'
+  /** Dashed line stroke, e.g. outbound traffic matching SystemStatusCard. */
+  dashed?: boolean
+  /** 0 = left y-axis (default), 1 = right secondary y-axis. */
+  yAxisIndex?: 0 | 1
+  /** Optional per-series tooltip/summary unit override. */
+  unit?: string
+}
+
+export interface OpsSecondaryAxis {
+  unit?: string
+  max?: number | null
 }
 
 /**
@@ -43,9 +58,21 @@ const props = withDefaults(
     threshold?: number | null
     /** Fixed y-axis ceiling, e.g. 100 for percentages; auto-scaled when null. */
     max?: number | null
+    secondaryAxis?: OpsSecondaryAxis | null
+    gridLeft?: number
+    gridRight?: number
     height?: number
   }>(),
-  { kind: 'line', unit: '', threshold: null, max: null, height: 140 }
+  {
+    kind: 'line',
+    unit: '',
+    threshold: null,
+    max: null,
+    secondaryAxis: null,
+    gridLeft: 40,
+    gridRight: undefined,
+    height: 140,
+  }
 )
 const { locale } = useI18n()
 const el = ref<HTMLElement | null>(null)
@@ -68,13 +95,20 @@ function axisNumber(value: number) {
   }).format(value)
 }
 
+function seriesUnit(line: OpsTrendSeries) {
+  if (line.unit !== undefined) return line.unit
+  if (line.yAxisIndex === 1 && props.secondaryAxis?.unit !== undefined)
+    return props.secondaryAxis.unit
+  return props.unit
+}
+
 const summary = computed(() =>
   props.series
     .map((line) => {
       const latest = [...line.points]
         .reverse()
         .find((point) => point.value !== null)
-      return `${line.name}: ${latest ? axisNumber(latest.value!) : '--'}${props.unit}`
+      return `${line.name}: ${latest ? axisNumber(latest.value!) : '--'}${seriesUnit(line)}`
     })
     .join('; ')
 )
@@ -87,11 +121,18 @@ useEChart(
       hour: '2-digit',
       minute: '2-digit',
     })
-    const filled = props.kind === 'line' && props.series.length === 1
+    const hasSecondary = Boolean(props.secondaryAxis)
+    const effectiveRight = props.gridRight ?? (hasSecondary ? 44 : 8)
+    const lineCount = props.series.filter(
+      (line) => (line.kind ?? props.kind) === 'line'
+    ).length
+    const filled = props.series.length === 1 && lineCount === 1
     const lines = props.series.map((line) => {
+      const seriesKind = line.kind ?? props.kind
       const color = palette[line.color]
+      const unit = seriesUnit(line)
       const shape =
-        props.kind === 'bar'
+        seriesKind === 'bar'
           ? {
               barMaxWidth: 10 * scale,
               itemStyle: {
@@ -113,18 +154,34 @@ useEChart(
                 },
               }
             : {}
+      const singlePoint =
+        line.points.filter((point) => point.value !== null).length === 1
       return {
         name: line.name,
-        type: props.kind,
+        type: seriesKind,
+        yAxisIndex: hasSecondary ? (line.yAxisIndex ?? 0) : 0,
         data: withGaps(line.points, props.bucketSeconds),
-        showSymbol:
-          line.points.filter((point) => point.value !== null).length === 1,
+        showSymbol: singlePoint,
         symbol: 'circle',
         symbolSize: 4 * scale,
         smooth: mood.line.smooth,
         connectNulls: false,
         itemStyle: { color },
-        lineStyle: { width: 1.75 * scale, color },
+        tooltip: {
+          valueFormatter: (value: unknown) =>
+            typeof value === 'number' ? `${axisNumber(value)}${unit}` : '--',
+        },
+        lineStyle: {
+          width: (line.dashed ? 1.5 : 1.75) * scale,
+          type: line.dashed ? ('dashed' as const) : ('solid' as const),
+          color,
+          ...(filled && palette.isDark
+            ? {
+                shadowBlur: mood.line.lineStyle.shadowBlur,
+                shadowColor: mood.line.lineStyle.shadowColor,
+              }
+            : { shadowBlur: 0, shadowColor: 'transparent' }),
+        },
         ...shape,
       }
     })
@@ -149,23 +206,56 @@ useEChart(
             },
           ]
         : []
+    const primaryYAxis = {
+      type: 'value' as const,
+      min: 0,
+      ...(props.max === null
+        ? {}
+        : { max: props.max, interval: props.max / 4 }),
+      splitNumber: 3,
+      axisLabel: {
+        color: palette.textTertiary,
+        fontSize: 10 * scale,
+        formatter: (value: number) => axisNumber(value),
+      },
+      splitLine: mood.splitLine,
+    }
+    const yAxis = hasSecondary
+      ? [
+          primaryYAxis,
+          {
+            type: 'value' as const,
+            min: 0,
+            ...(props.secondaryAxis?.max == null
+              ? {}
+              : {
+                  max: props.secondaryAxis.max,
+                  interval: props.secondaryAxis.max / 4,
+                }),
+            splitNumber: 3,
+            axisLabel: {
+              color: palette.textTertiary,
+              fontSize: 10 * scale,
+              formatter: (value: number) =>
+                `${axisNumber(value)}${props.secondaryAxis?.unit ?? ''}`,
+            },
+            splitLine: { show: false },
+          },
+        ]
+      : primaryYAxis
     return {
       animation: false,
       grid: {
         top: 12 * scale,
-        right: 8 * scale,
+        right: effectiveRight * scale,
         bottom: 22 * scale,
-        left: 40 * scale,
+        left: props.gridLeft * scale,
       },
       tooltip: {
         trigger: 'axis',
         backgroundColor: palette.surfaceSolid,
         borderColor: palette.borderSubtle,
         textStyle: { color: palette.textPrimary, fontSize: 12 * scale },
-        valueFormatter: (value: unknown) =>
-          typeof value === 'number'
-            ? `${axisNumber(value)}${props.unit}`
-            : '--',
       },
       xAxis: {
         type: 'time',
@@ -181,21 +271,7 @@ useEChart(
           formatter: (value: number) => clock.format(value),
         },
       },
-      yAxis: {
-        type: 'value',
-        min: 0,
-        // A fixed ceiling gets even quarter ticks, so its top value is labelled.
-        ...(props.max === null
-          ? {}
-          : { max: props.max, interval: props.max / 4 }),
-        splitNumber: 3,
-        axisLabel: {
-          color: palette.textTertiary,
-          fontSize: 10 * scale,
-          formatter: (value: number) => axisNumber(value),
-        },
-        splitLine: { lineStyle: { type: 'solid', color: palette.chartGrid } },
-      },
+      yAxis,
       series: [...lines, ...threshold],
     }
   },
@@ -204,6 +280,9 @@ useEChart(
     () => props.threshold,
     () => props.range,
     () => props.max,
+    () => props.secondaryAxis,
+    () => props.gridLeft,
+    () => props.gridRight,
     locale,
   ]
 )
@@ -215,6 +294,11 @@ useEChart(
     <ul v-if="series.length > 1" class="ops-legend" aria-hidden="true">
       <li v-for="line in series" :key="line.name">
         <span
+          v-if="line.dashed"
+          class="ops-line-swatch ops-line-swatch--dashed"
+          :style="{ borderColor: SERIES_COLORS[line.color] }"
+        /><span
+          v-else
           class="ops-dot"
           :style="{ background: SERIES_COLORS[line.color] }"
         />{{ line.name }}

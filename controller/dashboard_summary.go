@@ -67,4 +67,8 @@ func viewerLocation(c *gin.Context) (*time.Location, bool) {
 	return loc, true
 }
 
-func GetRoutingPerformance(c *gin.Context) { common.ApiSuccess(c, service.RoutingSnapshot()) }
+func GetRoutingPerformance(c *gin.Context) {
+	snap := service.RoutingSnapshot()
+	service.EnrichRoutingSnapshotNames(c.Request.Context(), &snap)
+	common.ApiSuccess(c, snap)
+}

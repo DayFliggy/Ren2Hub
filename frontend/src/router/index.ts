@@ -166,6 +166,7 @@ const router = createRouter({
           component: () => import('@/views/admin/OpsMonitorView.vue'),
           meta: {
             wide: true,
+            fullscreenable: true,
             requiresRoot: true,
             ...getTopNavRouteMeta('ops'),
           },

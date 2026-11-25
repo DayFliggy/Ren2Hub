@@ -547,3 +547,78 @@ func TestConcurrencyAdmissionErrorClassifiesRealFailures(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, status)
 	require.EqualValues(t, "user_unavailable", code)
 }
+
+func TestEnrichRoutingSnapshotNamesResolvesUsersChannelsBreakersAndCooldowns(t *testing.T) {
+	db := setupRouteTest(t)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}))
+
+	activeUser := model.User{Id: 101, Username: "alice", DisplayName: "Alice", AffCode: "a101"}
+	fallbackUser := model.User{Id: 102, Username: "", DisplayName: "Bob Display", AffCode: "b102"}
+	deletedUser := model.User{Id: 103, Username: "gone_user", DisplayName: "Gone", AffCode: "c103"}
+	require.NoError(t, db.Create(&activeUser).Error)
+	require.NoError(t, db.Create(&fallbackUser).Error)
+	require.NoError(t, db.Create(&deletedUser).Error)
+	require.NoError(t, db.Delete(&deletedUser).Error)
+
+	require.NoError(t, db.Create(&model.Channel{Id: 11, Name: "Primary Relay", Key: "k1"}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 12, Name: "Backup Relay", Key: "k2"}).Error)
+
+	snap := RoutingRuntimeSnapshot{
+		Users: []ConcurrencySnapshot{
+			{ID: 101, Limit: 10, InFlight: 2},
+			{ID: 102, Limit: 5, InFlight: 1},
+			{ID: 103, Limit: 5, InFlight: 1},
+			{ID: 999, Limit: 5, InFlight: 1},
+		},
+		Channels: []ConcurrencySnapshot{
+			{ID: 11, Limit: 20, InFlight: 3},
+			{ID: 888, Limit: 10, InFlight: 1},
+		},
+		Breakers: []RouteBreakerSnapshot{
+			{ChannelID: 12, Model: "gpt-4o", State: "open"},
+		},
+		Cooldowns: []RouteCooldownSnapshot{
+			{ChannelID: 11, Until: 1000, Source: "header"},
+		},
+	}
+
+	EnrichRoutingSnapshotNames(context.Background(), &snap)
+
+	require.Equal(t, "alice", snap.Users[0].Name)
+	require.Equal(t, "Bob Display", snap.Users[1].Name)
+	require.Equal(t, "gone_user", snap.Users[2].Name)
+	require.Equal(t, "", snap.Users[3].Name)
+	require.Equal(t, "Primary Relay", snap.Channels[0].Name)
+	require.Equal(t, "", snap.Channels[1].Name)
+	require.Equal(t, "Backup Relay", snap.Breakers[0].ChannelName)
+	require.Equal(t, "Primary Relay", snap.Cooldowns[0].ChannelName)
+
+	// >500 IDs exercises multi-batch chunking across SQLite bind limits.
+	batchUsers := make([]ConcurrencySnapshot, 0, routingNameLookupBatchSize+5)
+	for id := 1; id <= routingNameLookupBatchSize+5; id++ {
+		batchUsers = append(batchUsers, ConcurrencySnapshot{ID: id, Limit: 1, InFlight: 1})
+	}
+	batchSnap := RoutingRuntimeSnapshot{Users: batchUsers}
+	EnrichRoutingSnapshotNames(context.Background(), &batchSnap)
+	require.Equal(t, "alice", batchSnap.Users[100].Name)
+	require.Equal(t, "Bob Display", batchSnap.Users[101].Name)
+
+	// Canceled context degrades cleanly without mutating or failing the snapshot.
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledSnap := RoutingRuntimeSnapshot{Users: []ConcurrencySnapshot{{ID: 101, Limit: 1, InFlight: 1}}}
+	EnrichRoutingSnapshotNames(canceledCtx, &canceledSnap)
+	require.Equal(t, "", canceledSnap.Users[0].Name)
+
+	// Non-empty snapshot with nil DB stays safe and leaves names empty.
+	previousDB := model.DB
+	model.DB = nil
+	t.Cleanup(func() { model.DB = previousDB })
+	nonEmpty := RoutingRuntimeSnapshot{
+		Users:    []ConcurrencySnapshot{{ID: 101, Limit: 1, InFlight: 1}},
+		Channels: []ConcurrencySnapshot{{ID: 11, Limit: 1, InFlight: 1}},
+	}
+	EnrichRoutingSnapshotNames(context.Background(), &nonEmpty)
+	require.Equal(t, "", nonEmpty.Users[0].Name)
+	require.Equal(t, "", nonEmpty.Channels[0].Name)
+}

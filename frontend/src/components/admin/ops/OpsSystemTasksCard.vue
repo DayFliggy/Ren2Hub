@@ -186,7 +186,7 @@ async function cleanLogs() {
           <summary :aria-label="t('actions')" :title="t('actions')">
             <MoreHorizontal :size="18" />
           </summary>
-          <div class="ops-menu-content">
+          <div class="ops-menu-content" data-handdrawn="menu">
             <button type="button" @click="openLogDialog">
               <Trash2 :size="15" />{{ t('cleanupLogs') }}
             </button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   checkStatus,
@@ -7,16 +7,17 @@ import {
   type OpsOverview,
   type OpsSeriesField,
 } from '@/api/opsMonitor'
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import { verdictTone } from '@/utils/loadTone'
 import {
   formatBytes,
+  formatClock,
   formatCount,
   formatLatencyMs,
   formatMbps,
   formatPercent,
-  formatClock,
 } from '@/utils/opsFormat'
 import OpsCard from './OpsCard.vue'
 import OpsMetric from './OpsMetric.vue'
@@ -32,6 +33,12 @@ const { t, locale } = useI18n({
   useScope: 'local',
   messages: opsMonitorMessages,
 })
+
+const secondaryView = ref<'traffic' | 'process'>('traffic')
+const secondaryOptions = computed(() => [
+  { value: 'traffic', label: t('resourceTabs.traffic') },
+  { value: 'process', label: t('resourceTabs.process') },
+])
 
 const joined = (value: { value: string; unit: string }) =>
   value.value === '--' ? '--' : `${value.value} ${value.unit}`
@@ -72,8 +79,6 @@ const gauges = computed(() => {
     },
   ].map((gauge) => {
     const status = checkStatus(props.overview, gauge.key)
-    // The dashboard's colour language: a check turned off by threshold 0 keeps
-    // its reading, unjudged; stale or unknown has no reading to colour.
     const tone = verdictTone(
       status === 'disabled' ? 'unchecked' : status,
       gauge.percent
@@ -137,33 +142,73 @@ const trend = computed(() => {
     ],
   }
 })
+
+/** Neutral traffic lines matching SystemStatusCard (THEMES.md):
+ * inbound (↓) primary & solid, outbound (↑) tertiary & dashed. */
 const trafficTrend = computed(() => {
   const overview = props.overview
   if (!overview) return null
   return {
     range: seriesRange(overview),
-    // The server's view: up is outbound, down is inbound, as in the metrics.
-    series: (
-      [
-        ['inbound_mbps', 'down', 'accent'],
-        ['outbound_mbps', 'up', 'signal'],
-      ] as const
-    ).map(([field, label, color]) => ({
-      name: t(`resources.${label}`),
-      color,
-      points: overview.series.points.map((point) => ({
-        ts: point.ts,
-        value: point[field] ?? null,
-      })),
-    })),
+    series: [
+      {
+        name: t('resources.down'),
+        color: 'textPrimary' as const,
+        dashed: false,
+        points: overview.series.points.map((point) => ({
+          ts: point.ts,
+          value: point.inbound_mbps ?? null,
+        })),
+      },
+      {
+        name: t('resources.up'),
+        color: 'textTertiary' as const,
+        dashed: true,
+        points: overview.series.points.map((point) => ({
+          ts: point.ts,
+          value: point.outbound_mbps ?? null,
+        })),
+      },
+    ],
   }
 })
-/** What the traffic figures count, and why a configured host interface has no
- * reading; the figures themselves keep the plain "unavailable" text. */
+
+const processTrend = computed(() => {
+  const overview = props.overview
+  if (!overview) return null
+  return {
+    range: seriesRange(overview),
+    series: [
+      {
+        name: t('resourceTabs.goroutines'),
+        color: 'signal' as const,
+        yAxisIndex: 0 as const,
+        unit: '',
+        points: overview.series.points.map((point) => ({
+          ts: point.ts,
+          value: point.goroutines ?? null,
+        })),
+      },
+      {
+        name: t('resourceTabs.heapAlloc'),
+        color: 'trendMemory' as const,
+        yAxisIndex: 1 as const,
+        unit: ' MiB',
+        points: overview.series.points.map((point) => ({
+          ts: point.ts,
+          value:
+            point.heap_alloc_bytes == null
+              ? null
+              : Math.round((point.heap_alloc_bytes / (1024 * 1024)) * 10) / 10,
+        })),
+      },
+    ],
+  }
+})
+
 const trafficNote = computed(() => {
   const traffic = props.overview?.observation?.traffic
   if (!traffic) return undefined
-  // Host mode without a name only happens with host_config_invalid.
   const scopeKey =
     traffic.scope === 'host_interface' && traffic.interface === ''
       ? 'host_interface_unnamed'
@@ -204,6 +249,7 @@ const trafficNote = computed(() => {
           class="ops-gauge"
           :data-ops-gauge="gauge.key"
           :data-load-tier="gauge.tone.tier"
+          :style="{ '--mark-glow': gauge.tone.fill }"
         >
           <MiniRing
             :percent="gauge.percent ?? 0"
@@ -213,7 +259,7 @@ const trafficNote = computed(() => {
             :indeterminate="gauge.percent === null"
           >
             <span
-              class="ops-gauge-value"
+              class="ops-gauge-value display-number"
               :style="{
                 color:
                   gauge.status === 'critical' ? gauge.tone.text : undefined,
@@ -263,20 +309,22 @@ const trafficNote = computed(() => {
         data-ops-traffic
       >
         <OpsMetric
-          :label="t('resources.up')"
-          v-bind="
-            overview.resources.network.up_mbps === null
-              ? { value: t('unavailable'), unit: '' }
-              : formatMbps(overview.resources.network.up_mbps, locale)
-          "
-          size="sm"
-        />
-        <OpsMetric
           :label="t('resources.down')"
+          color="var(--text-primary)"
           v-bind="
             overview.resources.network.down_mbps === null
               ? { value: t('unavailable'), unit: '' }
               : formatMbps(overview.resources.network.down_mbps, locale)
+          "
+          size="sm"
+        />
+        <OpsMetric
+          :label="t('resources.up')"
+          color="var(--text-tertiary)"
+          v-bind="
+            overview.resources.network.up_mbps === null
+              ? { value: t('unavailable'), unit: '' }
+              : formatMbps(overview.resources.network.up_mbps, locale)
           "
           size="sm"
         />
@@ -339,14 +387,39 @@ const trafficNote = computed(() => {
           :height="120"
         />
       </div>
-      <div v-if="trafficTrend" class="ops-trend">
-        <p class="ops-trend-title">{{ t('resources.network') }}</p>
+      <div v-if="trafficTrend && processTrend" class="ops-trend">
+        <div class="ops-subbar">
+          <p class="ops-trend-title">
+            {{
+              secondaryView === 'traffic'
+                ? t('resources.network')
+                : t('resourceTabs.process')
+            }}
+          </p>
+          <SegmentedToggle
+            v-model="secondaryView"
+            :options="secondaryOptions"
+            :label="t('resourceTabs.label')"
+            size="sm"
+          />
+        </div>
         <OpsTrendChart
+          v-if="secondaryView === 'traffic'"
           :label="t('resources.network')"
           :series="trafficTrend.series"
           :bucket-seconds="overview.series.bucket_seconds"
           :range="trafficTrend.range"
           unit="Mbps"
+          :height="120"
+        />
+        <OpsTrendChart
+          v-else
+          :label="t('resourceTabs.process')"
+          :series="processTrend.series"
+          :bucket-seconds="overview.series.bucket_seconds"
+          :range="processTrend.range"
+          :secondary-axis="{ unit: ' MiB' }"
+          :height="120"
         />
       </div>
     </template>

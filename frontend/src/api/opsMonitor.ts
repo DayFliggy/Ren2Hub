@@ -28,21 +28,55 @@ export interface RoutingObservation {
   latency_samples: number | null
   latency_known: boolean
 }
+export interface RouteBreakerSnapshot {
+  channel_id: number
+  channel_name?: string
+  model: string
+  state: 'open' | 'half_open'
+  open_until: number
+  probe_in_flight: boolean
+  trigger: string
+  last_status?: number
+  last_error_code?: string
+  opened_at: number
+  reopens: number
+}
+export interface RouteCooldownSnapshot {
+  channel_id: number
+  channel_name?: string
+  until: number
+  source: string
+}
 export interface RoutingSnapshot {
+  breakers?: RouteBreakerSnapshot[]
+  cooldowns?: RouteCooldownSnapshot[]
   quality?: {
     channel_id: number
     model: string
+    actual_model?: string
     operation: number
     stream: boolean
     band: number
     reason: string
     samples: number
+    success_rate?: number
     latency_samples: number
+    latency_ms?: number
     speed_samples: number
+    tokens_per_second?: number
+    updated_at?: number
+    evaluated_at?: number
   }[]
   cache?: {
     explorations: number
     free_requests: number
+    cells?: number
+    cell_limit?: number
+    visit_count?: number
+    visit_limit?: number
+    evictions?: number
+    evaluated_at?: number
+    evaluation_ms?: number
     bands: {
       channel_id: number
       model: string
@@ -58,8 +92,8 @@ export interface RoutingSnapshot {
       sessions: number
     }[]
   }
-  users: { id: number; limit: number; in_flight: number }[]
-  channels: { id: number; limit: number; in_flight: number }[]
+  users: { id: number; name?: string; limit: number; in_flight: number }[]
+  channels: { id: number; name?: string; limit: number; in_flight: number }[]
   observations: RoutingObservation[]
 }
 /** Counters of common.DiskCacheStats; an absent counter stays null, not 0. */
@@ -121,24 +155,82 @@ export function parseRoutingSnapshot(value: unknown): RoutingSnapshot {
       invalidResponse(endpoint)
     return result as Record<string, unknown>[]
   }
+  const optionalString = (raw: unknown): string | undefined => {
+    if (raw === undefined || raw === null) return undefined
+    return requiredString(raw, endpoint)
+  }
   const limits = (key: string) =>
     rows(key).map((row) => ({
       id: nonnegative(row.id, endpoint, true),
+      name: optionalString(row.name),
       limit: nonnegative(row.limit, endpoint, true),
       in_flight: nonnegative(row.in_flight, endpoint, true),
     }))
+  const breakers = (value.breakers === undefined ? [] : rows('breakers')).map(
+    (row) => {
+      const state = requiredString(row.state, endpoint)
+      if (state !== 'open' && state !== 'half_open') invalidResponse(endpoint)
+      return {
+        channel_id: requiredStrictInteger(row.channel_id, endpoint),
+        channel_name: optionalString(row.channel_name),
+        model: requiredString(row.model, endpoint),
+        state: state as 'open' | 'half_open',
+        open_until: nonnegative(row.open_until, endpoint, true),
+        probe_in_flight: requiredBoolean(row.probe_in_flight, endpoint),
+        trigger: requiredString(row.trigger, endpoint),
+        last_status:
+          row.last_status === undefined
+            ? undefined
+            : nonnegative(row.last_status, endpoint, true),
+        last_error_code: optionalString(row.last_error_code),
+        opened_at: nonnegative(row.opened_at, endpoint, true),
+        reopens: nonnegative(row.reopens, endpoint, true),
+      }
+    }
+  )
+  const cooldowns = (
+    value.cooldowns === undefined ? [] : rows('cooldowns')
+  ).map((row) => ({
+    channel_id: requiredStrictInteger(row.channel_id, endpoint),
+    channel_name: optionalString(row.channel_name),
+    until: nonnegative(row.until, endpoint, true),
+    source: requiredString(row.source, endpoint),
+  }))
   return {
+    breakers,
+    cooldowns,
     quality: (value.quality === undefined ? [] : rows('quality')).map(
       (row) => ({
         channel_id: requiredStrictInteger(row.channel_id, endpoint),
         model: requiredString(row.model, endpoint),
+        actual_model: optionalString(row.actual_model),
         operation: requiredStrictInteger(row.operation, endpoint),
         stream: requiredBoolean(row.stream, endpoint),
         band: nonnegative(row.band, endpoint, true),
         reason: requiredString(row.reason, endpoint),
         samples: nonnegative(row.samples, endpoint, true),
+        success_rate:
+          row.success_rate === undefined
+            ? undefined
+            : probability(row.success_rate, endpoint),
         latency_samples: nonnegative(row.latency_samples, endpoint, true),
+        latency_ms:
+          row.latency_ms === undefined
+            ? undefined
+            : nonnegative(row.latency_ms, endpoint),
         speed_samples: nonnegative(row.speed_samples, endpoint, true),
+        tokens_per_second:
+          row.tokens_per_second === undefined
+            ? undefined
+            : nonnegative(row.tokens_per_second, endpoint),
+        updated_at:
+          row.updated_at === undefined
+            ? undefined
+            : nonnegative(row.updated_at, endpoint, true),
+        evaluated_at:
+          row.evaluated_at === undefined
+            ? undefined
+            : nonnegative(row.evaluated_at, endpoint, true),
       })
     ),
     cache: parseRouteCache(value.cache, endpoint),
@@ -178,6 +270,34 @@ function parseRouteCache(
   return {
     explorations: nonnegative(value.explorations, endpoint, true),
     free_requests: nonnegative(value.free_requests, endpoint, true),
+    cells:
+      value.cells === undefined
+        ? undefined
+        : nonnegative(value.cells, endpoint, true),
+    cell_limit:
+      value.cell_limit === undefined
+        ? undefined
+        : nonnegative(value.cell_limit, endpoint, true),
+    visit_count:
+      value.visit_count === undefined
+        ? undefined
+        : nonnegative(value.visit_count, endpoint, true),
+    visit_limit:
+      value.visit_limit === undefined
+        ? undefined
+        : nonnegative(value.visit_limit, endpoint, true),
+    evictions:
+      value.evictions === undefined
+        ? undefined
+        : nonnegative(value.evictions, endpoint, true),
+    evaluated_at:
+      value.evaluated_at === undefined
+        ? undefined
+        : nonnegative(value.evaluated_at, endpoint, true),
+    evaluation_ms:
+      value.evaluation_ms === undefined
+        ? undefined
+        : nonnegative(value.evaluation_ms, endpoint, true),
     bands: value.bands.map((row: unknown) => {
       if (!isRecord(row)) invalidResponse(endpoint)
       return {
@@ -361,6 +481,8 @@ export function parsePerformanceQuality(value: unknown): PerformanceQuality {
   }
 }
 export const QUALITY_HOURS = 24
+export const OPS_QUALITY_HOURS = [6, 24, 72] as const
+export type OpsQualityHours = (typeof OPS_QUALITY_HOURS)[number]
 export type PerformanceAction = 'gc' | 'disk_cache' | 'reset_stats'
 export const opsMonitorApi = {
   execute: (action: PerformanceAction) =>
@@ -375,11 +497,14 @@ export const opsMonitorApi = {
     parseRoutingSnapshot(
       await api.get('/api/performance/routing', undefined, { signal })
     ),
-  quality: async (signal?: AbortSignal) =>
+  quality: async (
+    signal?: AbortSignal,
+    hours: OpsQualityHours = QUALITY_HOURS
+  ) =>
     parsePerformanceQuality(
       await api.get(
         '/api/performance/quality',
-        { hours: String(QUALITY_HOURS) },
+        { hours: String(hours) },
         { signal }
       )
     ),
@@ -410,10 +535,13 @@ export interface OpsSeriesPoint {
   channels: number | null
   inbound_mbps?: number | null
   outbound_mbps?: number | null
+  goroutines?: number | null
+  heap_alloc_bytes?: number | null
 }
 export type OpsSeriesField = Exclude<keyof OpsSeriesPoint, 'ts'>
 export interface OpsOverview {
   sampled_at: number
+  instance_started_at: number | null
   health_score: null
   observation: Observability | null
   status: OpsStatus
@@ -551,6 +679,7 @@ export function projectOpsOverview(
   const path = config.disk_cache_path
   return {
     sampled_at: sampledAt,
+    instance_started_at: observation?.instance_started_at ?? null,
     health_score: null,
     observation,
     status: observation?.status ?? 'unknown',
@@ -595,11 +724,14 @@ export function projectOpsOverview(
       ? {
           window: observation.series.window,
           bucket_seconds: observation.series.bucket_seconds,
-          points: observation.series.points.map((point) => ({
-            ...point,
-            users: null,
-            channels: null,
-          })),
+          points: observation.series.points.map((point) => {
+            const { user_in_flight, channel_in_flight, ...rest } = point
+            return {
+              ...rest,
+              users: user_in_flight ?? null,
+              channels: channel_in_flight ?? null,
+            }
+          }),
         }
       : {
           window,

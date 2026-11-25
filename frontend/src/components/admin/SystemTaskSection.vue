@@ -168,18 +168,31 @@ const tones = {
 .task-actions {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.5rem 0.625rem;
 }
 .task-header {
+  flex-wrap: wrap;
   justify-content: space-between;
   margin-bottom: 0.75rem;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px var(--row-divider-style, solid) var(--border-subtle);
   padding-top: 1rem;
+}
+.task-section:first-of-type > .task-header {
+  border-top: 0;
+  padding-top: 0;
 }
 .task-header h2 {
   font-size: 0.9375rem;
   font-weight: 600;
   min-width: 0;
+  white-space: nowrap;
+}
+.task-header h2 svg {
+  flex-shrink: 0;
+}
+.task-actions {
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 .task-count {
   font-size: 0.75rem;
@@ -188,25 +201,28 @@ const tones = {
 }
 .task-toggle {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.25rem;
   min-height: 2.75rem;
-  padding: 0 0.5rem;
+  padding: 0 0.625rem;
   border-radius: var(--shape-control, 8px);
   font-size: 0.8125rem;
   font-weight: 600;
+  white-space: nowrap;
   color: var(--text-secondary);
 }
 .task-toggle:hover {
   background: var(--state-hover-layer);
 }
 .task-toggle-icon {
+  flex-shrink: 0;
   transition: transform 0.15s ease;
 }
 .task-toggle-icon--open {
   transform: rotate(180deg);
 }
-@media (min-width: 640px) {
+@media (min-width: 1024px) and (pointer: fine) {
   .task-toggle {
     min-height: 2rem;
   }

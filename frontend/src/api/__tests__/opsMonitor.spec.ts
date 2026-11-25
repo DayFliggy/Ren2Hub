@@ -287,6 +287,8 @@ describe('native ops monitoring', () => {
           outbound_mbps: null,
           goroutines: null,
           heap_alloc_bytes: null,
+          user_in_flight: null,
+          channel_in_flight: null,
         },
         {
           ts: 1350,
@@ -297,6 +299,8 @@ describe('native ops monitoring', () => {
           outbound_mbps: 2,
           goroutines: 2.5,
           heap_alloc_bytes: 1024,
+          user_in_flight: null,
+          channel_in_flight: null,
         },
       ],
     }
@@ -310,11 +314,13 @@ describe('native ops monitoring', () => {
     expect(result.series.window).toBe('24h')
     expect(result.series.bucket_seconds).toBe(900)
     expect(result.series.points).toEqual(
-      data.observability.series.points.map((point) => ({
-        ...point,
-        users: null,
-        channels: null,
-      }))
+      data.observability.series.points.map(
+        ({ user_in_flight: _u, channel_in_flight: _c, ...point }) => ({
+          ...point,
+          users: null,
+          channels: null,
+        })
+      )
     )
     expect(seriesRange(result)).toEqual([-82800, 3600])
   })
@@ -476,6 +482,100 @@ describe('native ops monitoring', () => {
     ])
     expect(mocks.delete).toHaveBeenCalledExactlyOnceWith(
       '/api/performance/disk_cache'
+    )
+  })
+  it('parses routing breakers, cooldowns, resolved names and rejects invalid breaker states', () => {
+    const parsed = parseRoutingSnapshot({
+      ...routingFixture(),
+      users: [{ id: 1, name: 'alice', limit: 4, in_flight: 2 }],
+      channels: [{ id: 9, name: 'Primary', limit: 10, in_flight: 3 }],
+      breakers: [
+        {
+          channel_id: 9,
+          channel_name: 'Primary',
+          model: 'gpt-4o',
+          state: 'open',
+          open_until: 1_800_000_060_000,
+          probe_in_flight: false,
+          trigger: 'consecutive_errors',
+          last_status: 502,
+          last_error_code: 'upstream_error',
+          opened_at: 1_800_000_000_000,
+          reopens: 2,
+        },
+      ],
+      cooldowns: [
+        {
+          channel_id: 11,
+          channel_name: 'Fallback',
+          until: 1_800_000_030_000,
+          source: 'retry_after',
+        },
+      ],
+    })
+    expect(parsed.users[0]?.name).toBe('alice')
+    expect(parsed.channels[0]?.name).toBe('Primary')
+    expect(parsed.breakers).toHaveLength(1)
+    expect(parsed.breakers?.[0]).toMatchObject({
+      channel_id: 9,
+      channel_name: 'Primary',
+      state: 'open',
+      last_status: 502,
+    })
+    expect(parsed.cooldowns?.[0]).toMatchObject({
+      channel_id: 11,
+      channel_name: 'Fallback',
+      source: 'retry_after',
+    })
+    expect(() =>
+      parseRoutingSnapshot({
+        ...routingFixture(),
+        breakers: [
+          {
+            channel_id: 9,
+            model: 'gpt-4o',
+            state: 'closed',
+            open_until: 0,
+            probe_in_flight: false,
+            trigger: '',
+            opened_at: 0,
+            reopens: 0,
+          },
+        ],
+      })
+    ).toThrow('Invalid API response')
+  })
+  it('maps server user_in_flight and channel_in_flight series and supports variable quality hours', async () => {
+    const data = performanceFixture()
+    data.observability.series.points = [
+      {
+        ts: 3600,
+        cpu: 20,
+        memory: 30,
+        disk: 40,
+        inbound_mbps: 1,
+        outbound_mbps: 2,
+        goroutines: 12,
+        heap_alloc_bytes: 2048,
+        user_in_flight: 3,
+        channel_in_flight: 5,
+      },
+    ]
+    const projected = projectOpsOverview(
+      parsePerformanceStats(data),
+      null,
+      '1h',
+      [],
+      3600
+    )!
+    expect(projected.series.points[0]?.users).toBe(3)
+    expect(projected.series.points[0]?.channels).toBe(5)
+    mocks.get.mockResolvedValueOnce(qualityFixture())
+    await opsMonitorApi.quality(undefined, 72)
+    expect(mocks.get).toHaveBeenCalledWith(
+      '/api/performance/quality',
+      { hours: '72' },
+      { signal: undefined }
     )
   })
 })

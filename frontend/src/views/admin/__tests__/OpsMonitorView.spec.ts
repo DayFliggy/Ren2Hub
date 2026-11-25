@@ -126,11 +126,13 @@ describe('historical ops layout with native data', () => {
     expect(view.getComponent(OpsResourcesCard).text()).toContain(
       'Runtime reserved heap:'
     )
-    expect(view.get('[data-ops-concurrency="users"]').text()).toContain(
-      '#12 / 4'
+    expect(view.get('[data-ops-concurrency="users"]').text()).toContain('#1')
+    expect(view.get('[data-ops-concurrency="users"]').text()).toContain('2 / 4')
+    expect(view.get('[data-ops-concurrency="channels"]').text()).toContain(
+      'Fixture channel (#9)'
     )
     expect(view.get('[data-ops-concurrency="channels"]').text()).toContain(
-      '#92 / Unlimited'
+      '2 / Unlimited'
     )
     const database = view.get('[data-ops-storage="database"]').text()
     expect(database).toContain('Unlimited')
@@ -157,7 +159,7 @@ describe('historical ops layout with native data', () => {
     ).toBe(true)
     expect(
       view.getComponent(OpsGatewayCard).props('overview')!.series.points
-    ).toHaveLength(1)
+    ).toHaveLength(3)
   })
   it('shows sampled host usage and a separate unreadable log pool', async () => {
     const defaultGet = mocks.get.getMockImplementation()!
@@ -219,7 +221,12 @@ describe('historical ops layout with native data', () => {
     await flushPromises()
     expect(view.find('[data-ops-error]').exists()).toBe(false)
     expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('Threshold off')
-    expect(view.get('[data-ops-unmeasured]').text()).toContain('CPU')
+    expect(view.get('[data-ops-unmeasured]').text()).toContain(
+      'Threshold checks off: CPU'
+    )
+    expect(view.get('[data-ops-unmeasured]').text()).not.toContain(
+      'No data yet: CPU'
+    )
     expect(view.get('[data-ops-coverage]').text()).toContain('1 / 4')
   })
   it('shows a CPU burst above 100% while capping its ring at a full arc', async () => {
@@ -347,6 +354,8 @@ describe('historical ops layout with native data', () => {
               outbound_mbps: 2,
               goroutines: 5,
               heap_alloc_bytes: 1024,
+              user_in_flight: 1,
+              channel_in_flight: 2,
             },
           ],
         }
@@ -359,7 +368,10 @@ describe('historical ops layout with native data', () => {
     const resources = view.getComponent(OpsResourcesCard)
     expect(resources.props('overview')!.series.points[0]?.ts).toBe(900)
     expect(resources.props('overview')!.series.bucket_seconds).toBe(60)
-    view.getComponent(SegmentedToggle).vm.$emit('update:modelValue', '24h')
+    view
+      .get('[data-ops-runtime-window]')
+      .getComponent(SegmentedToggle)
+      .vm.$emit('update:modelValue', '24h')
     await flushPromises()
     expect(resources.props('overview')!.series.window).toBe('24h')
     expect(resources.props('overview')!.series.bucket_seconds).toBe(900)
@@ -387,6 +399,8 @@ describe('historical ops layout with native data', () => {
             outbound_mbps: null,
             goroutines: 5,
             heap_alloc_bytes: 1024,
+            user_in_flight: null,
+            channel_in_flight: null,
           },
         ]
         return Promise.resolve(data)
@@ -413,10 +427,7 @@ describe('historical ops layout with native data', () => {
       resources.props('overview')!.series.points.map((point) => point.disk)
     ).toEqual([50])
   })
-  it('does not sample superseded or aborted routing responses', async () => {
-    const start = 1_800_000_000_000
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(start)
+  it('does not apply superseded or aborted routing responses', async () => {
     const defaultGet = mocks.get.getMockImplementation()!
     const pending: ((value: ReturnType<typeof routingFixture>) => void)[] = []
     mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
@@ -428,21 +439,76 @@ describe('historical ops layout with native data', () => {
     })
     const view = setup()
     await flushPromises()
-    vi.setSystemTime(start + 1000)
     view.getComponent(OpsStatusHeader).vm.$emit('refresh')
     await flushPromises()
-    pending[0]!(routingFixture())
+    pending[0]!({
+      ...routingFixture(),
+      users: [{ id: 1, limit: 4, in_flight: 99 }],
+    })
     await flushPromises()
     expect(view.getComponent(OpsGatewayCard).props('overview')).toBeNull()
-    vi.setSystemTime(start + 2000)
-    pending[1]!(routingFixture())
+    pending[1]!({
+      ...routingFixture(),
+      users: [{ id: 1, limit: 4, in_flight: 3 }],
+    })
     await flushPromises()
     expect(
-      view
-        .getComponent(OpsGatewayCard)
-        .props('overview')!
-        .series.points.map(({ ts }) => ts)
-    ).toEqual([start / 1000 + 2])
+      view.getComponent(OpsGatewayCard).props('overview')!.gateway?.users[0]
+        ?.in_flight
+    ).toBe(3)
+  })
+  it('displays active breakers/cooldowns, opens the diagnosis drawer and switches quality hours', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/routing') {
+        return Promise.resolve({
+          ...routingFixture(),
+          breakers: [
+            {
+              channel_id: 9,
+              channel_name: 'Fixture channel',
+              model: 'gpt-4o',
+              state: 'open',
+              open_until: Date.now() + 60_000,
+              probe_in_flight: false,
+              trigger: 'consecutive_errors',
+              last_status: 502,
+              last_error_code: 'upstream_error',
+              opened_at: Date.now() - 10_000,
+              reopens: 1,
+            },
+          ],
+          cooldowns: [
+            {
+              channel_id: 12,
+              channel_name: 'Cooling channel',
+              until: Date.now() + 30_000,
+              source: 'retry_after',
+            },
+          ],
+        })
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    expect(view.get('[data-ops-breakers]').text()).toContain('Fixture channel')
+    expect(view.get('[data-ops-breakers]').text()).toContain('Cooling channel')
+    const trigger = view.get('[data-ops-diagnosis-trigger]')
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(view.text()).toContain('Active circuit breakers')
+    expect(view.text()).toContain('upstream_error')
+    view
+      .get('[data-ops-quality-window]')
+      .getComponent(SegmentedToggle)
+      .vm.$emit('update:modelValue', '72')
+    await flushPromises()
+    expect(mocks.get).toHaveBeenCalledWith(
+      '/api/performance/quality',
+      { hours: '72' },
+      { signal: expect.any(AbortSignal) }
+    )
   })
   it('does not display latency before its independent sample threshold', async () => {
     const defaultGet = mocks.get.getMockImplementation()!
