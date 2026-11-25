@@ -907,7 +907,7 @@ async function submit() {
         <RouterLink
           :to="{
             name: 'upstreams',
-            query: { account: String(binding.account_id) },
+            query: { account: String(binding.account_id), tab: 'bindings' },
           }"
           class="font-medium text-[var(--accent)] hover:underline"
         >

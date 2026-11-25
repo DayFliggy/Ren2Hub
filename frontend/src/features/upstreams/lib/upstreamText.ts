@@ -5,6 +5,7 @@ import {
   type UpstreamAccount,
   type UpstreamRemoteKey,
 } from '@/api/upstreams'
+import { relativeTime } from '@/utils/format'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
 type HasKey = (key: string) => boolean
@@ -55,6 +56,100 @@ export function upstreamErrorText(error: unknown, t: Translate, te: HasKey) {
   if (error instanceof UpstreamRequestError && error.retryAfter !== null)
     text = `${text} ${t('upstreams.retryAfter', { seconds: error.retryAfter })}`
   return text
+}
+
+function errorCodeText(code: string, t: Translate, te: HasKey) {
+  const key = `upstreams.errors.${code}`
+  return te(key) ? t(key) : code
+}
+
+export type AccountAlertAction = 'reauth' | 'enable' | 'sync'
+
+export interface AccountAlert {
+  tone: Tone
+  title: string
+  /** Translated `last_error`; unknown codes keep the server text. */
+  detail: string
+  action: AccountAlertAction | null
+}
+
+/**
+ * The one mapping from account state to its attention banner. The backend
+ * writes four statuses; sync failures keep `active` and only set last_error.
+ */
+export function accountAlert(
+  account: UpstreamAccount,
+  t: Translate,
+  te: HasKey
+): AccountAlert | null {
+  const detail = account.last_error
+    ? errorCodeText(account.last_error, t, te)
+    : ''
+  switch (account.status) {
+    case 'credential_undecryptable':
+      return {
+        tone: 'danger',
+        title: t('upstreams.alerts.undecryptable'),
+        detail,
+        action: 'reauth',
+      }
+    case 'reauth_required':
+      return {
+        tone: 'warning',
+        title: t('upstreams.alerts.reauth'),
+        detail,
+        action: 'reauth',
+      }
+    case 'disabled':
+      return {
+        tone: 'neutral',
+        title: t('upstreams.alerts.disabled'),
+        detail,
+        action: 'enable',
+      }
+    case 'active':
+      if (!account.last_error) return null
+      return {
+        tone: 'danger',
+        title: t('upstreams.alerts.syncFailed'),
+        detail,
+        action: 'sync',
+      }
+    default:
+      return {
+        tone: 'warning',
+        title: accountStatusText(account.status, t, te),
+        detail,
+        action: null,
+      }
+  }
+}
+
+/** Host part of the site address; malformed addresses are shown as stored. */
+export function siteHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host || baseUrl
+  } catch {
+    return baseUrl
+  }
+}
+
+/**
+ * Next scheduled sync, or '' when none applies: the scheduler only picks
+ * active accounts and re-authorization resets next_sync_at to 0. A due or
+ * overdue time reads "soon" instead of a past relative time.
+ */
+export function nextSyncText(
+  account: UpstreamAccount,
+  now: number,
+  t: Translate,
+  locale: string
+): string {
+  if (account.status !== 'active' || account.next_sync_at <= 0) return ''
+  if (account.next_sync_at <= now + 60) return t('upstreams.syncDueSoon')
+  return t('upstreams.nextSync', {
+    time: relativeTime(account.next_sync_at, locale),
+  })
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', CNY: '¥' }

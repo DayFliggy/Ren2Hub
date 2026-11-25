@@ -13,6 +13,7 @@ import ActionMenu, {
 } from '@/components/common/ActionMenu.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
@@ -35,7 +36,11 @@ const props = defineProps<{
   loading: boolean
   error: string
 }>()
-const emit = defineEmits<{ reload: [] }>()
+const emit = defineEmits<{
+  reload: []
+  retry: []
+  showBinding: [channelId: number]
+}>()
 const { t, te } = useI18n()
 const auth = useAuthStore()
 const toast = useToast()
@@ -43,6 +48,9 @@ const toast = useToast()
 type Dialog =
   | { kind: 'form'; key: UpstreamRemoteKey | null }
   | { kind: 'channel' | 'bind' | 'delete'; key: UpstreamRemoteKey }
+// One column template for the header and every row in the wide layout.
+const ROW_COLUMNS =
+  '@3xl:grid-cols-[minmax(9rem,1.6fr)_minmax(5rem,1fr)_6rem_minmax(7rem,1fr)_7.5rem_6rem_2.75rem]'
 const dialog = ref<Dialog | null>(null)
 const busyKey = ref<number | null>(null)
 
@@ -150,6 +158,11 @@ function onSelect(key: UpstreamRemoteKey, action: string) {
     dialog.value = { kind: action, key }
 }
 
+function openBinding(key: UpstreamRemoteKey) {
+  const channelId = boundChannel.value.get(key.id)
+  if (channelId) emit('showBinding', channelId)
+}
+
 function done() {
   dialog.value = null
   emit('reload')
@@ -157,14 +170,13 @@ function done() {
 </script>
 
 <template>
-  <section class="space-y-3">
+  <section class="@container space-y-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p
-        v-if="inactive"
-        class="text-xs text-[var(--status-warning-text)]"
-        role="note"
+        v-if="!loading && !error"
+        class="text-xs tabular-nums text-[var(--text-tertiary)]"
       >
-        {{ t('upstreams.detail.inactiveHint') }}
+        {{ t('upstreams.keys.count', { count: keys.length }) }}
       </p>
       <ConsoleButton
         size="sm"
@@ -179,31 +191,62 @@ function done() {
     <div
       v-if="error"
       role="alert"
-      class="rounded-lg bg-[var(--status-danger-soft)] px-3 py-2 text-sm text-[var(--status-danger-text)]"
+      class="flex flex-wrap items-start gap-3 rounded-lg bg-[var(--status-danger-soft)] px-3 py-2 text-sm text-[var(--status-danger-text)]"
     >
-      <p class="font-semibold">{{ t('upstreams.keys.loadFailed') }}</p>
-      <p class="break-words">{{ error }}</p>
+      <div class="min-w-0 flex-1">
+        <p class="font-semibold">{{ t('upstreams.keys.loadFailed') }}</p>
+        <p class="break-words">{{ error }}</p>
+      </div>
+      <ConsoleButton size="sm" variant="secondary" @click="emit('retry')">
+        {{ t('upstreams.retry') }}
+      </ConsoleButton>
     </div>
-    <p
+    <div
       v-else-if="loading && !keys.length"
       role="status"
-      class="text-sm text-[var(--text-tertiary)]"
+      :aria-label="t('common.loading')"
+      class="space-y-2"
+      data-upstream-keys-loading
     >
-      {{ t('common.loading') }}
-    </p>
+      <SkeletonBlock
+        v-for="index in 3"
+        :key="index"
+        rounded="md"
+        class="h-14"
+      />
+    </div>
     <p v-else-if="!keys.length" class="text-sm text-[var(--text-tertiary)]">
       {{ t('upstreams.keys.empty') }}
     </p>
-    <ul
+    <div
       v-else
-      class="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]"
-      data-upstream-keys
+      class="overflow-hidden rounded-xl border border-[var(--border-subtle)]"
     >
-      <li v-for="key in keys" :key="key.id" class="px-3 py-2.5">
-        <div class="flex items-start gap-2">
-          <div class="min-w-0 flex-1">
+      <div
+        aria-hidden="true"
+        class="hidden items-center gap-x-2 bg-[var(--surface-container-high)] px-3 py-2 text-xs text-[var(--text-tertiary)] @3xl:grid"
+        :class="ROW_COLUMNS"
+      >
+        <span>{{ t('upstreams.keys.name') }}</span>
+        <span>{{ t('upstreams.keys.group') }}</span>
+        <span>{{ t('upstreams.keys.status') }}</span>
+        <span>{{ t('upstreams.keys.quota') }}</span>
+        <span>{{ t('upstreams.keys.expiry') }}</span>
+        <span>{{ t('upstreams.keys.channel') }}</span>
+        <span />
+      </div>
+      <ul class="divide-y divide-[var(--border-subtle)]" data-upstream-keys>
+        <li
+          v-for="key in keys"
+          :key="key.id"
+          class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-2 px-3 py-2.5 @3xl:items-center"
+          :class="ROW_COLUMNS"
+          data-upstream-key-row
+        >
+          <div class="min-w-0 @3xl:order-1">
             <p
               class="truncate text-sm font-semibold text-[var(--text-primary)]"
+              :title="key.name"
             >
               {{ key.name }}
             </p>
@@ -211,46 +254,70 @@ function done() {
               {{ key.remote_key_prefix }}
             </p>
           </div>
-          <StatusChip :tone="keyTone(key.status)">
-            {{ keyStatusText(key.status, t, te) }}
-          </StatusChip>
-          <ActionMenu
-            :items="items(key)"
-            :label="t('upstreams.keys.actions.menu', { name: key.name })"
-            @select="onSelect(key, $event)"
-          />
-        </div>
-        <dl
-          class="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-[var(--text-secondary)]"
-        >
-          <dt class="text-[var(--text-tertiary)]">
-            {{ t('upstreams.keys.group') }}
-          </dt>
-          <dd class="min-w-0 truncate">{{ groupText(key) }}</dd>
-          <dt class="text-[var(--text-tertiary)]">
-            {{ t('upstreams.keys.quota') }}
-          </dt>
-          <dd class="tabular-nums">{{ keyQuotaText(key, t) }}</dd>
-          <dt class="text-[var(--text-tertiary)]">
-            {{ t('upstreams.keys.expiry') }}
-          </dt>
-          <dd class="tabular-nums">
-            {{ keyExpiryText(key, t, formatTime) }}
-          </dd>
-          <dt class="text-[var(--text-tertiary)]">
-            {{ t('upstreams.keys.channel') }}
-          </dt>
-          <dd>
-            {{
-              boundChannel.has(key.id)
-                ? t('upstreams.keys.boundTo', { id: boundChannel.get(key.id) })
-                : t('upstreams.keys.unbound')
-            }}
-          </dd>
-        </dl>
-      </li>
-    </ul>
-
+          <div class="@3xl:order-3">
+            <StatusChip :tone="keyTone(key.status)">
+              {{ keyStatusText(key.status, t, te) }}
+            </StatusChip>
+          </div>
+          <div class="@3xl:order-7 @3xl:justify-self-end">
+            <ActionMenu
+              :items="items(key)"
+              :label="t('upstreams.keys.actions.menu', { name: key.name })"
+              @select="onSelect(key, $event)"
+            />
+          </div>
+          <dl
+            class="col-span-3 mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs text-[var(--text-secondary)] @3xl:contents"
+          >
+            <div class="contents @3xl:order-2 @3xl:block @3xl:min-w-0">
+              <dt class="text-[var(--text-tertiary)] @3xl:sr-only">
+                {{ t('upstreams.keys.group') }}
+              </dt>
+              <dd class="min-w-0 truncate" :title="groupText(key)">
+                {{ groupText(key) }}
+              </dd>
+            </div>
+            <div class="contents @3xl:order-4 @3xl:block @3xl:min-w-0">
+              <dt class="text-[var(--text-tertiary)] @3xl:sr-only">
+                {{ t('upstreams.keys.quota') }}
+              </dt>
+              <dd class="min-w-0 truncate tabular-nums">
+                {{ keyQuotaText(key, t) }}
+              </dd>
+            </div>
+            <div class="contents @3xl:order-5 @3xl:block @3xl:min-w-0">
+              <dt class="text-[var(--text-tertiary)] @3xl:sr-only">
+                {{ t('upstreams.keys.expiry') }}
+              </dt>
+              <dd class="min-w-0 truncate tabular-nums">
+                {{ keyExpiryText(key, t, formatTime) }}
+              </dd>
+            </div>
+            <div class="contents @3xl:order-6 @3xl:block @3xl:min-w-0">
+              <dt class="text-[var(--text-tertiary)] @3xl:sr-only">
+                {{ t('upstreams.keys.channel') }}
+              </dt>
+              <dd class="min-w-0">
+                <button
+                  v-if="boundChannel.has(key.id)"
+                  type="button"
+                  class="font-medium text-[var(--accent-text)] hover:underline focus-ring"
+                  data-upstream-key-channel
+                  @click="openBinding(key)"
+                >
+                  {{
+                    t('upstreams.keys.boundTo', {
+                      id: boundChannel.get(key.id),
+                    })
+                  }}
+                </button>
+                <template v-else>{{ t('upstreams.keys.unbound') }}</template>
+              </dd>
+            </div>
+          </dl>
+        </li>
+      </ul>
+    </div>
     <UpstreamKeyFormModal
       v-if="dialog?.kind === 'form'"
       :account="account"

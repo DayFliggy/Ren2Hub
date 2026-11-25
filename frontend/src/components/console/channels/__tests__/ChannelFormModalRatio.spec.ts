@@ -75,7 +75,12 @@ function mountForm(
       upstreamBinding,
     },
     global: {
-      stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      stubs: {
+        RouterLink: {
+          props: ['to'],
+          template: '<a :data-to="JSON.stringify(to)"><slot /></a>',
+        },
+      },
       plugins: [
         createI18n({
           legacy: false,
@@ -197,9 +202,15 @@ describe('channel multiplier managed by an upstream binding', () => {
       const ratio = ratioInput()
       expect(ratio.disabled).toBe(true)
       expect(ratio.hasAttribute('data-upstream-managed')).toBe(true)
+      const notice = document.body.querySelector(
+        '[data-channel-upstream-notice]'
+      )!
       expect(
-        document.body.querySelector('[data-channel-upstream-notice]')
-      ).not.toBeNull()
+        JSON.parse(notice.querySelector('a')!.getAttribute('data-to')!)
+      ).toEqual({
+        name: 'upstreams',
+        query: { account: '4', tab: 'bindings' },
+      })
       saveButton().click()
       await flushPromises()
       expect(save).toHaveBeenCalledOnce()
