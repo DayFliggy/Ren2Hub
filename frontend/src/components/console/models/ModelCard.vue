@@ -9,6 +9,7 @@ import {
   watch,
 } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { CatalogOfferHealth } from '@/api/modelCatalog'
 import type { MarketModel, ModelPerformanceState } from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
@@ -27,8 +28,8 @@ const props = defineProps<{
 const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 const cardId = useId()
-const benchmarkId = `${cardId}-benchmark`
 const quoteId = `${cardId}-quote`
+const statsId = `${cardId}-stats`
 const overflowMenuId = `${cardId}-overflow`
 
 const selectedOfferId = ref<string | null>(null)
@@ -55,9 +56,6 @@ const activeOffer = computed(
     props.model.offers.find((offer) => offer.id === selectedOfferId.value) ??
     props.model.offers[0]
 )
-const reference = computed(
-  () => activeOffer.value?.baseline ?? props.model.baselines[0]
-)
 const channelCount = computed(
   () => new Set(props.model.offers.map((offer) => offer.channelId)).size
 )
@@ -65,6 +63,33 @@ const visibleTags = computed(() => props.model.tags.slice(0, 3))
 const hiddenTagCount = computed(() =>
   Math.max(0, props.model.tags.length - visibleTags.value.length)
 )
+
+function offerHealthTone(
+  health?: CatalogOfferHealth
+): 'good' | 'warn' | 'bad' | 'neutral' {
+  if (!health) return 'neutral'
+  if (
+    health.availability === 'paused' ||
+    (health.availability === 'no_restriction' &&
+      health.quality === 'severely_degraded')
+  ) {
+    return 'bad'
+  }
+  if (
+    health.availability === 'limited' ||
+    health.availability === 'recovering' ||
+    (health.availability === 'no_restriction' && health.quality === 'degraded')
+  ) {
+    return 'warn'
+  }
+  if (
+    health.availability === 'no_restriction' &&
+    health.quality === 'no_downgrade'
+  ) {
+    return 'good'
+  }
+  return 'neutral'
+}
 
 const railOffers = computed(() => {
   const offers = props.model.offers
@@ -189,7 +214,7 @@ onBeforeUnmount(() => {
       class="market-card-hit focus-ring"
       type="button"
       :aria-label="t('openDetail', { name: model.name })"
-      :aria-describedby="`${benchmarkId} ${quoteId}`"
+      :aria-describedby="`${quoteId} ${statsId}`"
       @click="emit('detail', model.id, activeOffer?.id)"
     />
     <div class="market-card-heading">
@@ -260,6 +285,10 @@ onBeforeUnmount(() => {
             class="market-rail-chip"
             data-rail-probe
           >
+            <span
+              class="market-rail-dot"
+              :class="`is-${offerHealthTone(offer.health)}`"
+            />
             <span class="market-rail-chip-name">{{ offer.channelName }}</span>
             <span class="market-rail-chip-ratio">{{
               formatMarketRatio(offer.ratio)
@@ -277,6 +306,11 @@ onBeforeUnmount(() => {
           :data-channel-chip="offer.channelId"
           @click.stop="selectChannel(offer.id)"
         >
+          <span
+            class="market-rail-dot"
+            :class="`is-${offerHealthTone(offer.health)}`"
+            aria-hidden="true"
+          />
           <span class="market-rail-chip-name">{{ offer.channelName }}</span>
           <span class="market-rail-chip-ratio">{{
             formatMarketRatio(offer.ratio)
@@ -314,9 +348,16 @@ onBeforeUnmount(() => {
               :data-channel-overflow-item="offer.channelId"
               @click="selectChannel(offer.id)"
             >
-              <span class="market-rail-popover-name">{{
-                offer.channelName
-              }}</span>
+              <span class="market-rail-popover-main">
+                <span
+                  class="market-rail-dot"
+                  :class="`is-${offerHealthTone(offer.health)}`"
+                  aria-hidden="true"
+                />
+                <span class="market-rail-popover-name">{{
+                  offer.channelName
+                }}</span>
+              </span>
               <span class="market-rail-chip-ratio">{{
                 formatMarketRatio(offer.ratio)
               }}</span>
@@ -325,34 +366,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div
-        :id="benchmarkId"
-        class="market-baseline-strip"
-        data-platform-reference
-        data-market-baseline
-      >
-        <div class="market-baseline-heading">
-          <span
-            >{{ t('benchmark') }}
-            <span class="market-baseline-ratio">{{
-              formatMarketRatio('1')
-            }}</span></span
-          >
-          <span class="market-reference-label">{{ t('reference') }}</span>
-        </div>
-        <p
-          v-if="
-            reference && (model.baselines.length > 1 || reference.pluginName)
-          "
-          class="market-variant-label"
-        >
-          {{ pricingVariantLabel(reference, t('defaultVariant')) }}
-        </p>
-        <ModelPriceDisplay :id="`${benchmarkId}-price`" :pricing="reference" />
-      </div>
-
-      <!-- Model-wide metrics sit outside the channel lane they do not describe. -->
+      <!-- Model-wide metrics sit outside the channel lane and anchor to the card base. -->
       <ModelStatistics
+        :id="statsId"
         compact
         :performance="performance"
         class="market-card-statistics"
@@ -453,17 +469,16 @@ onBeforeUnmount(() => {
   gap: 0.6rem;
 }
 .market-quote-stage {
-  padding: 0.7rem 0.8rem;
+  padding: 0.75rem 0.85rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--shape-control);
   background: var(--surface-muted);
   min-width: 0;
 }
 .market-quote-health {
-  margin-top: 0.45rem;
+  margin-top: 0.5rem;
 }
-.market-quote-heading,
-.market-baseline-heading {
+.market-quote-heading {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -473,8 +488,7 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
   font-size: 0.75rem;
 }
-.market-quote-heading > span:first-child,
-.market-baseline-heading > span:first-child {
+.market-quote-heading > span:first-child {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -492,27 +506,6 @@ onBeforeUnmount(() => {
   color: var(--accent-text);
   background: var(--accent-soft);
 }
-.market-baseline-strip {
-  padding: 0.55rem 0 0;
-  border-top: 1px dashed var(--border-subtle);
-  min-width: 0;
-}
-.market-baseline-heading {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-  margin-bottom: 0.28rem;
-}
-.market-baseline-ratio {
-  font-family: var(--font-mono);
-  margin-left: 0.2rem;
-  color: var(--text-secondary);
-}
-.market-baseline-strip :deep(.market-price dd strong) {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-.market-reference-label,
 .market-billing-label {
   color: var(--text-tertiary);
   font-size: 0.625rem;
@@ -581,6 +574,25 @@ onBeforeUnmount(() => {
   color: var(--accent-text);
   font-weight: 600;
 }
+.market-rail-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex: none;
+}
+.market-rail-dot.is-good {
+  background: var(--status-success);
+}
+.market-rail-dot.is-warn {
+  background: var(--status-warning);
+}
+.market-rail-dot.is-bad {
+  background: var(--status-danger);
+}
+.market-rail-dot.is-neutral {
+  border: 1.5px solid var(--load-unchecked);
+  background: transparent;
+}
 .market-rail-chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -622,10 +634,10 @@ onBeforeUnmount(() => {
   min-width: 11.5rem;
   max-width: min(16rem, calc(100vw - 2.5rem));
   padding: 0.3rem;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--overlay-border, var(--border-default));
   border-radius: var(--shape-control);
-  background: var(--surface-solid);
-  box-shadow: var(--card-shadow-hover);
+  background: var(--surface-overlay, var(--surface-solid));
+  box-shadow: var(--overlay-shadow, var(--card-shadow-hover));
   display: grid;
   gap: 2px;
 }
@@ -645,6 +657,12 @@ onBeforeUnmount(() => {
 .market-rail-popover-item:hover {
   background: var(--state-hover-layer);
 }
+.market-rail-popover-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
 .market-rail-popover-name {
   min-width: 0;
   overflow: hidden;
@@ -652,7 +670,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .market-card-statistics {
-  margin-bottom: 0.2rem;
+  margin-top: auto;
+  padding-bottom: 0.1rem;
 }
 .market-card-footer {
   display: flex;
@@ -661,7 +680,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.65rem 1rem;
-  margin-top: 0.55rem;
+  margin-top: 0.5rem;
   background: var(--surface-muted);
   border-top: 1px dashed var(--border-subtle);
   border-radius: 0 0 var(--shape-card) var(--shape-card);
@@ -694,10 +713,11 @@ onBeforeUnmount(() => {
   }
 }
 
-html.dark .market-baseline-strip {
-  border-top: 1px solid var(--border-subtle);
+html.dark .market-quote-stage {
+  background: var(--surface-container-low);
 }
 html.dark .market-card-footer {
+  background: var(--surface-container-low);
   border-top: 1px solid var(--border-subtle);
 }
 </style>

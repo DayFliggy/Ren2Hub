@@ -32,20 +32,23 @@ for (const [width, theme] of [
 
     const card = page.locator('[data-model-card][data-model-name="gpt-4.1"]')
     await expect(card).toBeVisible()
-    await expect(card.locator('[data-market-baseline]')).toContainText('$2.500')
+    // Model cards omit platform baseline (kept in comparison matrix & details) and highlight active channel quote.
+    await expect(card.locator('[data-market-baseline]')).toHaveCount(0)
     await expect(card.locator('[data-channel-quote]')).toContainText('$0.500')
-    await expect(
-      card.locator('[data-market-baseline] [data-market-telemetry]')
-    ).toHaveCount(0)
     await expect(card).not.toContainText(/优惠|最优/)
-    // Compact cards show per-channel offer health without fabricating model perf-metrics.
-    await expect(card.locator('[data-market-telemetry]')).toHaveCount(0)
+    // Compact cards show per-channel offer health inside quote stage and neutral placeholder telemetry outside when unsampled.
+    await expect(
+      card.locator('[data-channel-quote] [data-market-telemetry]')
+    ).toHaveCount(0)
+    await expect(card.locator('[data-model-statistics="empty"]')).toContainText(
+      '--'
+    )
+    await expect(
+      card.locator('[data-model-statistics="empty"]')
+    ).not.toContainText(/\d+%/)
     await expect(
       card.locator('[data-channel-quote] [data-catalog-offer-health]')
     ).toBeVisible()
-    await expect(
-      card.locator('[data-market-baseline] [data-catalog-offer-health]')
-    ).toHaveCount(0)
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
       path: testInfo.outputPath('models.png'),

@@ -74,9 +74,25 @@ const metrics = computed(() => {
   ]
 })
 
+const COMPACT_PLACEHOLDER_BARS = 12
+
 const compactRibbon = computed(() => {
   if (props.performance?.status !== 'ready') return []
   return (props.performance.summary.recent_success_series ?? []).slice(-16)
+})
+
+const compactPlaceholderState = computed<'empty' | 'loading' | 'error' | null>(
+  () => {
+    if (!props.compact || !props.performance) return null
+    if (props.performance.status === 'ready') return null
+    return props.performance.status
+  }
+)
+
+const compactPlaceholderAriaLabel = computed(() => {
+  const status = compactPlaceholderState.value
+  if (!status) return undefined
+  return `${t('modelStats.scope', { hours })}：${t(`modelStats.${status}`, { hours })}`
 })
 
 const chartPoints = computed(() => {
@@ -176,6 +192,17 @@ function stepSlot(delta: number, event: KeyboardEvent) {
           }"
         />
       </div>
+      <div
+        v-else-if="compact"
+        class="statistics-mini-ribbon is-placeholder"
+        aria-hidden="true"
+      >
+        <span
+          v-for="index in COMPACT_PLACEHOLDER_BARS"
+          :key="index"
+          class="statistics-mini-bar is-empty"
+        />
+      </div>
     </div>
     <div
       v-if="!compact && chartPoints.length"
@@ -259,6 +286,62 @@ function stepSlot(delta: number, event: KeyboardEvent) {
     </p>
   </div>
   <div
+    v-else-if="compactPlaceholderState"
+    class="model-statistics compact is-placeholder"
+    :class="`is-state-${compactPlaceholderState}`"
+    :data-model-statistics="compactPlaceholderState"
+    data-market-telemetry
+    role="group"
+    :aria-label="compactPlaceholderAriaLabel"
+  >
+    <div class="statistics-summary-row">
+      <dl
+        v-if="compactPlaceholderState === 'empty'"
+        class="statistics-metrics is-placeholder"
+      >
+        <div>
+          <dt>
+            <span class="statistics-dot is-empty" aria-hidden="true" />{{
+              t('modelStats.successRate')
+            }}
+          </dt>
+          <dd>--</dd>
+        </div>
+        <div>
+          <dt>{{ t('modelStats.latency') }}</dt>
+          <dd>--</dd>
+        </div>
+        <div>
+          <dt>{{ t('modelStats.tps') }}</dt>
+          <dd>--</dd>
+        </div>
+      </dl>
+      <span
+        v-else
+        class="statistics-status"
+        :class="{ 'is-error': compactPlaceholderState === 'error' }"
+      >
+        <span
+          class="statistics-dot"
+          :class="compactPlaceholderState === 'error' ? 'is-bad' : 'is-loading'"
+          aria-hidden="true"
+        />{{ t(`modelStats.${compactPlaceholderState}`, { hours }) }}
+      </span>
+      <div
+        class="statistics-mini-ribbon is-placeholder"
+        :class="`is-${compactPlaceholderState}`"
+        aria-hidden="true"
+      >
+        <span
+          v-for="index in COMPACT_PLACEHOLDER_BARS"
+          :key="index"
+          class="statistics-mini-bar"
+          :class="`is-${compactPlaceholderState}`"
+        />
+      </div>
+    </div>
+  </div>
+  <div
     v-else-if="!compact && performance"
     class="model-statistics"
     :class="{ compact }"
@@ -336,6 +419,47 @@ function stepSlot(delta: number, event: KeyboardEvent) {
 .statistics-bar-fill.is-bad,
 .statistics-mini-bar.is-bad {
   background: var(--status-danger);
+}
+.statistics-dot.is-empty {
+  border: 1.5px solid var(--load-unchecked);
+  background: transparent;
+}
+.statistics-dot.is-loading {
+  background: var(--load-unchecked);
+  opacity: 0.7;
+  animation: statistics-pulse 1.4s ease-in-out infinite;
+}
+.statistics-metrics.is-placeholder dt {
+  color: var(--text-tertiary);
+}
+.statistics-metrics.is-placeholder dd {
+  color: var(--load-unchecked);
+  opacity: 0.78;
+}
+.statistics-mini-bar.is-empty {
+  height: 44%;
+  background: var(--load-unchecked);
+  opacity: 0.26;
+}
+.statistics-mini-bar.is-loading {
+  height: 48%;
+  background: var(--load-unchecked);
+  opacity: 0.34;
+  animation: statistics-pulse 1.4s ease-in-out infinite;
+}
+.statistics-mini-bar.is-error {
+  height: 44%;
+  background: var(--status-danger);
+  opacity: 0.28;
+}
+@keyframes statistics-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.52;
+  }
 }
 .statistics-explanation,
 .statistics-scope {
@@ -465,6 +589,10 @@ html.dark .model-statistics-empty {
 @media (prefers-reduced-motion: reduce) {
   .statistics-bar-fill {
     transition: none;
+  }
+  .statistics-dot.is-loading,
+  .statistics-mini-bar.is-loading {
+    animation: none;
   }
 }
 </style>

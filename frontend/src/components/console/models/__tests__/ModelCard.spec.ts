@@ -11,13 +11,13 @@ beforeAll(async () => {
 })
 const noSamples = { status: 'empty' } as const
 describe('native catalog cards', () => {
-  it('separates baseline and channel prices without fabricating measured performance', async () => {
+  it('omits platform baseline on cards and renders neutral placeholder telemetry when unsampled', async () => {
     const model = buildModelMarketCatalog(modelCatalogFixture()).models[0]!
     const wrapper = mount(ModelCard, {
       props: { model, performance: noSamples },
       global: { plugins: [i18n] },
     })
-    expect(wrapper.get('[data-market-baseline]').text()).toContain('$1.250')
+    expect(wrapper.find('[data-market-baseline]').exists()).toBe(false)
     expect(wrapper.get('[data-channel-quote]').text()).toContain('$0.250')
     expect(wrapper.get('[data-channel-quote]').text()).toContain(
       'Fixture channel'
@@ -26,12 +26,14 @@ describe('native catalog cards', () => {
     expect(
       wrapper.find('[data-channel-quote] [data-market-telemetry]').exists()
     ).toBe(false)
-    expect(wrapper.find('[data-model-statistics]').exists()).toBe(false)
+    const placeholder = wrapper.get('[data-model-statistics="empty"]')
+    expect(placeholder.attributes('aria-label')).toContain('近 24 小时')
+    expect(placeholder.text()).toContain('--')
     expect(wrapper.find('[data-model-statistics-unavailable]').exists()).toBe(
       false
     )
     expect(wrapper.text()).not.toContain('近 24 小时')
-    expect(wrapper.text()).not.toMatch(/\d+%|TPS|优惠|最低|最优/)
+    expect(wrapper.text()).not.toMatch(/\d+%|优惠|最低|最优/)
     await wrapper.get('button[aria-label*="模型详情"]').trigger('click')
     expect(wrapper.emitted('detail')).toEqual([
       ['fixture-model', 'fixture-model:9'],
@@ -182,7 +184,7 @@ describe('native catalog cards', () => {
       wrapper.unmount()
     }
   })
-  it('keeps ready model statistics but omits repeated compact scope and empty states', () => {
+  it('renders ready model statistics and distinct compact placeholder states for empty/loading/error', () => {
     const model = buildModelMarketCatalog(modelCatalogFixture()).models[0]!
     const wrapper = mount(ModelCard, {
       props: {
@@ -205,6 +207,16 @@ describe('native catalog cards', () => {
     expect(statistics.attributes('aria-label')).toContain('近 24 小时')
     expect(statistics.text()).not.toContain('近 24 小时')
     wrapper.unmount()
+
+    for (const status of ['loading', 'error'] as const) {
+      const stateWrapper = mount(ModelCard, {
+        props: { model, performance: { status } },
+        global: { plugins: [i18n] },
+      })
+      const bar = stateWrapper.get(`[data-model-statistics="${status}"]`)
+      expect(bar.text()).not.toMatch(/\d+%/)
+      stateWrapper.unmount()
+    }
   })
   it('keeps >3 channels on a single rail with an overflow popover that switches preview', async () => {
     const fixture = modelCatalogFixture()

@@ -379,23 +379,31 @@ const filteredScopeText = computed(() =>
   flex: none;
 }
 .catalog-health-pill.is-good {
-  border-color: var(--status-success);
+  border-color: color-mix(in srgb, var(--status-success) 45%, transparent);
   background: var(--status-success-soft);
   color: var(--status-success-text);
 }
 .catalog-health-pill.is-warn {
-  border-color: var(--status-warning);
+  border-color: color-mix(in srgb, var(--status-warning) 48%, transparent);
   background: var(--status-warning-soft);
   color: var(--status-warning-text);
 }
 .catalog-health-pill.is-bad {
-  border-color: var(--status-danger);
+  border-color: color-mix(in srgb, var(--status-danger) 48%, transparent);
   background: var(--status-danger-soft);
   color: var(--status-danger-text);
 }
 .catalog-health-pill.is-neutral {
-  border-color: var(--border-subtle);
-  background: var(--surface-muted);
+  border: 1px dashed var(--border-default);
+  background: var(--surface-solid);
+  color: var(--text-secondary);
+}
+.catalog-health-pill.is-neutral svg {
+  color: var(--load-unchecked);
+}
+html.dark .catalog-health-pill.is-neutral {
+  border-color: color-mix(in srgb, var(--load-unchecked) 38%, transparent);
+  background: color-mix(in srgb, var(--load-unchecked) 10%, transparent);
   color: var(--text-secondary);
 }
 .catalog-health-secondary {

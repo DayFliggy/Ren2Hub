@@ -180,15 +180,16 @@ describe('native model performance', () => {
         .exists()
     ).toBe(true)
   })
-  it('reports models without samples instead of a zero success rate', async () => {
+  it('shows neutral placeholder telemetry for models without samples instead of a zero success rate', async () => {
     mockFeeds(async () => performanceSummary([]))
     const view = render()
     await flushPromises()
-    expect(view.find('[data-model-statistics]').exists()).toBe(false)
+    const placeholder = view.get('[data-model-statistics="empty"]')
+    expect(placeholder.text()).toContain('--')
     expect(view.find('[data-model-statistics-unavailable]').exists()).toBe(
       false
     )
-    expect(view.get('[data-model-card]').text()).not.toMatch(/\d%|TPS/)
+    expect(view.get('[data-model-card]').text()).not.toMatch(/\d%/)
   })
   it('shows a load error without inventing statistics and retries on demand', async () => {
     mockFeeds(async () => {
@@ -196,11 +197,13 @@ describe('native model performance', () => {
     })
     const view = render()
     await flushPromises()
-    expect(view.find('[data-model-statistics]').exists()).toBe(false)
+    expect(view.get('[data-model-statistics="error"]').text()).toContain(
+      '统计加载失败'
+    )
     expect(view.get('[data-model-performance-error]').text()).toContain(
       '统计加载失败'
     )
-    expect(view.get('[data-model-card]').text()).not.toMatch(/\d%|TPS/)
+    expect(view.get('[data-model-card]').text()).not.toMatch(/\d%/)
     expect(view.get('[data-channel-quote]').text()).toContain('$0.250')
     const alert = view.get('[data-model-performance-error]')
     expect(alert.attributes('role')).toBe('alert')
