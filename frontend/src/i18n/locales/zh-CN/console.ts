@@ -687,11 +687,19 @@ export default {
       },
       modeHints: {
         auto: '按健康、质量、负载与优先级自动择优；未选渠道时使用全平台，选入渠道后自动收窄范围。',
-        ordered: '按下方顺序逐个尝试已启用的渠道，仅检查容量与模型匹配。',
+        ordered: '按已选渠道顺序逐个尝试已启用的渠道，仅检查容量与模型匹配。',
       },
       orderedInactiveHint: '当前所有渠道均已暂停，顺序路由暂未生效',
       orderedRequired: '顺序路由至少需要选择 1 个渠道。',
       switchToAuto: '切回自动路由（全平台）',
+      goSelectChannels: '选择渠道',
+      editPolicy: '修改路由方式',
+      policySummaryMode: '当前方式：{mode}',
+      policySummaryRatio: '倍率上限 ×{ratio}',
+      pendingOrderedHint:
+        '已切至顺序路由：请从下方勾选至少 1 条渠道并调整顺序后保存。',
+      partialSavedNotice:
+        '令牌基础设置已保存，但路由方式未能保存；请处理下方提示后重试。',
       revertedToPlatform: '已清空所选渠道，路由范围自动恢复为全平台。',
       allPausedNotice:
         '所选渠道已全部暂停，当前请求自动退回全平台路由（仍受模型限制与倍率上限约束），已保留你的渠道列表。',
@@ -705,7 +713,8 @@ export default {
         '当前默认使用全平台可用渠道自动择优；可从下方勾选渠道收窄范围。',
       emptyOrdered: '顺序路由至少需要选择 1 条渠道，请从下方候选渠道勾选。',
       orderedListHint: '拖动或使用上下箭头调整尝试顺序',
-      autoListHint: '仅在下方已启用渠道内自动择优，列表顺序不参与排序',
+      autoListHint:
+        '仅在下方已启用渠道内自动择优，列表顺序不参与排序；可在编辑令牌中切换为顺序路由',
       clearToPlatform: '清空为全平台',
       candidateTitle: '候选渠道',
       searchPlaceholder: '搜索渠道名称、#ID 或模型…',

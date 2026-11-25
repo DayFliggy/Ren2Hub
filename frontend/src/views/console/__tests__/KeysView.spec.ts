@@ -208,14 +208,15 @@ describe('KeysView token routing entry', () => {
     ['live', false, 0],
     ['disabled', true, 0],
   ])(
-    'makes desktop and mobile route chips clickable for %s with read %s',
+    'makes desktop and mobile route chips and action buttons available for %s with read %s',
     async (routing, read, count) => {
       expect(await mountWithAccess(routing, read)).toHaveLength(count)
+      expect(wrapper!.findAll('[data-key-routing-action]')).toHaveLength(count)
       expect(wrapper!.findAll('a[data-route="token-routing"]')).toHaveLength(0)
     }
   )
 
-  it('labels each key by effective routing mode and channel scope and opens the standalone routing modal', async () => {
+  it('labels each key by effective routing mode and channel scope and opens the standalone routing modal from both chip and action button', async () => {
     await mountWithAccess('live', true)
     const labels = wrapper!
       .findAll('td[headers$="-type"]')
@@ -241,6 +242,35 @@ describe('KeysView token routing entry', () => {
     expect(routingModal.props('token')?.id).toBe(5)
     expect(formModal.props('open')).toBe(false)
     expect(wrapper!.find('[data-key-created-notice]').exists()).toBe(false)
+
+    // Switch from routing modal to edit modal via edit-policy, then back with ordered intent.
+    routingModal.vm.$emit('edit-policy', tokens[4]!)
+    await nextTick()
+    await nextTick()
+    expect(routingModal.props('open')).toBe(false)
+    expect(formModal.props('open')).toBe(true)
+    expect(formModal.props('editing')?.id).toBe(5)
+
+    formModal.vm.$emit('open-routing', {
+      token: tokens[0]!,
+      initialMode: 'ordered',
+    })
+    await nextTick()
+    await nextTick()
+    expect(formModal.props('open')).toBe(false)
+    expect(routingModal.props('open')).toBe(true)
+    expect(routingModal.props('token')?.id).toBe(1)
+    expect(routingModal.props('initialMode')).toBe('ordered')
+
+    // Dedicated row action button opens the standalone routing modal directly.
+    routingModal.vm.$emit('close')
+    await nextTick()
+    await wrapper!
+      .findAll('td[headers$="-actions"] [data-key-routing-action]')[1]!
+      .trigger('click')
+    expect(routingModal.props('open')).toBe(true)
+    expect(routingModal.props('token')?.id).toBe(2)
+    expect(routingModal.props('initialMode')).toBeNull()
   })
 })
 

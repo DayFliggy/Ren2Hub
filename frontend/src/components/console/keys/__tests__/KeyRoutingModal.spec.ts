@@ -201,7 +201,7 @@ describe('KeyRoutingModal', () => {
     }
   })
 
-  it('auto-reverts to platform on last channel removal, blocks empty ordered mode, and refetches on draft ratio change', async () => {
+  it('shows read-only policy summary, preserves max_channel_ratio on save, and emits edit-policy', async () => {
     setupPermissions('live', true, true)
     const candidates = vi
       .spyOn(tokenRoutingApi, 'candidates')
@@ -211,19 +211,45 @@ describe('KeyRoutingModal', () => {
       mode: 'auto',
       selected_only: true,
       version: 2,
-      max_channel_ratio: null,
+      max_channel_ratio: '1.5',
       entries: [{ channel_id: 11, enabled: true, position: 0 }],
     })
-    const saveRouting = vi.spyOn(tokenRoutingApi, 'save')
+    const saveRouting = vi.spyOn(tokenRoutingApi, 'save').mockResolvedValue({
+      token_id: 7,
+      mode: 'auto',
+      selected_only: false,
+      version: 3,
+      max_channel_ratio: '1.5',
+      entries: [],
+    })
 
+    const token = makeToken()
     const wrapper = mount(KeyRoutingModal, {
       attachTo: document.body,
       global: { plugins: [i18n] },
-      props: { open: true, token: makeToken() },
+      props: { open: true, token },
     })
     try {
       await flushPromises()
-      // Remove the only channel in auto mode -> reverts to platform.
+      expect(candidates).toHaveBeenCalledWith(
+        { model_limits: [], max_channel_ratio: '1.5' },
+        expect.any(AbortSignal)
+      )
+      expect(document.querySelectorAll('[role="radio"]')).toHaveLength(0)
+      expect(
+        document.querySelector('[name="token-max-channel-ratio"]')
+      ).toBeNull()
+      const summary = document.querySelector('[data-routing-policy-summary]')!
+      expect(summary.textContent).toContain('自动路由')
+      expect(summary.textContent).toContain('×1.5')
+
+      document
+        .querySelector<HTMLButtonElement>('[data-routing-edit-policy]')!
+        .click()
+      await nextTick()
+      expect(wrapper.emitted('edit-policy')).toEqual([[token]])
+
+      // Remove the only channel in auto mode -> reverts to platform while preserving max_channel_ratio.
       document
         .querySelector<HTMLButtonElement>('[data-candidate-channel-id="11"]')!
         .click()
@@ -232,38 +258,68 @@ describe('KeyRoutingModal', () => {
         document.querySelector('[data-key-routing-modal]')!.textContent
       ).toContain('路由范围自动恢复为全平台')
 
-      // Switch to ordered mode with 0 channels -> blocks saving.
-      const orderedRadio = [
-        ...document.querySelectorAll('[role="radio"]'),
-      ].find((el) => el.textContent?.includes('顺序路由')) as HTMLButtonElement
-      orderedRadio.click()
-      await nextTick()
-      expect(
-        document.querySelector('[data-routing-ordered-empty]')
-      ).not.toBeNull()
-      expect(saveButton().disabled).toBe(true)
-      expect(saveRouting).not.toHaveBeenCalled()
-
-      // Invalid ratio disables save; valid draft ratio triggers debounced candidate refetch.
-      vi.useFakeTimers()
-      const ratioInput = document.querySelector<HTMLInputElement>(
-        '[name="token-max-channel-ratio"]'
-      )!
-      ratioInput.value = 'abc'
-      ratioInput.dispatchEvent(new Event('input', { bubbles: true }))
-      await nextTick()
-      expect(ratioInput.getAttribute('aria-invalid')).toBe('true')
-      expect(saveButton().disabled).toBe(true)
-
-      ratioInput.value = '1.2'
-      ratioInput.dispatchEvent(new Event('input', { bubbles: true }))
-      await nextTick()
-      vi.advanceTimersByTime(260)
+      saveButton().click()
       await flushPromises()
-      expect(candidates).toHaveBeenLastCalledWith(
-        { model_limits: [], max_channel_ratio: '1.2' },
-        expect.any(AbortSignal)
-      )
+      expect(saveRouting).toHaveBeenCalledWith(7, {
+        mode: 'auto',
+        selected_only: false,
+        version: 2,
+        max_channel_ratio: '1.5',
+        entries: [],
+      })
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('supports initialMode=ordered jump from edit modal to pick channels and save ordered mode in one request', async () => {
+    setupPermissions('live', true, true)
+    vi.spyOn(tokenRoutingApi, 'candidates').mockResolvedValue(sampleChannels)
+    vi.spyOn(tokenRoutingApi, 'get').mockResolvedValue({
+      token_id: 7,
+      mode: 'auto',
+      selected_only: false,
+      version: 1,
+      max_channel_ratio: '2',
+      entries: [],
+    })
+    const saveRouting = vi.spyOn(tokenRoutingApi, 'save').mockResolvedValue({
+      token_id: 7,
+      mode: 'ordered',
+      selected_only: true,
+      version: 2,
+      max_channel_ratio: '2',
+      entries: [{ channel_id: 11, enabled: true, position: 0 }],
+    })
+
+    const wrapper = mount(KeyRoutingModal, {
+      attachTo: document.body,
+      global: { plugins: [i18n] },
+      props: { open: true, token: makeToken(), initialMode: 'ordered' },
+    })
+    try {
+      await flushPromises()
+      expect(
+        document.querySelector('[data-routing-ordered-empty]')!.textContent
+      ).toContain('已切至顺序路由')
+      expect(saveButton().disabled).toBe(true)
+
+      document
+        .querySelector<HTMLButtonElement>('[data-candidate-channel-id="11"]')!
+        .click()
+      await nextTick()
+      expect(document.querySelector('[data-routing-ordered-empty]')).toBeNull()
+      expect(saveButton().disabled).toBe(false)
+
+      saveButton().click()
+      await flushPromises()
+      expect(saveRouting).toHaveBeenCalledWith(7, {
+        mode: 'ordered',
+        selected_only: true,
+        version: 1,
+        max_channel_ratio: '2',
+        entries: [{ channel_id: 11, enabled: true, position: 0 }],
+      })
     } finally {
       wrapper.unmount()
     }

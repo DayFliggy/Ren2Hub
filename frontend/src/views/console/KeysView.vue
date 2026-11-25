@@ -7,13 +7,15 @@ import {
   Plus,
   Power,
   PowerOff,
+  Route,
   Trash2,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { parseTokenPage, parseUserModels } from '@/api/liveContracts'
+import type { TokenRouteMode } from '@/api/tokenRouting'
 import { ApiError, type PageResult } from '@/api/types'
 import type { TokenSummary } from '@/types/console'
 import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
@@ -73,25 +75,27 @@ const models = ref<string[]>([])
 const formOpen = ref(false)
 const editing = ref<TokenSummary | null>(null)
 const routingToken = ref<TokenSummary | null>(null)
+const routingInitialMode = ref<TokenRouteMode | null>(null)
 const deleting = ref<TokenSummary | null>(null)
 const batchDeleting = ref(false)
 const deleteLoading = ref(false)
 const revealTokenId = ref<number | null>(null)
 const clientConfigTokenId = ref<number | null>(null)
 
-// Fixed columns sum to 628px (44 selection + 216 type + 144 quota + 224 actions),
-// leaving ~142px content each for name and key at the 960px table breakpoint.
+// Fixed columns sum to 628px when routing is enabled (44 selection + 188 type
+// + 136 quota + 260 actions), keeping ~142px content each for name and key at
+// the 960px table breakpoint even with 44px touch/tablet controls.
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
-  { key: 'type', label: t('keys.colType'), width: '216px' },
+  { key: 'type', label: t('keys.colType'), width: '188px' },
   { key: 'key', label: t('keys.colKey') },
-  { key: 'quota', label: t('keys.colQuota'), width: '144px' },
-  // Four actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding.
+  { key: 'quota', label: t('keys.colQuota'), width: '136px' },
+  // Five actions when routing is enabled (four otherwise): 32px mouse or 44px touch/tablet, plus gaps and cell padding.
   {
     key: 'actions',
     label: t('keys.colActions'),
     align: 'right',
-    width: '224px',
+    width: routingEnabled.value ? '260px' : '224px',
   },
 ])
 
@@ -209,8 +213,32 @@ function openEdit(row: TokenSummary) {
   formOpen.value = true
 }
 
-function openRouting(row: TokenSummary) {
+function openRouting(
+  row: TokenSummary,
+  initialMode: TokenRouteMode | null = null
+) {
+  routingInitialMode.value = initialMode
   routingToken.value = row
+}
+
+function closeRouting() {
+  routingToken.value = null
+  routingInitialMode.value = null
+}
+
+async function switchFormToRouting(payload: {
+  token: TokenSummary
+  initialMode?: TokenRouteMode
+}) {
+  formOpen.value = false
+  await nextTick()
+  openRouting(payload.token, payload.initialMode ?? null)
+}
+
+async function switchRoutingToEdit(row: TokenSummary) {
+  closeRouting()
+  await nextTick()
+  openEdit(row)
 }
 
 function copyKey(row: TokenSummary) {
@@ -353,6 +381,14 @@ onBeforeUnmount(() => {
             @dblclick.stop
           >
             <IconButton
+              v-if="routingEnabled"
+              data-key-routing-action
+              :label="t('keys.routing')"
+              @click="openRouting(row as TokenSummary)"
+            >
+              <Route :size="16" aria-hidden="true" />
+            </IconButton>
+            <IconButton
               :label="clientText('title')"
               @click="clientConfigTokenId = (row as TokenSummary).id"
             >
@@ -461,14 +497,17 @@ onBeforeUnmount(() => {
       :models="models"
       @close="formOpen = false"
       @saved="onSaved"
+      @open-routing="switchFormToRouting"
     />
 
     <!-- standalone token channel routing -->
     <KeyRoutingModal
       :open="routingToken !== null"
       :token="routingToken"
-      @close="routingToken = null"
+      :initial-mode="routingInitialMode"
+      @close="closeRouting"
       @saved="onSaved"
+      @edit-policy="switchRoutingToEdit"
     />
 
     <KeyRevealModal

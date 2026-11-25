@@ -283,7 +283,7 @@ for (const theme of ['light', 'dark'] as const) {
           }
           const actions = page.locator('td[headers$="-actions"]')
           const controls = actions.locator('button, a')
-          await expect(controls).toHaveCount(4)
+          await expect(controls).toHaveCount(5)
           const bounds = await controls.evaluateAll((nodes) =>
             nodes.map((node) => {
               const { x, y, width, height } = node.getBoundingClientRect()

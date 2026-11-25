@@ -719,12 +719,20 @@ export default {
       modeHints: {
         auto: 'Picks by health, quality, load, and priority. Uses all platform channels when none are selected and narrows automatically once you pick channels.',
         ordered:
-          'Tries enabled channels in the order below, checking only capacity and model support.',
+          'Tries enabled selected channels in order, checking only capacity and model support.',
       },
       orderedInactiveHint:
         'All entries are paused; ordered routing is currently inactive',
       orderedRequired: 'Ordered routing requires at least one channel.',
       switchToAuto: 'Switch to automatic (all platform)',
+      goSelectChannels: 'Select channels',
+      editPolicy: 'Edit routing policy',
+      policySummaryMode: 'Mode: {mode}',
+      policySummaryRatio: 'Multiplier cap ×{ratio}',
+      pendingOrderedHint:
+        'Switching to ordered routing: select at least one channel below, arrange the order, and save.',
+      partialSavedNotice:
+        'Key details were saved, but routing policy failed to save. Resolve the error below and retry.',
       revertedToPlatform:
         'All selected channels cleared; scope restored to all platform channels.',
       allPausedNotice:
@@ -741,7 +749,7 @@ export default {
         'Ordered routing requires at least one channel. Select channels from the list below.',
       orderedListHint: 'Drag or use the arrow buttons to set priority order',
       autoListHint:
-        'Automatic routing picks among enabled channels below; order is ignored',
+        'Automatic routing picks among enabled channels below; switch to ordered routing in Edit key to prioritize order',
       clearToPlatform: 'Clear to all platform',
       candidateTitle: 'Candidate channels',
       searchPlaceholder: 'Search by name, #ID, or model…',

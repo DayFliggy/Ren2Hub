@@ -137,6 +137,13 @@ describe('KeyMobileList', () => {
     expect(configureRouting).toHaveBeenCalledWith(
       expect.objectContaining({ id: 4 })
     )
+
+    const routingButtons = wrapper.findAll('[data-key-routing-action]')
+    expect(routingButtons).toHaveLength(4)
+    await routingButtons[0]!.trigger('click')
+    expect(configureRouting).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1 })
+    )
   })
 
   it('says why a key is blocked next to its ring, not by colour alone', async () => {
@@ -228,5 +235,6 @@ describe('KeyMobileList', () => {
     expect(actions.viewKey).toHaveBeenCalledWith(token)
     expect(actions.editKey).toHaveBeenCalledWith(token)
     expect(actions.deleteKey).toHaveBeenCalledWith(token)
+    expect(row.find('[data-key-routing-action]').exists()).toBe(false)
   })
 })

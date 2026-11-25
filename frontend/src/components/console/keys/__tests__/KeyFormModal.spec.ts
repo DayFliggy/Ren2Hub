@@ -10,26 +10,36 @@ import {
   vi,
 } from 'vitest'
 
+import { createPinia, setActivePinia } from 'pinia'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
-import i18n, { loadMessageDomain } from '@/i18n'
+import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { TokenSummary } from '@/types/console'
 import { api } from '@/api/console'
+import { parsePublicStatus } from '@/api/public'
+import { tokenRoutingApi, type TokenRoute } from '@/api/tokenRouting'
+import { ApiError } from '@/api/types'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { configureQuotaDisplay } from '@/utils/format'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
+  await setLocale('zh-CN')
 })
 
-beforeEach(() => {
-  i18n.global.locale.value = 'zh-CN'
+beforeEach(async () => {
+  await setLocale('zh-CN')
 })
 
 afterEach(() => vi.restoreAllMocks())
 
-function mountForm(editing: TokenSummary | null = null) {
+function mountForm(
+  editing: TokenSummary | null = null,
+  pinia?: ReturnType<typeof createPinia>
+) {
   return mount(KeyFormModal, {
     attachTo: document.body,
-    global: { plugins: [i18n] },
+    global: { plugins: pinia ? [i18n, pinia] : [i18n] },
     props: { open: true, editing, models: ['gpt-4o'] },
   })
 }
@@ -422,6 +432,337 @@ describe('KeyFormModal expiry', () => {
     const stored = Date.UTC(2026, 9, 12, 15, 0, 30) / 1000
     for (const value of ['', '2026-02-30T10:00:00']) {
       expect(await editExpiry(stored, value)).toEqual([])
+    }
+  })
+})
+
+describe('KeyFormModal routing policy', () => {
+  let activePinia: ReturnType<typeof createPinia> | undefined
+
+  function setupPermissions(
+    feature: 'live' | 'disabled',
+    read: boolean,
+    write: boolean
+  ) {
+    activePinia = createPinia()
+    setActivePinia(activePinia)
+    useAppStore().status = parsePublicStatus({
+      frontend_capabilities: { token_private_routing: feature },
+    })
+    useAuthStore().persist({
+      id: 7,
+      username: 'user',
+      display_name: 'User',
+      email: 'user@example.com',
+      role: 1,
+      status: 1,
+      quota: 100,
+      used_quota: 0,
+      request_count: 0,
+      permissions: {
+        admin_permissions: { routing: { read, write } },
+      },
+    })
+  }
+
+  function makeToken(overrides: Partial<TokenSummary> = {}): TokenSummary {
+    return {
+      id: 7,
+      name: 'Prod Key',
+      key_preview: 'sk-****1234',
+      type: 'auto',
+      selected_only: false,
+      route_channel_count: 0,
+      enabled_route_channel_count: 0,
+      route_scope: 'platform',
+      effective_mode: 'auto',
+      allow_user_quota_query: true,
+      status: 1,
+      used_quota: '0',
+      remain_quota: 0,
+      unlimited: true,
+      model_limits: [],
+      ip_limits: [],
+      expired_time: -1,
+      created_time: 1_722_000_000,
+      ...overrides,
+    }
+  }
+
+  function confirmButton(): HTMLButtonElement {
+    return [...document.body.querySelectorAll('button')].find(
+      (item) => item.textContent?.trim() === i18n.global.t('common.confirm')
+    )!
+  }
+
+  afterEach(() => {
+    activePinia = undefined
+    setActivePinia(undefined as unknown as ReturnType<typeof createPinia>)
+    document.body.innerHTML = ''
+    vi.restoreAllMocks()
+  })
+
+  it('keeps creation free of routing controls even with full routing permission', async () => {
+    setupPermissions('live', true, true)
+    const getRouting = vi.spyOn(tokenRoutingApi, 'get')
+    const wrapper = mountForm(null, activePinia)
+    try {
+      await flushPromises()
+      expect(getRouting).not.toHaveBeenCalled()
+      expect(document.querySelector('[data-key-form-routing]')).toBeNull()
+      expect(document.querySelectorAll('[role="radio"]')).toHaveLength(0)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('edits routing mode and multiplier cap while preserving entries, and skips PUT /routing when unchanged', async () => {
+    setupPermissions('live', true, true)
+    const putBase = vi.spyOn(api, 'put').mockResolvedValue(null)
+    vi.spyOn(tokenRoutingApi, 'get').mockResolvedValue({
+      token_id: 7,
+      mode: 'ordered',
+      selected_only: true,
+      version: 4,
+      max_channel_ratio: '1',
+      entries: [
+        { channel_id: 11, enabled: true, position: 0 },
+        { channel_id: 22, enabled: false, position: 1 },
+      ],
+    })
+    const saveRouting = vi.spyOn(tokenRoutingApi, 'save').mockResolvedValue({
+      token_id: 7,
+      mode: 'auto',
+      selected_only: true,
+      version: 5,
+      max_channel_ratio: '2.5',
+      entries: [
+        { channel_id: 11, enabled: true, position: 0 },
+        { channel_id: 22, enabled: false, position: 1 },
+      ],
+    })
+
+    const wrapper = mountForm(
+      makeToken({
+        type: 'ordered',
+        selected_only: true,
+        route_channel_count: 2,
+        enabled_route_channel_count: 1,
+        route_scope: 'selected',
+        effective_mode: 'ordered',
+      }),
+      activePinia
+    )
+    try {
+      await flushPromises()
+      const ratioInput = document.querySelector<HTMLInputElement>(
+        '[name="token-max-channel-ratio"]'
+      )!
+      // Canonical equivalent ratio ("1.0" vs "1") must not trigger PUT /routing.
+      ratioInput.value = '1.0'
+      ratioInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      confirmButton().click()
+      await flushPromises()
+      expect(putBase).toHaveBeenCalledTimes(1)
+      expect(saveRouting).not.toHaveBeenCalled()
+
+      // Switch mode to auto and change multiplier cap to 2.5.
+      const autoRadio = [...document.querySelectorAll('[role="radio"]')].find(
+        (el) => el.textContent?.includes('自动路由')
+      ) as HTMLButtonElement
+      autoRadio.click()
+      ratioInput.value = '2.5'
+      ratioInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      confirmButton().click()
+      await flushPromises()
+
+      expect(saveRouting).toHaveBeenCalledWith(7, {
+        mode: 'auto',
+        selected_only: true,
+        version: 4,
+        max_channel_ratio: '2.5',
+        entries: [
+          { channel_id: 11, enabled: true, position: 0 },
+          { channel_id: 22, enabled: false, position: 1 },
+        ],
+      })
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('blocks empty ordered mode, validates ratio, and jumps to channel picker with ordered intent', async () => {
+    setupPermissions('live', true, true)
+    const putBase = vi.spyOn(api, 'put').mockResolvedValue(null)
+    const saveRouting = vi.spyOn(tokenRoutingApi, 'save')
+    vi.spyOn(tokenRoutingApi, 'get').mockResolvedValue({
+      token_id: 7,
+      mode: 'auto',
+      selected_only: false,
+      version: 1,
+      max_channel_ratio: null,
+      entries: [],
+    })
+
+    const editing = makeToken()
+    const wrapper = mountForm(editing, activePinia)
+    try {
+      await flushPromises()
+      const orderedRadio = [
+        ...document.querySelectorAll('[role="radio"]'),
+      ].find((el) => el.textContent?.includes('顺序路由')) as HTMLButtonElement
+      orderedRadio.click()
+      await nextTick()
+
+      expect(
+        document.querySelector('[data-routing-ordered-empty]')
+      ).not.toBeNull()
+      expect(confirmButton().disabled).toBe(true)
+      expect(putBase).not.toHaveBeenCalled()
+      expect(saveRouting).not.toHaveBeenCalled()
+
+      document
+        .querySelector<HTMLButtonElement>('[data-routing-go-select]')!
+        .click()
+      await nextTick()
+      expect(wrapper.emitted('open-routing')).toEqual([
+        [{ token: editing, initialMode: 'ordered' }],
+      ])
+
+      const ratioInput = document.querySelector<HTMLInputElement>(
+        '[name="token-max-channel-ratio"]'
+      )!
+      ratioInput.value = 'abc'
+      ratioInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      expect(ratioInput.getAttribute('aria-invalid')).toBe('true')
+      expect(confirmButton().disabled).toBe(true)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('handles 409 routing conflict with reload and avoids repeating PUT /api/token/ on retry', async () => {
+    setupPermissions('live', true, true)
+    const putBase = vi.spyOn(api, 'put').mockResolvedValue(null)
+    const getRouting = vi
+      .spyOn(tokenRoutingApi, 'get')
+      .mockResolvedValueOnce({
+        token_id: 7,
+        mode: 'auto',
+        selected_only: false,
+        version: 1,
+        max_channel_ratio: null,
+        entries: [],
+      })
+      .mockResolvedValueOnce({
+        token_id: 7,
+        mode: 'auto',
+        selected_only: false,
+        version: 2,
+        max_channel_ratio: null,
+        entries: [],
+      } as TokenRoute)
+    const saveRouting = vi
+      .spyOn(tokenRoutingApi, 'save')
+      .mockRejectedValueOnce(new ApiError('conflict', { status: 409 }))
+      .mockResolvedValueOnce({
+        token_id: 7,
+        mode: 'auto',
+        selected_only: false,
+        version: 3,
+        max_channel_ratio: '2',
+        entries: [],
+      })
+
+    const wrapper = mountForm(makeToken(), activePinia)
+    try {
+      await flushPromises()
+      const ratioInput = document.querySelector<HTMLInputElement>(
+        '[name="token-max-channel-ratio"]'
+      )!
+      ratioInput.value = '2'
+      ratioInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+
+      confirmButton().click()
+      await flushPromises()
+      expect(putBase).toHaveBeenCalledTimes(1)
+      expect(wrapper.emitted('saved')).toHaveLength(1)
+      expect(wrapper.emitted('close')).toBeUndefined()
+      const errBanner = document.querySelector('[data-routing-save-error]')!
+      expect(errBanner.textContent).toContain('已被其他操作修改')
+      expect(confirmButton().disabled).toBe(true)
+
+      ;(errBanner.querySelector('button') as HTMLButtonElement).click()
+      await flushPromises()
+      expect(getRouting).toHaveBeenCalledTimes(2)
+
+      const reloadedRatioInput = document.querySelector<HTMLInputElement>(
+        '[name="token-max-channel-ratio"]'
+      )!
+      reloadedRatioInput.value = '2'
+      reloadedRatioInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      confirmButton().click()
+      await flushPromises()
+      // Base payload did not change after the partial save, so PUT /api/token/ is not repeated.
+      expect(putBase).toHaveBeenCalledTimes(1)
+      expect(saveRouting).toHaveBeenCalledTimes(2)
+      expect(saveRouting).toHaveBeenLastCalledWith(7, {
+        mode: 'auto',
+        selected_only: false,
+        version: 2,
+        max_channel_ratio: '2',
+        entries: [],
+      })
+      expect(wrapper.emitted('close')).toEqual([[]])
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('keeps base fields editable when routing is read-only and hides routing when disabled', async () => {
+    setupPermissions('live', true, false)
+    const putBase = vi.spyOn(api, 'put').mockResolvedValue(null)
+    const saveRouting = vi.spyOn(tokenRoutingApi, 'save')
+    vi.spyOn(tokenRoutingApi, 'get').mockResolvedValue({
+      token_id: 7,
+      mode: 'auto',
+      selected_only: false,
+      version: 1,
+      max_channel_ratio: '1.5',
+      entries: [],
+    })
+
+    const wrapper = mountForm(makeToken(), activePinia)
+    try {
+      await flushPromises()
+      expect(document.querySelector('[data-routing-readonly]')).not.toBeNull()
+      expect(
+        document.querySelector<HTMLInputElement>(
+          '[name="token-max-channel-ratio"]'
+        )?.disabled
+      ).toBe(true)
+      expect(confirmButton().disabled).toBe(false)
+
+      confirmButton().click()
+      await flushPromises()
+      expect(putBase).toHaveBeenCalledTimes(1)
+      expect(saveRouting).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
+
+    setupPermissions('disabled', true, true)
+    const hiddenWrapper = mountForm(makeToken(), activePinia)
+    try {
+      await flushPromises()
+      expect(document.querySelector('[data-key-form-routing]')).toBeNull()
+    } finally {
+      hiddenWrapper.unmount()
     }
   })
 })

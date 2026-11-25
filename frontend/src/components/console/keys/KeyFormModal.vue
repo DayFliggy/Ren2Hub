@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref, useId, watch } from 'vue'
+import { AlertTriangle, Info, Lock, RefreshCw } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
+import { getActivePinia } from 'pinia'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
+import {
+  tokenRoutingApi,
+  type TokenRoute,
+  type TokenRouteEntry,
+  type TokenRouteMode,
+} from '@/api/tokenRouting'
 import { ApiError } from '@/api/types'
 import type { TokenSummary } from '@/types/console'
 import ChipPicker from '@/components/common/ChipPicker.vue'
@@ -11,7 +19,12 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
+import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
+import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
+import { isValidChannelRatio } from '@/utils/channelRatio'
 import { formatTime, fromDateTimeLocal, toDateTimeLocal } from '@/utils/format'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
 
@@ -25,10 +38,32 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   saved: []
+  'open-routing': [
+    payload: { token: TokenSummary; initialMode?: TokenRouteMode },
+  ]
 }>()
 
 const { t } = useI18n()
 const toast = useToast()
+
+const routingFeatureOn = computed(() => {
+  if (!getActivePinia()) return false
+  return useAppStore().isFeatureEnabled(tokenRoutingAccess.feature)
+})
+const canReadRouting = computed(() => {
+  if (!routingFeatureOn.value || !getActivePinia()) return false
+  return useAuthStore().hasPermission(
+    tokenRoutingAccess.requiresPermission.resource,
+    tokenRoutingAccess.requiresPermission.action
+  )
+})
+const canWriteRouting = computed(() => {
+  if (!canReadRouting.value || !getActivePinia()) return false
+  return useAuthStore().hasPermission('routing', 'write')
+})
+const showRoutingPolicy = computed(
+  () => props.editing !== null && canReadRouting.value
+)
 
 const form = reactive({
   allow_user_quota_query: true,
@@ -43,15 +78,174 @@ const form = reactive({
 let loadedExpireAt = ''
 let loadedQuota: { amount: string; quota: number } | null = null
 let initialModelLimitsKey = ''
+let savedBasePayloadKey = ''
 
 const saving = ref(false)
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
+const baseSavedPartial = ref(false)
 
 /** Which optional sections are expanded (hidden by default). */
 const vis = reactive({
   expiry: false,
 })
+
+/* ---- Edit-mode routing policy (mode + max channel ratio) ---------------- */
+const routeRequest = useLatestRequest()
+const routeLoading = ref(false)
+const routeLoadError = ref('')
+const routeSaveError = ref('')
+const routeConflict = ref(false)
+const routeVersion = ref(0)
+const routeEntries = ref<TokenRouteEntry[]>([])
+const routeDraft = reactive({
+  mode: 'auto' as TokenRouteMode,
+  maxRatio: '',
+  orphan: false,
+})
+let routeBaseline = {
+  mode: 'auto' as TokenRouteMode,
+  selected_only: false,
+  max_channel_ratio: null as string | null,
+}
+
+/** Canonicalizes valid decimal ratio strings so "1" and "1.0" compare equal. */
+function canonicalRatio(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  if (!isValidChannelRatio(trimmed)) return trimmed
+  const [intRaw = '0', fracRaw = ''] = trimmed.split('.')
+  const intPart = intRaw.replace(/^0+(?=\d)/, '') || '0'
+  const fracPart = fracRaw.replace(/0+$/, '')
+  return fracPart ? `${intPart}.${fracPart}` : intPart
+}
+
+function resetRoutingState(): void {
+  routeRequest.cancel()
+  routeLoading.value = false
+  routeLoadError.value = ''
+  routeSaveError.value = ''
+  routeConflict.value = false
+  baseSavedPartial.value = false
+  savedBasePayloadKey = ''
+  routeVersion.value = 0
+  routeEntries.value = []
+  routeDraft.mode = 'auto'
+  routeDraft.maxRatio = ''
+  routeDraft.orphan = false
+  routeBaseline = {
+    mode: 'auto',
+    selected_only: false,
+    max_channel_ratio: null,
+  }
+}
+
+function applyLoadedRoute(route: TokenRoute): void {
+  routeVersion.value = route.version
+  routeEntries.value = route.entries.map((entry) => ({ ...entry }))
+  routeDraft.mode = route.mode
+  routeDraft.maxRatio = route.max_channel_ratio ?? ''
+  routeDraft.orphan = route.selected_only && route.entries.length === 0
+  routeBaseline = {
+    mode: route.mode,
+    selected_only: route.selected_only,
+    max_channel_ratio: canonicalRatio(routeDraft.maxRatio),
+  }
+}
+
+async function loadRouting(): Promise<void> {
+  routeRequest.cancel()
+  routeLoadError.value = ''
+  routeSaveError.value = ''
+  routeConflict.value = false
+  if (!props.open || !props.editing || !canReadRouting.value) {
+    routeLoading.value = false
+    return
+  }
+  routeLoading.value = true
+  const id = props.editing.id
+  const result = await routeRequest.run((signal) =>
+    tokenRoutingApi.get(id, signal)
+  )
+  if (result.stale) return
+  routeLoading.value = false
+  if (result.ok) {
+    applyLoadedRoute(result.value)
+  } else {
+    routeLoadError.value =
+      result.error instanceof Error
+        ? result.error.message
+        : String(result.error)
+  }
+}
+
+const routeValidRatio = computed(() => {
+  const value = routeDraft.maxRatio.trim()
+  return !value || isValidChannelRatio(value)
+})
+const routeEnabledCount = computed(
+  () => routeEntries.value.filter((entry) => entry.enabled).length
+)
+const routeAllPaused = computed(
+  () => routeEntries.value.length > 0 && routeEnabledCount.value === 0
+)
+const routeEffectiveSelectedOnly = computed(
+  () => routeEntries.value.length > 0 || routeDraft.orphan
+)
+const routeDirty = computed(() => {
+  if (!showRoutingPolicy.value || !canWriteRouting.value) return false
+  if (routeLoading.value || routeLoadError.value !== '') return false
+  return (
+    routeDraft.mode !== routeBaseline.mode ||
+    routeEffectiveSelectedOnly.value !== routeBaseline.selected_only ||
+    canonicalRatio(routeDraft.maxRatio) !== routeBaseline.max_channel_ratio
+  )
+})
+const canInteractRouting = computed(
+  () =>
+    showRoutingPolicy.value &&
+    canWriteRouting.value &&
+    !saving.value &&
+    !routeLoading.value &&
+    !routeLoadError.value &&
+    !routeConflict.value
+)
+const routeValidationError = computed(() => {
+  if (!showRoutingPolicy.value || !canWriteRouting.value || !routeDirty.value) {
+    return ''
+  }
+  if (!routeValidRatio.value) return t('keys.routingPanel.invalidRatio')
+  if (routeDraft.orphan) return t('keys.routingPanel.orphanedRequired')
+  if (routeDraft.mode === 'ordered' && routeEntries.value.length === 0) {
+    return t('keys.routingPanel.orderedRequired')
+  }
+  return ''
+})
+const confirmDisabled = computed(() => {
+  if (saving.value) return true
+  if (!showRoutingPolicy.value || !canWriteRouting.value) return false
+  if (routeConflict.value) return true
+  if (!routeValidRatio.value) return true
+  return routeDirty.value && routeValidationError.value !== ''
+})
+
+function setRouteMode(mode: TokenRouteMode): void {
+  if (!canInteractRouting.value) return
+  routeSaveError.value = ''
+  routeDraft.mode = mode
+}
+
+function resetRouteToPlatform(): void {
+  if (!canInteractRouting.value) return
+  routeSaveError.value = ''
+  routeDraft.mode = 'auto'
+  routeDraft.orphan = false
+}
+
+function openChannelPicker(initialMode?: TokenRouteMode): void {
+  if (!props.editing) return
+  emit('open-routing', { token: props.editing, initialMode })
+}
 
 function normalizeModelLimitsKey(items: readonly string[]): string {
   return [...items]
@@ -62,9 +256,12 @@ function normalizeModelLimitsKey(items: readonly string[]): string {
 }
 
 watch(
-  () => props.open,
-  (open) => {
-    if (!open) return
+  [() => props.open, () => props.editing?.id],
+  ([open]) => {
+    if (!open) {
+      resetRoutingState()
+      return
+    }
     const e = props.editing
     form.allow_user_quota_query = e ? (e.allow_user_quota_query ?? false) : true
     form.name = e?.name ?? ''
@@ -88,9 +285,30 @@ watch(
         form.ipText.trim().length > 0 ||
         form.allow_user_quota_query === false)
     )
+    resetRoutingState()
+    if (e && canReadRouting.value) {
+      void loadRouting()
+    }
   },
   { immediate: true }
 )
+
+watch(canReadRouting, (readable) => {
+  if (!props.open || !props.editing) return
+  if (readable) void loadRouting()
+  else resetRoutingState()
+})
+
+watch(
+  () => routeDraft.maxRatio,
+  () => {
+    routeSaveError.value = ''
+  }
+)
+
+onBeforeUnmount(() => {
+  routeRequest.cancel()
+})
 
 /** Native expired_time: -1 never expires, otherwise epoch seconds. */
 function expiredTime(): number {
@@ -156,12 +374,66 @@ function buildPayload(): Record<string, unknown> {
 
 async function save() {
   if (saving.value) return
-  saving.value = true
+  if (showRoutingPolicy.value && canWriteRouting.value && routeDirty.value) {
+    if (routeConflict.value) return
+    if (routeValidationError.value) {
+      routeSaveError.value = routeValidationError.value
+      return
+    }
+  }
+  let payload: Record<string, unknown>
   try {
-    const payload = buildPayload()
+    payload = buildPayload()
+  } catch (error) {
+    toast.error(error instanceof ApiError ? error.message : String(error))
+    return
+  }
+
+  saving.value = true
+  routeSaveError.value = ''
+  try {
     if (props.editing) {
       payload.id = props.editing.id
-      await api.put('/api/token/', payload)
+      const currentBaseKey = JSON.stringify(payload)
+      if (!baseSavedPartial.value || currentBaseKey !== savedBasePayloadKey) {
+        await api.put('/api/token/', payload)
+        savedBasePayloadKey = currentBaseKey
+        baseSavedPartial.value = false
+      }
+      if (
+        showRoutingPolicy.value &&
+        canWriteRouting.value &&
+        routeDirty.value
+      ) {
+        try {
+          const selectedOnly = routeEffectiveSelectedOnly.value
+          const savedRoute = await tokenRoutingApi.save(props.editing.id, {
+            mode: routeDraft.mode,
+            selected_only: selectedOnly,
+            version: routeVersion.value,
+            max_channel_ratio: routeDraft.maxRatio.trim() || null,
+            entries: selectedOnly
+              ? routeEntries.value.map((entry, position) => ({
+                  channel_id: entry.channel_id,
+                  enabled: entry.enabled,
+                  position,
+                }))
+              : [],
+          })
+          applyLoadedRoute(savedRoute)
+        } catch (error) {
+          baseSavedPartial.value = true
+          const isConflict = error instanceof ApiError && error.status === 409
+          routeConflict.value = isConflict
+          routeSaveError.value = isConflict
+            ? t('keys.routingPanel.conflict')
+            : error instanceof ApiError
+              ? error.message
+              : String(error)
+          emit('saved')
+          return
+        }
+      }
       toast.success(t('keys.updated'))
     } else {
       await api.post('/api/token/', payload)
@@ -279,6 +551,237 @@ async function save() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Routing policy (mode + multiplier cap), edit mode only -->
+      <div
+        v-if="showRoutingPolicy"
+        data-key-form-routing
+        class="sibling-space-y-3"
+      >
+        <div
+          v-if="routeSaveError"
+          role="alert"
+          data-routing-save-error
+          class="no-handdrawn flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-xs"
+          :class="
+            routeConflict
+              ? 'border-[var(--status-warning)] bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]'
+              : 'border-[var(--status-danger)] bg-[var(--status-danger-soft)] text-[var(--status-danger-text)]'
+          "
+        >
+          <div class="min-w-0 flex-1 space-y-1 leading-relaxed">
+            <p v-if="baseSavedPartial">
+              {{ t('keys.routingPanel.partialSavedNotice') }}
+            </p>
+            <p>{{ routeSaveError }}</p>
+          </div>
+          <ConsoleButton
+            v-if="routeConflict"
+            variant="secondary"
+            size="sm"
+            @click="loadRouting"
+          >
+            <RefreshCw :size="14" aria-hidden="true" />
+            {{ t('keys.routingPanel.reload') }}
+          </ConsoleButton>
+        </div>
+
+        <p
+          v-if="routeLoading"
+          role="status"
+          class="py-3 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+        >
+          {{ t('keys.routingPanel.loading') }}
+        </p>
+        <div
+          v-else-if="routeLoadError"
+          role="alert"
+          class="no-handdrawn flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--status-danger)] bg-[var(--status-danger-soft)] p-3 text-xs text-[var(--status-danger-text)]"
+        >
+          <span class="min-w-0 flex-1">{{
+            t('keys.routingPanel.loadFailed', { error: routeLoadError })
+          }}</span>
+          <ConsoleButton variant="secondary" size="sm" @click="loadRouting">
+            <RefreshCw :size="14" aria-hidden="true" />
+            {{ t('keys.routingPanel.reload') }}
+          </ConsoleButton>
+        </div>
+
+        <template v-else>
+          <div
+            v-if="!canWriteRouting"
+            data-routing-readonly
+            class="no-handdrawn flex items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-xs text-[var(--text-secondary)]"
+          >
+            <Lock :size="14" class="shrink-0" aria-hidden="true" />
+            <span>{{ t('keys.routingPanel.readOnlyEdit') }}</span>
+          </div>
+
+          <div
+            v-if="routeDraft.orphan"
+            role="alert"
+            data-route-orphaned
+            class="no-handdrawn flex flex-col gap-2.5 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-3.5 text-xs text-[var(--status-warning-text)]"
+          >
+            <div class="flex items-start gap-2">
+              <AlertTriangle
+                :size="15"
+                class="mt-0.5 shrink-0"
+                aria-hidden="true"
+              />
+              <span class="leading-relaxed">{{
+                t('keys.routingPanel.orphanedNotice')
+              }}</span>
+            </div>
+            <div v-if="canWriteRouting" class="flex flex-wrap gap-2">
+              <ConsoleButton
+                variant="secondary"
+                size="sm"
+                :disabled="!canInteractRouting"
+                @click="openChannelPicker()"
+              >
+                {{ t('keys.routingPanel.goSelectChannels') }}
+              </ConsoleButton>
+              <ConsoleButton
+                variant="secondary"
+                size="sm"
+                :disabled="!canInteractRouting"
+                @click="resetRouteToPlatform"
+              >
+                {{ t('keys.routingPanel.usePlatform') }}
+              </ConsoleButton>
+            </div>
+          </div>
+
+          <fieldset :disabled="!canInteractRouting" class="min-w-0">
+            <legend
+              class="mb-2 text-xs font-medium text-[var(--text-secondary)]"
+            >
+              {{ t('keys.routingPanel.modeLabel') }}
+            </legend>
+            <div
+              class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              role="radiogroup"
+              :aria-label="t('keys.routingPanel.modeLabel')"
+            >
+              <button
+                v-for="mode in ['auto', 'ordered'] as const"
+                :key="mode"
+                type="button"
+                role="radio"
+                :aria-checked="routeDraft.mode === mode"
+                :disabled="!canInteractRouting"
+                class="no-handdrawn flex min-h-[44px] flex-col rounded-xl border px-3.5 py-2.5 text-left transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                :class="
+                  routeDraft.mode === mode
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                    : 'border-[var(--border-subtle)] bg-[var(--surface-solid)] hover:border-[var(--border-strong)]'
+                "
+                @click="setRouteMode(mode)"
+              >
+                <span class="flex w-full items-center justify-between gap-2">
+                  <span
+                    class="text-sm font-semibold"
+                    :class="
+                      routeDraft.mode === mode
+                        ? 'text-[var(--accent-text)]'
+                        : 'text-[var(--text-primary)]'
+                    "
+                  >
+                    {{ t(`keys.routingPanel.modes.${mode}`) }}
+                  </span>
+                  <span
+                    v-if="mode === 'ordered' && routeAllPaused"
+                    class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--text-tertiary)]"
+                  >
+                    {{ t('keys.routingPanel.reasons.entry_disabled') }}
+                  </span>
+                </span>
+                <span
+                  class="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]"
+                >
+                  {{ t(`keys.routingPanel.modeHints.${mode}`) }}
+                </span>
+              </button>
+            </div>
+          </fieldset>
+
+          <div
+            v-if="
+              routeDraft.mode === 'ordered' &&
+              routeEntries.length === 0 &&
+              !routeDraft.orphan
+            "
+            role="alert"
+            data-routing-ordered-empty
+            class="no-handdrawn flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-3.5 py-2.5 text-xs text-[var(--status-warning-text)]"
+          >
+            <span>{{ t('keys.routingPanel.orderedRequired') }}</span>
+            <div v-if="canInteractRouting" class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="min-h-[44px] rounded-lg px-2 py-1 font-medium underline underline-offset-2 focus-ring sm:min-h-0 sm:px-0 sm:py-0"
+                data-routing-go-select
+                @click="openChannelPicker('ordered')"
+              >
+                {{ t('keys.routingPanel.goSelectChannels') }}
+              </button>
+              <button
+                type="button"
+                class="min-h-[44px] rounded-lg px-2 py-1 underline underline-offset-2 focus-ring sm:min-h-0 sm:px-0 sm:py-0"
+                @click="resetRouteToPlatform"
+              >
+                {{ t('keys.routingPanel.switchToAuto') }}
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="routeAllPaused"
+            role="status"
+            data-routing-all-paused
+            class="no-handdrawn flex items-start gap-2 rounded-xl border border-[var(--status-info)] bg-[var(--status-info-soft)] p-3 text-xs text-[var(--status-info-text)]"
+          >
+            <Info :size="15" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <div class="min-w-0 flex-1 space-y-1">
+              <p class="leading-relaxed">
+                {{ t('keys.routingPanel.allPausedNotice') }}
+              </p>
+              <p v-if="routeDraft.mode === 'ordered'" class="opacity-85">
+                {{ t('keys.routingPanel.orderedInactiveHint') }}
+              </p>
+            </div>
+          </div>
+
+          <div
+            v-if="canWriteRouting || routeDraft.maxRatio"
+            class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3.5 py-3"
+          >
+            <FormField
+              :label="t('keys.routingPanel.maxRatio')"
+              :hint="t('keys.routingPanel.maxRatioHint')"
+            >
+              <TextInput
+                v-model="routeDraft.maxRatio"
+                name="token-max-channel-ratio"
+                inputmode="decimal"
+                maxlength="24"
+                :aria-label="t('keys.routingPanel.maxRatio')"
+                :aria-invalid="!routeValidRatio"
+                :placeholder="t('keys.routingPanel.maxRatioPlaceholder')"
+                :disabled="!canInteractRouting"
+              />
+            </FormField>
+            <p
+              v-if="!routeValidRatio"
+              role="alert"
+              class="mt-1.5 text-xs text-[var(--status-danger-text)]"
+            >
+              {{ t('keys.routingPanel.invalidRatio') }}
+            </p>
+          </div>
+        </template>
       </div>
 
       <section
@@ -426,7 +929,12 @@ async function save() {
         >
           {{ t('common.cancel') }}
         </ConsoleButton>
-        <ConsoleButton size="lg" :loading="saving" @click="save">
+        <ConsoleButton
+          size="lg"
+          :loading="saving"
+          :disabled="confirmDisabled"
+          @click="save"
+        >
           {{ t('common.confirm') }}
         </ConsoleButton>
       </div>

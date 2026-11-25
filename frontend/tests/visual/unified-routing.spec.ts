@@ -93,13 +93,60 @@ for (const theme of ['light', 'dark'] as const) {
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
 
-      // 2. Click the route chip on row #7 to open the standalone KeyRoutingModal directly.
-      await page.locator('[data-key-route-trigger]:visible').first().click()
+      // 2. Edit modal owns routing mode + multiplier cap (no channel picker inside).
+      await page
+        .getByRole('button', { name: '编辑令牌', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const editDialog = page.getByRole('dialog', {
+        name: '编辑令牌',
+        exact: true,
+      })
+      await expect(editDialog).toBeVisible()
+      await expect(editDialog.locator('[data-key-form-routing]')).toBeVisible()
+      await expect(
+        editDialog.locator('[data-routing-candidate-picker]')
+      ).toHaveCount(0)
+      await expect(
+        editDialog.getByRole('radio', { name: /顺序路由/ })
+      ).toHaveAttribute('aria-checked', 'true')
+      await editDialog.getByRole('radio', { name: /自动路由/ }).click()
+      await editDialog
+        .locator('input[name="token-max-channel-ratio"]')
+        .fill('2')
+      await assertNoHorizontalOverflow(page)
+      await captureEvidence(page, {
+        path: testInfo.outputPath('edit-key-routing-policy.png'),
+      })
+      await editDialog
+        .getByRole('button', { name: '确认', exact: true })
+        .click()
+      await expect(editDialog).toHaveCount(0)
+      const editRoutingWrite = fixture.writes
+        .filter((write) => write.path === '/api/token/7/routing')
+        .at(-1)
+      expect(editRoutingWrite?.body).toMatchObject({
+        mode: 'auto',
+        selected_only: true,
+        max_channel_ratio: '2',
+        entries: [{ channel_id: 2, enabled: true }],
+      })
+
+      // 3. Dedicated routing action button opens the standalone KeyRoutingModal directly.
+      await page.locator('[data-key-routing-action]:visible').first().click()
       const routingDialog = page.getByRole('dialog', {
         name: '路由 · Native Key',
         exact: true,
       })
       await expect(routingDialog).toBeVisible()
+      await expect(routingDialog.getByRole('radio')).toHaveCount(0)
+      await expect(
+        routingDialog.locator('input[name="token-max-channel-ratio"]')
+      ).toHaveCount(0)
+      await expect(
+        routingDialog.locator('[data-routing-policy-summary]')
+      ).toContainText('自动路由')
       await expect(
         routingDialog.locator('li[data-selected-channel-id="2"]')
       ).toBeVisible()
@@ -130,8 +177,9 @@ for (const theme of ['light', 'dark'] as const) {
         .filter((write) => write.path === '/api/token/7/routing')
         .at(-1)
       expect(lastRoutingWrite?.body).toMatchObject({
-        mode: 'ordered',
+        mode: 'auto',
         selected_only: true,
+        max_channel_ratio: '2',
         entries: [{ channel_id: 2, enabled: false }],
       })
     })

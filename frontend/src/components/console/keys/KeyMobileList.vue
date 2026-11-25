@@ -6,6 +6,7 @@ import {
   Pencil,
   Power,
   PowerOff,
+  Route,
   Trash2,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -127,6 +128,14 @@ function isBlocked(token: TokenSummary): boolean {
             </IconButton>
           </div>
           <div class="flex items-center justify-end gap-1">
+            <IconButton
+              v-if="routingEnabled && configureRouting"
+              data-key-routing-action
+              :label="t('keys.routing')"
+              @click="configureRouting(token)"
+            >
+              <Route :size="16" aria-hidden="true" />
+            </IconButton>
             <IconButton
               v-if="clientConfig"
               :label="configT('title')"

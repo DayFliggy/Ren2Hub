@@ -25,26 +25,29 @@ import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
-import FormField from '@/components/common/FormField.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
-import TextInput from '@/components/common/TextInput.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import type { TokenSummary } from '@/types/console'
-import { isValidChannelRatio } from '@/utils/channelRatio'
 
-const props = defineProps<{
-  open: boolean
-  token: TokenSummary | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    token: TokenSummary | null
+    /** Optional mode intent when jumping from KeyFormModal to pick ordered channels. */
+    initialMode?: TokenRouteMode | null
+  }>(),
+  { initialMode: null }
+)
 
 const emit = defineEmits<{
   close: []
   saved: []
+  'edit-policy': [token: TokenSummary]
 }>()
 
 const { t, te } = useI18n()
@@ -85,8 +88,6 @@ const draggingChannelId = ref<number | null>(null)
 
 const routeRequest = useLatestRequest()
 const candidatesRequest = useLatestRequest()
-let candidateDebounceTimer = 0
-let lastCandidateFilterKey = ''
 
 interface DraftEntry {
   channel_id: number
@@ -96,14 +97,13 @@ interface DraftEntry {
 interface NormalizedSnapshot {
   mode: TokenRouteMode
   selected_only: boolean
-  max_channel_ratio: string | null
   entries: Array<[number, boolean]>
 }
 
 const draft = reactive({
   mode: 'auto' as TokenRouteMode,
   entries: [] as DraftEntry[],
-  maxRatio: '',
+  maxRatio: '' as string,
   orphan: false,
 })
 
@@ -114,33 +114,19 @@ function defaultSnapshot(): NormalizedSnapshot {
   return {
     mode: 'auto',
     selected_only: false,
-    max_channel_ratio: null,
     entries: [],
   }
-}
-
-/** Canonicalizes valid decimal ratio strings so "1" and "1.0" compare equal. */
-function canonicalRatio(raw: string): string | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  if (!isValidChannelRatio(trimmed)) return trimmed
-  const [intRaw = '0', fracRaw = ''] = trimmed.split('.')
-  const intPart = intRaw.replace(/^0+(?=\d)/, '') || '0'
-  const fracPart = fracRaw.replace(/0+$/, '')
-  return fracPart ? `${intPart}.${fracPart}` : intPart
 }
 
 function buildSnapshot(
   mode: TokenRouteMode,
   selectedOnly: boolean,
-  ratio: string,
   entries: DraftEntry[]
 ): NormalizedSnapshot {
   const effectiveEntries = selectedOnly ? entries : []
   return {
     mode,
     selected_only: selectedOnly,
-    max_channel_ratio: canonicalRatio(ratio),
     entries: effectiveEntries.map((entry) => [entry.channel_id, entry.enabled]),
   }
 }
@@ -149,7 +135,6 @@ function snapshotsEqual(a: NormalizedSnapshot, b: NormalizedSnapshot): boolean {
   if (
     a.mode !== b.mode ||
     a.selected_only !== b.selected_only ||
-    a.max_channel_ratio !== b.max_channel_ratio ||
     a.entries.length !== b.entries.length
   ) {
     return false
@@ -176,18 +161,12 @@ const isAllPaused = computed(
   () => draft.entries.length > 0 && enabledCount.value === 0
 )
 const ordered = computed(() => draft.mode === 'ordered')
-const validRatio = computed(() => {
-  const value = draft.maxRatio.trim()
-  return !value || isValidChannelRatio(value)
-})
+const pendingOrderedIntent = computed(
+  () => props.initialMode === 'ordered' && baseline.mode !== 'ordered'
+)
 
 const currentSnapshot = computed(() =>
-  buildSnapshot(
-    draft.mode,
-    derivedSelectedOnly.value,
-    draft.maxRatio,
-    draft.entries
-  )
+  buildSnapshot(draft.mode, derivedSelectedOnly.value, draft.entries)
 )
 
 const dirty = computed(() => !snapshotsEqual(currentSnapshot.value, baseline))
@@ -204,7 +183,6 @@ const canInteract = computed(
 
 const validationError = computed(() => {
   if (!canWrite.value || !dirty.value) return ''
-  if (!validRatio.value) return t('keys.routingPanel.invalidRatio')
   if (draft.orphan) return t('keys.routingPanel.orphanedRequired')
   if (draft.mode === 'ordered' && draft.entries.length === 0) {
     return t('keys.routingPanel.orderedRequired')
@@ -213,11 +191,7 @@ const validationError = computed(() => {
 })
 
 const canSave = computed(
-  () =>
-    canInteract.value &&
-    dirty.value &&
-    validationError.value === '' &&
-    validRatio.value
+  () => canInteract.value && dirty.value && validationError.value === ''
 )
 
 const channelById = computed(
@@ -284,26 +258,16 @@ function applyRoute(route: TokenRoute): void {
   }))
   draft.maxRatio = route.max_channel_ratio ?? ''
   draft.orphan = route.selected_only && route.entries.length === 0
-  baseline = buildSnapshot(
-    draft.mode,
-    route.selected_only,
-    draft.maxRatio,
-    draft.entries
-  )
+  baseline = buildSnapshot(draft.mode, route.selected_only, draft.entries)
   revertedNote.value = false
-}
-
-function candidateFilterKey(limits: readonly string[], ratio: string): string {
-  return `${limits.join('\u0000')}|${ratio}`
 }
 
 async function fetchCandidates(): Promise<void> {
   if (!props.open || !props.token || !canRead.value) return
   candidatesLoading.value = true
   candidatesError.value = ''
-  const ratio = validRatio.value ? draft.maxRatio.trim() : ''
+  const ratio = draft.maxRatio.trim()
   const limits = [...modelLimits.value]
-  lastCandidateFilterKey = candidateFilterKey(limits, ratio)
   const result = await candidatesRequest.run((signal) =>
     tokenRoutingApi.candidates(
       { model_limits: limits, max_channel_ratio: ratio || undefined },
@@ -315,7 +279,6 @@ async function fetchCandidates(): Promise<void> {
   if (result.ok) {
     channels.value = result.value
   } else {
-    lastCandidateFilterKey = ''
     candidatesError.value =
       result.error instanceof Error
         ? result.error.message
@@ -323,22 +286,9 @@ async function fetchCandidates(): Promise<void> {
   }
 }
 
-function scheduleCandidatesFetch(): void {
-  const ratio = validRatio.value ? draft.maxRatio.trim() : ''
-  if (candidateFilterKey(modelLimits.value, ratio) === lastCandidateFilterKey) {
-    return
-  }
-  window.clearTimeout(candidateDebounceTimer)
-  candidateDebounceTimer = window.setTimeout(() => {
-    void fetchCandidates()
-  }, 250)
-}
-
 async function loadAll(): Promise<void> {
-  window.clearTimeout(candidateDebounceTimer)
   routeRequest.cancel()
   candidatesRequest.cancel()
-  lastCandidateFilterKey = ''
   clearErrors()
   searchQuery.value = ''
   onlyEligible.value = false
@@ -374,9 +324,16 @@ async function loadAll(): Promise<void> {
     return
   }
   applyRoute(routeResult.value)
+  if (
+    props.initialMode === 'ordered' &&
+    canWrite.value &&
+    draft.mode === 'auto' &&
+    !draft.orphan
+  ) {
+    draft.mode = 'ordered'
+  }
 
   const ratio = routeResult.value.max_channel_ratio ?? ''
-  lastCandidateFilterKey = candidateFilterKey(limits, ratio)
   const candResult = await candidatesRequest.run((signal) =>
     tokenRoutingApi.candidates(
       { model_limits: limits, max_channel_ratio: ratio || undefined },
@@ -388,19 +345,11 @@ async function loadAll(): Promise<void> {
   if (candResult.ok) {
     channels.value = candResult.value
   } else {
-    lastCandidateFilterKey = ''
     candidatesError.value =
       candResult.error instanceof Error
         ? candResult.error.message
         : String(candResult.error)
   }
-}
-
-function setMode(mode: TokenRouteMode): void {
-  if (!canInteract.value) return
-  clearErrors()
-  draft.mode = mode
-  revertedNote.value = false
 }
 
 function usePlatform(): void {
@@ -522,10 +471,9 @@ async function save(): Promise<void> {
 }
 
 watch(
-  [() => props.open, () => props.token?.id, canRead],
+  [() => props.open, () => props.token?.id, () => props.initialMode, canRead],
   ([open]) => {
     if (!open || !props.token) {
-      window.clearTimeout(candidateDebounceTimer)
       routeRequest.cancel()
       candidatesRequest.cancel()
       return
@@ -535,22 +483,11 @@ watch(
   { immediate: true }
 )
 
-watch(
-  () => draft.maxRatio,
-  () => {
-    clearErrors()
-    if (!props.open || !props.token || !canRead.value || loading.value) return
-    if (!validRatio.value) return
-    scheduleCandidatesFetch()
-  }
-)
-
 watch(searchQuery, () => {
   visibleLimit.value = 20
 })
 
 onBeforeUnmount(() => {
-  window.clearTimeout(candidateDebounceTimer)
   routeRequest.cancel()
   candidatesRequest.cancel()
 })
@@ -615,6 +552,48 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
+        <!-- Compact read-only policy summary (mode + multiplier cap live in KeyFormModal) -->
+        <div
+          data-routing-policy-summary
+          class="no-handdrawn flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-xs"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-medium text-[var(--text-primary)]">
+              {{
+                t('keys.routingPanel.policySummaryMode', {
+                  mode: t(`keys.routingPanel.modes.${draft.mode}`),
+                })
+              }}
+            </span>
+            <span
+              v-if="ordered && isAllPaused"
+              class="rounded-md bg-[var(--surface-solid)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--text-tertiary)]"
+            >
+              {{ t('keys.routingPanel.reasons.entry_disabled') }}
+            </span>
+            <span
+              v-if="draft.maxRatio"
+              class="tabular-nums text-[var(--text-secondary)]"
+            >
+              ·
+              {{
+                t('keys.routingPanel.policySummaryRatio', {
+                  ratio: draft.maxRatio,
+                })
+              }}
+            </span>
+          </div>
+          <button
+            v-if="canWrite"
+            type="button"
+            data-routing-edit-policy
+            class="min-h-[44px] rounded-lg px-2.5 py-1 text-xs font-medium text-[var(--accent-text)] transition-colors hover:bg-[var(--surface-solid)] focus-ring sm:min-h-[32px]"
+            @click="emit('edit-policy', token)"
+          >
+            {{ t('keys.routingPanel.editPolicy') }}
+          </button>
+        </div>
+
         <!-- Read-only notice -->
         <div
           v-if="!canWrite"
@@ -654,87 +633,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Mode segmented control -->
-        <fieldset :disabled="!canInteract" class="min-w-0">
-          <legend class="mb-2 text-xs font-medium text-[var(--text-secondary)]">
-            {{ t('keys.routingPanel.modeLabel') }}
-          </legend>
-          <div
-            class="grid grid-cols-1 gap-2 sm:grid-cols-2"
-            role="radiogroup"
-            :aria-label="t('keys.routingPanel.modeLabel')"
-          >
-            <button
-              v-for="mode in ['auto', 'ordered'] as const"
-              :key="mode"
-              type="button"
-              role="radio"
-              :aria-checked="draft.mode === mode"
-              :disabled="!canInteract"
-              class="no-handdrawn flex min-h-[44px] flex-col rounded-xl border px-3.5 py-2.5 text-left transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-60"
-              :class="
-                draft.mode === mode
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                  : 'border-[var(--border-subtle)] bg-[var(--surface-solid)] hover:border-[var(--border-strong)]'
-              "
-              @click="setMode(mode)"
-            >
-              <span class="flex w-full items-center justify-between gap-2">
-                <span
-                  class="text-sm font-semibold"
-                  :class="
-                    draft.mode === mode
-                      ? 'text-[var(--accent-text)]'
-                      : 'text-[var(--text-primary)]'
-                  "
-                >
-                  {{ t(`keys.routingPanel.modes.${mode}`) }}
-                </span>
-                <span
-                  v-if="mode === 'ordered' && isAllPaused"
-                  class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--text-tertiary)]"
-                >
-                  {{ t('keys.routingPanel.reasons.entry_disabled') }}
-                </span>
-              </span>
-              <span
-                class="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]"
-              >
-                {{ t(`keys.routingPanel.modeHints.${mode}`) }}
-              </span>
-            </button>
-          </div>
-        </fieldset>
-
-        <!-- Multiplier cap (route-level policy: applies to both platform & selected scopes) -->
-        <div
-          v-if="canWrite || draft.maxRatio"
-          class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3.5 py-3"
-        >
-          <FormField
-            :label="t('keys.routingPanel.maxRatio')"
-            :hint="t('keys.routingPanel.maxRatioHint')"
-          >
-            <TextInput
-              v-model="draft.maxRatio"
-              name="token-max-channel-ratio"
-              inputmode="decimal"
-              maxlength="24"
-              :aria-label="t('keys.routingPanel.maxRatio')"
-              :aria-invalid="!validRatio"
-              :placeholder="t('keys.routingPanel.maxRatioPlaceholder')"
-              :disabled="!canInteract"
-            />
-          </FormField>
-          <p
-            v-if="!validRatio"
-            role="alert"
-            class="mt-1.5 text-xs text-[var(--status-danger-text)]"
-          >
-            {{ t('keys.routingPanel.invalidRatio') }}
-          </p>
-        </div>
-
         <!-- Ordered empty validation hint -->
         <div
           v-if="ordered && draft.entries.length === 0 && !draft.orphan"
@@ -742,7 +640,11 @@ onBeforeUnmount(() => {
           data-routing-ordered-empty
           class="no-handdrawn flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-3.5 py-2.5 text-xs text-[var(--status-warning-text)]"
         >
-          <span>{{ t('keys.routingPanel.orderedRequired') }}</span>
+          <span>{{
+            pendingOrderedIntent
+              ? t('keys.routingPanel.pendingOrderedHint')
+              : t('keys.routingPanel.orderedRequired')
+          }}</span>
           <button
             v-if="canInteract"
             type="button"
@@ -966,15 +868,13 @@ onBeforeUnmount(() => {
               {{ t('keys.routingPanel.candidateTitle') }}
             </h3>
             <div
-              v-if="
-                modelLimits.length > 0 || (validRatio && draft.maxRatio.trim())
-              "
+              v-if="modelLimits.length > 0 || draft.maxRatio.trim()"
               class="flex flex-wrap gap-1.5 text-[0.6875rem] text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
             >
               <span v-if="modelLimits.length > 0">{{
                 t('keys.routingPanel.filteredByModels')
               }}</span>
-              <span v-if="validRatio && draft.maxRatio.trim()">{{
+              <span v-if="draft.maxRatio.trim()">{{
                 t('keys.routingPanel.filteredByRatio', {
                   ratio: draft.maxRatio.trim(),
                 })

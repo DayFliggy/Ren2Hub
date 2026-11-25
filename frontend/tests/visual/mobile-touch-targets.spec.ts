@@ -339,10 +339,11 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await configureStablePage(page, { theme, authenticated: true })
     await page.goto('/keys', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
-    await page
-      .locator('[data-key-mobile-row] [data-key-route-trigger]')
+    const routingAction = page
+      .locator('[data-key-mobile-row] [data-key-routing-action]')
       .first()
-      .click()
+    await expectTouchTarget(routingAction, 'mobile routing action')
+    await routingAction.click()
     const dialog = page.getByRole('dialog', {
       name: '路由 · Native Key',
       exact: true,
