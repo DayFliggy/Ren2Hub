@@ -971,6 +971,9 @@ func deleteUserAuthenticationData(tx *gorm.DB, userId int) error {
 			return err
 		}
 	}
+	if err := deleteUserAnnouncementReads(tx, userId); err != nil {
+		return err
+	}
 	return deleteUserOAuthBindingsByUserId(tx, userId)
 }
 

@@ -171,6 +171,8 @@ describe('top navigation', () => {
           TopNavMenu: true,
           UserMenu: true,
           VersionBadge: true,
+          AnnouncementBell: true,
+          AnnouncementPopup: true,
           CommandPaletteModal: true,
           LanguageSelector: true,
           ThemeSwitcher: true,

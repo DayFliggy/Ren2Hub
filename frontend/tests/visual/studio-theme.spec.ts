@@ -160,7 +160,7 @@ test.describe('coarse pointer control targets', () => {
         await checkTargets(page.locator('[data-bonus-configure]'), 'bonus icon')
         await checkTargets(
           page.locator(
-            '.topbar-nav [aria-controls="console-mobile-navigation"], .topbar-nav .search-trigger, .topbar-nav [data-theme-switcher], .topbar-nav [data-user-menu-trigger], .topbar-brand [data-version-badge], .topbar-language > button'
+            '.topbar-nav [aria-controls="console-mobile-navigation"], .topbar-nav [data-announcement-trigger], .topbar-nav [data-theme-switcher], .topbar-nav [data-user-menu-trigger], .topbar-brand [data-version-badge], .topbar-language > button'
           ),
           'topbar actions'
         )

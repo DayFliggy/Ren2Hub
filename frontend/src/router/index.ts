@@ -278,6 +278,17 @@ const router = createRouter({
           },
         },
         {
+          path: '/announcements',
+          name: 'announcements',
+          component: () => import('@/views/console/AnnouncementsView.vue'),
+          meta: {
+            wide: true,
+            noPageScroll: true,
+            feature: 'admin',
+            ...getConsoleRouteAccessMeta('announcements'),
+          },
+        },
+        {
           path: '/users',
           name: 'users',
           component: () => import('@/views/console/UsersView.vue'),

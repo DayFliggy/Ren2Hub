@@ -9,6 +9,8 @@ import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 
+import AnnouncementBell from './announcements/AnnouncementBell.vue'
+import AnnouncementPopup from './announcements/AnnouncementPopup.vue'
 import CommandPaletteModal from './CommandPaletteModal.vue'
 import ConsoleMobileNavDrawer from './ConsoleMobileNavDrawer.vue'
 import TopNavMenu from './TopNavMenu.vue'
@@ -40,11 +42,6 @@ watch(isDesktop, async (desktop) => {
     )
     ?.focus()
 })
-
-const isApplePlatform = /Mac|iPhone|iPad|iPod/.test(
-  window.navigator.platform || window.navigator.userAgent
-)
-const searchShortcut = isApplePlatform ? '⌘K' : 'Ctrl+K'
 
 async function onGlobalKeydown(e: KeyboardEvent) {
   if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
@@ -142,37 +139,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
 
       <!-- right actions -->
       <div class="topbar-actions flex shrink-0 items-center gap-0.5 sm:gap-1.5">
-        <!-- search: underline-style hand-drawn feel -->
-        <button
-          type="button"
-          class="pencil-control search-trigger topbar-search flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)] focus-ring md:w-auto md:justify-start md:pl-3.5"
-          data-handdrawn="control"
-          :aria-label="t('nav.search')"
-          @click="searchOpen = true"
-        >
-          <!-- hand-drawn magnifier SVG: rounded linecap, slightly asymmetric -->
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <span class="topbar-control-label hidden md:inline">{{
-            t('nav.search')
-          }}</span>
-          <kbd
-            class="topbar-control-label hidden rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[0.625rem] font-medium md:inline"
-          >
-            {{ searchShortcut }}
-          </kbd>
-        </button>
+        <AnnouncementBell />
         <LanguageSelector
           variant="console"
           class="topbar-language hidden lg:block"
@@ -189,6 +156,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
       :open="navigationOpen"
       @close="navigationOpen = false"
     />
+    <AnnouncementPopup />
     <CommandPaletteModal :open="searchOpen" @close="searchOpen = false" />
   </header>
 </template>
@@ -211,14 +179,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
  */
 @media (min-width: 1024px) {
   @container console-topbar (max-width: 69.9375rem) {
-    .topbar-control-label,
     .topbar-divider,
     .topbar-language :deep([data-language-label]) {
       display: none;
-    }
-    .topbar-search {
-      justify-content: center;
-      padding-inline: 0;
     }
   }
   @container console-topbar (max-width: 57.4375rem) {
@@ -255,7 +218,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
     .topbar-actions {
       gap: 2px;
     }
-    .topbar-search,
+    .topbar-actions :deep([data-announcement-trigger]),
     .topbar-actions :deep([data-theme-switcher]),
     .topbar-actions :deep([data-user-menu-trigger]) {
       width: 44px;
@@ -333,7 +296,7 @@ html.dark .topbar-header {
     gap: 2px;
   }
   /* Icon-only targets stay usable without consuming the text zoom budget. */
-  .topbar-search,
+  .topbar-actions :deep([data-announcement-trigger]),
   .topbar-actions :deep([data-theme-switcher]),
   .topbar-actions :deep([data-user-menu-trigger]) {
     width: 44px;
@@ -342,7 +305,6 @@ html.dark .topbar-header {
     padding: 0;
     flex-shrink: 0;
   }
-  .topbar-control-label,
   .topbar-divider {
     display: none;
   }

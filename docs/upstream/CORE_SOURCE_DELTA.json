@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 830,
     "adapted": 334,
-    "extension": 528,
+    "extension": 540,
     "removed": 47
   },
   "files": [
@@ -971,6 +971,25 @@
       "local_sha256": "3874ddeaaf7f4b1ab786ac9b004326c8c225331674dec8e56023d688ff1d6c28"
     },
     {
+      "path": "controller/announcement.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "70039a68e42b91bcd822e91a3b8f23c4fa5770abace5757a922a7253c52b3ee4",
+      "reasons": [
+        "announcements"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "公告管理与控制台公告中心扩展，见 SYNC_LEDGER.md#现行本地差异。"
+      }
+    },
+    {
+      "path": "controller/announcement_contract_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "696af9fb35a6911543e4362328f53582dd37c234fb8d1d0ba0aaf84edf34e53b"
+    },
+    {
       "path": "controller/audit.go",
       "status": "adapted",
       "upstream_sha256": "74d63a6666915d0aa0d97f269e2300e028342083d99ff75871015d27bc8b80b2",
@@ -1355,7 +1374,7 @@
       "path": "controller/channel_upstream_update.go",
       "status": "adapted",
       "upstream_sha256": "7dd46eb7b98d12f9bd93475ff1a3208120107c3c70b8c4feaa475c27b70b6aab",
-      "local_sha256": "b6cdc6bb21ccf880af5f1b5e67dfdb759abbef0cd81eb0176813b47f21a13c02",
+      "local_sha256": "a73810ed5f634d8c86255dc586575d58cf225ae1fb50aa8687f2b740a357f61e",
       "reasons": [
         "concurrency",
         "retired",
@@ -1742,7 +1761,7 @@
       "path": "controller/model_catalog.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "752a59238204b03df1b4acc5c81794bce76cd3fb3399e247bb828a7b0ff24159",
+      "local_sha256": "da9412b40983f86668603e0ee5436c89ba1361fae8eee0826d5a5cf23cee1c80",
       "reasons": [
         "catalog-stats"
       ],
@@ -1755,6 +1774,12 @@
           "controller/model_catalog.go#1"
         ]
       }
+    },
+    {
+      "path": "controller/model_catalog_contract_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "108dc39e6513f407b0acc44e14ba9f6f4d4838b46d4727685ff10626b52ef143"
     },
     {
       "path": "controller/model_catalog_prices_test.go",
@@ -4505,6 +4530,25 @@
       "local_sha256": "4357fbf988d0153411a619c092d9355748bb9b09f0368341926373a693ebee7c"
     },
     {
+      "path": "model/announcement.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "7612d99f87044652eb1fb62c8f003db56ead9db1c70575250bce63f2ed9a7d5e",
+      "reasons": [
+        "announcements"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "公告管理与控制台公告中心扩展，见 SYNC_LEDGER.md#现行本地差异。"
+      }
+    },
+    {
+      "path": "model/announcement_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6ff1c2a88a6faf7ce9498691f0df8064bcca6ea58e7c13952f05ac792c390268"
+    },
+    {
       "path": "model/audit_log.go",
       "status": "upstream_equal",
       "upstream_sha256": "1b9db892b78a45b6ea86f425aab1aef4678c5bef5f36363d1ac173551672b554",
@@ -4593,7 +4637,7 @@
       "path": "model/channel.go",
       "status": "adapted",
       "upstream_sha256": "427962e1109534ae14701076dd2c430d1ffec08db04b0a0f5a14e0f2214db3fc",
-      "local_sha256": "601a2dbe35e1c39a7f1383f388eb01babed2dcc4a9597931334921127fac17c4",
+      "local_sha256": "20a3e6a90468bacefb760bd8265b84962ef5889b5ad28b56b6f3a34ca8861177",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -4744,7 +4788,7 @@
       "path": "model/channel_lock.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "36b40af452e471d7de4a69e86de57e3bf5bd601d15c02765a55423e022bf07ef",
+      "local_sha256": "c4149358cc101ad593ba4387dd542a99c3c0290bf9ac0741ca35f7825a679836",
       "reasons": [
         "token-routing"
       ],
@@ -4774,7 +4818,7 @@
       "path": "model/channel_plugin_credential.go",
       "status": "adapted",
       "upstream_sha256": "d0733a5981dd2637b45a8d14e0cd4dcf1e8111e87a51b1bfc20603c34e7cffc3",
-      "local_sha256": "3f0f67a450ae65e4664327da29ecf4453b71135778204a2599e941eee5ed5c19",
+      "local_sha256": "e0c3d44491d5f366438c7ec24879b3302edc5efd3da0efcbc9d11c5c5e74490b",
       "reasons": [
         "auth-cache-integrity",
         "single-key-channel",
@@ -4816,7 +4860,7 @@
       "path": "model/channel_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9553b38a8c4f17599e080e6ce458970b82c97b306c1ae21e6747a900f3baf614",
+      "local_sha256": "46a60858cedbc44552c3d33222b46a1555b23e7a6f2df22ecc932d1400dcef8a",
       "reasons": [
         "channel-ratio",
         "token-routing"
@@ -4872,7 +4916,7 @@
       "path": "model/channel_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "52540a319360caff7cfc97f5ed2ed0fcb027f494f9b4082bb29de0b312bcc78c",
+      "local_sha256": "6851bb05a328a09d45a5903dcf517ce04dd2b876b5ebab13d57583b94e366ee8",
       "reasons": [
         "audit-local-safety",
         "single-key-channel",
@@ -5255,9 +5299,10 @@
       "path": "model/main.go",
       "status": "adapted",
       "upstream_sha256": "36d2ef0c7dd4124b0a07e0e5972830da44f5fc72e39b90703472ace43746a1e1",
-      "local_sha256": "24d1f7ef8ea1f5a0bc3a5b7aba7e702b72bbaa7d6c00abeefd25beae63a64042",
+      "local_sha256": "d07c73b5dc87c1a1b11ee1d20aa7c6ddc4d69162e65178adad4bee27710d1c19",
       "reasons": [
         "affiliate",
+        "announcements",
         "gmpay",
         "group-removal",
         "install-guard",
@@ -5810,7 +5855,7 @@
       "path": "model/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "67007cb9fe53132847e0cd56f6245d228e9300c43cd043caa428e60d97bfd5a1",
+      "local_sha256": "59eb64dc05643d6f2dfb8500dc57f3e49a58de400bc7b39c43fc174b2b29e280",
       "reasons": [
         "token-routing"
       ],
@@ -5828,7 +5873,7 @@
       "path": "model/route_candidates_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3af7e51ba5cf9de3ad68fab2fbd2fb120b1f003f2fe670e8acabe902511d6f42"
+      "local_sha256": "708921ab6dd1501febaa2602e12f2e9c68819c9acaaff3907274a2228ae65bd3"
     },
     {
       "path": "model/sensitive_word_migration.go",
@@ -6447,9 +6492,10 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "162942f4b1fd925a2e3ea3e3e2f410663aab78d777974b6eb9ca22cebe468d63",
+      "local_sha256": "1ca017f00ee0c115215aec68ebe10022a02756ccd54142c819a4b3a8f6de311a",
       "reasons": [
         "affiliate",
+        "announcements",
         "audit-local-safety",
         "auth-cache-integrity",
         "concurrency",
@@ -11604,6 +11650,12 @@
       "local_sha256": "af5a4a2307ddc48a69188e630b6dbed10c019859142be437a3e50a085f53f69a"
     },
     {
+      "path": "router/announcement_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a72afc71ad110d44525e961f1a7fe492921be902ec243a49201336b388dc5cc3"
+    },
+    {
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "a6ec29bf1844cb7d2100467937be3872ff1cc0437f354aeaaed017da3e6a96d7",
@@ -11717,9 +11769,10 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8818345e2d5eea5c946c9af76cd45aaa85cbcb010df9071c6280150136a9f2cd",
+      "local_sha256": "cc07e59774ea1fe3ebcdf66ad17d7918a05790c38133ce36a034343266fd58f8",
       "reasons": [
         "affiliate",
+        "announcements",
         "system-update",
         "ticket",
         "token-routing",
@@ -12167,6 +12220,25 @@
       "local_sha256": "9398aa3bf66f3fa6e81c70a0ebbef437af5f922ade06132cf7e10baef8ac7f33"
     },
     {
+      "path": "service/announcement.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "02f3d4b8ef09f91b9268d05ec9341b1c89a506cd431d57e465852a91135b70e2",
+      "reasons": [
+        "announcements"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "公告管理与控制台公告中心扩展，见 SYNC_LEDGER.md#现行本地差异。"
+      }
+    },
+    {
+      "path": "service/announcement_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "48f35ffdb8e92acbe51ba87d191f203f5af9b8c5a7322f6176d829d14638080b"
+    },
+    {
       "path": "service/audio.go",
       "status": "upstream_equal",
       "upstream_sha256": "95dbffb6c5db604b0032f627916349f3ccb352d97f39585bf810dd5358ecb41c",
@@ -12262,6 +12334,25 @@
       "status": "upstream_equal",
       "upstream_sha256": "3d00097d412d10444985402da351add1761d0e2dac343c422e61d57c4a367b90",
       "local_sha256": "3d00097d412d10444985402da351add1761d0e2dac343c422e61d57c4a367b90"
+    },
+    {
+      "path": "service/authz/resources_announcement.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "998b1d9e02fa685a70e4da1eeb99f59caa54b6ebaa2b8f0d594530dcd2603596",
+      "reasons": [
+        "announcements"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "公告管理与控制台公告中心扩展，见 SYNC_LEDGER.md#现行本地差异。"
+      }
+    },
+    {
+      "path": "service/authz/resources_announcement_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ca218a7ea329a1d81bb1da054b80c68f207a3da6eedebb60aaa7e9a540b58f37"
     },
     {
       "path": "service/authz/resources_audit.go",
@@ -12825,7 +12916,7 @@
       "path": "service/concurrency.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "411753ca41469909e460c9a998368879d8126a02f252ebafbacf17cec22bbdce",
+      "local_sha256": "16036e9aff47b161dc5eaa43b4a5ed168b9cde68c5d4dea072fa1b256452d097",
       "reasons": [
         "concurrency"
       ],
@@ -13271,7 +13362,7 @@
       "path": "service/model_catalog.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e4177a4b3c964f2388932ee7448c59a49eeedebea49fe252b9d58d7eee4f6b72",
+      "local_sha256": "c6da190d92db1521e1485cbed1f2318e9b32f68a3117f92613278cb4fb1a624e",
       "reasons": [
         "catalog-stats"
       ],
@@ -13284,6 +13375,26 @@
           "service/model_catalog.go#1"
         ]
       }
+    },
+    {
+      "path": "service/model_catalog_health.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fa19d4aa83fc942c65277b849cb5933e49afff7a9788cfa8cc109d29a08637e7",
+      "reasons": [
+        "catalog-stats"
+      ],
+      "review": {
+        "target": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+        "basis": "用户侧模型目录渠道健康与质量无锁投影，接点见 SYNC_LEDGER.md 与 UNIFIED_ROUTING.md。",
+        "method": "经 Opus 5.5 与 GPT-Astra-6.2 交叉设计定稿，由 GPT-Astra-6 交叉审计验收"
+      }
+    },
+    {
+      "path": "service/model_catalog_health_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "36ed1cebd85352372a87f03f62ae45b222d6540c1a4ff49d3da5aa5d94ff1bde"
     },
     {
       "path": "service/model_catalog_test.go",
@@ -13890,7 +14001,7 @@
       "path": "service/route_breaker.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4e4d56883e74b7684f4ac8c025cfabc96bcc37d86ae86868fcf8981f136d94f7",
+      "local_sha256": "2e670bbb8c50ca1128b4eaa7196bafac60a3e03ada6143c4ad6b4564fa9bea13",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -13983,7 +14094,7 @@
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3c7d8576cded17ff83fdc2441e263814075c27326df1ca85f8f3870accdd505a",
+      "local_sha256": "e3628e74bf2b6cc11ce6d4fa178c8d9ac8ed647de9d684c5be560ed2dfe99c02",
       "reasons": [
         "concurrency",
         "origin-task-continuation",
@@ -14054,7 +14165,7 @@
       "path": "service/route_observation.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "7778660e707664d4ce2e41cfb2f7aabd7e8c3eb08ad16a92ceaf9892b4a97c35",
+      "local_sha256": "fc911a1a941cafb4d20b32b6710c177689238c109b194d635743eff5c38d4b4d",
       "reasons": [
         "concurrency",
         "token-routing"
@@ -14246,7 +14357,7 @@
       "path": "service/route_test_helpers_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "187a9f11d2f74170c36c31d45e240d74f74a5ef14d2f416c5ddd02ef98edce30"
+      "local_sha256": "3de417a536a4bc85a0479c4cb4014a2aaf3e404c74f1a887e07be31313051290"
     },
     {
       "path": "service/route_usage.go",
@@ -14272,7 +14383,7 @@
       "path": "service/route_user_view_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0b94319188047fd183e28bb459dcc5e968ebec0838f688f32ea096019c1b2005"
+      "local_sha256": "1e22c0ce760ab06e31d2a08b451b7584c8b2fd7229faa988ff6e71df5cc22d6d"
     },
     {
       "path": "service/route_workload_test.go",
@@ -15909,6 +16020,11 @@
       "kind": "approved_contract",
       "basis": "管理员维护 Sub2API/NewAPI 上游账号、远端 Key、渠道绑定及可选倍率同步。见 SYNC_LEDGER.md 与 ../channel/UPSTREAM_RATIO.md。",
       "authority": "SYNC_LEDGER.md#现行本地差异"
+    },
+    "announcements": {
+      "kind": "approved_contract",
+      "authority": "SYNC_LEDGER.md#现行本地差异",
+      "basis": "独立公告管理与用户已读追踪扩展：支持类型、草稿/生效/归档状态、静默/弹窗通知、置顶、定时生效窗口及已读统计，接现有 authz 与会话权限，原生 console_setting.announcements 保持不变。"
     }
   },
   "review_scope": {

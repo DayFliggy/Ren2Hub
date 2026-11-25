@@ -1,0 +1,149 @@
+{
+  "admin_detail": {
+    "data": {
+      "content": "### 本次更新\n\n- 优化自动选渠与缓存复用统计\n- 新增控制台公告中心与已读追踪\n\n详情请查看 [状态页](https://next.renai.uno)。",
+      "created_at": 1785120000,
+      "created_by": 101,
+      "ends_at": 1893456000,
+      "id": 11,
+      "notify_mode": "silent",
+      "pinned": true,
+      "read_count": 1,
+      "starts_at": 1785000000,
+      "status": "active",
+      "title": "平台路由与模型目录升级公告",
+      "type": "ongoing",
+      "updated_at": 1785120000,
+      "updated_by": 101
+    },
+    "message": "",
+    "success": true
+  },
+  "admin_list": {
+    "data": {
+      "items": [
+        {
+          "content": "### 本次更新\n\n- 优化自动选渠与缓存复用统计\n- 新增控制台公告中心与已读追踪\n\n详情请查看 [状态页](https://next.renai.uno)。",
+          "created_at": 1785120000,
+          "created_by": 101,
+          "ends_at": 1893456000,
+          "id": 11,
+          "notify_mode": "silent",
+          "pinned": true,
+          "read_count": 1,
+          "starts_at": 1785000000,
+          "status": "active",
+          "title": "平台路由与模型目录升级公告",
+          "type": "ongoing",
+          "updated_at": 1785120000,
+          "updated_by": 101
+        },
+        {
+          "content": "维护窗口内不影响在途请求，完成后将自动恢复。",
+          "created_at": 1785050000,
+          "created_by": 101,
+          "ends_at": null,
+          "id": 12,
+          "notify_mode": "popup",
+          "pinned": false,
+          "read_count": 0,
+          "starts_at": null,
+          "status": "active",
+          "title": "余额结算维护通知",
+          "type": "warning",
+          "updated_at": 1785050000,
+          "updated_by": 101
+        },
+        {
+          "content": "内部审阅草稿，暂不对普通用户展示。",
+          "created_at": 1785000000,
+          "created_by": 101,
+          "ends_at": null,
+          "id": 13,
+          "notify_mode": "silent",
+          "pinned": false,
+          "read_count": 0,
+          "starts_at": null,
+          "status": "draft",
+          "title": "下季度计费调整草稿",
+          "type": "default",
+          "updated_at": 1785000000,
+          "updated_by": 101
+        }
+      ],
+      "page": 1,
+      "page_size": 20,
+      "total": 3
+    },
+    "message": "",
+    "success": true
+  },
+  "read_status": {
+    "data": {
+      "items": [
+        {
+          "display_name": "Member Demo",
+          "email": "member@ren2hub.dev",
+          "read_at": 1785123600,
+          "user_id": 102,
+          "username": "member.demo"
+        },
+        {
+          "display_name": "Visual Root",
+          "email": "visual-root@ren2hub.dev",
+          "read_at": null,
+          "user_id": 101,
+          "username": "visual.root"
+        }
+      ],
+      "page": 1,
+      "page_size": 20,
+      "read_count": 1,
+      "total": 2,
+      "total_users": 2
+    },
+    "message": "",
+    "success": true
+  },
+  "user_list": {
+    "data": {
+      "items": [
+        {
+          "content": "### 本次更新\n\n- 优化自动选渠与缓存复用统计\n- 新增控制台公告中心与已读追踪\n\n详情请查看 [状态页](https://next.renai.uno)。",
+          "created_at": 1785120000,
+          "created_by": 101,
+          "ends_at": 1893456000,
+          "id": 11,
+          "notify_mode": "silent",
+          "pinned": true,
+          "read_at": null,
+          "starts_at": 1785000000,
+          "status": "active",
+          "title": "平台路由与模型目录升级公告",
+          "type": "ongoing",
+          "updated_at": 1785120000,
+          "updated_by": 101
+        },
+        {
+          "content": "维护窗口内不影响在途请求，完成后将自动恢复。",
+          "created_at": 1785050000,
+          "created_by": 101,
+          "ends_at": null,
+          "id": 12,
+          "notify_mode": "popup",
+          "pinned": false,
+          "read_at": null,
+          "starts_at": null,
+          "status": "active",
+          "title": "余额结算维护通知",
+          "type": "warning",
+          "updated_at": 1785050000,
+          "updated_by": 101
+        }
+      ],
+      "unread_count": 2
+    },
+    "message": "",
+    "success": true
+  }
+}

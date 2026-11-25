@@ -97,6 +97,8 @@ async function setup(role = 100, { realModals = false } = {}) {
       stubs: {
         TopNavMenu: true,
         UserMenu: true,
+        AnnouncementBell: true,
+        AnnouncementPopup: true,
         ConsoleMobileNavDrawer: true,
         LanguageSelector: true,
         ThemeSwitcher: true,

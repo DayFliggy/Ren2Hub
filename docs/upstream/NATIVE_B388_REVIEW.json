@@ -33466,7 +33466,7 @@
       ]
     },
     "model/channel.go": {
-      "local_sha256": "601a2dbe35e1c39a7f1383f388eb01babed2dcc4a9597931334921127fac17c4",
+      "local_sha256": "20a3e6a90468bacefb760bd8265b84962ef5889b5ad28b56b6f3a34ca8861177",
       "hunks": [
         {
           "header": "@@ -3,11 +3,9 @@",
@@ -33509,49 +33509,49 @@
           "basis": "删除业务分组：搜索查询不加分组过滤。"
         },
         {
-          "header": "@@ -538,32 +369,42 @@",
-          "sha256": "4d2a4b3008265365ffe0ae1baa260d56c6550ebd3f917493c656d4de7d08b3d6",
-          "basis": "批量删除按有序行锁返回快照并发布路由变更（token-routing、concurrency）。"
+          "header": "@@ -538,32 +369,50 @@",
+          "sha256": "b2c9e111586db6fa0c50abf71ec97f063c8f676ac45eb8694120c6a4ff39c983",
+          "basis": "批量删除按有序行锁返回快照并发布路由变更（token-routing、concurrency）；提交前经 BeginChannelRoutingMutation 隔离目录健康投影，提交后经 ChannelRoutingDeleted 立即失效残留状态（catalog-stats）。"
         },
         {
-          "header": "@@ -620,48 +461,37 @@",
-          "sha256": "de94ebd0c5dd37e0022e60e8808f163a3a4da3b4b1778289000f31491127dc7c",
+          "header": "@@ -620,48 +469,38 @@",
+          "sha256": "369cf96a8310672f7df4ee09f092202a82e13a050c35424eea1b60d405c6fc38",
           "basis": "删除多 Key：编辑不再重算 MultiKeySize（single-key-channel）；编辑未带 channel_ratio 时沿用库内倍率，避免回落默认值（channel-ratio）；编辑在事务内写入并重建能力，提交后发布路由变更（token-routing）。"
         },
         {
-          "header": "@@ -685,51 +515,11 @@",
-          "sha256": "cb4ec18e738aac79040d9fe5c1e9d43426d647ba173afd3cb50171c2566b0053",
-          "basis": "删除渠道经本地有序删除并发布路由变更（token-routing、concurrency）；删除多 Key：删除按渠道的轮询锁（single-key-channel）。"
+          "header": "@@ -685,51 +524,11 @@",
+          "sha256": "aaf05055a9758e3b7c2813e6a80c2a7d80c6320b4f93860868e4d23a44ee0b3d",
+          "basis": "删除渠道经本地有序删除并发布路由变更（token-routing、concurrency）；删除多 Key：删除按渠道的轮询锁（single-key-channel）；提交前经 BeginChannelRoutingMutation 隔离目录健康投影，提交后经 ChannelRoutingDeleted 立即失效残留状态（catalog-stats）。"
         },
         {
-          "header": "@@ -793,233 +583,28 @@",
-          "sha256": "9ecce3ae701bc99aa668d4e83424acd8f0410135fdc655ba41187e5cd21ac0f9",
+          "header": "@@ -793,233 +592,28 @@",
+          "sha256": "efabe00d61259dcb0c0166317e11a032aadc12ade0ff22bb67847ffb52afca54",
           "basis": "删除多 Key：删除 handlerMultiKeyUpdate、hasEnabledMultiKey，按标签禁用不再单独处理全部 Key 停用的渠道（single-key-channel）；渠道状态写入移到扩展文件 model/channel_status.go 的 UpdateChannelStatusDetailed（token-routing）；按标签启用、禁用经行锁事务并发布路由变更（token-routing、concurrency）；删除业务分组：EditChannelByTag 去掉 group 参数。"
         },
         {
-          "header": "@@ -1028,10 +613,6 @@",
-          "sha256": "28776383eca62379df5052637f7de1aa61bff02a8ea9f5ce4b8d367429ecec44",
+          "header": "@@ -1028,10 +622,6 @@",
+          "sha256": "9d223091cd7489997dd3791da58c5ea73cda43c5287312e50d9cf523fc979f54",
           "basis": "删除业务分组：按标签编辑不再改分组。"
         },
         {
-          "header": "@@ -1045,28 +626,12 @@",
-          "sha256": "25d2537c73733353eb058ea0c8d5daf9a36c07a7878d9dca73495ac1466fd5da",
+          "header": "@@ -1045,28 +635,12 @@",
+          "sha256": "97796bb23d19d5aa530e7053f408c614da15b224faf42f4a27494a98cd2f3b0f",
           "basis": "按标签编辑经行锁事务写入并发布路由变更（token-routing、concurrency）。"
         },
         {
-          "header": "@@ -1113,7 +678,7 @@",
-          "sha256": "9966d9b83047d862fd7fac32139e5cc8b978ad713286650b332301b551af9460",
+          "header": "@@ -1113,7 +687,7 @@",
+          "sha256": "30fffdd31b9889d994835b147ab773b9846b3a1e4cf470d6eecef431cb3e9911",
           "basis": "删除业务分组：SearchTags 去掉 group 参数。"
         },
         {
-          "header": "@@ -1139,7 +704,7 @@",
-          "sha256": "e10256fe7245575f1a783a13030aec57cc0a18cf60aa5a1763633101856da7e0",
+          "header": "@@ -1139,7 +713,7 @@",
+          "sha256": "46481b3c39722a1304b6e6a29cb35fa2d1fe9a4533a31b59602cf0d1992a56dd",
           "basis": "删除业务分组：标签搜索不加分组过滤。"
         },
         {
-          "header": "@@ -1281,41 +846,20 @@",
-          "sha256": "37758390f1c8ba9d8dc444944051b3fc72b50976ee6e1bbc8ccebd55c8722ca5",
-          "basis": "BatchSetChannelTag 用本地行锁事务（lockChannels 与 updateLockedChannels，在同一事务内加锁重读后重建能力）实现渠道变更锁顺序与路由发布；上游 ce8fc49e4 改为事务内读回，生产行为等价，保留本地实现并带入上游 TestBatchSetChannelTagDatabaseMatrix（去掉 Group，能力数按本地 2）。"
+          "header": "@@ -1281,41 +855,23 @@",
+          "sha256": "c076e2ca6c390173912e51ba8d84d95dd81d3b8c3b82474a05f1e62a522d0fbe",
+          "basis": "BatchSetChannelTag 用本地行锁事务（lockChannels 与 updateLockedChannels，在同一事务内加锁重读后重建能力）实现渠道变更锁顺序与路由发布；上游 ce8fc49e4 改为事务内读回，生产行为等价，保留本地实现并带入上游 TestBatchSetChannelTagDatabaseMatrix（去掉 Group，能力数按本地 2），并在提交前经 BeginChannelRoutingMutation 隔离目录健康投影（catalog-stats）。"
         }
       ]
     },
@@ -35988,7 +35988,7 @@
       ]
     },
     "model/user.go": {
-      "local_sha256": "162942f4b1fd925a2e3ea3e3e2f410663aab78d777974b6eb9ca22cebe468d63",
+      "local_sha256": "1ca017f00ee0c115215aec68ebe10022a02756ccd54142c819a4b3a8f6de311a",
       "hunks": [
         {
           "header": "@@ -10,7 +10,6 @@",
@@ -36086,18 +36086,23 @@
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1269,34 +1189,6 @@",
-          "sha256": "da619398a7a5df1c6ab6780e9dcd55e80595c78355732ec3e2159176991f3fff",
+          "header": "@@ -1051,6 +971,9 @@",
+          "sha256": "bccacf580096f168658073e3e5618d444f7d76f3fa950766dfd2bbd8138de5b2",
+          "basis": "硬删除用户事务内同步清理公告已读记录（deleteUserAnnouncementReads，announcements）。"
+        },
+        {
+          "header": "@@ -1269,34 +1192,6 @@",
+          "sha256": "362da07e4ff89eb94e4eab03ce6f8f110af9fbf59141e89381c893fb7793235c",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1345,23 +1237,9 @@",
-          "sha256": "5aaed006ea42dc85d5db0982ee6d36624ed0d95d2f7a46e3cd528ed83daff4bb",
+          "header": "@@ -1345,23 +1240,9 @@",
+          "sha256": "2d6014b44aace388745a952d13d01e632b58e72b937cf84b39b0b538e3124680",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1388,17 +1266,10 @@",
-          "sha256": "6a4d81d3dc3afdade03b2019ad065f43ef6e28f131607dfe83804ad5a35f8dd3",
+          "header": "@@ -1388,17 +1269,10 @@",
+          "sha256": "b21235658fbf3b488ef2c06964f7dd0a9b1d4425ad5b06ec158aa21b57f6c100",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         }
       ]

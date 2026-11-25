@@ -140,6 +140,15 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a2.5 2.5 0 0 0 0 5V16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a2.5 2.5 0 0 0 0-5V8ZM13 6v2m0 8v2m0-7v2',
       },
       {
+        name: 'announcement-management',
+        labelKey: 'nav.announcementManagement',
+        route: 'announcements',
+        feature: 'admin',
+        permission: { resource: 'announcement', action: 'read' },
+        // Lucide "megaphone"
+        icon: 'm3 11 18-5v12L3 13v-2ZM11.6 16.8a3 3 0 1 1-5.8-1.6',
+      },
+      {
         name: 'user-management',
         labelKey: 'nav.userManagement',
         route: 'users',

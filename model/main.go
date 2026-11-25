@@ -392,6 +392,8 @@ func migrateDB() error {
 		&TopUpBonusUsageHourly{},
 		&TopUpBonusConfigVersion{},
 		&TopUpBonusDecisionRecord{},
+		&Announcement{},
+		&AnnouncementRead{},
 	)
 	if err != nil {
 		return err

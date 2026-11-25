@@ -41,6 +41,7 @@ MATRIX_TESTS = {
         "TestTopUpQueryDatabases", "TestTopUpBonusDatabaseMatrix", "TestChannelUpstreamRatioDatabases",
         "TestNativeTopUpFacadeDatabaseMatrix", "TestQuotaReserveRedisLossDatabaseMatrix", "TestQuotaBatchHydrationAtomicityDatabaseMatrix", "TestQuotaDirectSyncHydrationDatabaseMatrix", "TestQuotaBatchDeletedBalancesDatabaseMatrix", "TestVerifiedTopUpReceiptDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
         "TestBatchSetChannelTagDatabaseMatrix",
+        "TestReadRouteChannelsAndModelsDatabaseMatrix",
     ),
     "controller": (
         "TestModelPricingConversionDatabaseMatrix", "TestProviderChannelManagementDatabaseMatrix", "TestModelManagementDatabaseMatrix",
@@ -92,6 +93,7 @@ PAIRED_TESTS = (
 )
 PROVIDER_TESTS = (
     ("model", "TestUpstreamManagementDatabaseMatrix"),
+    ("model", "TestAnnouncementDatabaseMatrix"),
     ("model", "TestRestoredRound3ChannelStatusFailureRestoresCache"),
     ("model", "TestChannelStatusFailureDatabaseMatrix"),
     ("model", "TestChannelStatusCacheFastPathDatabaseMatrix"),

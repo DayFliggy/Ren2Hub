@@ -475,6 +475,42 @@ export async function nativeCoreFixture(
       if (path === '/api/admin/upstreams/4/bindings')
         return ok(upstreams.bindings.data)
     }
+    if (path === '/api/announcements' && method === 'GET') {
+      const fixture = nativeFixture<{
+        user_list: {
+          data: {
+            items: Array<Record<string, unknown>>
+            unread_count: number
+          }
+        }
+      }>('announcements.get.json')
+      // Existing page tests should not be interrupted by an auto-popup dialog;
+      // mark popup items read in the shared default fixture while keeping
+      // silent unread items visible on the topbar bell badge.
+      const items = fixture.user_list.data.items.map((item) =>
+        item.notify_mode === 'popup' ? { ...item, read_at: now } : item
+      )
+      const unreadCount = items.filter((item) => item.read_at === null).length
+      return ok({ items, unread_count: unreadCount })
+    }
+    if (path === '/api/announcements/read-all' && method === 'POST') {
+      return ok({ updated: 1 })
+    }
+    if (/^\/api\/announcements\/\d+\/read$/.test(path) && method === 'POST') {
+      const id = Number(path.split('/')[3])
+      return ok({ id, read_at: now })
+    }
+    if (path.startsWith('/api/admin/announcements') && method === 'GET') {
+      const fixture = nativeFixture<Record<string, { data: unknown }>>(
+        'announcements.get.json'
+      )
+      if (path === '/api/admin/announcements')
+        return ok(fixture.admin_list.data)
+      if (path === '/api/admin/announcements/11')
+        return ok(fixture.admin_detail.data)
+      if (path === '/api/admin/announcements/11/read-status')
+        return ok(fixture.read_status.data)
+    }
     // Visual channels are never probed: each requested id gets the real
     // handler's no-record view.
     if (path === '/api/channel/upstream_ratios') {

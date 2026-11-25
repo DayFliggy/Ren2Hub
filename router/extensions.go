@@ -16,6 +16,7 @@ func handleSessionRoute(group *gin.RouterGroup, method, path string, handlers ..
 
 func registerExtensionRoutes(api *gin.RouterGroup) {
 	registerUpstreamRoutes(api)
+	registerAnnouncementRoutes(api)
 	system := api.Group("/admin/system", middleware.RootAuth())
 	handleSessionRoute(system, http.MethodGet, "/version", controller.SystemUpdates.Version)
 	handleSessionRoute(system, http.MethodGet, "/check-updates", controller.SystemUpdates.CheckUpdates)
@@ -95,4 +96,19 @@ func registerUpstreamRoutes(api *gin.RouterGroup) {
 	handlePermissionRoute(up, http.MethodPost, "/:id/channels", authz.UpstreamSensitiveWrite, controller.RequireUpstreamChannelWrite, controller.CreateManagedChannel)
 	handlePermissionRoute(up, http.MethodPatch, "/:id/bindings/:channel_id", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.EditManagedBinding)
 	handlePermissionRoute(up, http.MethodDelete, "/:id/bindings/:channel_id", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.DeleteManagedBinding)
+}
+
+func registerAnnouncementRoutes(api *gin.RouterGroup) {
+	user := api.Group("/announcements", middleware.UserAuth(), middleware.DisableCache())
+	handleSessionRoute(user, http.MethodGet, "", controller.ListUserAnnouncements)
+	handleSessionRoute(user, http.MethodPost, "/read-all", controller.MarkAllUserAnnouncementsRead)
+	handleSessionRoute(user, http.MethodPost, "/:id/read", controller.MarkUserAnnouncementRead)
+
+	admin := api.Group("/admin/announcements", middleware.AdminAuth(), middleware.DisableCache())
+	handlePermissionRoute(admin, http.MethodGet, "", authz.AnnouncementRead, controller.ListAdminAnnouncements)
+	handlePermissionRoute(admin, http.MethodPost, "", authz.AnnouncementWrite, controller.CreateAdminAnnouncement)
+	handlePermissionRoute(admin, http.MethodGet, "/:id", authz.AnnouncementRead, controller.GetAdminAnnouncement)
+	handlePermissionRoute(admin, http.MethodPut, "/:id", authz.AnnouncementWrite, controller.UpdateAdminAnnouncement)
+	handlePermissionRoute(admin, http.MethodDelete, "/:id", authz.AnnouncementWrite, controller.DeleteAdminAnnouncement)
+	handlePermissionRoute(admin, http.MethodGet, "/:id/read-status", authz.AnnouncementRead, controller.ListAdminAnnouncementReadStatus)
 }
