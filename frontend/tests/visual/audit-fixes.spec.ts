@@ -79,9 +79,11 @@ for (const [theme, width] of [
         .getByRole('button', { name: '查看自动禁用原因', exact: true })
         .filter({ visible: true })
       await expect(reason).toBeVisible()
+      await page.locator('[aria-label="更多渠道操作"]:visible').first().click()
       await expect(
-        page.locator('[aria-label="预览模型更新"]:visible')
+        page.getByRole('menuitem', { name: '预览模型更新', exact: true })
       ).toHaveCount(operate ? 1 : 0)
+      await page.keyboard.press('Escape')
       if (width > 640) {
         await reason.hover()
         await expect(page.getByRole('tooltip')).toContainText(
@@ -99,9 +101,9 @@ for (const [theme, width] of [
         path: info.outputPath('disabled-reason.png'),
       })
       await page.keyboard.press('Escape')
+      await page.locator('[aria-label="更多渠道操作"]:visible').first().click()
       await page
-        .getByRole('button', { name: '渠道运行状态', exact: true })
-        .filter({ visible: true })
+        .getByRole('menuitem', { name: '渠道运行状态', exact: true })
         .click()
       const dialog = page.getByRole('dialog', { name: channel.name })
       await expect(dialog).toBeVisible()

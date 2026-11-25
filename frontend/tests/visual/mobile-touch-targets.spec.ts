@@ -275,6 +275,13 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
       row.getByRole('button', { name: '测试响应', exact: true }),
       'channel row test'
     )
+    const toolbarMenuTrigger = page.locator(
+      '[data-channel-toolbar-menu-trigger]'
+    )
+    await expectTouchTarget(toolbarMenuTrigger, 'channel toolbar menu')
+    await toolbarMenuTrigger.click()
+    await page.locator('[data-channel-group-toggle]').click()
+    await page.keyboard.press('Escape')
     await expectTouchTarget(
       page.getByRole('button', { name: '测试 OpenAI 渠道的响应' }),
       'channel group test action'

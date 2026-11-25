@@ -37,6 +37,9 @@ export const ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS: AdminChannelOptionalField[] =
 export const ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY =
   'ren2hub_admin_channel_visible_fields_v2'
 
+export const ADMIN_CHANNEL_GROUP_BY_LAB_STORAGE_KEY =
+  'ren2hub_admin_channel_group_by_lab'
+
 export function sanitizeAdminChannelVisibleFields(
   fields: readonly string[]
 ): AdminChannelOptionalField[] {

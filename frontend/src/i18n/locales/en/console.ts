@@ -1,8 +1,10 @@
+import { announcementMessages } from '../../announcements'
 import { pluginExtensionMessages } from '../../pluginExtensions'
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
 import { upstreamMessages } from '../../upstreams'
 export default {
+  announcements: announcementMessages['en'],
   pluginExtensions: pluginExtensionMessages['en'],
   upstreams: upstreamMessages['en'],
   taskPlugins: taskPluginMessages.en,
@@ -382,6 +384,7 @@ export default {
     bigame: 'Fun Games',
     groupConsole: 'Console',
     groupAdmin: 'Administration',
+    announcementManagement: 'Announcements',
     channelManagement: 'Channel management',
     upstreamManagement: 'Upstreams',
     ticketManagement: 'Ticket management',
@@ -1393,6 +1396,16 @@ export default {
     title: 'Channel management',
     resultCount: '{count} channels',
     refreshList: 'Refresh list',
+    moreActions: 'More actions and view',
+    menuViewSection: 'View',
+    menuSortSection: 'Sort',
+    menuBatchSection: 'Batch tools',
+    groupByLab: 'Group by vendor',
+    sortOrderAscShort: 'Asc',
+    sortOrderDescShort: 'Desc',
+    batchTestPage: 'Batch test visible channels',
+    rowMoreActions: 'More channel actions',
+    balanceDetailsToggle: 'Balance window details',
     advancedLegacy: 'Advanced (legacy)',
     createChannel: 'New channel',
     createShort: 'New',
@@ -1445,6 +1458,7 @@ export default {
       open: 'View upstream ratio',
       cell: 'Upstream {ratio}×',
       cellEmpty: 'Upstream ratio —',
+      setManualShort: 'Set ratio',
       empty: 'None',
       stale: 'Stale',
       notDetected: 'Not detected',
@@ -1586,6 +1600,8 @@ export default {
     testConcurrency: 'Test concurrency (1–32)',
     pickChannelDesc:
       'Pick one model and test every {supplier} channel that publishes it.',
+    pickPageChannelDesc:
+      'Pick one model and test every visible channel on this page that publishes it.',
     pickChannelModels: '{count} models',
     pickChannelStart: 'Start test',
     pickModelLabel: 'Test model',
@@ -1601,6 +1617,7 @@ export default {
     batchFailed: '{action} failed for all {count} channels',
     enableChannel: 'Enable channel',
     disableChannel: 'Disable channel',
+    disabledReasonTitle: 'Automatic disable reason',
     disabledReason: 'View automatic disable reason',
     disabledReasonMissing: 'No disable reason was provided.',
     disabledAt: 'Disabled at: {time}',

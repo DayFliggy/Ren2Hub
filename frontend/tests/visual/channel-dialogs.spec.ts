@@ -203,6 +203,12 @@ for (const [theme, viewport] of [
       await expect(menuTrigger).toBeFocused()
     }
 
+    // Enable optional vendor grouping from the unified toolbar menu to reach
+    // the group-level batch test action.
+    await page.locator('[data-channel-toolbar-menu-trigger]').click()
+    await page.locator('[data-channel-group-toggle]').click()
+    await page.keyboard.press('Escape')
+
     await page
       .locator('[aria-label="测试 Anthropic 渠道的响应"]:visible')
       .click()

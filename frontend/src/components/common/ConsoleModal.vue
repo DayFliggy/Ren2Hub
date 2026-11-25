@@ -24,6 +24,8 @@ const props = withDefaults(
     drawerSide?: 'left' | 'right'
     /** Overrides the shared --z-modal layer, e.g. a proof above a form. */
     zIndex?: number
+    /** Draws a subtle divider above the footer; drawers default to true. */
+    footerBorder?: boolean
   }>(),
   {
     title: '',
@@ -35,6 +37,7 @@ const props = withDefaults(
     presentation: 'modal',
     drawerSide: 'right',
     zIndex: undefined,
+    footerBorder: undefined,
   }
 )
 
@@ -230,8 +233,10 @@ onBeforeUnmount(() => {
             v-if="$slots.footer"
             class="shrink-0 px-6 pb-6"
             :class="{
-              'border-t border-[var(--border-subtle)] pt-5':
-                presentation === 'drawer',
+              'border-t border-[var(--border-subtle)]':
+                footerBorder ?? presentation === 'drawer',
+              'pt-5': presentation === 'drawer',
+              'pt-4': presentation !== 'drawer' && footerBorder,
             }"
           >
             <slot name="footer" />

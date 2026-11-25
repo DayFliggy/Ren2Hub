@@ -338,28 +338,36 @@ function close() {
 </script>
 
 <template>
-  <ConsoleModal :open="open" :title="modalTitle" size="xl" @close="close">
+  <ConsoleModal
+    :open="open"
+    :title="modalTitle"
+    size="xl"
+    footer-border
+    @close="close"
+  >
     <p
       v-if="pluginOptionsError"
       role="alert"
-      class="text-sm text-[var(--status-danger)]"
+      class="text-sm text-[var(--status-danger-text)]"
     >
       {{ pluginOptionsError }}
     </p>
     <div class="sibling-space-y-5 text-left">
       <!-- ══ 测试配置 ══════════════════════════════════════════════════ -->
       <section class="channel-test-config">
-        <div :inert="testingAll" class="mb-4">
-          <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
-            {{ t('channels.testConcurrency') }}
-          </p>
-          <FilterSelect
-            v-model="concurrency"
-            :options="concurrencyOptions"
-            :label="t('channels.testConcurrency')"
-          />
-        </div>
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div
+          class="grid gap-4 sm:grid-cols-[minmax(8.5rem,max-content)_minmax(0,1fr)_auto] sm:items-start"
+        >
+          <div :inert="testingAll">
+            <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
+              {{ t('channels.testConcurrency') }}
+            </p>
+            <FilterSelect
+              v-model="concurrency"
+              :options="concurrencyOptions"
+              :label="t('channels.testConcurrency')"
+            />
+          </div>
           <div>
             <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
               {{ t('channels.endpointTypeLabel') }}
@@ -383,7 +391,9 @@ function close() {
                 v-model="stream"
                 :label="t('channels.streamMode')"
               />
-              <span class="text-sm text-[var(--text-secondary)]">
+              <span
+                class="whitespace-nowrap text-sm text-[var(--text-secondary)]"
+              >
                 {{
                   stream
                     ? t('channels.streamEnabled')
@@ -660,6 +670,6 @@ function close() {
   border-bottom: none;
 }
 .channel-test-row:hover {
-  background: var(--surface-muted);
+  background: var(--state-hover-layer);
 }
 </style>

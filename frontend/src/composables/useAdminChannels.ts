@@ -886,8 +886,10 @@ export function useAdminChannels() {
   ) {
     return deleteSelectedChannels(targets)
   }
-  function runVisibleBalance(): Promise<void> {
-    return runBalanceBatch('page', rows.value)
+  function runVisibleBalance(
+    targets: AdminChannel[] = rows.value
+  ): Promise<void> {
+    return runBalanceBatch('page', targets)
   }
 
   watch(canRead, (readable) => {

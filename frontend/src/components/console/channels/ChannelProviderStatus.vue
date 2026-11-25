@@ -3,6 +3,7 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/client'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
 import type { AdminChannel } from '@/types/console'
 interface ProviderStatus {
   sampled_at: number
@@ -78,34 +79,52 @@ onBeforeUnmount(() => controller?.abort())
         {{ t('channels.providerVersion') }}: {{ data.version || '—' }} ·
         {{ new Date(data.sampled_at).toLocaleString(locale) }}
       </p>
-      <dl class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+      <dl class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <template v-for="(endpoint, path) in data.endpoints" :key="path"
-          ><dt class="break-all font-mono">{{ path }}</dt>
-          <dd :class="endpoint.error ? 'text-[var(--status-danger-text)]' : ''">
-            {{ endpoint.status || '—'
-            }}{{
-              endpoint.error
-                ? ` · ${t(`channels.providerErrors.${endpoint.error}`)}`
-                : ''
-            }}
+          ><dt class="break-all font-mono text-xs text-[var(--text-secondary)]">
+            {{ path }}
+          </dt>
+          <dd>
+            <StatusChip
+              :tone="
+                endpoint.error
+                  ? 'danger'
+                  : endpoint.status && endpoint.status < 400
+                    ? 'success'
+                    : 'neutral'
+              "
+            >
+              {{ endpoint.status || '—'
+              }}{{
+                endpoint.error
+                  ? ` · ${t(`channels.providerErrors.${endpoint.error}`)}`
+                  : ''
+              }}
+            </StatusChip>
           </dd></template
         >
       </dl>
-      <div class="overflow-x-auto">
+      <div
+        class="overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+      >
         <table class="w-full text-left text-xs">
           <thead>
-            <tr>
-              <th>{{ t('channels.models') }}</th>
-              <th>{{ t('channels.contextWindow') }}</th>
+            <tr
+              class="border-b border-[var(--border-subtle)] bg-[var(--surface-table-header)] text-[var(--text-secondary)]"
+            >
+              <th class="px-3 py-2 font-medium">{{ t('channels.models') }}</th>
+              <th class="px-3 py-2 text-right font-medium">
+                {{ t('channels.contextWindow') }}
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="model in data.models"
               :key="model.id"
-              class="border-t border-[var(--border-subtle)]"
+              class="border-t border-[var(--border-subtle)] first:border-t-0"
             >
-              <td class="break-all py-2 font-mono">
+              <td class="break-all px-3 py-2 font-mono">
                 {{ model.id
                 }}<span
                   v-if="model.root && model.root !== model.id"
@@ -113,13 +132,20 @@ onBeforeUnmount(() => controller?.abort())
                   >{{ model.root }}</span
                 >
               </td>
-              <td>{{ model.max_model_len ?? '—' }}</td>
+              <td
+                class="px-3 py-2 text-right font-mono tabular-nums text-[var(--text-secondary)]"
+              >
+                {{ model.max_model_len ?? '—' }}
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <details v-if="data.metrics.length">
-        <summary>
+      <details
+        v-if="data.metrics.length"
+        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2"
+      >
+        <summary class="cursor-pointer font-medium text-[var(--text-primary)]">
           {{ t('channels.providerMetrics') }} ({{ data.metrics.length }})
         </summary>
         <dl class="mt-2 sibling-space-y-2">
@@ -128,13 +154,22 @@ onBeforeUnmount(() => controller?.abort())
             :key="index"
             class="break-all font-mono text-xs"
           >
-            <dt>{{ metric.name }} {{ JSON.stringify(metric.labels) }}</dt>
-            <dd>{{ metric.value }}</dd>
+            <dt class="text-[var(--text-secondary)]">
+              {{ metric.name }} {{ JSON.stringify(metric.labels) }}
+            </dt>
+            <dd class="tabular-nums text-[var(--text-primary)]">
+              {{ metric.value }}
+            </dd>
           </div>
         </dl>
       </details>
-      <details v-if="data.raw_metrics">
-        <summary>{{ t('channels.providerRawMetrics') }}</summary>
+      <details
+        v-if="data.raw_metrics"
+        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2"
+      >
+        <summary class="cursor-pointer font-medium text-[var(--text-primary)]">
+          {{ t('channels.providerRawMetrics') }}
+        </summary>
         <pre
           class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs"
           >{{ data.raw_metrics }}</pre>

@@ -1,8 +1,10 @@
+import { announcementMessages } from '../../announcements'
 import { pluginExtensionMessages } from '../../pluginExtensions'
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
 import { upstreamMessages } from '../../upstreams'
 export default {
+  announcements: announcementMessages['zh-CN'],
   pluginExtensions: pluginExtensionMessages['zh-CN'],
   upstreams: upstreamMessages['zh-CN'],
   taskPlugins: taskPluginMessages['zh-CN'],
@@ -359,6 +361,7 @@ export default {
     bigame: '无趣大游戏',
     groupConsole: '控制台',
     groupAdmin: '管理员',
+    announcementManagement: '公告管理',
     channelManagement: '渠道管理',
     upstreamManagement: '上游管理',
     ticketManagement: '工单管理',
@@ -1344,6 +1347,16 @@ export default {
     title: '渠道管理',
     resultCount: '共 {count} 条渠道',
     refreshList: '刷新列表',
+    moreActions: '更多操作与视图',
+    menuViewSection: '视图',
+    menuSortSection: '排序',
+    menuBatchSection: '批量工具',
+    groupByLab: '按厂商分组',
+    sortOrderAscShort: '升序',
+    sortOrderDescShort: '降序',
+    batchTestPage: '批量测试本页渠道',
+    rowMoreActions: '更多渠道操作',
+    balanceDetailsToggle: '额度窗口明细',
     advancedLegacy: '高级管理（旧版）',
     createChannel: '新建渠道',
     createShort: '新建',
@@ -1396,6 +1409,7 @@ export default {
       open: '查看上游倍率',
       cell: '上游 {ratio}×',
       cellEmpty: '上游倍率 —',
+      setManualShort: '手填倍率',
       empty: '暂无',
       stale: '已过期',
       notDetected: '待识别',
@@ -1530,6 +1544,7 @@ export default {
     testConcurrency: '测试并发（1–32）',
     pickChannelDesc:
       '选择一个模型，对 {supplier} 分组中已配置该模型的渠道批量测试。',
+    pickPageChannelDesc: '选择一个模型，对当前页中已配置该模型的渠道批量测试。',
     pickChannelModels: '{count} 个模型',
     pickChannelStart: '开始测试',
     pickModelLabel: '测试模型',
@@ -1544,6 +1559,7 @@ export default {
     batchFailed: '{action}失败：{count} 条渠道均未完成',
     enableChannel: '启用渠道',
     disableChannel: '禁用渠道',
+    disabledReasonTitle: '自动禁用原因',
     disabledReason: '查看自动禁用原因',
     disabledReasonMissing: '未提供禁用原因。',
     disabledAt: '禁用时间：{time}',

@@ -131,6 +131,7 @@ html.dark .console-input {
   button[data-handdrawn='control'],
   a[data-handdrawn='control'],
   [data-control-container],
+  [data-handdrawn='underline'],
   [data-handdrawn='segments'] button,
   [data-handdrawn='pagination'] button {
     min-height: 44px;

@@ -178,7 +178,11 @@ async function runBatch() {
   >
     <div class="sibling-space-y-5 text-left">
       <p class="text-sm leading-6 text-[var(--text-tertiary)]">
-        {{ t('channels.pickChannelDesc', { supplier }) }}
+        {{
+          supplier
+            ? t('channels.pickChannelDesc', { supplier })
+            : t('channels.pickPageChannelDesc')
+        }}
       </p>
 
       <div>

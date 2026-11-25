@@ -1,23 +1,22 @@
 <script setup lang="ts">
 import ChannelBalanceDetails from '@/features/channels/components/ChannelBalanceDetails.vue'
-import BalanceUpdateTask from '@/features/channels/components/BalanceUpdateTask.vue'
 import { useStorage } from '@vueuse/core'
 import {
   Activity,
-  Gauge,
   AlertTriangle,
-  ArrowDownNarrowWide,
-  ArrowUpNarrowWide,
   ChevronDown,
   ChevronRight,
+  Coins,
+  Gauge,
+  GitCompareArrows,
   LoaderCircle,
   Pencil,
   Plus,
   Power,
   PowerOff,
-  Scale,
   RefreshCw,
   RotateCcw,
+  Scale,
   Trash2,
   X,
 } from 'lucide-vue-next'
@@ -25,43 +24,47 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
+import ActionMenu, {
+  type ActionMenuItem,
+} from '@/components/common/ActionMenu.vue'
+import CapacityMeter from '@/components/common/CapacityMeter.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import CapacityMeter from '@/components/common/CapacityMeter.vue'
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import FieldVisibilityMenu from '@/components/common/FieldVisibilityMenu.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
+import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
+import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSyncDialog.vue'
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
 import ChannelStatusBadge from '@/components/console/channels/ChannelStatusBadge.vue'
-import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
-import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
 import ChannelTestPickerDialog from '@/components/console/channels/ChannelTestPickerDialog.vue'
+import ChannelToolbarMenu from '@/components/console/channels/ChannelToolbarMenu.vue'
+import ChannelUpstreamBindingBadge from '@/components/console/channels/ChannelUpstreamBindingBadge.vue'
 import ChannelUpstreamRatioDialog from '@/components/console/channels/ChannelUpstreamRatioDialog.vue'
 import UpstreamRatioSummary from '@/components/console/channels/UpstreamRatioSummary.vue'
-import ChannelUpstreamBindingBadge from '@/components/console/channels/ChannelUpstreamBindingBadge.vue'
-import { useChannelUpstreamBindings } from '@/composables/useChannelUpstreamBindings'
-import { useChannelUpstreamRatios } from '@/composables/useChannelUpstreamRatios'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import {
   type ChannelModelTestResult,
   useAdminChannels,
 } from '@/composables/useAdminChannels'
-import { useAuthStore } from '@/stores/auth'
+import { useChannelBalanceTask } from '@/composables/useChannelBalanceTask'
+import { useChannelUpstreamBindings } from '@/composables/useChannelUpstreamBindings'
+import { useChannelUpstreamRatios } from '@/composables/useChannelUpstreamRatios'
 import {
   ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS,
+  ADMIN_CHANNEL_GROUP_BY_LAB_STORAGE_KEY,
   ADMIN_CHANNEL_OPTIONAL_FIELDS,
-  ADMIN_CHANNEL_SORT_FIELDS,
   ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY,
   type AdminChannelOptionalField,
   adminChannelResponseText,
@@ -76,16 +79,15 @@ import {
   sanitizeAdminChannelVisibleFields,
   supportsBalanceQuery,
 } from '@/constants/adminChannels'
+import { useAuthStore } from '@/stores/auth'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
   AdminChannelCreateOptions,
-  AdminChannelSortBy,
-  AdminChannelSortOrder,
   AdminChannelUpdateInput,
 } from '@/types/console'
-import { formatQuota, relativeTime } from '@/utils/format'
 import { formatDecimal } from '@/utils/decimal'
+import { formatQuota, relativeTime } from '@/utils/format'
 
 interface SupplierTableRow extends Record<string, unknown> {
   key: string | number
@@ -168,6 +170,33 @@ const {
   runVisibleBalance,
   runSupplierBalance,
 } = useAdminChannels()
+
+const {
+  task: balanceTask,
+  busy: balanceTaskStarting,
+  polling: balanceTaskPolling,
+  active: balanceTaskActive,
+  error: balanceTaskError,
+  start: startBalanceAll,
+  poll: retryBalanceTask,
+  dismiss: dismissBalanceTask,
+  cancel: cancelBalanceTask,
+} = useChannelBalanceTask({
+  onComplete: () => {
+    void load({ background: true })
+  },
+})
+
+const balanceTaskBusy = computed(
+  () => balanceTaskStarting.value || balanceTaskActive.value
+)
+const canRunBalanceBatch = computed(
+  () => canRunBatch.value && !balanceTaskBusy.value
+)
+watch(canOperate, (allowed) => {
+  if (!allowed) cancelBalanceTask()
+})
+
 const { ratios: upstreamRatios, update: updateUpstreamRatio } =
   useChannelUpstreamRatios(rows, canRead)
 const editingUpstreamRatio = ref<AdminChannel | null>(null)
@@ -218,6 +247,13 @@ const visibleRows = computed(() => {
     (channel) => upstreamBindings.value[channel.id]?.account_id === account
   )
 })
+const hasAnyFilter = computed(
+  () => hasFilters.value || Boolean(upstreamAccountFilter.value)
+)
+function resetAllFilters() {
+  resetFilters()
+  if (upstreamAccountFilter.value) upstreamAccountFilter.value = ''
+}
 function upstreamBindingFor(channel: AdminChannel | null) {
   return channel ? (upstreamBindings.value[channel.id] ?? null) : null
 }
@@ -232,6 +268,10 @@ function openRuntime(channel: AdminChannel) {
   if (isReadOnlyChannel(channel)) return
   if (canRead.value) runtimeChannel.value = channel
 }
+function openUpstreamRatio(channel: AdminChannel) {
+  if (!canRead.value) return
+  editingUpstreamRatio.value = channel
+}
 const deleting = ref<DeleteTarget | null>(null)
 const testing = ref<AdminChannel | null>(null)
 const pickingGroup = ref<ChannelLabGroup | null>(null)
@@ -242,6 +282,10 @@ const groupTestOverrides = ref<
 >({})
 const selectedIds = ref<number[]>([])
 const collapsedSuppliers = ref<string[]>([])
+const groupByLab = useStorage<boolean>(
+  ADMIN_CHANNEL_GROUP_BY_LAB_STORAGE_KEY,
+  false
+)
 const storedVisibleFields = useStorage<string[]>(
   ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY,
   [...ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS]
@@ -274,6 +318,9 @@ function isReadOnlyChannel(channel: AdminChannel): boolean {
 
 const mutableRows = computed(() =>
   visibleRows.value.filter((channel) => !isReadOnlyChannel(channel))
+)
+const pageBalanceCount = computed(
+  () => visibleRows.value.filter(supportsBalanceQuery).length
 )
 const selectedChannels = computed(() =>
   mutableRows.value.filter((channel) => selectedIds.value.includes(channel.id))
@@ -315,7 +362,7 @@ function clearSelection() {
   selectedIds.value = []
 }
 
-watch(rows, (nextRows) => {
+watch(visibleRows, (nextRows) => {
   const ids = new Set(nextRows.map((channel) => channel.id))
   selectedIds.value = selectedIds.value.filter((id) => ids.has(id))
 })
@@ -337,23 +384,23 @@ const allColumns = computed<
   Array<TableColumn & { optional?: AdminChannelOptionalField }>
 >(() => [
   { key: 'id', label: t('channels.id'), width: '72px', optional: 'id' },
-  { key: 'name', label: t('channels.name'), width: '190px' },
+  { key: 'name', label: t('channels.name'), width: '210px' },
   {
     key: 'type',
     label: t('channels.type'),
-    width: '145px',
+    width: '104px',
     optional: 'type',
   },
   {
     key: 'status',
     label: t('channels.status'),
-    width: '118px',
+    width: '96px',
     optional: 'status',
   },
   {
     key: 'priority',
     label: t('channels.priority'),
-    width: '96px',
+    width: '128px',
     optional: 'priority',
   },
   {
@@ -365,31 +412,31 @@ const allColumns = computed<
   {
     key: 'capacity',
     label: t('channels.capacity'),
-    width: '130px',
+    width: '112px',
     optional: 'capacity',
   },
   {
     key: 'usage',
     label: t('channels.usageAndRatio'),
-    width: '158px',
+    width: '132px',
     optional: 'usage',
   },
   {
     key: 'upstream',
     label: t('channels.upstreamAndRatio'),
-    width: '178px',
+    width: '166px',
     optional: 'upstream',
   },
   {
     key: 'response',
     label: t('channels.response'),
-    width: '138px',
+    width: '122px',
     optional: 'response',
   },
   {
     key: 'actions',
     label: t('channels.actions'),
-    width: '120px',
+    width: '132px',
     align: 'right',
   },
 ])
@@ -404,17 +451,24 @@ const minTableWidth = computed(() => {
   const width = columns.value.reduce(
     (totalWidth, column) =>
       totalWidth + Number.parseInt(column.width ?? '120', 10),
-    0
+    canSelect.value ? 44 : 0
   )
-  return `${Math.max(860, width + 40)}px`
+  return `${Math.max(820, width)}px`
 })
 
 const supplierGroups = computed<ChannelLabGroup[]>(() =>
   groupChannelsByLab(visibleRows.value)
 )
 
-const tableRows = computed<AdminChannelTableRow[]>(() =>
-  supplierGroups.value.flatMap((group) => {
+const tableRows = computed<AdminChannelTableRow[]>(() => {
+  if (!groupByLab.value) {
+    return visibleRows.value.map<ChannelTableRow>((channel) => ({
+      key: channel.id,
+      kind: 'channel',
+      channel,
+    }))
+  }
+  return supplierGroups.value.flatMap((group) => {
     const groupRow: SupplierTableRow = {
       key: `lab:${group.groupSlug}`,
       kind: 'supplier',
@@ -433,7 +487,7 @@ const tableRows = computed<AdminChannelTableRow[]>(() =>
       })),
     ]
   })
-)
+})
 
 const typeOptions = computed(() => {
   const ids = Object.entries(typeCounts.value)
@@ -497,26 +551,6 @@ const searchPlaceholder = computed(() =>
     : t('channels.searchPlaceholder')
 )
 
-const sortOptions = computed(() =>
-  ADMIN_CHANNEL_SORT_FIELDS.map((field) => ({
-    value: field,
-    label: t(`channels.sort.${field}`),
-  }))
-)
-
-const sortModel = computed({
-  get: () => sortBy.value,
-  set: (value: string) => {
-    sortBy.value = value as AdminChannelSortBy
-  },
-})
-
-function toggleSortOrder() {
-  sortOrder.value = (
-    sortOrder.value === 'asc' ? 'desc' : 'asc'
-  ) as AdminChannelSortOrder
-}
-
 function isSupplierRow(row: AdminChannelTableRow): boolean {
   return row.kind === 'supplier'
 }
@@ -538,7 +572,7 @@ function channelRowClass(row: AdminChannelTableRow): string | undefined {
   if (row.kind !== 'channel') return undefined
   if (row.channel.status === 1 && !isReadOnlyChannel(row.channel))
     return undefined
-  return 'opacity-75'
+  return 'bg-[var(--surface-muted)]'
 }
 
 function isSupplierCollapsed(supplier: string): boolean {
@@ -549,19 +583,6 @@ function toggleSupplier(supplier: string) {
   collapsedSuppliers.value = collapsedSuppliers.value.includes(supplier)
     ? collapsedSuppliers.value.filter((item) => item !== supplier)
     : [...collapsedSuppliers.value, supplier]
-}
-
-function balanceButtonLabel(): string {
-  if (batchProgress.value?.scope === 'page') {
-    return t('channels.batchProgressLabel', {
-      action: t('channels.batchBalanceAction'),
-      processed: batchProgress.value.processed,
-      total: batchProgress.value.total,
-    })
-  }
-  return t('channels.batchBalanceLabel', {
-    count: rows.value.filter(supportsBalanceQuery).length,
-  })
 }
 
 function isPageBalance(): boolean {
@@ -592,6 +613,19 @@ function supplierBalanceLabel(supplier: string): string {
   return t('channels.syncSupplier', { supplier })
 }
 
+function triggerBalanceAll() {
+  if (!canOperate.value || !canMutate.value || isBatchBusy.value) return
+  void startBalanceAll()
+}
+
+const showBalanceStatusBar = computed(
+  () =>
+    balanceTaskActive.value ||
+    balanceTask.value?.status === 'succeeded' ||
+    Boolean(balanceTaskError.value) ||
+    isPageBalance()
+)
+
 function openTest(channel: AdminChannel) {
   if (!canOperate.value || isReadOnlyChannel(channel)) return
   testing.value = channel
@@ -605,6 +639,16 @@ function openSupplierTest(group: ChannelLabGroup) {
   )
   if (channels.length === 0) return
   pickingGroup.value = { ...group, channels }
+}
+
+function openPageTest() {
+  if (!canOperate.value || mutableRows.value.length === 0) return
+  groupTestOverrides.value = {}
+  pickingGroup.value = {
+    groupSlug: 'page',
+    supplier: '',
+    channels: mutableRows.value,
+  }
 }
 
 function closeSupplierTest() {
@@ -696,6 +740,63 @@ const syncingModels = ref<AdminChannel | null>(null)
 function previewModelSync(channel: AdminChannel) {
   if (isReadOnlyChannel(channel)) return
   if (canOperate.value && canMutate.value) syncingModels.value = channel
+}
+
+function rowMenuItems(channel: AdminChannel): ActionMenuItem[] {
+  const items: ActionMenuItem[] = []
+  const retired = isReadOnlyChannel(channel)
+  if (!retired && canOperate.value) {
+    items.push({
+      key: 'sync-models',
+      label: t('channels.syncModelsTitle'),
+      icon: GitCompareArrows,
+      disabled: !canMutate.value,
+    })
+  }
+  if (!retired && canRead.value) {
+    items.push({
+      key: 'runtime',
+      label: t('gateway.channelRuntime'),
+      icon: Gauge,
+    })
+  }
+  if (
+    !retired &&
+    canOperate.value &&
+    (!isFieldVisible('response') || !isFieldVisible('rowResponseAction'))
+  ) {
+    items.push({
+      key: 'test',
+      label: t('channels.testChannel'),
+      icon: Activity,
+    })
+  }
+  if (!retired && canRead.value && upstreamRatios.value[channel.id]) {
+    items.push({
+      key: 'upstream-ratio',
+      label: t('channels.upstreamRatio.open'),
+      icon: Scale,
+    })
+  }
+  if (canSensitiveWrite.value) {
+    items.push({
+      key: 'delete',
+      label: t('channels.deleteChannel'),
+      icon: Trash2,
+      tone: 'danger',
+      separated: items.length > 0,
+      disabled: isRowBusy(channel.id),
+    })
+  }
+  return items
+}
+
+function onRowMenuSelect(channel: AdminChannel, key: string) {
+  if (key === 'sync-models') previewModelSync(channel)
+  else if (key === 'runtime') openRuntime(channel)
+  else if (key === 'test') openTest(channel)
+  else if (key === 'upstream-ratio') openUpstreamRatio(channel)
+  else if (key === 'delete') requestDelete(channel)
 }
 
 function closeForm() {
@@ -824,15 +925,14 @@ function routeQualitySummary(row: AdminChannelTableRow) {
 <template>
   <div>
     <ConsoleCard :padded="false">
-      <!-- Toolbar row as in NewAPI: searches and filter chips on the left,
-        list actions on the right. -->
+      <!-- Compact single-row toolbar on desktop: search & filter chips on the left;
+        only Refresh, Field settings, unified More menu and Create on the right. -->
       <div
         class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] p-4"
         data-channel-toolbar
       >
-        <!-- One search box; the scope picks what the native search matches. -->
         <div
-          class="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:max-w-[28rem] sm:grow sm:basis-72"
+          class="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:max-w-[24rem] sm:grow sm:basis-64"
           data-channel-search
         >
           <FilterSelect
@@ -887,49 +987,22 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             data-channel-upstream-filter
           />
           <ConsoleButton
-            v-if="hasFilters"
+            v-if="hasAnyFilter"
             variant="ghost"
             size="sm"
-            @click="resetFilters"
+            @click="resetAllFilters"
           >
             {{ t('channels.resetFilters') }}
             <X :size="14" aria-hidden="true" />
           </ConsoleButton>
         </div>
         <div
-          class="ml-auto flex w-full items-center gap-2 md:w-auto"
+          class="ml-auto flex w-full items-center justify-end gap-2 lg:w-auto"
           data-channel-toolbar-actions
         >
-          <ConsoleButton
-            v-if="canOperate"
-            variant="secondary"
-            size="sm"
-            class="min-w-0 grow md:hidden"
-            :disabled="!canRunBatch"
-            :aria-label="balanceButtonLabel()"
-            @click="runVisibleBalance()"
-          >
-            <LoaderCircle
-              v-if="isPageBalance()"
-              :size="14"
-              class="animate-spin"
-            />
-            <RefreshCw v-else :size="14" />
-            <span class="min-w-0 truncate">
-              {{
-                isPageBalance()
-                  ? batchProgressText()
-                  : t('channels.batchBalancePage')
-              }}
-            </span>
-          </ConsoleButton>
-          <BalanceUpdateTask
-            v-if="canOperate"
-            @complete="load({ background: true })"
-          />
           <IconButton
             :label="t('channels.refreshList')"
-            class="pencil-control ml-auto shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
+            class="pencil-control rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
             data-handdrawn="control"
             :aria-busy="refreshing"
             :disabled="refreshing || isBatchBusy || isCrudBusy || isBulkBusy"
@@ -945,39 +1018,24 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             :title="t('channels.fieldSettings')"
             :reset-label="t('channels.resetFields')"
           />
-        </div>
-        <div
-          class="flex w-full items-center gap-2 md:w-auto"
-          data-channel-header-actions
-        >
-          <span
-            class="mr-auto whitespace-nowrap text-xs tabular-nums text-[var(--text-tertiary)] md:hidden 2xl:mr-1 2xl:inline"
-            aria-live="polite"
-          >
-            {{ t('channels.resultCount', { count: total }) }}
-          </span>
-          <!-- Sort sits beside create as in NewAPI's channel header. -->
-          <FilterSelect
-            v-model="sortModel"
-            :options="sortOptions"
-            :label="t('channels.sortLabel')"
-            :prefix-label="t('channels.sortPrefix')"
-            size="compact"
-            class="w-36"
-          />
-          <IconButton
-            :label="
-              sortOrder === 'asc'
-                ? t('channels.sortAscending')
-                : t('channels.sortDescending')
+          <ChannelToolbarMenu
+            v-model:group-by-lab="groupByLab"
+            v-model:sort-by="sortBy"
+            v-model:sort-order="sortOrder"
+            :can-operate="canOperate"
+            :balance-all-busy="balanceTaskBusy"
+            :balance-all-disabled="isBatchBusy || !canMutate"
+            :page-balance-busy="isPageBalance()"
+            :page-balance-progress="batchProgressText()"
+            :page-balance-disabled="
+              !canRunBalanceBatch || pageBalanceCount === 0
             "
-            class="pencil-control shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
-            data-handdrawn="control"
-            @click="toggleSortOrder"
-          >
-            <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="16" />
-            <ArrowDownNarrowWide v-else :size="16" />
-          </IconButton>
+            :page-balance-count="pageBalanceCount"
+            :batch-test-disabled="mutableRows.length === 0"
+            @start-balance-all="triggerBalanceAll"
+            @run-page-balance="runVisibleBalance(visibleRows)"
+            @open-page-test="openPageTest"
+          />
           <ConsoleButton
             v-if="canSensitiveWrite"
             size="sm"
@@ -986,12 +1044,84 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             @click="openCreate"
           >
             <Plus :size="14" />
-            <span class="2xl:hidden">{{ t('channels.createShort') }}</span>
-            <span class="hidden 2xl:inline">{{
-              t('channels.createChannel')
-            }}</span>
+            <span>{{ t('channels.createChannel') }}</span>
           </ConsoleButton>
         </div>
+      </div>
+
+      <!-- Non-intrusive async balance task progress / feedback banner -->
+      <div
+        v-if="showBalanceStatusBar"
+        data-channel-balance-status
+        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2 text-xs text-[var(--text-secondary)]"
+      >
+        <template v-if="isPageBalance()">
+          <LoaderCircle
+            :size="14"
+            class="shrink-0 animate-spin text-[var(--accent-text)]"
+            aria-hidden="true"
+          />
+          <span role="status" class="tabular-nums">
+            {{
+              t('channels.batchProgressLabel', {
+                action: t('channels.batchBalanceAction'),
+                processed: batchProgress?.processed ?? 0,
+                total: batchProgress?.total ?? 0,
+              })
+            }}
+          </span>
+        </template>
+        <template v-if="balanceTaskActive">
+          <LoaderCircle
+            :size="14"
+            class="shrink-0 animate-spin text-[var(--accent-text)]"
+            aria-hidden="true"
+          />
+          <span role="status" class="tabular-nums">
+            {{
+              balanceTask?.state
+                ? t('pluginExtensions.balanceProgress', {
+                    completed: balanceTask.state.processed ?? 0,
+                    total: balanceTask.state.total ?? 0,
+                  })
+                : t('pluginExtensions.balancePending')
+            }}
+          </span>
+        </template>
+        <span
+          v-else-if="balanceTask?.status === 'succeeded'"
+          role="status"
+          class="text-[var(--status-success-text)]"
+        >
+          {{ t('pluginExtensions.balanceDone') }}
+        </span>
+        <span
+          v-if="balanceTaskError"
+          role="alert"
+          class="text-[var(--status-danger-text)]"
+        >
+          {{ balanceTaskError }}
+        </span>
+        <ConsoleButton
+          v-if="balanceTaskError && balanceTaskActive"
+          :disabled="balanceTaskPolling"
+          size="sm"
+          variant="secondary"
+          @click="retryBalanceTask"
+        >
+          {{ t('common.retry') }}
+        </ConsoleButton>
+        <IconButton
+          v-if="
+            (!balanceTaskActive || Boolean(balanceTaskError)) &&
+            !isPageBalance()
+          "
+          :label="t('common.close')"
+          class="ml-auto"
+          @click="dismissBalanceTask"
+        >
+          <X :size="14" />
+        </IconButton>
       </div>
 
       <div
@@ -1012,7 +1142,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             !canMutate ||
             selectedChannels.every((channel) => channel.status === 1)
           "
-          :class="isBulkActionBusy('enable') ? 'text-[var(--accent)]' : ''"
+          :class="isBulkActionBusy('enable') ? 'text-[var(--accent-text)]' : ''"
           @click="runBulkStatus('enable')"
         >
           <LoaderCircle
@@ -1029,7 +1159,9 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             !canMutate ||
             selectedChannels.every((channel) => channel.status === 2)
           "
-          :class="isBulkActionBusy('disable') ? 'text-[var(--accent)]' : ''"
+          :class="
+            isBulkActionBusy('disable') ? 'text-[var(--accent-text)]' : ''
+          "
           @click="runBulkStatus('disable')"
         >
           <LoaderCircle
@@ -1043,7 +1175,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
           v-if="canOperate"
           :label="t('channels.bulkReset')"
           :disabled="!canMutate || resettableSelectedCount === 0"
-          :class="isBulkActionBusy('reset') ? 'text-[var(--accent)]' : ''"
+          :class="isBulkActionBusy('reset') ? 'text-[var(--accent-text)]' : ''"
           @click="runBulkStatus('reset')"
         >
           <LoaderCircle
@@ -1099,7 +1231,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
           :selection-keys="pageChannelIds"
           :selection-disabled="!canMutate"
           :row-selectable="isSelectableRow"
-          :is-group-row="isSupplierRow"
+          :is-group-row="groupByLab ? isSupplierRow : undefined"
           :loading="loading"
           :skeleton-rows="pageSize"
           adaptive-scroll
@@ -1109,7 +1241,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
           :empty-title="t('channels.emptyTitle')"
           :empty-hint="t('channels.emptyHint')"
           :row-class="channelRowClass"
-          class="hidden md:block"
+          class="hidden lg:block"
           @update:selected="updateSelected"
         >
           <template #group-row="{ row }">
@@ -1179,7 +1311,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                   :label="
                     supplierBalanceLabel((row as SupplierTableRow).supplier)
                   "
-                  :disabled="!canRunBatch"
+                  :disabled="!canRunBalanceBatch"
                   @click="
                     runSupplierBalance(
                       (row as SupplierTableRow).supplier,
@@ -1193,7 +1325,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                     :size="14"
                     class="animate-spin"
                   />
-                  <RefreshCw v-else :size="14" />
+                  <Coins v-else :size="14" />
                 </IconButton>
                 <IconButton
                   v-if="
@@ -1241,105 +1373,89 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             </div>
           </template>
 
-          <template #header-upstream="{ column }">
-            <div class="flex items-center justify-between gap-1">
-              <span aria-hidden="true">{{ column.label }}</span>
-              <span class="flex shrink-0 items-center gap-0.5">
-                <span
-                  v-if="isPageBalance()"
-                  class="font-mono text-[0.5625rem] tabular-nums text-[var(--text-tertiary)]"
-                >
-                  {{ batchProgressText() }}
-                </span>
-                <IconButton
-                  v-if="canOperate"
-                  :label="balanceButtonLabel()"
-                  :disabled="!canRunBatch"
-                  class="h-6 w-6 rounded-md"
-                  @click="runVisibleBalance()"
-                >
-                  <LoaderCircle
-                    v-if="isPageBalance()"
-                    :size="13"
-                    class="animate-spin"
-                  />
-                  <RefreshCw v-else :size="13" />
-                </IconButton>
-              </span>
-            </div>
-          </template>
-
           <template #cell-id="{ row }">
             <span class="font-mono text-xs text-[var(--text-secondary)]">
               #{{ channelFromRow(row as AdminChannelTableRow).id }}
             </span>
           </template>
           <template #cell-name="{ row }">
-            <span
-              class="block truncate font-semibold"
-              :class="
-                channelFromRow(row as AdminChannelTableRow).status === 1
-                  ? 'text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)]'
-              "
-              :title="channelFromRow(row as AdminChannelTableRow).name"
-            >
-              {{ channelFromRow(row as AdminChannelTableRow).name }}
-            </span>
-            <StatusChip
-              v-if="
-                hasInvalidModelMapping(
-                  channelFromRow(row as AdminChannelTableRow).lab
-                )
-              "
-              class="mt-1"
-              tone="warning"
-              data-channel-invalid-mapping
-            >
-              {{ t('channels.labInvalidMapping') }}
-            </StatusChip>
-            <ChannelUpstreamBindingBadge
-              v-if="
-                upstreamBindingFor(channelFromRow(row as AdminChannelTableRow))
-              "
-              :binding="
-                upstreamBindingFor(channelFromRow(row as AdminChannelTableRow))!
-              "
-            />
-            <p
-              v-if="
-                isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
-              "
-              class="mt-1 whitespace-normal text-xs text-[var(--text-tertiary)]"
-            >
-              {{ t('channels.retiredHint') }}
-            </p>
-          </template>
-          <template #cell-type="{ row }">
-            <div class="flex min-w-0 items-center gap-2">
+            <div class="flex min-w-0 items-start gap-2">
               <VendorLogo
                 :vendor="
                   labDisplayName(
                     channelFromRow(row as AdminChannelTableRow).lab
                   )
                 "
-                :size="28"
+                :size="24"
+                class="mt-0.5 shrink-0"
               />
-              <span
-                class="truncate text-xs text-[var(--text-secondary)]"
-                :title="
-                  adminChannelTypeMeta(
-                    channelFromRow(row as AdminChannelTableRow).type
-                  ).label
-                "
-              >
-                {{
-                  adminChannelTypeMeta(
-                    channelFromRow(row as AdminChannelTableRow).type
-                  ).label
-                }}
-              </span>
+              <div class="min-w-0 flex-1">
+                <span
+                  class="block truncate font-semibold"
+                  :class="
+                    channelFromRow(row as AdminChannelTableRow).status === 1 &&
+                    !isReadOnlyChannel(
+                      channelFromRow(row as AdminChannelTableRow)
+                    )
+                      ? 'text-[var(--text-primary)]'
+                      : 'text-[var(--text-secondary)]'
+                  "
+                  :title="channelFromRow(row as AdminChannelTableRow).name"
+                >
+                  {{ channelFromRow(row as AdminChannelTableRow).name }}
+                </span>
+                <StatusChip
+                  v-if="
+                    hasInvalidModelMapping(
+                      channelFromRow(row as AdminChannelTableRow).lab
+                    )
+                  "
+                  class="mt-1"
+                  tone="warning"
+                  data-channel-invalid-mapping
+                >
+                  {{ t('channels.labInvalidMapping') }}
+                </StatusChip>
+                <ChannelUpstreamBindingBadge
+                  v-if="
+                    upstreamBindingFor(
+                      channelFromRow(row as AdminChannelTableRow)
+                    )
+                  "
+                  :binding="
+                    upstreamBindingFor(
+                      channelFromRow(row as AdminChannelTableRow)
+                    )!
+                  "
+                />
+                <p
+                  v-if="
+                    isReadOnlyChannel(
+                      channelFromRow(row as AdminChannelTableRow)
+                    )
+                  "
+                  class="mt-1 whitespace-normal text-xs text-[var(--text-secondary)]"
+                >
+                  {{ t('channels.retiredHint') }}
+                </p>
+              </div>
             </div>
+          </template>
+          <template #cell-type="{ row }">
+            <span
+              class="block truncate text-xs text-[var(--text-secondary)]"
+              :title="
+                adminChannelTypeMeta(
+                  channelFromRow(row as AdminChannelTableRow).type
+                ).label
+              "
+            >
+              {{
+                adminChannelTypeMeta(
+                  channelFromRow(row as AdminChannelTableRow).type
+                ).label
+              }}
+            </span>
           </template>
           <template #cell-status="{ row }">
             <div class="flex flex-wrap items-center gap-1">
@@ -1377,7 +1493,8 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             </span>
             <small
               v-if="channelFromRow(row as AdminChannelTableRow).routing_quality"
-              class="block text-[var(--text-tertiary)]"
+              class="mt-0.5 block truncate text-[var(--text-tertiary)]"
+              :title="routeQualitySummary(row as AdminChannelTableRow)"
             >
               {{ routeQualitySummary(row as AdminChannelTableRow) }}
             </small>
@@ -1417,6 +1534,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
               :total="
                 channelFromRow(row as AdminChannelTableRow).max_concurrency
               "
+              min-width="84px"
             />
             <span
               v-else
@@ -1458,11 +1576,11 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                     ]
                   "
                   type="button"
-                  class="flex flex-wrap items-center gap-1 text-left text-[0.6875rem] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  class="flex flex-wrap items-center gap-1 text-left text-[0.6875rem] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus-ring"
                   :disabled="!canRead"
                   @click="
-                    editingUpstreamRatio = channelFromRow(
-                      row as AdminChannelTableRow
+                    openUpstreamRatio(
+                      channelFromRow(row as AdminChannelTableRow)
                     )
                   "
                 >
@@ -1488,7 +1606,6 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                 :disabled="
                   isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
                 "
-                class="shrink-0"
                 @click="
                   refreshBalance(channelFromRow(row as AdminChannelTableRow))
                 "
@@ -1503,7 +1620,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                   :size="14"
                   class="animate-spin"
                 />
-                <RefreshCw v-else :size="14" />
+                <Coins v-else :size="14" />
               </IconButton>
             </div>
           </template>
@@ -1550,7 +1667,6 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                   isFieldVisible('rowResponseAction')
                 "
                 :label="t('channels.testChannel')"
-                class="shrink-0"
                 @click="openTest(channelFromRow(row as AdminChannelTableRow))"
               >
                 <Activity :size="14" />
@@ -1558,114 +1674,106 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             </div>
           </template>
           <template #cell-actions="{ row }">
-            <div class="flex items-center justify-end gap-0.5">
-              <IconButton
+            <div class="flex items-center justify-end gap-1">
+              <template
                 v-if="
-                  canOperate &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="t('channels.syncModelsTitle')"
-                :disabled="!canMutate"
-                @click="
-                  previewModelSync(channelFromRow(row as AdminChannelTableRow))
-                "
-                ><RefreshCw :size="15"
-              /></IconButton>
-              <IconButton
-                v-if="
-                  canRead &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="t('gateway.channelRuntime')"
-                @click="
-                  openRuntime(channelFromRow(row as AdminChannelTableRow))
-                "
-                ><Gauge :size="15"
-              /></IconButton>
-              <IconButton
-                v-if="
-                  canEditChannel(
-                    channelFromRow(row as AdminChannelTableRow),
-                    canWrite
-                  )
-                "
-                :label="t('channels.editChannel')"
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                @click="openEdit(channelFromRow(row as AdminChannelTableRow))"
-              >
-                <Pencil :size="15" />
-              </IconButton>
-              <IconButton
-                v-if="
-                  canOperate &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="
-                  channelFromRow(row as AdminChannelTableRow).status === 1
-                    ? t('channels.disableChannel')
-                    : t('channels.enableChannel')
-                "
-                :tone="
-                  channelFromRow(row as AdminChannelTableRow).status === 1
-                    ? 'danger'
-                    : 'default'
-                "
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                @click="
-                  toggleStatus(channelFromRow(row as AdminChannelTableRow))
+                  isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
                 "
               >
-                <LoaderCircle
+                <IconButton
+                  v-if="canSensitiveWrite"
+                  :label="t('channels.deleteChannel')"
+                  tone="danger"
+                  :disabled="
+                    isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
+                  "
+                  @click="
+                    requestDelete(channelFromRow(row as AdminChannelTableRow))
+                  "
+                >
+                  <LoaderCircle
+                    v-if="
+                      isCrudActionBusy(
+                        'delete',
+                        channelFromRow(row as AdminChannelTableRow).id
+                      )
+                    "
+                    :size="15"
+                    class="animate-spin"
+                  />
+                  <Trash2 v-else :size="15" />
+                </IconButton>
+              </template>
+              <template v-else>
+                <IconButton
                   v-if="
-                    isBusy(
-                      channelFromRow(row as AdminChannelTableRow).id,
-                      'status'
+                    canEditChannel(
+                      channelFromRow(row as AdminChannelTableRow),
+                      canWrite
                     )
                   "
-                  :size="15"
-                  class="animate-spin"
-                />
-                <PowerOff
-                  v-else-if="
+                  :label="t('channels.editChannel')"
+                  :disabled="
+                    isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
+                  "
+                  @click="openEdit(channelFromRow(row as AdminChannelTableRow))"
+                >
+                  <Pencil :size="15" />
+                </IconButton>
+                <IconButton
+                  v-if="canOperate"
+                  :label="
                     channelFromRow(row as AdminChannelTableRow).status === 1
+                      ? t('channels.disableChannel')
+                      : t('channels.enableChannel')
                   "
-                  :size="15"
-                />
-                <Power v-else :size="15" />
-              </IconButton>
-              <IconButton
-                v-if="canSensitiveWrite"
-                :label="t('channels.deleteChannel')"
-                tone="danger"
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                @click="
-                  requestDelete(channelFromRow(row as AdminChannelTableRow))
-                "
-              >
-                <LoaderCircle
+                  :tone="
+                    channelFromRow(row as AdminChannelTableRow).status === 1
+                      ? 'danger'
+                      : 'default'
+                  "
+                  :disabled="
+                    isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
+                  "
+                  @click="
+                    toggleStatus(channelFromRow(row as AdminChannelTableRow))
+                  "
+                >
+                  <LoaderCircle
+                    v-if="
+                      isBusy(
+                        channelFromRow(row as AdminChannelTableRow).id,
+                        'status'
+                      )
+                    "
+                    :size="15"
+                    class="animate-spin"
+                  />
+                  <PowerOff
+                    v-else-if="
+                      channelFromRow(row as AdminChannelTableRow).status === 1
+                    "
+                    :size="15"
+                  />
+                  <Power v-else :size="15" />
+                </IconButton>
+                <ActionMenu
                   v-if="
-                    isCrudActionBusy(
-                      'delete',
-                      channelFromRow(row as AdminChannelTableRow).id
+                    rowMenuItems(channelFromRow(row as AdminChannelTableRow))
+                      .length > 0
+                  "
+                  :items="
+                    rowMenuItems(channelFromRow(row as AdminChannelTableRow))
+                  "
+                  :label="t('channels.rowMoreActions')"
+                  @select="
+                    onRowMenuSelect(
+                      channelFromRow(row as AdminChannelTableRow),
+                      $event
                     )
                   "
-                  :size="15"
-                  class="animate-spin"
                 />
-                <Trash2 v-else :size="15" />
-              </IconButton>
+              </template>
             </div>
           </template>
           <template #footer>
@@ -1678,7 +1786,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
           </template>
         </DataTable>
 
-        <div class="md:hidden">
+        <div class="lg:hidden">
           <div
             v-if="loading"
             class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
@@ -1700,7 +1808,9 @@ function routeQualitySummary(row: AdminChannelTableRow) {
           />
           <ChannelMobileList
             v-else
+            :channels="visibleRows"
             :groups="supplierGroups"
+            :grouped="groupByLab"
             :visible-fields="visibleFields"
             :selected-ids="selectedIds"
             :all-selected="allPageSelected"
@@ -1711,8 +1821,9 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             :toggle-supplier="toggleSupplier"
             :batch-progress="batchProgress"
             :group-test-overrides="groupTestOverrides"
-            :can-run-batch="canRunBatch"
+            :can-run-batch="canRunBalanceBatch"
             :can-mutate="canMutate"
+            :can-read="canRead"
             :can-operate="canOperate"
             :can-write="canWrite"
             :can-sensitive-write="canSensitiveWrite"
@@ -1730,6 +1841,8 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             :show-runtime="openRuntime"
             :delete-channel="requestDelete"
             :upstream-bindings="upstreamBindings"
+            :upstream-ratios="upstreamRatios"
+            :open-upstream-ratio="openUpstreamRatio"
           />
           <TablePagination
             v-if="!loading"
@@ -1746,6 +1859,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
       :open="runtimeChannel !== null && canRead"
       :title="runtimeChannel?.name ?? t('gateway.channelRuntime')"
       size="lg"
+      footer-border
       @close="runtimeChannel = null"
     >
       <dl
@@ -1763,13 +1877,13 @@ function routeQualitySummary(row: AdminChannelTableRow) {
           <dt class="text-[var(--text-tertiary)]">
             {{ t('channels.channelRatio') }}
           </dt>
-          <dd class="mt-1">{{ runtimeChannel.channel_ratio }}×</dd>
+          <dd class="mt-1 tabular-nums">{{ runtimeChannel.channel_ratio }}×</dd>
         </div>
         <div>
           <dt class="text-[var(--text-tertiary)]">
             {{ t('channels.capacity') }}
           </dt>
-          <dd class="mt-1">
+          <dd class="mt-1 font-mono tabular-nums">
             {{ runtimeChannel.in_flight }} /
             {{ runtimeChannel.max_concurrency || '∞' }}
           </dd>
@@ -1783,6 +1897,13 @@ function routeQualitySummary(row: AdminChannelTableRow) {
         v-if="runtimeChannel && [62, 63].includes(runtimeChannel.type)"
         :channel="runtimeChannel"
       />
+      <template #footer>
+        <div class="flex justify-end">
+          <ConsoleButton variant="secondary" @click="runtimeChannel = null">
+            {{ t('common.close') }}
+          </ConsoleButton>
+        </div>
+      </template>
     </ConsoleModal>
     <ConsoleModal
       :open="balanceResponse !== null"
@@ -1792,6 +1913,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
         })
       "
       size="lg"
+      footer-border
       @close="balanceResponse = null"
     >
       <p class="mb-3 text-sm text-[var(--text-secondary)]">
@@ -1801,9 +1923,11 @@ function routeQualitySummary(row: AdminChannelTableRow) {
         class="max-h-[55vh] overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--surface-hover)] p-4 text-xs text-[var(--text-primary)]"
         >{{ balanceResponse?.rawResponse }}</pre>
       <template #footer>
-        <ConsoleButton variant="secondary" @click="balanceResponse = null">
-          {{ t('common.close') }}
-        </ConsoleButton>
+        <div class="flex justify-end">
+          <ConsoleButton variant="secondary" @click="balanceResponse = null">
+            {{ t('common.close') }}
+          </ConsoleButton>
+        </div>
       </template>
     </ConsoleModal>
     <ChannelFormModal

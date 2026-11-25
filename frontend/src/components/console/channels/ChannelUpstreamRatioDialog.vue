@@ -162,6 +162,7 @@ watch(
   <ConsoleModal
     :open="channel !== null"
     :title="t('channels.upstreamRatio.title', { name: channel?.name ?? '' })"
+    footer-border
     @close="emit('close')"
   >
     <p class="mb-4 text-sm text-[var(--text-secondary)]">
@@ -178,7 +179,7 @@ watch(
     <p
       v-if="error"
       role="alert"
-      class="mb-3 break-words text-sm text-[var(--status-danger)]"
+      class="mb-3 break-words text-sm text-[var(--status-danger-text)]"
     >
       {{ error }}
     </p>
@@ -265,19 +266,19 @@ watch(
         <legend class="mb-2 font-semibold">
           {{ t('channels.upstreamRatio.modeLabel') }}
         </legend>
-        <label class="flex items-center gap-2"
-          ><input v-model="mode" type="radio" value="auto" />{{
-            t('channels.upstreamRatio.modes.auto')
-          }}</label
+        <label class="flex cursor-pointer items-center gap-2"
+          ><input
+            v-model="mode"
+            type="radio"
+            value="auto"
+            class="h-4 w-4 accent-[var(--accent)]"
+          />{{ t('channels.upstreamRatio.modes.auto') }}</label
         >
         <label v-if="mode === 'auto' && canMapGroup" class="block">
           <span class="mb-1 block text-[var(--text-secondary)]">{{
             t('channels.upstreamRatio.groupSelect')
           }}</span>
-          <select
-            v-model="groupName"
-            class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
-          >
+          <select v-model="groupName" class="console-input w-full">
             <option value="">
               {{ t('channels.upstreamRatio.groupByName') }}
             </option>
@@ -292,10 +293,13 @@ watch(
             </option>
           </select>
         </label>
-        <label class="flex items-center gap-2"
-          ><input v-model="mode" type="radio" value="manual" />{{
-            t('channels.upstreamRatio.modes.manual')
-          }}</label
+        <label class="flex cursor-pointer items-center gap-2"
+          ><input
+            v-model="mode"
+            type="radio"
+            value="manual"
+            class="h-4 w-4 accent-[var(--accent)]"
+          />{{ t('channels.upstreamRatio.modes.manual') }}</label
         >
         <label v-if="mode === 'manual'" class="block">
           <span class="mb-1 block text-[var(--text-secondary)]">{{
@@ -304,35 +308,46 @@ watch(
           <input
             v-model.trim="manualRatio"
             inputmode="decimal"
-            class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 tabular-nums"
+            class="console-input w-full tabular-nums"
             :aria-invalid="manualRatio !== '' && !manualValid"
           />
           <span
             v-if="manualRatio !== '' && !manualValid"
-            class="mt-1 block text-[var(--status-danger)]"
+            class="mt-1 block text-[var(--status-danger-text)]"
             >{{ t('channels.upstreamRatio.manualInvalid') }}</span
           >
         </label>
       </fieldset>
     </div>
-    <template #footer
-      ><ConsoleButton
-        v-if="canOperate && view && view.kind !== 'unsupported'"
-        variant="secondary"
-        :disabled="busy"
-        @click="refresh"
-        >{{
-          view.kind === 'detect' && !view.source
-            ? t('channels.upstreamRatio.detect')
-            : t('channels.upstreamRatio.refresh')
-        }}</ConsoleButton
-      ><ConsoleButton
-        v-if="canWrite"
-        :loading="busy && view !== null"
-        :disabled="!canSave"
-        @click="save"
-        >{{ t('common.save') }}</ConsoleButton
-      ></template
-    >
+    <template #footer>
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <ConsoleButton
+          variant="ghost"
+          :disabled="busy && view !== null"
+          @click="emit('close')"
+          >{{
+            canWrite ? t('common.cancel') : t('common.close')
+          }}</ConsoleButton
+        >
+        <ConsoleButton
+          v-if="canOperate && view && view.kind !== 'unsupported'"
+          variant="secondary"
+          :disabled="busy"
+          @click="refresh"
+          >{{
+            view.kind === 'detect' && !view.source
+              ? t('channels.upstreamRatio.detect')
+              : t('channels.upstreamRatio.refresh')
+          }}</ConsoleButton
+        >
+        <ConsoleButton
+          v-if="canWrite"
+          :loading="busy && view !== null"
+          :disabled="!canSave"
+          @click="save"
+          >{{ t('common.save') }}</ConsoleButton
+        >
+      </div>
+    </template>
   </ConsoleModal>
 </template>

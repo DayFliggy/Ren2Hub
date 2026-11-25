@@ -13,6 +13,73 @@ export function nativeModelCatalog(now: number): ModelCatalog {
     { id: 12, name: '原生专线', ratio: '1' },
     { id: 13, name: '长文专线', ratio: '0.6' },
   ]
+  const offerHealth = (
+    channelId: number,
+    modelId: string
+  ): {
+    availability:
+      'no_restriction' | 'paused' | 'limited' | 'recovering' | 'unknown'
+    quality: 'no_downgrade' | 'degraded' | 'severely_degraded' | 'unrated'
+  } => {
+    if (channelId === 11 && modelId === 'gpt-4.1') {
+      return { availability: 'no_restriction', quality: 'no_downgrade' }
+    }
+    if (channelId === 11 && modelId === 'claude-sonnet-4') {
+      return { availability: 'paused', quality: 'unrated' }
+    }
+    if (channelId === 12) {
+      return { availability: 'limited', quality: 'unrated' }
+    }
+    if (channelId === 13 && modelId === 'gemini-2.5-pro') {
+      return { availability: 'recovering', quality: 'degraded' }
+    }
+    return { availability: 'no_restriction', quality: 'unrated' }
+  }
+  const offers = prices.flatMap(([model_id, , input, output]) =>
+    channels.map((channel) => ({
+      model_id,
+      channel_id: channel.id,
+      channel_ratio: channel.ratio,
+      supported_endpoint_types: ['openai', 'openai-response'],
+      price_status: 'configured' as const,
+      pricing_values: {
+        input: String(Number(input) * Number(channel.ratio)),
+        output: String(Number(output) * Number(channel.ratio)),
+      },
+      health: offerHealth(channel.id, model_id),
+    }))
+  )
+  const channelHealth = (channelId: number) => {
+    const list = offers.filter((o) => o.channel_id === channelId)
+    let affected = 0
+    let evaluated = 0
+    let unrated = 0
+    for (const o of list) {
+      const h = o.health
+      if (
+        h.availability === 'paused' ||
+        h.availability === 'limited' ||
+        h.availability === 'recovering' ||
+        h.quality === 'degraded' ||
+        h.quality === 'severely_degraded'
+      ) {
+        affected++
+      } else if (
+        h.availability === 'no_restriction' &&
+        h.quality === 'no_downgrade'
+      ) {
+        evaluated++
+      } else {
+        unrated++
+      }
+    }
+    return {
+      visible_models: list.length,
+      affected_models: affected,
+      evaluated_models: evaluated,
+      unrated_models: unrated,
+    }
+  }
   return {
     schema_version: 1,
     generated_at: now,
@@ -42,24 +109,12 @@ export function nativeModelCatalog(now: number): ModelCatalog {
       status: 1,
       channel_ratio: ratio,
       max_concurrency: 8,
-      in_flight: 2,
       eligible: true,
       filter_reason: '',
       lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
+      health: channelHealth(id),
     })),
-    offers: prices.flatMap(([model_id, , input, output]) =>
-      channels.map((channel) => ({
-        model_id,
-        channel_id: channel.id,
-        channel_ratio: channel.ratio,
-        supported_endpoint_types: ['openai', 'openai-response'],
-        price_status: 'configured' as const,
-        pricing_values: {
-          input: String(Number(input) * Number(channel.ratio)),
-          output: String(Number(output) * Number(channel.ratio)),
-        },
-      }))
-    ),
+    offers,
   }
 }
 

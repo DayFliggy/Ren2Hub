@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronRight } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AdminChannel } from '@/types/console'
@@ -55,17 +56,29 @@ const detail = computed(() => parsed.value.detail)
     <span
       v-if="parsed.error"
       role="alert"
-      class="text-[var(--status-danger)]"
+      class="text-[var(--status-danger-text)]"
       >{{ parsed.error }}</span
     >
-    <details v-else-if="detail" class="break-words">
-      <summary class="cursor-pointer font-semibold tabular-nums">
-        {{ summary(detail) }}
+    <details v-else-if="detail" class="balance-details break-words">
+      <summary
+        class="balance-details-summary inline-flex cursor-pointer items-center gap-1 font-semibold tabular-nums focus-ring"
+        :title="t('channels.balanceDetailsToggle')"
+      >
+        <span>{{ summary(detail) }}</span>
+        <ChevronRight
+          :size="12"
+          class="balance-details-chevron shrink-0 text-[var(--text-tertiary)] transition-transform"
+          aria-hidden="true"
+        />
       </summary>
-      <p v-if="detail.error" class="text-[var(--status-danger)]">
+      <p v-if="detail.error" class="mt-1 text-[var(--status-danger-text)]">
         {{ detail.error }}
       </p>
-      <p v-for="(window, index) in detail.windows" :key="index" class="mt-1">
+      <p
+        v-for="(window, index) in detail.windows"
+        :key="index"
+        class="mt-1 text-[0.6875rem] text-[var(--text-secondary)]"
+      >
         {{ localizedText(window.name, locale) }} {{ window.used }} /
         {{ window.limit }} {{ window.unit
         }}<span v-if="window.resetAt"> · {{ formatTime(window.resetAt) }}</span>
@@ -76,3 +89,15 @@ const detail = computed(() => parsed.value.detail)
     }}</span>
   </div>
 </template>
+
+<style scoped>
+.balance-details-summary {
+  list-style: none;
+}
+.balance-details-summary::-webkit-details-marker {
+  display: none;
+}
+.balance-details[open] .balance-details-chevron {
+  transform: rotate(90deg);
+}
+</style>

@@ -65,8 +65,16 @@ function onKeydown(event: KeyboardEvent) {
     step="1"
     :aria-label="label"
     :disabled="busy"
-    class="h-8 w-[72px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2 text-center font-mono text-xs tabular-nums text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus-ring disabled:cursor-wait disabled:opacity-60"
+    class="channel-inline-number h-8 w-[72px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2 text-center font-mono text-xs tabular-nums text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus-ring disabled:cursor-wait disabled:opacity-60"
     @blur="commitDraft"
     @keydown="onKeydown"
   />
 </template>
+
+<style scoped>
+:global(html.dark .channel-inline-number) {
+  border-color: var(--outline);
+  border-radius: var(--shape-control);
+  background: var(--studio-control-track);
+}
+</style>

@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { ChannelUpstreamRatio } from '@/api/channelUpstreamRatio'
 import { parseChannelPage } from '@/api/channelStatus'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
@@ -36,13 +37,20 @@ function channel(patch: Partial<AdminChannel>): AdminChannel {
 function mountList(
   channels: AdminChannel[],
   canWrite = true,
-  visibleFields: AdminChannelOptionalField[] = ['upstream', 'rowUpstreamAction']
+  visibleFields: AdminChannelOptionalField[] = [
+    'upstream',
+    'rowUpstreamAction',
+  ],
+  extraProps: Record<string, unknown> = {}
 ) {
   const refreshBalance = vi.fn().mockResolvedValue(true)
   const runSupplierBalance = vi.fn().mockResolvedValue(undefined)
+  const openUpstreamRatio = vi.fn()
   const wrapper = mount(ChannelMobileList, {
     props: {
+      channels,
       groups: [{ groupSlug: 'g', supplier: 'Group', channels }],
+      grouped: true,
       visibleFields,
       selectedIds: [],
       allSelected: false,
@@ -55,6 +63,7 @@ function mountList(
       groupTestOverrides: {},
       canRunBatch: true,
       canMutate: true,
+      canRead: true,
       canOperate: true,
       canWrite,
       canSensitiveWrite: true,
@@ -71,6 +80,8 @@ function mountList(
       syncModels: vi.fn(),
       showRuntime: vi.fn(),
       deleteChannel: vi.fn(),
+      openUpstreamRatio,
+      ...extraProps,
     },
     global: {
       plugins: [
@@ -88,7 +99,7 @@ function mountList(
       ],
     },
   })
-  return { wrapper, refreshBalance, runSupplierBalance }
+  return { wrapper, refreshBalance, runSupplierBalance, openUpstreamRatio }
 }
 
 function balanceButtons(wrapper: ReturnType<typeof mount>) {
@@ -214,7 +225,44 @@ describe('channel mobile list concurrency and pricing', () => {
     const rows = wrapper.findAll('[data-channel-mobile-row]')
     expect(rows[0]!.text()).toContain('3 / ∞')
     expect(rows[0]!.text()).toContain('Channel ratio 1.250×')
-    expect(rows[1]!.text()).toContain('2 / 8')
+    expect(rows[1]!.text()).toContain('2/8')
+    expect(rows[1]!.text()).toContain('25%')
     expect(rows[1]!.text()).toContain('Channel ratio 0.500×')
+  })
+
+  it('supports flat rendering without group headers and exposes upstream ratio dialog', async () => {
+    const ratio: ChannelUpstreamRatio = {
+      channel_id: 1,
+      kind: 'newapi',
+      source: 'newapi',
+      mode: 'auto',
+      status: 'ok',
+      ratio: '1.25',
+      effective_ratio: '1.25',
+      group_name: 'vip',
+      mapping: 'account',
+      token_name: 'vip',
+      stale: false,
+      received_at: 1700000000,
+      next_probe_at: 1700001800,
+      last_error: '',
+      version: 1,
+      sub2api: null,
+      groups: [],
+    }
+    const item = channel({ id: 1 })
+    const { wrapper, openUpstreamRatio } = mountList(
+      [item],
+      true,
+      ['upstream'],
+      {
+        grouped: false,
+        upstreamRatios: { 1: ratio },
+      }
+    )
+    expect(wrapper.find('[data-channel-mobile-group]').exists()).toBe(false)
+    const ratioBtn = wrapper.get('[data-channel-mobile-upstream-ratio]')
+    await ratioBtn.trigger('click')
+    expect(openUpstreamRatio).toHaveBeenCalledWith(item)
   })
 })

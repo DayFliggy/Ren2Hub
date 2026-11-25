@@ -881,6 +881,7 @@ async function submit() {
     :open="open"
     :title="editing ? t('channels.editTitle') : t('channels.createTitle')"
     size="lg"
+    footer-border
     @close="close"
   >
     <div class="sibling-space-y-4 text-left">
@@ -909,7 +910,7 @@ async function submit() {
             name: 'upstreams',
             query: { account: String(binding.account_id), tab: 'bindings' },
           }"
-          class="font-medium text-[var(--accent)] hover:underline"
+          class="font-medium text-[var(--accent-text)] hover:underline"
         >
           {{ t('upstreams.channelLink.formOpen') }}
         </RouterLink>
@@ -917,7 +918,7 @@ async function submit() {
       <p
         v-if="settingsError"
         role="alert"
-        class="text-sm text-[var(--status-danger)]"
+        class="text-sm text-[var(--status-danger-text)]"
       >
         {{ settingsError }}
       </p>
@@ -944,7 +945,7 @@ async function submit() {
         <p
           v-if="pluginError"
           role="alert"
-          class="text-sm text-[var(--status-danger)]"
+          class="text-sm text-[var(--status-danger-text)]"
         >
           {{ pluginError }}
         </p>
@@ -973,13 +974,13 @@ async function submit() {
                 class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]"
               >
                 {{ t('channels.type') }}
-                <span class="text-[var(--status-danger)]">*</span>
+                <span class="text-[var(--status-danger-text)]">*</span>
               </p>
               <!-- Custom searchable type selector -->
               <div class="relative" @keydown.esc="onTypeDropdownEscape">
                 <button
                   type="button"
-                  class="flex h-10 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
+                  class="channel-type-trigger flex h-11 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
                   :aria-expanded="typeDropdownOpen"
                   :disabled="typeLocked"
                   @click="typeDropdownOpen = !typeDropdownOpen"
@@ -1049,7 +1050,7 @@ async function submit() {
               <p
                 v-if="unknownType"
                 role="alert"
-                class="mt-1.5 text-xs text-[var(--status-danger)]"
+                class="mt-1.5 text-xs text-[var(--status-danger-text)]"
               >
                 {{ t('channels.unknownTypeCannotSave', { type: form.type }) }}
               </p>
@@ -1370,7 +1371,7 @@ async function submit() {
             <p
               v-if="modelTags.length === 0"
               role="alert"
-              class="mt-1.5 text-xs text-[var(--status-danger)]"
+              class="mt-1.5 text-xs text-[var(--status-danger-text)]"
             >
               {{ t('channels.modelsRequired') }}
             </p>
@@ -1386,7 +1387,7 @@ async function submit() {
                   id="channel-prefill-group"
                   v-model="prefillId"
                   :disabled="prefillLoading || saving"
-                  class="min-w-0 flex-1 channel-form-input"
+                  class="console-input h-10 min-w-0 flex-1"
                 >
                   <option value="">
                     {{
@@ -1424,7 +1425,7 @@ async function submit() {
               <p
                 v-if="prefillError"
                 role="alert"
-                class="text-sm text-[var(--status-danger)]"
+                class="text-sm text-[var(--status-danger-text)]"
               >
                 {{ prefillError }}
               </p>
@@ -1584,7 +1585,7 @@ async function submit() {
                 v-if="mappingError"
                 id="admin-channel-model-mapping-error"
                 role="alert"
-                class="mt-1 text-xs text-[var(--status-danger)]"
+                class="mt-1 text-xs text-[var(--status-danger-text)]"
               >
                 {{ mappingError }}
               </p>
@@ -1719,7 +1720,7 @@ async function submit() {
           <p
             v-if="!validOverrides"
             role="alert"
-            class="text-sm text-[var(--status-danger)]"
+            class="text-sm text-[var(--status-danger-text)]"
           >
             {{ t('channels.invalidOverrides') }}
           </p>
@@ -1997,5 +1998,13 @@ async function submit() {
 }
 .channel-form-textarea:focus {
   border-color: var(--border-strong);
+}
+:global(html.dark .channel-type-trigger),
+:global(html.dark .channel-form-number),
+:global(html.dark .channel-form-input),
+:global(html.dark .channel-form-textarea) {
+  border-color: var(--outline);
+  border-radius: var(--shape-control);
+  background: var(--studio-control-track);
 }
 </style>

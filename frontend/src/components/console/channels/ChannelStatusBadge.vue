@@ -12,7 +12,12 @@ import { translateServerText } from '@/i18n/serverMessages'
 import type { AdminChannel } from '@/types/console'
 
 const props = defineProps<{ channel: AdminChannel; mobile?: boolean }>()
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
+const reasonTitle = computed(() =>
+  te('channels.disabledReasonTitle')
+    ? t('channels.disabledReasonTitle')
+    : t('channels.disabledReason')
+)
 // Reasons the gateway writes are fixed English sentences; provider text passes
 // through unchanged.
 const reasonText = computed(() => {
@@ -105,7 +110,7 @@ onBeforeUnmount(() => {
         class="channel-status-reason"
         :style="position"
       >
-        <p class="font-semibold">{{ t('channels.disabledReason') }}</p>
+        <p class="font-semibold">{{ reasonTitle }}</p>
         <p class="mt-2 whitespace-pre-wrap">
           {{ reasonText || t('channels.disabledReasonMissing') }}
         </p>

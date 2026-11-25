@@ -10,6 +10,8 @@ import {
 } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useTableScrollFade } from '@/composables/useTableScrollFade'
+
 import EmptyState from './EmptyState.vue'
 
 export interface TableColumn {
@@ -228,6 +230,8 @@ const headerTableRef = ref<HTMLTableElement | null>(null)
 const bodyViewportRef = ref<HTMLElement | null>(null)
 const bodyTableRef = ref<HTMLTableElement | null>(null)
 const footerRef = ref<HTMLElement | null>(null)
+const { canScrollLeft, canScrollRight, updateScrollFade } =
+  useTableScrollFade(bodyViewportRef)
 
 const constrained = ref(false)
 const innerScrollActive = ref(false)
@@ -360,6 +364,7 @@ function measure() {
   }
   horizontalScrollAvailable.value =
     viewport.scrollWidth > viewport.clientWidth + 1
+  updateScrollFade()
 
   if (!props.adaptiveScroll || !boundaryElement) {
     constrained.value = false
@@ -554,156 +559,166 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div
-      ref="bodyViewportRef"
-      class="data-table-body-viewport overflow-x-auto"
-      :style="bodyViewportStyle"
-      :role="scrollRegionAvailable ? 'region' : undefined"
-      :tabindex="scrollRegionAvailable ? 0 : undefined"
-      :aria-label="
-        scrollRegionAvailable
-          ? scrollRegionLabel || t('common.tableRows')
-          : undefined
-      "
-      :aria-busy="loading"
-      @pointerdown.capture="onBodyPointerDown"
-      @focusin="onBodyFocusIn"
-      @scroll="onBodyScroll"
-    >
-      <table
-        ref="bodyTableRef"
-        class="w-full table-fixed border-collapse text-sm"
-        :style="{ minWidth: tableLength(minTableWidth) }"
+    <div class="relative">
+      <div
+        v-if="canScrollLeft"
+        class="table-scroll-fade table-scroll-fade--start"
+        aria-hidden="true"
+      />
+      <div v-if="canScrollRight" class="table-scroll-fade" aria-hidden="true" />
+      <div
+        ref="bodyViewportRef"
+        class="data-table-body-viewport overflow-x-auto"
+        :style="bodyViewportStyle"
+        :role="scrollRegionAvailable ? 'region' : undefined"
+        :tabindex="scrollRegionAvailable ? 0 : undefined"
+        :aria-label="
+          scrollRegionAvailable
+            ? scrollRegionLabel || t('common.tableRows')
+            : undefined
+        "
+        :aria-busy="loading"
+        @pointerdown.capture="onBodyPointerDown"
+        @focusin="onBodyFocusIn"
+        @scroll="onBodyScroll"
       >
-        <colgroup>
-          <col v-if="selectable" class="data-table-selection-column" />
-          <col
-            v-for="col in columns"
-            :key="col.key"
-            :style="col.width ? { width: tableLength(col.width) } : undefined"
-          />
-        </colgroup>
-        <!-- The visible header is a separate non-scrolling table. This zero-height
-             semantic header keeps column associations within the body table. -->
-        <thead class="data-table-semantic-head">
-          <tr>
-            <th v-if="selectable" scope="col">
-              <span class="sr-only">{{ t('common.selectColumn') }}</span>
-            </th>
-            <th
+        <table
+          ref="bodyTableRef"
+          class="w-full table-fixed border-collapse text-sm"
+          :style="{ minWidth: tableLength(minTableWidth) }"
+        >
+          <colgroup>
+            <col v-if="selectable" class="data-table-selection-column" />
+            <col
               v-for="col in columns"
-              :id="columnHeaderId(col.key)"
               :key="col.key"
-              scope="col"
-            >
-              <span class="sr-only">{{ col.label }}</span>
-            </th>
-          </tr>
-        </thead>
-
-        <tbody v-if="!loading && rows.length > 0">
-          <template v-for="(row, index) in rows" :key="String(row[rowKey])">
-            <tr
-              v-if="isGroupRow?.(row)"
-              data-table-group-row
-              class="border-b border-[var(--border-default)] bg-[var(--surface-muted)]"
-            >
+              :style="col.width ? { width: tableLength(col.width) } : undefined"
+            />
+          </colgroup>
+          <!-- The visible header is a separate non-scrolling table. This zero-height
+             semantic header keeps column associations within the body table. -->
+          <thead class="data-table-semantic-head">
+            <tr>
+              <th v-if="selectable" scope="col">
+                <span class="sr-only">{{ t('common.selectColumn') }}</span>
+              </th>
               <th
-                scope="rowgroup"
-                :colspan="columns.length + (selectable ? 1 : 0)"
-                class="px-3 py-2 text-left font-medium text-[var(--text-primary)]"
+                v-for="col in columns"
+                :id="columnHeaderId(col.key)"
+                :key="col.key"
+                scope="col"
               >
-                <slot name="group-row" :row="row" :index="index">
-                  {{ row[rowKey] }}
-                </slot>
+                <span class="sr-only">{{ col.label }}</span>
               </th>
             </tr>
-            <tr
-              v-else
-              class="row-divider transition-colors last:border-0 hover:bg-[var(--state-hover-layer)]"
-              :data-selected="
-                selected.includes(row[rowKey] as string | number)
-                  ? 'true'
-                  : undefined
-              "
-              :class="[
-                rowInteractive ? 'cursor-pointer select-none' : undefined,
-                rowClass?.(row),
-              ]"
-              :tabindex="rowInteractive ? 0 : undefined"
-              @click="rowClickable && emit('row-click', row)"
-              @dblclick="
-                (rowClickable || rowDblclickable) && emit('row-dblclick', row)
-              "
-              @keydown="activateRowFromKeyboard($event, row)"
-            >
-              <td
-                v-if="selectable"
-                class="data-table-selection-cell px-3 py-3"
-                @click.stop
-                @dblclick.stop
-              >
-                <label
-                  v-if="!rowSelectionHidden?.(row)"
-                  :class="checkboxTargetClass"
-                >
-                  <input
-                    type="checkbox"
-                    :class="checkboxClass"
-                    :checked="selected.includes(row[rowKey] as string | number)"
-                    :disabled="selectionDisabled || !isRowSelectable(row)"
-                    :aria-label="
-                      rowSelectionLabel?.(row) ??
-                      t('common.selectRow', { index: dataRowNumber(row) })
-                    "
-                    @change="toggleRow(row)"
-                  />
-                </label>
-              </td>
-              <td
-                v-for="col in columns"
-                :key="col.key"
-                :headers="columnHeaderId(col.key)"
-                class="px-3 py-3 text-[var(--text-primary)]"
-                :class="alignClass(col.align)"
-              >
-                <slot :name="`cell-${col.key}`" :row="row" :index="index">
-                  {{ row[col.key] }}
-                </slot>
-              </td>
-            </tr>
-          </template>
-        </tbody>
+          </thead>
 
-        <!-- Skeleton rows live inside the table so each matches a data row's
+          <tbody v-if="!loading && rows.length > 0">
+            <template v-for="(row, index) in rows" :key="String(row[rowKey])">
+              <tr
+                v-if="isGroupRow?.(row)"
+                data-table-group-row
+                class="border-b border-[var(--border-default)] bg-[var(--surface-muted)]"
+              >
+                <th
+                  scope="rowgroup"
+                  :colspan="columns.length + (selectable ? 1 : 0)"
+                  class="px-3 py-2 text-left font-medium text-[var(--text-primary)]"
+                >
+                  <slot name="group-row" :row="row" :index="index">
+                    {{ row[rowKey] }}
+                  </slot>
+                </th>
+              </tr>
+              <tr
+                v-else
+                class="row-divider transition-colors last:border-0 hover:bg-[var(--state-hover-layer)]"
+                :data-selected="
+                  selected.includes(row[rowKey] as string | number)
+                    ? 'true'
+                    : undefined
+                "
+                :class="[
+                  rowInteractive ? 'cursor-pointer select-none' : undefined,
+                  rowClass?.(row),
+                ]"
+                :tabindex="rowInteractive ? 0 : undefined"
+                @click="rowClickable && emit('row-click', row)"
+                @dblclick="
+                  (rowClickable || rowDblclickable) && emit('row-dblclick', row)
+                "
+                @keydown="activateRowFromKeyboard($event, row)"
+              >
+                <td
+                  v-if="selectable"
+                  class="data-table-selection-cell px-3 py-3"
+                  @click.stop
+                  @dblclick.stop
+                >
+                  <label
+                    v-if="!rowSelectionHidden?.(row)"
+                    :class="checkboxTargetClass"
+                  >
+                    <input
+                      type="checkbox"
+                      :class="checkboxClass"
+                      :checked="
+                        selected.includes(row[rowKey] as string | number)
+                      "
+                      :disabled="selectionDisabled || !isRowSelectable(row)"
+                      :aria-label="
+                        rowSelectionLabel?.(row) ??
+                        t('common.selectRow', { index: dataRowNumber(row) })
+                      "
+                      @change="toggleRow(row)"
+                    />
+                  </label>
+                </td>
+                <td
+                  v-for="col in columns"
+                  :key="col.key"
+                  :headers="columnHeaderId(col.key)"
+                  class="px-3 py-3 text-[var(--text-primary)]"
+                  :class="alignClass(col.align)"
+                >
+                  <slot :name="`cell-${col.key}`" :row="row" :index="index">
+                    {{ row[col.key] }}
+                  </slot>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+
+          <!-- Skeleton rows live inside the table so each matches a data row's
              exact height; rendering skeletonRows = page size keeps the body the
              same height loaded or loading, so pagination doesn't shift layout. -->
-        <tbody v-else-if="loading">
-          <tr
-            v-for="i in skeletonRows"
-            :key="i"
-            class="border-b border-[var(--border-subtle)] last:border-0"
-          >
-            <td v-if="selectable" class="px-3 py-3">
-              <div
-                class="h-[22px] w-4 animate-pulse rounded-sm bg-[var(--surface-muted)]"
-              />
-            </td>
-            <td v-for="col in columns" :key="col.key" class="px-3 py-3">
-              <div
-                class="h-[22px] animate-pulse rounded-sm bg-[var(--surface-muted)]"
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+          <tbody v-else-if="loading">
+            <tr
+              v-for="i in skeletonRows"
+              :key="i"
+              class="border-b border-[var(--border-subtle)] last:border-0"
+            >
+              <td v-if="selectable" class="px-3 py-3">
+                <div
+                  class="h-[22px] w-4 animate-pulse rounded-sm bg-[var(--surface-muted)]"
+                />
+              </td>
+              <td v-for="col in columns" :key="col.key" class="px-3 py-3">
+                <div
+                  class="h-[22px] animate-pulse rounded-sm bg-[var(--surface-muted)]"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
-      <EmptyState
-        v-if="!loading && rows.length === 0"
-        :title="emptyTitle || t('common.none')"
-        :hint="emptyHint"
-        :illustration="emptyIllustration"
-      />
+        <EmptyState
+          v-if="!loading && rows.length === 0"
+          :title="emptyTitle || t('common.none')"
+          :hint="emptyHint"
+          :illustration="emptyIllustration"
+        />
+      </div>
     </div>
 
     <div v-if="$slots.footer" ref="footerRef" class="data-table-footer">
@@ -744,6 +759,27 @@ html.dark .data-table-shell {
   overflow: hidden;
   background: var(--surface-solid);
   box-shadow: var(--card-shadow, var(--elevation-1));
+}
+
+/* When embedded inside ConsoleCard, avoid double borders and inward top corners
+   underneath toolbars while keeping bottom corners aligned to the card radius. */
+html.dark [data-handdrawn='surface'] .data-table-shell,
+html.dark [data-handdrawn='surface-strong'] .data-table-shell {
+  border: 0;
+  border-radius: 0 0 var(--shape-card, 16px) var(--shape-card, 16px);
+  background: transparent;
+  box-shadow: none;
+}
+
+html.dark
+  [data-handdrawn='surface']
+  > div:first-child
+  > .data-table-shell:first-child,
+html.dark
+  [data-handdrawn='surface-strong']
+  > div:first-child
+  > .data-table-shell:first-child {
+  border-radius: var(--shape-card, 16px);
 }
 
 .data-table-header {

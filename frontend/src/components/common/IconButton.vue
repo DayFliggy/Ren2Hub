@@ -22,7 +22,7 @@ defineExpose({
     type="button"
     :aria-label="label"
     :title="label"
-    class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:w-8 touch-snappy"
+    class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:w-8 touch-snappy"
     data-handdrawn="control"
     :class="
       tone === 'danger'

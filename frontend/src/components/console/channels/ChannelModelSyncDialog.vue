@@ -97,6 +97,8 @@ onBeforeUnmount(() => {
   <ConsoleModal
     :open="channel !== null"
     :title="t('channels.syncModelsTitle')"
+    size="lg"
+    footer-border
     :close-disabled="busy && preview !== null"
     @close="emit('close')"
   >
@@ -106,64 +108,82 @@ onBeforeUnmount(() => {
     <p
       v-if="error"
       role="alert"
-      class="mb-3 break-words text-sm text-[var(--status-danger)]"
+      class="mb-3 break-words text-sm text-[var(--status-danger-text)]"
     >
       {{ error }}
     </p>
     <p v-if="busy && !preview" role="status">{{ t('common.loading') }}</p>
     <div v-if="preview" class="grid gap-5 sm:grid-cols-2">
       <section>
-        <h3 class="mb-2 font-semibold">{{ t('channels.syncModelsAdd') }}</h3>
-        <p v-if="!preview.add_models.length" class="text-sm">
+        <h3 class="mb-2.5 text-sm font-semibold text-[var(--text-primary)]">
+          {{ t('channels.syncModelsAdd') }}
+        </h3>
+        <p
+          v-if="!preview.add_models.length"
+          class="text-sm text-[var(--text-tertiary)]"
+        >
           {{ t('channels.syncModelsNone') }}
         </p>
         <label
           v-for="name in preview.add_models"
           :key="name"
-          class="mb-2 flex items-start gap-2 break-all text-sm"
+          class="mb-2 flex cursor-pointer items-start gap-2.5 break-all text-sm text-[var(--text-primary)]"
           ><input
             v-model="additions"
             type="checkbox"
             :value="name"
             :disabled="busy || !canWrite"
-            class="mt-1"
-          />{{ name }}</label
+            class="checkbox-round mt-0.5 shrink-0"
+          /><span>{{ name }}</span></label
         >
       </section>
       <section>
-        <h3 class="mb-2 font-semibold">{{ t('channels.syncModelsRemove') }}</h3>
-        <p v-if="!preview.remove_models.length" class="text-sm">
+        <h3 class="mb-2.5 text-sm font-semibold text-[var(--text-primary)]">
+          {{ t('channels.syncModelsRemove') }}
+        </h3>
+        <p
+          v-if="!preview.remove_models.length"
+          class="text-sm text-[var(--text-tertiary)]"
+        >
           {{ t('channels.syncModelsNone') }}
         </p>
         <label
           v-for="name in preview.remove_models"
           :key="name"
-          class="mb-2 flex items-start gap-2 break-all text-sm"
+          class="mb-2 flex cursor-pointer items-start gap-2.5 break-all text-sm text-[var(--text-primary)]"
           ><input
             v-model="removals"
             type="checkbox"
             :value="name"
             :disabled="busy || !canWrite"
-            class="mt-1"
-          />{{ name }}</label
+            class="checkbox-round mt-0.5 shrink-0"
+          /><span>{{ name }}</span></label
         >
       </section>
     </div>
-    <template #footer
-      ><ConsoleButton variant="secondary" :disabled="busy" @click="detect">{{
-        t('channels.syncModelsRefresh')
-      }}</ConsoleButton
-      ><ConsoleButton
-        :loading="busy && preview !== null"
-        :disabled="
-          !canWrite ||
-          !preview ||
-          busy ||
-          (!additions.length && !removals.length)
-        "
-        @click="apply"
-        >{{ t('channels.syncModelsApply') }}</ConsoleButton
-      ></template
-    >
+    <template #footer>
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <ConsoleButton
+          variant="ghost"
+          :disabled="busy && preview !== null"
+          @click="emit('close')"
+          >{{ t('common.cancel') }}</ConsoleButton
+        >
+        <ConsoleButton variant="secondary" :disabled="busy" @click="detect">{{
+          t('channels.syncModelsRefresh')
+        }}</ConsoleButton>
+        <ConsoleButton
+          :loading="busy && preview !== null"
+          :disabled="
+            !canWrite ||
+            !preview ||
+            busy ||
+            (!additions.length && !removals.length)
+          "
+          @click="apply"
+          >{{ t('channels.syncModelsApply') }}</ConsoleButton
+        >
+      </div>
+    </template>
   </ConsoleModal>
 </template>

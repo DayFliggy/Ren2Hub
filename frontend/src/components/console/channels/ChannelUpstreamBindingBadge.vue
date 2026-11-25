@@ -24,7 +24,7 @@ function remoteStatusText(status: string) {
         name: 'upstreams',
         query: { account: String(binding.account_id), tab: 'bindings' },
       }"
-      class="text-xs text-[var(--accent)] hover:underline"
+      class="text-xs font-medium text-[var(--accent-text)] hover:underline"
       :title="
         t('upstreams.channelLink.badgeTitle', {
           account: binding.account_id,

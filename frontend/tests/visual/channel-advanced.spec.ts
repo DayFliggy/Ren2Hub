@@ -142,7 +142,10 @@ for (const [theme, width] of [
       .getByRole('button', { name: '关闭', exact: true })
       .click()
     await expect(balanceDialog).toHaveCount(0)
-    await page.locator('[aria-label="预览模型更新"]:visible').first().click()
+    await page.locator('[aria-label="更多渠道操作"]:visible').first().click()
+    await page
+      .getByRole('menuitem', { name: '预览模型更新', exact: true })
+      .click()
     const syncDialog = page.getByRole('dialog', {
       name: '预览模型更新',
       exact: true,

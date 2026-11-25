@@ -30,8 +30,8 @@ const inputAttrs = computed(() => {
 
 <template>
   <div
-    class="pencil-underline relative"
-    :class="attrs.class"
+    class="pencil-underline relative flex"
+    :class="[size === 'compact' ? 'h-11 sm:h-8' : 'h-11', attrs.class]"
     :style="wrapperStyle"
     data-handdrawn="underline"
   >
@@ -55,8 +55,7 @@ const inputAttrs = computed(() => {
       type="search"
       :placeholder="placeholder"
       v-bind="inputAttrs"
-      class="w-full border-0 border-b-[1.5px] bg-transparent pl-10 pr-4 text-base leading-5 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-hidden focus:border-[var(--accent)] hover:bg-[var(--state-hover-layer)] sm:text-sm"
-      :class="size === 'compact' ? 'h-11 sm:h-8' : 'h-11'"
+      class="h-full w-full border-0 border-b-[1.5px] bg-transparent pl-10 pr-4 text-base leading-5 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-hidden focus:border-[var(--accent)] hover:bg-[var(--state-hover-layer)] sm:text-sm"
       style="border-color: var(--border-default)"
     />
   </div>

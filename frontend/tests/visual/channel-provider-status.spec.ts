@@ -71,7 +71,10 @@ for (const [theme, width] of [
       })
     )
     await page.goto('/channels')
-    await page.locator('[aria-label="渠道运行状态"]:visible').first().click()
+    await page.locator('[aria-label="更多渠道操作"]:visible').first().click()
+    await page
+      .getByRole('menuitem', { name: '渠道运行状态', exact: true })
+      .click()
     const dialog = page.getByRole('dialog', {
       name: 'Provider Fixture',
       exact: true,
@@ -80,10 +83,15 @@ for (const [theme, width] of [
     await expect(dialog.getByText('/health', { exact: true })).toBeVisible()
     await expect(dialog.getByText(/503/)).toBeVisible()
     await expect(dialog.getByText('32768', { exact: true })).toBeVisible()
+    await expect(
+      dialog.getByRole('button', { name: '关闭', exact: true })
+    ).toBeVisible()
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
       path: testInfo.outputPath('provider-status.png'),
       fullPage: true,
     })
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
   })
 }
