@@ -380,15 +380,20 @@ func DeleteChannels(ids []int) ([]*Channel, error) {
 		return nil, nil
 	}
 	var deleted []*Channel
+	var deletedIDs []int
+	release := func() {}
+	defer func() { release() }()
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		channels, err := lockChannels(tx, ids, clause.LockingStrengthUpdate)
 		if err != nil {
 			return err
 		}
+		deletedIDs = lockedChannelIDs(channels)
+		release = BeginChannelRoutingMutation(deletedIDs...)
 		for index := range channels {
 			deleted = append(deleted, &channels[index])
 		}
-		for chunk := range slices.Chunk(lockedChannelIDs(channels), 200) {
+		for chunk := range slices.Chunk(deletedIDs, 200) {
 			if err := tx.Where("id IN ?", chunk).Delete(&Channel{}).Error; err != nil {
 				return err
 			}
@@ -403,6 +408,9 @@ func DeleteChannels(ids []int) ([]*Channel, error) {
 	}
 	if len(deleted) > 0 {
 		BumpSyncTopic(SyncTopicChannels)
+		if ChannelRoutingDeleted != nil {
+			ChannelRoutingDeleted(deletedIDs)
+		}
 	}
 	return deleted, nil
 }
@@ -471,6 +479,7 @@ func (channel *Channel) Update() error {
 	if err := channel.ValidateRoutingFields(); err != nil {
 		return err
 	}
+	defer beginChannelRoutingMutation(channel.Id)()
 
 	var err error
 	err = DB.Transaction(func(tx *gorm.DB) error {
@@ -847,12 +856,15 @@ func GetChannelsByIds(ids []int) ([]*Channel, error) {
 
 func BatchSetChannelTag(ids []int, tag *string) error {
 	var changed []int
+	release := func() {}
+	defer func() { release() }()
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		channels, err := lockChannels(tx, ids, clause.LockingStrengthUpdate)
 		if err != nil {
 			return err
 		}
 		changed = lockedChannelIDs(channels)
+		release = beginChannelRoutingMutation(changed...)
 		return updateLockedChannels(tx, channels, map[string]any{"tag": tag}, (*Channel).UpdateAbilities)
 	})
 	if err != nil {

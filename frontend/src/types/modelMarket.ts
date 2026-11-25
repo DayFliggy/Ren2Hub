@@ -1,5 +1,9 @@
 import type { PriceSort, ReferencePrice } from './pricingReference'
 import type { BillingUsageSchema } from '@/features/pricing/types'
+import type {
+  CatalogChannelHealth,
+  CatalogOfferHealth,
+} from '@/api/modelCatalog'
 
 export type ModelMarketViewMode = 'models' | 'channels' | 'comparison'
 export type ModelMarketSort = PriceSort
@@ -12,6 +16,7 @@ export interface MarketChannel {
   id: number
   name: string
   ratio: string
+  health?: CatalogChannelHealth
 }
 
 /** Values stay exact; labels and formatting are applied by the shared price UI. */
@@ -46,6 +51,7 @@ export interface MarketOffer {
   pricing: MarketPricing
   baseline: MarketPricing
   endpointTypes: string[]
+  health?: CatalogOfferHealth
 }
 
 export interface MarketModel {
@@ -66,7 +72,7 @@ export interface ModelMarketCatalog {
   models: MarketModel[]
   channels: MarketChannel[]
   serverAddress: string
-  telemetry: { status: 'unavailable'; reason: 'channel_metrics_not_collected' }
+  generatedAt: number
 }
 
 export interface MarketChannelShelf {

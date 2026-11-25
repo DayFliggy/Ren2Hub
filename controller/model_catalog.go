@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
 )
+
+var buildModelCatalog = service.BuildModelCatalog
 
 // GetModelCatalog 带 token_id 时按那把 Key 的模型限制和路由投影，与
 // /api/token/:id/routing/channels 相同，所以 scoped PAT 另需 routing:read；路由规则表
@@ -28,8 +31,12 @@ func GetModelCatalog(c *gin.Context) {
 			return
 		}
 	}
-	result, err := service.BuildModelCatalog(c.Request.Context(), c.GetInt("id"), tokenID)
+	result, err := buildModelCatalog(c.Request.Context(), c.GetInt("id"), tokenID)
 	if err != nil {
+		if errors.Is(err, service.ErrCatalogConfigChanging) {
+			common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Model catalog is temporarily updating, please retry"), gin.H{"code": "CATALOG_BUSY"})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}

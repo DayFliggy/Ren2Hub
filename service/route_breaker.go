@@ -128,6 +128,7 @@ func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey,
 	}
 	s.pruneLocked(now)
 	state, present := s.breakers[key]
+	prevOpenUntil := state.openUntil
 	if present && state.openUntil == 0 && now-state.updatedAt > routeObservationTTL.Milliseconds() {
 		state = routeBreakerState{}
 	}
@@ -162,6 +163,13 @@ func (s *routeObservationStore) recordBreaker(epoch uint64, key routeBreakerKey,
 	}
 	state.updatedAt = now
 	s.breakers[key] = state
+	if state.openUntil != prevOpenUntil {
+		if state.openUntil != 0 {
+			s.breakerOpenUntil.Store(key, state.openUntil)
+		} else {
+			s.breakerOpenUntil.Delete(key)
+		}
+	}
 }
 
 // 表满时只淘汰闭合渠道的样本。撤掉仍在生效的熔断会重新放入故障流量。
@@ -175,6 +183,7 @@ func (s *routeObservationStore) makeBreakerRoomLocked(now int64) bool {
 	}
 	if oldestAt != math.MaxInt64 {
 		delete(s.breakers, oldest)
+		s.breakerOpenUntil.Delete(oldest)
 	}
 	s.logEvictionLocked(now)
 	return len(s.breakers) < routeObservationCapacity
@@ -324,6 +333,7 @@ func (s *routeObservationStore) coolDown(epoch uint64, channelID int, cooldown r
 		for id, end := range s.cooldowns {
 			if end.until <= now {
 				delete(s.cooldowns, id)
+				s.cooldownUntil.Delete(id)
 			}
 		}
 		if len(s.cooldowns) >= routeObservationCapacity {
@@ -332,6 +342,7 @@ func (s *routeObservationStore) coolDown(epoch uint64, channelID int, cooldown r
 		}
 	}
 	s.cooldowns[channelID] = cooldown
+	s.cooldownUntil.Store(channelID, cooldown.until)
 	return cooldown.until, true
 }
 

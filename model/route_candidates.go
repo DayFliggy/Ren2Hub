@@ -2,11 +2,13 @@ package model
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"gorm.io/gorm"
 )
 
 // ChannelRoutable 是读侧“渠道能否被选中”的唯一规则：已启用且不是退役的 type 57。
@@ -79,16 +81,55 @@ func routeChannelRowsForAbility(ctx context.Context, abilityModel, modelName str
 // EnabledRouteModels projects the same enabled ability rows used by dispatch.
 // It is a single batch lookup, including when the catalog spans many channels.
 func EnabledRouteModels(ctx context.Context, channelIDs []int) (map[int][]string, error) {
+	return enabledRouteModelsTx(DB.WithContext(ctx), channelIDs)
+}
+
+func enabledRouteModelsTx(db *gorm.DB, channelIDs []int) (map[int][]string, error) {
 	result := map[int][]string{}
 	if len(channelIDs) == 0 {
 		return result, nil
 	}
 	var rows []Ability
-	if err := DB.WithContext(ctx).Select("channel_id", "model").Where("channel_id IN ? AND enabled = ?", channelIDs, true).Order("model asc").Find(&rows).Error; err != nil {
+	if err := db.Select("channel_id", "model").Where("channel_id IN ? AND enabled = ?", channelIDs, true).Order("model asc").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
 		result[row.ChannelId] = append(result[row.ChannelId], row.Model)
 	}
 	return result, nil
+}
+
+var afterReadRouteChannelsHook func()
+
+// ReadRouteChannelsAndModels reads channels and their enabled abilities from a
+// single consistent read-only snapshot transaction (REPEATABLE READ READ ONLY on
+// PostgreSQL and MySQL; deferred read-only WAL snapshot on SQLite so catalog
+// reads do not take SQLite's BEGIN IMMEDIATE write lock) so catalog projections
+// never mix channel rows with abilities from a different commit.
+func ReadRouteChannelsAndModels(ctx context.Context) ([]*Channel, map[int][]string, error) {
+	rows := []*Channel{}
+	var advertised map[int][]string
+	txOpt := &sql.TxOptions{ReadOnly: true}
+	if DB.Dialector.Name() != string(common.DatabaseTypeSQLite) {
+		txOpt.Isolation = sql.LevelRepeatableRead
+	}
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Order("id asc").Find(&rows).Error; err != nil {
+			return err
+		}
+		if afterReadRouteChannelsHook != nil {
+			afterReadRouteChannelsHook()
+		}
+		ids := make([]int, 0, len(rows))
+		for _, row := range rows {
+			ids = append(ids, row.Id)
+		}
+		var err error
+		advertised, err = enabledRouteModelsTx(tx, ids)
+		return err
+	}, txOpt)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rows, advertised, nil
 }

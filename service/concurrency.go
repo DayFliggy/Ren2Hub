@@ -184,6 +184,7 @@ func ReleaseDeletedChannels(ctx context.Context, channelIDs []int) {
 	gatewayConcurrency.forget("channel", channelIDs)
 	for _, id := range channelIDs {
 		routeObservations.invalidate(id)
+		routeObservations.clearDeletedChannelPending(id)
 	}
 }
 
@@ -260,7 +261,11 @@ func publishConcurrencyLimit(ctx context.Context, key concurrencyKey) error {
 	defer cancel()
 	gatewayConcurrency.mu.Lock()
 	gatewayConcurrency.publication++
-	gatewayConcurrency.pending[key] = gatewayConcurrency.publication
+	publication := gatewayConcurrency.publication
+	gatewayConcurrency.pending[key] = publication
+	if key.kind == "channel" {
+		routeObservations.markChannelPublishPending(key.id, publication)
+	}
 	gatewayConcurrency.mu.Unlock()
 	concurrencyPublishMu.Lock()
 	defer concurrencyPublishMu.Unlock()
@@ -316,16 +321,26 @@ func refreshConcurrencyLimitLocked(ctx context.Context, key concurrencyKey) erro
 		return fmt.Errorf("%w: invalid concurrency limit %d", errConcurrencyLimitUnavailable, limit)
 	}
 	gatewayConcurrency.setLimit(key.kind, key.id, limit)
-	gatewayConcurrency.mu.Lock()
-	if gatewayConcurrency.pending[key] == publication {
-		delete(gatewayConcurrency.pending, key)
-	}
-	gatewayConcurrency.mu.Unlock()
 	if key.kind == "channel" {
 		routeObservations.invalidate(key.id)
 	}
+	gatewayConcurrency.mu.Lock()
+	if gatewayConcurrency.pending[key] == publication {
+		delete(gatewayConcurrency.pending, key)
+		if key.kind == "channel" {
+			routeObservations.clearChannelPublishPending(key.id, publication)
+		}
+	}
+	gatewayConcurrency.mu.Unlock()
 	return nil
 }
 func init() {
 	model.ChannelRoutingChanged = func(id int) error { return RefreshChannelConcurrencyLimit(context.Background(), id) }
+	model.ChannelRoutingMutating = func(ids []int) func() { return routeObservations.beginChannelMutation(ids) }
+	model.ChannelRoutingDeleted = func(ids []int) {
+		for _, id := range ids {
+			routeObservations.invalidate(id)
+			routeObservations.clearDeletedChannelPending(id)
+		}
+	}
 }

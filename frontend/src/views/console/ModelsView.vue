@@ -20,11 +20,15 @@ import { modelMarketMessages } from '@/i18n/modelMarket'
 import { PRICE_SORTS } from '@/types/pricingReference'
 import type { MarketModelType } from '@/types/modelMarket'
 
-const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
+const { t, locale } = useI18n({
+  useScope: 'local',
+  messages: modelMarketMessages,
+})
 const {
   loading,
   error,
   catalog,
+  generatedAt,
   keyword,
   channel,
   billing,
@@ -113,6 +117,14 @@ function openDetails(modelId: string, offerId?: string) {
   detailOfferId.value = offerId
   detailId.value = modelId
 }
+const snapshotTimeLabel = computed(() => {
+  if (!generatedAt.value) return ''
+  return new Intl.DateTimeFormat(locale.value, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(generatedAt.value * 1000))
+})
 onMounted(load)
 </script>
 
@@ -199,7 +211,25 @@ onMounted(load)
 
     <div class="market-result-meta" aria-live="polite">
       <p>{{ t('resultCount', { models: resultCount, offers: offerCount }) }}</p>
-      <span>{{ t('quotaNotice') }}</span>
+      <div class="market-result-meta-right">
+        <span
+          v-if="snapshotTimeLabel"
+          class="market-snapshot-time"
+          data-market-snapshot-time
+        >
+          {{ t('channelHealth.snapshotAt', { time: snapshotTimeLabel }) }}
+        </span>
+        <button
+          v-if="snapshotTimeLabel && !loading"
+          type="button"
+          class="market-refresh-btn focus-ring"
+          data-market-refresh
+          @click="load"
+        >
+          {{ t('channelHealth.refresh') }}
+        </button>
+        <span>{{ t('quotaNotice') }}</span>
+      </div>
     </div>
     <details
       v-if="pricingIssues.length"
@@ -415,8 +445,44 @@ html.dark .market-type-tab.active::after {
   color: var(--text-tertiary);
   font-size: 0.75rem;
 }
-.market-result-meta > span {
+.market-result-meta > span,
+.market-result-meta-right {
   font-size: 0.6875rem;
+}
+.market-result-meta-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+}
+.market-snapshot-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.market-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  background: var(--surface-solid);
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.market-refresh-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+@media (max-width: 1023px), (pointer: coarse) {
+  .market-refresh-btn {
+    min-height: 44px;
+    padding: 0 0.75rem;
+  }
 }
 .market-model-grid {
   display: grid;

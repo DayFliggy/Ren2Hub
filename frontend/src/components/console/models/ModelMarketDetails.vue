@@ -10,6 +10,7 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
+import CatalogHealthBadge from './CatalogHealthBadge.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 import ModelStatistics from './ModelStatistics.vue'
 import VendorLogo from './VendorLogo.vue'
@@ -94,6 +95,7 @@ const quoteRows = computed(() => [
     name: t('benchmark'),
     ratio: '1',
     pricing,
+    health: undefined,
   })),
   ...(props.model?.offers ?? []).map((offer) => ({
     kind: 'offer' as const,
@@ -101,6 +103,7 @@ const quoteRows = computed(() => [
     name: offer.channelName,
     ratio: offer.ratio,
     pricing: offer.pricing,
+    health: offer.health,
   })),
 ])
 
@@ -424,17 +427,19 @@ const usageFields = computed(() =>
                 layout="rows"
               />
               <span
+                v-if="quote.kind === 'baseline'"
                 :id="`${descriptionId(quote.kind, quote.id)}-note`"
-                :class="
-                  quote.kind === 'baseline'
-                    ? 'market-detail-reference-note'
-                    : 'market-detail-statistics-note'
-                "
+                class="market-detail-reference-note"
               >
-                {{
-                  t(quote.kind === 'baseline' ? 'reference' : 'noStatistics')
-                }}
+                {{ t('reference') }}
               </span>
+              <CatalogHealthBadge
+                v-else
+                :id="`${descriptionId(quote.kind, quote.id)}-note`"
+                :health="quote.health"
+                compact
+                class="market-detail-health-note"
+              />
             </div>
             <p v-if="!model.offers.length" class="market-detail-no-offers">
               {{ t('noSupply') }}
@@ -566,7 +571,11 @@ const usageFields = computed(() =>
                 </div>
               </dl>
             </details>
-            <ModelStatistics v-if="selectedOffer" />
+            <CatalogHealthBadge
+              v-if="selectedOffer"
+              :health="selectedOffer.health"
+              detail
+            />
             <ModelStatistics
               v-if="selectedOffer && performance"
               :performance="performance"
@@ -853,6 +862,11 @@ const usageFields = computed(() =>
   font: 0.6875rem var(--font-mono);
   color: var(--accent-text);
   white-space: nowrap;
+}
+.market-detail-health-note {
+  margin-top: 0.35rem;
+  position: relative;
+  pointer-events: none;
 }
 .market-detail-offer-meta {
   display: block;

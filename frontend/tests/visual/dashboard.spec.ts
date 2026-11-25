@@ -900,6 +900,7 @@ test('all dashboard panels remain contained at compact width', async ({
       eligible: id !== 17,
       status: id === 17 ? 2 : 1,
       filter_reason: id === 17 ? 'channel_unavailable' : '',
+      health: undefined,
     })
   }
   await page.route('**/api/user/model-catalog', (route) =>

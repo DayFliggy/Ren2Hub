@@ -3,6 +3,7 @@ package service
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -45,6 +46,13 @@ type routeObservationStore struct {
 	// evicted 统计上次日志之后因容量淘汰的键数。
 	evicted         int
 	lastEvictionLog int64
+	// Lock-free scalar read indexes updated on breaker/cooldown transitions and
+	// channel invalidation so user catalog projection never acquires s.mu.
+	breakerOpenUntil sync.Map      // routeBreakerKey -> int64 (non-zero openUntil)
+	cooldownUntil    sync.Map      // int (channelID) -> int64 (until > 0)
+	pendingMutations sync.Map      // int (channelID) -> *atomic.Int64 (active DB mutation refcount)
+	pendingPublish   sync.Map      // int (channelID) -> uint64 (pending concurrency publication gen)
+	configVersion    atomic.Uint64 // even when quiescent, odd during invalidation
 }
 
 var routeObservations = routeObservationStore{
@@ -66,6 +74,8 @@ func BeginRouteObservation(c *gin.Context) {
 func (s *routeObservationStore) invalidate(channelID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.configVersion.Add(1)
+	defer s.configVersion.Add(1)
 	if _, present := s.changed[channelID]; !present && len(s.changed) >= routeObservationCapacity {
 		s.staleFloor = s.epoch
 		clear(s.changed)
@@ -81,11 +91,106 @@ func (s *routeObservationStore) invalidate(channelID int) {
 	for key := range s.breakers {
 		if key.id == channelID {
 			delete(s.breakers, key)
+			s.breakerOpenUntil.Delete(key)
 		}
 	}
+	s.breakerOpenUntil.Range(func(k, _ any) bool {
+		if bk, ok := k.(routeBreakerKey); ok && bk.id == channelID {
+			s.breakerOpenUntil.Delete(k)
+		}
+		return true
+	})
 	delete(s.cooldowns, channelID)
+	s.cooldownUntil.Delete(channelID)
 	routeQualities.invalidate(channelID)
 	routeCaches.invalidate(channelID)
+}
+
+func (s *routeObservationStore) catalogBreakerOpenUntil(key routeBreakerKey) int64 {
+	if value, ok := s.breakerOpenUntil.Load(key); ok {
+		return value.(int64)
+	}
+	return 0
+}
+
+func (s *routeObservationStore) catalogCooldownUntil(channelID int) int64 {
+	if value, ok := s.cooldownUntil.Load(channelID); ok {
+		return value.(int64)
+	}
+	return 0
+}
+
+func (s *routeObservationStore) catalogConfigVersion() uint64 {
+	return s.configVersion.Load()
+}
+
+// beginChannelMutation marks the channels as having an uncommitted or
+// not-yet-published configuration mutation so catalog readers never attach
+// pre-mutation health observations to newly committed channel rows.
+func (s *routeObservationStore) beginChannelMutation(ids []int) func() {
+	tracked := make([]*atomic.Int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		raw, _ := s.pendingMutations.LoadOrStore(id, &atomic.Int64{})
+		counter := raw.(*atomic.Int64)
+		counter.Add(1)
+		tracked = append(tracked, counter)
+	}
+	if len(tracked) > 0 {
+		s.configVersion.Add(2)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			for _, counter := range tracked {
+				counter.Add(-1)
+			}
+			if len(tracked) > 0 {
+				s.configVersion.Add(2)
+			}
+		})
+	}
+}
+
+func (s *routeObservationStore) markChannelPublishPending(channelID int, publication uint64) {
+	if channelID <= 0 {
+		return
+	}
+	s.pendingPublish.Store(channelID, publication)
+	s.configVersion.Add(2)
+}
+
+func (s *routeObservationStore) clearChannelPublishPending(channelID int, publication uint64) {
+	if channelID <= 0 {
+		return
+	}
+	if current, ok := s.pendingPublish.Load(channelID); ok && current.(uint64) == publication {
+		s.pendingPublish.Delete(channelID)
+		s.configVersion.Add(2)
+	}
+}
+
+func (s *routeObservationStore) clearDeletedChannelPending(channelID int) {
+	if channelID <= 0 {
+		return
+	}
+	s.pendingPublish.Delete(channelID)
+	s.pendingMutations.Delete(channelID)
+}
+
+func (s *routeObservationStore) catalogChannelPending(channelID int) bool {
+	if channelID <= 0 {
+		return false
+	}
+	if _, pending := s.pendingPublish.Load(channelID); pending {
+		return true
+	}
+	if raw, ok := s.pendingMutations.Load(channelID); ok && raw.(*atomic.Int64).Load() > 0 {
+		return true
+	}
+	return false
 }
 
 // staleLocked 判断从 epoch 开始的尝试对该渠道是否已过期。调用方持有 s.mu。
@@ -107,11 +212,13 @@ func (s *routeObservationStore) pruneLocked(now int64) {
 	for key, state := range s.breakers {
 		if state.openUntil == 0 && now-state.updatedAt > ttl {
 			delete(s.breakers, key)
+			s.breakerOpenUntil.Delete(key)
 		}
 	}
 	for id, cooldown := range s.cooldowns {
 		if now >= cooldown.until {
 			delete(s.cooldowns, id)
+			s.cooldownUntil.Delete(id)
 		}
 	}
 	s.lastPrune = now

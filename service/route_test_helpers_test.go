@@ -84,14 +84,53 @@ func routeTestContext(t *testing.T) *gin.Context {
 func resetRouteObservations(t *testing.T) {
 	t.Helper()
 	s := &routeObservations
+	clearIndex := func() {
+		s.breakerOpenUntil.Range(func(k, _ any) bool {
+			s.breakerOpenUntil.Delete(k)
+			return true
+		})
+		s.cooldownUntil.Range(func(k, _ any) bool {
+			s.cooldownUntil.Delete(k)
+			return true
+		})
+		s.pendingMutations.Range(func(k, _ any) bool {
+			s.pendingMutations.Delete(k)
+			return true
+		})
+		s.pendingPublish.Range(func(k, _ any) bool {
+			s.pendingPublish.Delete(k)
+			return true
+		})
+	}
 	rows, breakers, cooldowns, changed, floor, last := s.rows, s.breakers, s.cooldowns, s.changed, s.staleFloor, s.lastPrune
+	savedBreakers := map[routeBreakerKey]int64{}
+	s.breakerOpenUntil.Range(func(k, v any) bool {
+		savedBreakers[k.(routeBreakerKey)] = v.(int64)
+		return true
+	})
+	savedCooldowns := map[int]int64{}
+	s.cooldownUntil.Range(func(k, v any) bool {
+		savedCooldowns[k.(int)] = v.(int64)
+		return true
+	})
+	savedVersion := s.configVersion.Load()
 	s.rows = map[routeObservationKey]RouteObservationSnapshot{}
 	s.breakers = map[routeBreakerKey]routeBreakerState{}
 	s.cooldowns = map[int]routeCooldown{}
 	s.changed = map[int]uint64{}
 	s.staleFloor = 0
+	clearIndex()
+	s.configVersion.Store(0)
 	t.Cleanup(func() {
 		s.rows, s.breakers, s.cooldowns, s.changed, s.staleFloor, s.lastPrune = rows, breakers, cooldowns, changed, floor, last
+		clearIndex()
+		for k, v := range savedBreakers {
+			s.breakerOpenUntil.Store(k, v)
+		}
+		for k, v := range savedCooldowns {
+			s.cooldownUntil.Store(k, v)
+		}
+		s.configVersion.Store(savedVersion)
 	})
 }
 func saveRouteTest(t *testing.T, entries ...int) {

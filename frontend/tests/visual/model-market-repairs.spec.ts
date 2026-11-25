@@ -198,7 +198,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(dialog.locator('.market-full-id')).toHaveCount(0)
       const offer = dialog.locator('button[data-offer-id]').first()
       await expect(offer).toHaveAccessibleDescription(
-        /0\.2×.*Usage.*\$0\.500.*1M tokens.*\$2\.000.*No per-channel statistics/s
+        /0\.2×.*Usage.*\$0\.500.*1M tokens.*\$2\.000.*No quality downgrade/s
       )
       const rows = dialog.locator('.market-detail-offer')
       for (const row of await rows.all()) {
@@ -304,6 +304,15 @@ test('comparison aligns a missing channel quote with its native platform row', a
   fixture.offers = fixture.offers.filter(
     (offer) => !(offer.model_id === 'video-preview' && offer.channel_id === 11)
   )
+  const ch11 = fixture.channels.find((ch) => ch.id === 11)
+  if (ch11?.health) {
+    ch11.health = {
+      visible_models: ch11.health.visible_models - 1,
+      affected_models: ch11.health.affected_models,
+      evaluated_models: ch11.health.evaluated_models,
+      unrated_models: ch11.health.unrated_models - 1,
+    }
+  }
   await page.route('**/api/user/model-catalog', (route) =>
     route.fulfill({ json: { success: true, data: fixture } })
   )

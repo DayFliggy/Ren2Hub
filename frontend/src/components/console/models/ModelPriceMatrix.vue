@@ -5,6 +5,7 @@ import type { MarketChannel, MarketModel } from '@/types/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
+import CatalogHealthBadge from './CatalogHealthBadge.vue'
 import ModelIdentity from './ModelIdentity.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 
@@ -207,6 +208,11 @@ function onFocusOut(event: FocusEvent) {
                     :pricing="offer.pricing"
                     mode="comparison"
                   />
+                  <CatalogHealthBadge
+                    :health="offer.health"
+                    compact
+                    class="matrix-offer-health"
+                  />
                 </div>
               </div>
               <span
@@ -313,6 +319,11 @@ function onFocusOut(event: FocusEvent) {
                   }}</span></span
                 >
                 <ModelPriceDisplay :pricing="offer.pricing" mode="comparison" />
+                <CatalogHealthBadge
+                  :health="offer.health"
+                  compact
+                  class="matrix-offer-health"
+                />
               </div>
             </div>
           </template>
@@ -556,6 +567,9 @@ function onFocusOut(event: FocusEvent) {
 
 html.dark .matrix-baseline-prices + .matrix-baseline-prices {
   border-top: 1px solid var(--border-subtle);
+}
+.matrix-offer-health {
+  margin-top: 0.35rem;
 }
 @container model-market (max-width: 720px) {
   html.dark .matrix-mobile-offer {

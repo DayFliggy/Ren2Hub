@@ -54,17 +54,40 @@ func (c *Channel) ValidateRoutingFields() error {
 // ChannelRoutingChanged publishes committed admission settings and invalidates old observations.
 var ChannelRoutingChanged func(int) error
 
+// ChannelRoutingDeleted invalidates observations immediately after committed channel deletion.
+var ChannelRoutingDeleted func(ids []int)
+
+// ChannelRoutingMutating marks channels as having a configuration mutation in
+// flight before the database transaction commits. Callers defer the returned
+// release func so the pending mark covers commit through post-commit publication.
+var ChannelRoutingMutating func(ids []int) func()
+
+// BeginChannelRoutingMutation marks channels as mutating across DB commit and
+// post-commit publication. Safe to call when no hook is registered.
+func BeginChannelRoutingMutation(ids ...int) func() {
+	if ChannelRoutingMutating == nil || len(ids) == 0 {
+		return func() {}
+	}
+	return ChannelRoutingMutating(ids)
+}
+
+func beginChannelRoutingMutation(ids ...int) func() {
+	return BeginChannelRoutingMutation(ids...)
+}
+
 // publishChannelRoutingIDs 只在提交后发布本次实际修改的渠道。
+// 首个渠道失败时必须继续遍历其余已提交渠道，确保所有渠道均进入待发布或失效态。
 func publishChannelRoutingIDs(ids []int) error {
 	if ChannelRoutingChanged == nil {
 		return nil
 	}
+	var firstErr error
 	for _, id := range ids {
-		if err := ChannelRoutingChanged(id); err != nil {
-			return err
+		if err := ChannelRoutingChanged(id); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
-	return nil
+	return firstErr
 }
 
 // ChannelRoutingQuality is a read-only management projection of the worst evidenced model band.

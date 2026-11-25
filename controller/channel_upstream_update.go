@@ -601,6 +601,9 @@ func checkAndPersistChannelUpstreamModelUpdates(
 	}
 	settings.UpstreamModelUpdateLastRemovedModels = pendingRemoveModels
 
+	if modelsChanged {
+		defer model.BeginChannelRoutingMutation(channel.Id)()
+	}
 	if err = updateChannelUpstreamModelSettings(channel, *settings, modelsChanged); err != nil {
 		return false, autoAdded, err
 	}
@@ -608,6 +611,9 @@ func checkAndPersistChannelUpstreamModelUpdates(
 		err = channel.UpdateAbilities(nil)
 		model.BumpSyncTopic(model.SyncTopicChannels)
 		if err != nil {
+			if model.ChannelRoutingChanged != nil {
+				_ = model.ChannelRoutingChanged(channel.Id)
+			}
 			return true, autoAdded, err
 		}
 		if model.ChannelRoutingChanged != nil {
@@ -1069,6 +1075,9 @@ func applyChannelUpstreamModelUpdates(
 	settings.UpstreamModelUpdateLastRemovedModels = remainingRemoveModels
 	settings.UpstreamModelUpdateLastCheckTime = common.GetTimestamp()
 
+	if modelsChanged {
+		defer model.BeginChannelRoutingMutation(channel.Id)()
+	}
 	if err := updateChannelUpstreamModelSettings(channel, settings, modelsChanged); err != nil {
 		return nil, nil, nil, nil, false, err
 	}
@@ -1077,6 +1086,9 @@ func applyChannelUpstreamModelUpdates(
 		err := channel.UpdateAbilities(nil)
 		model.BumpSyncTopic(model.SyncTopicChannels)
 		if err != nil {
+			if model.ChannelRoutingChanged != nil {
+				_ = model.ChannelRoutingChanged(channel.Id)
+			}
 			return addModels, removeModels, remainingModels, remainingRemoveModels, true, err
 		}
 		if model.ChannelRoutingChanged != nil {

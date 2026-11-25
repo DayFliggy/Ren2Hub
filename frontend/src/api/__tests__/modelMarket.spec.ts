@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import { getModelMarket, parseModelMarket } from '@/api/modelMarket'
 import { parsePerfMetricsDetail } from '@/api/liveContracts'
+import { buildModelMarketCatalog } from '@/utils/modelMarket'
+import nativeCatalogHealthEnvelope from '../../../tests/fixtures/native/model-catalog-health.get.json'
 import { modelCatalogFixture } from './modelCatalogFixture'
 vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
 beforeEach(() => vi.resetAllMocks())
@@ -136,5 +138,87 @@ describe('native model catalog', () => {
         window_end: 10,
       })
     ).toThrow('Invalid API response')
+  })
+
+  it('parses the Go-generated catalog health fixture and rejects malformed health payloads', () => {
+    const parsed = parseModelMarket(nativeCatalogHealthEnvelope.data)
+    expect(parsed.channels[0]!.health).toEqual({
+      visible_models: 2,
+      affected_models: 1,
+      evaluated_models: 0,
+      unrated_models: 1,
+    })
+    expect(parsed.channels[1]!.health).toEqual({
+      visible_models: 1,
+      affected_models: 1,
+      evaluated_models: 0,
+      unrated_models: 0,
+    })
+    const market = buildModelMarketCatalog(parsed)
+    expect(market.generatedAt).toBe(1792281600)
+    expect(market.channels[0]!.health?.affected_models).toBe(1)
+    const gpt4oOffer = market.models
+      .find((m) => m.name === 'gpt-4o')
+      ?.offers.find((o) => o.channelId === 11)
+    expect(gpt4oOffer?.health).toEqual({
+      availability: 'paused',
+      quality: 'unrated',
+    })
+
+    // Rejects invalid enums, null health objects, negative counts, and mismatched sums.
+    const invalidCases: Array<(input: Record<string, unknown>) => void> = [
+      (copy) => {
+        ;(copy.offers as Array<Record<string, unknown>>)[0]!.health = null
+      },
+      (copy) => {
+        ;(copy.offers as Array<Record<string, unknown>>)[0]!.health = {
+          availability: 'invalid_state',
+          quality: 'unrated',
+        }
+      },
+      (copy) => {
+        ;(copy.offers as Array<Record<string, unknown>>)[0]!.health = {
+          availability: 'paused',
+          quality: 'bogus_band',
+        }
+      },
+      (copy) => {
+        ;(copy.channels as Array<Record<string, unknown>>)[0]!.health = {
+          visible_models: 2,
+          affected_models: 1,
+          evaluated_models: 1,
+          unrated_models: 1,
+        }
+      },
+      (copy) => {
+        ;(copy.channels as Array<Record<string, unknown>>)[0]!.health = {
+          visible_models: 1,
+          affected_models: -1,
+          evaluated_models: 2,
+          unrated_models: 0,
+        }
+      },
+      // Cross-field contradiction: summary claims 2 evaluated/0 affected while offers are paused + unrated.
+      (copy) => {
+        ;(copy.channels as Array<Record<string, unknown>>)[0]!.health = {
+          visible_models: 2,
+          affected_models: 0,
+          evaluated_models: 2,
+          unrated_models: 0,
+        }
+      },
+      // Half-present payload: channel carries health while one of its offers omits health.
+      (copy) => {
+        delete (copy.offers as Array<Record<string, unknown>>)[0]!.health
+      },
+    ]
+    for (const mutate of invalidCases) {
+      const copy = structuredClone(nativeCatalogHealthEnvelope.data) as Record<
+        string,
+        unknown
+      >
+      mutate(copy)
+      expect(() => parseModelMarket(copy)).toThrow('Invalid API response')
+    }
   })
 })

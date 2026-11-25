@@ -179,10 +179,12 @@ export function useModelMarket() {
       )
       .map((model) => model.id)
   )
+  const generatedAt = computed(() => catalog.value?.generatedAt ?? null)
   return {
     loading,
     error,
     catalog,
+    generatedAt,
     keyword,
     channel,
     billing,

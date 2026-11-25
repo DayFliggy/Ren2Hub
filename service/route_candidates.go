@@ -101,44 +101,48 @@ func routeCandidates(ctx context.Context, scope routeScope, modelName string, fi
 }
 
 func CatalogRouteChannels(ctx context.Context, userID, tokenID int) ([]RouteChannel, error) {
-	return catalogRouteChannels(ctx, userID, tokenID, true)
+	channels, _, err := catalogRouteChannelsWithMappings(ctx, userID, tokenID, true)
+	return channels, err
 }
 
 func catalogRouteChannels(ctx context.Context, userID, tokenID int, applyList bool) ([]RouteChannel, error) {
+	channels, _, err := catalogRouteChannelsWithMappings(ctx, userID, tokenID, applyList)
+	return channels, err
+}
+
+func catalogRouteChannelsWithMappings(ctx context.Context, userID, tokenID int, applyList bool) ([]RouteChannel, map[int]string, error) {
 	route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto}}
 	limitsEnabled := false
 	var limits map[string]bool
 	if tokenID > 0 {
 		token, err := model.GetTokenByIds(tokenID, userID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		route, err = model.ReadTokenRouting(ctx, tokenID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		limitsEnabled = token.ModelLimitsEnabled
 		if limitsEnabled {
 			limits = token.GetModelLimitsMap()
 		}
 	}
-	return catalogRouteChannelsWithScope(ctx, limitsEnabled, limits, route, applyList)
+	return catalogRouteChannelsWithScopeAndMappings(ctx, limitsEnabled, limits, route, applyList)
 }
 
 func catalogRouteChannelsWithScope(ctx context.Context, limitsEnabled bool, limits map[string]bool, route model.TokenRouting, applyList bool) ([]RouteChannel, error) {
-	rows, err := model.RouteChannelRows(ctx, "", nil)
+	channels, _, err := catalogRouteChannelsWithScopeAndMappings(ctx, limitsEnabled, limits, route, applyList)
+	return channels, err
+}
+
+func catalogRouteChannelsWithScopeAndMappings(ctx context.Context, limitsEnabled bool, limits map[string]bool, route model.TokenRouting, applyList bool) ([]RouteChannel, map[int]string, error) {
+	rows, advertised, err := model.ReadRouteChannelsAndModels(ctx)
 	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, 0, len(rows))
-	for _, row := range rows {
-		ids = append(ids, row.Id)
-	}
-	advertised, err := model.EnabledRouteModels(ctx, ids)
-	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result := make([]RouteChannel, 0, len(rows))
+	mappings := make(map[int]string, len(rows))
 	for _, row := range rows {
 		item := RouteChannel{ID: row.Id, Name: row.Name, Type: row.Type, Status: row.Status, Models: []string{}, SupportedEndpoints: map[string][]constant.EndpointType{}, ChannelRatio: row.ChannelRatio, MaxConcurrency: row.MaxConcurrency}
 		names := advertised[row.Id]
@@ -180,8 +184,11 @@ func catalogRouteChannelsWithScope(ctx context.Context, limitsEnabled bool, limi
 		item.FilterReason = routeChannelReason(row, route, applyList)
 		item.Eligible = item.FilterReason == ""
 		result = append(result, item)
+		if row.ModelMapping != nil && *row.ModelMapping != "" {
+			mappings[row.Id] = *row.ModelMapping
+		}
 	}
-	return result, nil
+	return result, mappings, nil
 }
 
 func observationBand(value, warning, critical float64) int {

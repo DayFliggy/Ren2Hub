@@ -30,7 +30,9 @@ func TestUserRouteViewsHideRuntimeOccupancy(t *testing.T) {
 	for name, view := range map[string]any{"catalog": catalog, "routing channels": channels} {
 		encoded, err := common.Marshal(view)
 		require.NoError(t, err)
-		require.NotContains(t, string(encoded), "in_flight", name)
+		for _, forbidden := range []string{"in_flight", "probe_in_flight", "actual_model", "last_error_code", "last_status", "open_until", "opened_at", "reopens", `"trigger"`} {
+			require.NotContains(t, string(encoded), forbidden, name)
+		}
 	}
 	for name, view := range map[string]any{"catalog": catalog.Channels, "routing channels": channels} {
 		encoded, err := common.Marshal(view)

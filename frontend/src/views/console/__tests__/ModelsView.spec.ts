@@ -123,9 +123,8 @@ describe('native model catalog page', () => {
     expect(popup.querySelector('.market-detail-variant')).toBeNull()
     // The catalog has no capability source, so no placeholder fields are shown.
     expect(popup.textContent).not.toMatch(/上下文|最大输出|工具调用|推理强度/)
-    // Channel offers keep the unavailable state and explain why.
-    expect(popup.textContent).toContain('未按渠道统计')
-    expect(popup.textContent).toContain('统计按模型汇总，不区分渠道')
+    // Channel offer renders its channel-health status block instead of static unavailable telemetry.
+    expect(popup.querySelector('[data-catalog-offer-health]')).not.toBeNull()
     // Model-wide 24h hourly series renders from /api/perf-metrics.
     const series = popup.querySelector('[data-model-statistics-series]')
     expect(series).not.toBeNull()
@@ -168,6 +167,18 @@ describe('native model performance', () => {
     expect(
       view.get('[data-market-shelves]').find('[data-market-telemetry]').exists()
     ).toBe(false)
+    expect(
+      view
+        .get('[data-market-shelves]')
+        .find('[data-catalog-channel-health]')
+        .exists()
+    ).toBe(true)
+    expect(
+      view
+        .get('[data-market-shelves]')
+        .find('[data-catalog-offer-health]')
+        .exists()
+    ).toBe(true)
   })
   it('reports models without samples instead of a zero success rate', async () => {
     mockFeeds(async () => performanceSummary([]))

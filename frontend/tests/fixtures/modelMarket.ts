@@ -31,21 +31,74 @@ export function createModelMarketFixture(): ModelCatalog {
     model('video-preview', 0, { request: '0.08' }, ['openai-video']),
     model('unpriced-preview', 0, {}),
   ]
-  const channels = [
+  const rawChannels = [
     { id: 11, name: '雾桥中转', ratio: '0.2' },
     { id: 12, name: '原生专线', ratio: '1' },
     { id: 13, name: '长文专线', ratio: '0.6' },
-  ].map(({ ratio, ...row }) => ({
-    ...row,
-    type: 1,
-    status: 1,
-    channel_ratio: ratio,
-    max_concurrency: 8,
-    in_flight: 0,
-    eligible: true,
-    filter_reason: '',
-    lab: { id: 'mixed', name: 'Mixed', source: 'mapping' },
-  }))
+  ]
+  const offers = models.flatMap((entry) =>
+    rawChannels
+      .filter(
+        (channel) => channel.id !== 13 || entry.model_name === 'claude-sonnet-4'
+      )
+      .map((channel) => ({
+        model_id: entry.model_name,
+        channel_id: channel.id,
+        channel_ratio: channel.ratio,
+        supported_endpoint_types: entry.supported_endpoint_types,
+        price_status: entry.price_status,
+        pricing_values: Object.fromEntries(
+          Object.entries(entry.pricing_values).map(([key, value]) => [
+            key,
+            String(Number((Number(value) * Number(channel.ratio)).toFixed(8))),
+          ])
+        ),
+        health:
+          channel.id === 11 && entry.model_name === 'gpt-4.1'
+            ? ({
+                availability: 'no_restriction',
+                quality: 'no_downgrade',
+              } as const)
+            : channel.id === 11 && entry.model_name === 'claude-sonnet-4'
+              ? ({ availability: 'paused', quality: 'unrated' } as const)
+              : channel.id === 12 && entry.model_name === 'gpt-4.1'
+                ? ({ availability: 'limited', quality: 'unrated' } as const)
+                : ({
+                    availability: 'no_restriction',
+                    quality: 'unrated',
+                  } as const),
+      }))
+  )
+  const channels = rawChannels.map(({ ratio, ...row }) => {
+    const chOffers = offers.filter((o) => o.channel_id === row.id)
+    const affected = chOffers.filter(
+      (o) =>
+        o.health.availability !== 'no_restriction' ||
+        o.health.quality === 'degraded' ||
+        o.health.quality === 'severely_degraded'
+    ).length
+    const evaluated = chOffers.filter(
+      (o) =>
+        o.health.availability === 'no_restriction' &&
+        o.health.quality === 'no_downgrade'
+    ).length
+    return {
+      ...row,
+      type: 1,
+      status: 1,
+      channel_ratio: ratio,
+      max_concurrency: 8,
+      eligible: true,
+      filter_reason: '',
+      lab: { id: 'mixed', name: 'Mixed', source: 'mapping' },
+      health: {
+        visible_models: chOffers.length,
+        affected_models: affected,
+        evaluated_models: evaluated,
+        unrated_models: chOffers.length - affected - evaluated,
+      },
+    }
+  })
   return {
     schema_version: 1,
     models,
@@ -65,29 +118,6 @@ export function createModelMarketFixture(): ModelCatalog {
       'image-generation': { path: '/v1/images/generations', method: 'POST' },
       'openai-video': { path: '/v1/videos', method: 'POST' },
     },
-    offers: models.flatMap((entry) =>
-      channels
-        .filter(
-          (channel) =>
-            channel.id !== 13 || entry.model_name === 'claude-sonnet-4'
-        )
-        .map((channel) => ({
-          model_id: entry.model_name,
-          channel_id: channel.id,
-          channel_ratio: channel.channel_ratio,
-          supported_endpoint_types: entry.supported_endpoint_types,
-          price_status: entry.price_status,
-          pricing_values: Object.fromEntries(
-            Object.entries(entry.pricing_values).map(([key, value]) => [
-              key,
-              String(
-                Number(
-                  (Number(value) * Number(channel.channel_ratio)).toFixed(8)
-                )
-              ),
-            ])
-          ),
-        }))
-    ),
+    offers,
   }
 }

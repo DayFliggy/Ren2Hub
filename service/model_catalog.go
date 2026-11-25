@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"runtime"
 	"sort"
 	"time"
 
@@ -19,7 +20,8 @@ type CatalogModel struct {
 }
 type CatalogChannel struct {
 	RouteChannel
-	Lab modellab.Classification `json:"lab"`
+	Lab    modellab.Classification `json:"lab"`
+	Health *CatalogChannelHealth   `json:"health,omitempty"`
 }
 type CatalogOffer struct {
 	ModelID                string                  `json:"model_id"`
@@ -27,6 +29,7 @@ type CatalogOffer struct {
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	ChannelRatio           string                  `json:"channel_ratio"`
 	model.CatalogPrice
+	Health CatalogOfferHealth `json:"health"`
 }
 type ModelCatalog struct {
 	SchemaVersion      int                            `json:"schema_version"`
@@ -39,9 +42,41 @@ type ModelCatalog struct {
 	GeneratedAt        int64                          `json:"generated_at"`
 }
 
+var catalogAfterBuildOnce func()
+
 func BuildModelCatalog(ctx context.Context, userID, tokenID int) (ModelCatalog, error) {
-	result := ModelCatalog{SchemaVersion: 1, Models: []CatalogModel{}, Channels: []CatalogChannel{}, Offers: []CatalogOffer{}, Vendors: []model.PricingVendor{}, SupportedEndpoints: map[string]common.EndpointInfo{}, ServerAddress: system_setting.ServerAddress, GeneratedAt: time.Now().Unix()}
-	channels, err := CatalogRouteChannels(ctx, userID, tokenID)
+	for attempt := 0; attempt < catalogBuildMaxAttempts; attempt++ {
+		versionBefore := routeObservations.catalogConfigVersion()
+		if versionBefore%2 != 0 {
+			runtime.Gosched()
+			continue
+		}
+		result, err := buildModelCatalogOnce(ctx, userID, tokenID, time.Now())
+		if err != nil {
+			return result, err
+		}
+		if catalogAfterBuildOnce != nil {
+			catalogAfterBuildOnce()
+		}
+		if versionAfter := routeObservations.catalogConfigVersion(); versionAfter == versionBefore {
+			return result, nil
+		}
+	}
+	return ModelCatalog{}, ErrCatalogConfigChanging
+}
+
+func buildModelCatalogOnce(ctx context.Context, userID, tokenID int, now time.Time) (ModelCatalog, error) {
+	result := ModelCatalog{
+		SchemaVersion:      1,
+		Models:             []CatalogModel{},
+		Channels:           []CatalogChannel{},
+		Offers:             []CatalogOffer{},
+		Vendors:            []model.PricingVendor{},
+		SupportedEndpoints: map[string]common.EndpointInfo{},
+		ServerAddress:      system_setting.ServerAddress,
+		GeneratedAt:        now.Unix(),
+	}
+	channels, mappings, err := catalogRouteChannelsWithMappings(ctx, userID, tokenID, true)
 	if err != nil {
 		return result, err
 	}
@@ -52,13 +87,16 @@ func BuildModelCatalog(ctx context.Context, userID, tokenID int) (ModelCatalog, 
 		byName[item.ModelName] = item
 	}
 	requested := map[string]bool{}
-	ids := []int{}
+	eligibleChannels := make([]RouteChannel, 0, len(channels))
+	ids := make([]int, 0, len(channels))
 	for _, channel := range channels {
+		if !channel.Eligible {
+			continue
+		}
+		eligibleChannels = append(eligibleChannels, channel)
 		ids = append(ids, channel.ID)
-		if channel.Eligible {
-			for _, name := range channel.Models {
-				requested[name] = true
-			}
+		for _, name := range channel.Models {
+			requested[name] = true
 		}
 	}
 	names := make([]string, 0, len(requested))
@@ -90,11 +128,7 @@ func BuildModelCatalog(ctx context.Context, userID, tokenID int) (ModelCatalog, 
 		catalogModels[name] = projected
 		vendorIDs[item.VendorID] = true
 	}
-	for _, channel := range channels {
-		result.Channels = append(result.Channels, CatalogChannel{RouteChannel: channel, Lab: labs[channel.ID]})
-		if !channel.Eligible {
-			continue
-		}
+	for _, channel := range eligibleChannels {
 		for _, name := range channel.Models {
 			item := catalogModels[name]
 			if item == nil {
@@ -120,8 +154,42 @@ func BuildModelCatalog(ctx context.Context, userID, tokenID int) (ModelCatalog, 
 			if err != nil {
 				return result, err
 			}
-			result.Offers = append(result.Offers, CatalogOffer{ModelID: name, ChannelID: channel.ID, SupportedEndpointTypes: endpoints, ChannelRatio: channel.ChannelRatio, CatalogPrice: price})
+			result.Offers = append(result.Offers, CatalogOffer{
+				ModelID:                name,
+				ChannelID:              channel.ID,
+				SupportedEndpointTypes: endpoints,
+				ChannelRatio:           channel.ChannelRatio,
+				CatalogPrice:           price,
+			})
 		}
+	}
+	offerHealth, channelHealth := projectCatalogHealth(
+		now,
+		result.Offers,
+		mappings,
+		routeQualities.snapshot(),
+		routeObservations.catalogBreakerOpenUntil,
+		routeObservations.catalogCooldownUntil,
+		routeObservations.catalogChannelPending,
+	)
+	for index := range result.Offers {
+		key := catalogOfferKey{
+			channelID: result.Offers[index].ChannelID,
+			modelID:   result.Offers[index].ModelID,
+		}
+		result.Offers[index].Health = offerHealth[key]
+	}
+	for _, channel := range eligibleChannels {
+		summary, hasOffers := channelHealth[channel.ID]
+		if !hasOffers {
+			continue
+		}
+		copySummary := summary
+		result.Channels = append(result.Channels, CatalogChannel{
+			RouteChannel: channel,
+			Lab:          labs[channel.ID],
+			Health:       &copySummary,
+		})
 	}
 	for _, name := range names {
 		if item := catalogModels[name]; item != nil {

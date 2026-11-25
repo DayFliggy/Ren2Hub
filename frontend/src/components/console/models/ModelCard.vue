@@ -13,6 +13,7 @@ import type { MarketModel, ModelPerformanceState } from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
+import CatalogHealthBadge from './CatalogHealthBadge.vue'
 import ModelIdentity from './ModelIdentity.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 import ModelStatistics from './ModelStatistics.vue'
@@ -235,6 +236,11 @@ onBeforeUnmount(() => {
           :id="`${quoteId}-price`"
           :pricing="activeOffer.pricing"
         />
+        <CatalogHealthBadge
+          :health="activeOffer.health"
+          compact
+          class="market-quote-health"
+        />
       </div>
       <div v-else :id="quoteId" class="market-quote-stage market-no-offers">
         {{ t('noSupply') }}
@@ -452,6 +458,9 @@ onBeforeUnmount(() => {
   border-radius: var(--shape-control);
   background: var(--surface-muted);
   min-width: 0;
+}
+.market-quote-health {
+  margin-top: 0.45rem;
 }
 .market-quote-heading,
 .market-baseline-heading {

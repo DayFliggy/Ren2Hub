@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { createModelMarketFixture } from '../fixtures/modelMarket'
 import {
@@ -37,8 +38,14 @@ for (const [width, theme] of [
       card.locator('[data-market-baseline] [data-market-telemetry]')
     ).toHaveCount(0)
     await expect(card).not.toContainText(/优惠|最优/)
-    // Compact cards do not invent metrics when the native sample is empty.
+    // Compact cards show per-channel offer health without fabricating model perf-metrics.
     await expect(card.locator('[data-market-telemetry]')).toHaveCount(0)
+    await expect(
+      card.locator('[data-channel-quote] [data-catalog-offer-health]')
+    ).toBeVisible()
+    await expect(
+      card.locator('[data-market-baseline] [data-catalog-offer-health]')
+    ).toHaveCount(0)
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
       path: testInfo.outputPath('models.png'),
@@ -52,6 +59,14 @@ for (const [width, theme] of [
       page.getByRole('heading', { name: /^雾桥中转/ }).first()
     ).toBeVisible()
     await expect(page.locator('[data-market-telemetry]')).toHaveCount(0)
+    await expect(
+      page
+        .locator('[data-market-shelves] [data-catalog-channel-health]')
+        .first()
+    ).toBeVisible()
+    await expect(
+      page.locator('[data-market-shelves] [data-catalog-offer-health]').first()
+    ).toBeVisible()
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
       path: testInfo.outputPath('channels.png'),
@@ -64,6 +79,9 @@ for (const [width, theme] of [
     await expect(comparison).not.toContainText(
       /TPS|耗时|延迟|可用率|最优|省 \d+%/
     )
+    await expect(
+      comparison.locator('[data-catalog-offer-health]:visible').first()
+    ).toBeVisible()
     const matrix = page.locator('[data-market-matrix]')
     if (await matrix.isVisible()) {
       await expect(matrix.locator('thead .benchmark-column')).toContainText(
@@ -177,7 +195,8 @@ test('market filters persist across views and translated long names remain usabl
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText(longId)
   await expect(dialog).toContainText('Platform base price')
-  await expect(dialog).toContainText('No per-channel statistics')
+  await expect(dialog).toContainText('Channel status')
+  await expect(dialog).toContainText('Channel temporarily limited')
   await assertNoHorizontalOverflow(page)
   await dialog
     .getByRole('button', { name: 'Close model details', exact: true })
@@ -301,7 +320,8 @@ for (const [width, theme] of [
       .click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toContainText('Platform base price')
-    await expect(dialog).toContainText('No per-channel statistics')
+    await expect(dialog).toContainText('Channel status')
+    await expect(dialog).toContainText('No quality downgrade')
     await assertNoHorizontalOverflow(page)
     await captureEvidence(page, {
       path: testInfo.outputPath('english-details.png'),
@@ -328,11 +348,32 @@ for (const [theme, width] of [
       [15, '极速直连', '0.8'],
       [16, '海外备用', '1.2'],
     ] as const) {
+      const offerHealth =
+        id === 16
+          ? ({ availability: 'recovering', quality: 'degraded' } as const)
+          : ({
+              availability: 'no_restriction',
+              quality: 'no_downgrade',
+            } as const)
       fixture.channels.push({
         ...fixture.channels[0]!,
         id,
         name,
         channel_ratio: ratio,
+        health:
+          id === 16
+            ? {
+                visible_models: 1,
+                affected_models: 1,
+                evaluated_models: 0,
+                unrated_models: 0,
+              }
+            : {
+                visible_models: 1,
+                affected_models: 0,
+                evaluated_models: 1,
+                unrated_models: 0,
+              },
       })
       fixture.offers.push({
         ...fixture.offers.find(
@@ -344,6 +385,7 @@ for (const [theme, width] of [
           input: String(Number((2.5 * Number(ratio)).toFixed(4))),
           output: String(Number((10 * Number(ratio)).toFixed(4))),
         },
+        health: offerHealth,
       })
     }
     const baseTs = 1_785_038_400
@@ -426,6 +468,11 @@ for (const [theme, width] of [
     await expect(menu).toHaveCount(0)
     await expect(card.locator('[data-channel-quote]')).toContainText('海外备用')
     await expect(card.locator('[data-channel-quote]')).toContainText('$3.000')
+    await expect(
+      card.locator(
+        '[data-channel-quote] [data-catalog-offer-health="recovering"]'
+      )
+    ).toContainText('恢复观察')
     await assertNoHorizontalOverflow(page)
 
     await card
@@ -452,5 +499,96 @@ for (const [theme, width] of [
     await assertNoHorizontalOverflow(page)
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
+  })
+}
+
+const nativeCatalogHealthFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      '../fixtures/native/model-catalog-health.get.json',
+      import.meta.url
+    ),
+    'utf8'
+  )
+)
+
+for (const [theme, width, role] of [
+  ['light', 1440, 1],
+  ['dark', 1440, 100],
+  ['dark', 390, 1],
+] as const) {
+  test(`channel shelf health consumes Go catalog contract fixture (${theme} ${width} role=${role})`, async ({
+    page,
+  }, testInfo) => {
+    const requests: string[] = []
+    page.on('request', (request) =>
+      requests.push(new URL(request.url()).pathname)
+    )
+    await page.setViewportSize({ width, height: 900 })
+    await configureStablePage(page, { theme, authenticated: true, role })
+    await page.route('**/api/user/model-catalog', (route) =>
+      route.fulfill({ json: nativeCatalogHealthFixture })
+    )
+    await page.goto('/models')
+    await waitForStablePage(page)
+
+    await page.getByRole('radio', { name: '渠道货架', exact: true }).click()
+    const shelves = page.locator('[data-market-shelves]')
+    await expect(shelves).toBeVisible()
+    await expect(shelves.locator('[data-market-telemetry]')).toHaveCount(0)
+
+    const primaryShelf = shelves.locator('section[aria-label="Primary Pool"]')
+    await expect(
+      primaryShelf.locator('[data-catalog-channel-health]')
+    ).toContainText('1 个模型受影响')
+    await expect(
+      primaryShelf.locator('[data-catalog-channel-health]')
+    ).toContainText('1 个待评估')
+    await expect(
+      primaryShelf.locator('[data-catalog-offer-health="paused"]')
+    ).toContainText('自动路由暂停')
+    await expect(
+      primaryShelf.locator('[data-catalog-offer-health="unrated"]')
+    ).toContainText('近期样本不足')
+
+    const backupShelf = shelves.locator('section[aria-label="Backup Pool"]')
+    await expect(
+      backupShelf.locator('[data-catalog-offer-health="limited"]')
+    ).toContainText('渠道临时受限')
+
+    // Filtering Primary Pool down to 1 model reveals the visible full-channel scope note.
+    await page.locator('input[name="model-search"]').fill('gpt-4o')
+    await expect(
+      primaryShelf.locator('[data-catalog-channel-scope]')
+    ).toContainText('按该渠道全部 2 个模型')
+    await page.locator('input[name="model-search"]').fill('')
+
+    if (width <= 390) {
+      const refreshBox = (await page
+        .locator('[data-market-refresh]')
+        .boundingBox())!
+      expect(refreshBox.height).toBeGreaterThanOrEqual(44)
+    }
+
+    await assertNoHorizontalOverflow(page)
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`shelves-health-${theme}-${width}.png`),
+      fullPage: true,
+    })
+
+    // Opening offer detail shows channel health block without calling Root-only routing endpoint.
+    await primaryShelf.locator('button[data-offer-id="gpt-4o:11"]').click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.locator('[data-catalog-offer-health="paused"]').first()
+    ).toContainText('自动路由暂停')
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`detail-health-${theme}-${width}.png`),
+    })
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+
+    expect(requests.includes('/api/performance/routing')).toBe(false)
   })
 }

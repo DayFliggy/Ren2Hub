@@ -73,12 +73,15 @@ func updateLockedChannels(tx *gorm.DB, channels []Channel, values any, syncAbili
 
 func updateChannelsByTag(tag string, values any, syncAbilities func(*Channel, *gorm.DB) error) error {
 	var ids []int
+	release := func() {}
+	defer func() { release() }()
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		channels, err := lockChannelsByTag(tx, tag)
 		if err != nil {
 			return err
 		}
 		ids = lockedChannelIDs(channels)
+		release = beginChannelRoutingMutation(ids...)
 		return updateLockedChannels(tx, channels, values, syncAbilities)
 	})
 	if err != nil {

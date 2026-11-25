@@ -1,0 +1,203 @@
+{
+  "data": {
+    "channels": [
+      {
+        "channel_ratio": "1",
+        "eligible": true,
+        "health": {
+          "affected_models": 1,
+          "evaluated_models": 0,
+          "unrated_models": 1,
+          "visible_models": 2
+        },
+        "id": 11,
+        "lab": {
+          "id": "mixed",
+          "name": "mixed",
+          "source": "models"
+        },
+        "max_concurrency": 10,
+        "models": [
+          "claude-sonnet-4-5",
+          "gpt-4o"
+        ],
+        "name": "Primary Pool",
+        "status": 1,
+        "supported_endpoints": {
+          "claude-sonnet-4-5": [
+            "openai"
+          ],
+          "gpt-4o": [
+            "openai"
+          ]
+        },
+        "type": 1
+      },
+      {
+        "channel_ratio": "1.5",
+        "eligible": true,
+        "health": {
+          "affected_models": 1,
+          "evaluated_models": 0,
+          "unrated_models": 0,
+          "visible_models": 1
+        },
+        "id": 22,
+        "lab": {
+          "id": "anthropic",
+          "name": "Anthropic",
+          "source": "default"
+        },
+        "max_concurrency": 5,
+        "models": [
+          "claude-sonnet-4-5"
+        ],
+        "name": "Backup Pool",
+        "status": 1,
+        "supported_endpoints": {
+          "claude-sonnet-4-5": [
+            "anthropic",
+            "openai"
+          ]
+        },
+        "type": 14
+      }
+    ],
+    "generated_at": 1792281600,
+    "models": [
+      {
+        "completion_ratio": 1,
+        "model_name": "claude-sonnet-4-5",
+        "model_price": 0,
+        "model_ratio": 37.5,
+        "owner_by": "",
+        "price_status": "configured",
+        "pricing_values": {
+          "cache": "3",
+          "cache_create": "3.75",
+          "cache_create_1h": "6",
+          "image": "3",
+          "input": "3",
+          "output": "15"
+        },
+        "quota_type": 0,
+        "supported_endpoint_types": [
+          "openai",
+          "anthropic"
+        ],
+        "vendor_id": -1002
+      },
+      {
+        "completion_ratio": 1,
+        "model_name": "gpt-4o",
+        "model_price": 0,
+        "model_ratio": 37.5,
+        "owner_by": "",
+        "price_status": "configured",
+        "pricing_values": {
+          "cache": "2.5",
+          "cache_create": "3.125",
+          "image": "2.5",
+          "input": "2.5",
+          "output": "10"
+        },
+        "quota_type": 0,
+        "supported_endpoint_types": [
+          "openai"
+        ],
+        "vendor_id": -1012
+      }
+    ],
+    "offers": [
+      {
+        "channel_id": 11,
+        "channel_ratio": "1",
+        "health": {
+          "availability": "no_restriction",
+          "quality": "unrated"
+        },
+        "model_id": "claude-sonnet-4-5",
+        "price_status": "configured",
+        "pricing_values": {
+          "cache": "3",
+          "cache_create": "3.75",
+          "cache_create_1h": "6",
+          "image": "3",
+          "input": "3",
+          "output": "15"
+        },
+        "supported_endpoint_types": [
+          "openai"
+        ]
+      },
+      {
+        "channel_id": 11,
+        "channel_ratio": "1",
+        "health": {
+          "availability": "paused",
+          "quality": "unrated"
+        },
+        "model_id": "gpt-4o",
+        "price_status": "configured",
+        "pricing_values": {
+          "cache": "2.5",
+          "cache_create": "3.125",
+          "image": "2.5",
+          "input": "2.5",
+          "output": "10"
+        },
+        "supported_endpoint_types": [
+          "openai"
+        ]
+      },
+      {
+        "channel_id": 22,
+        "channel_ratio": "1.5",
+        "health": {
+          "availability": "limited",
+          "quality": "unrated"
+        },
+        "model_id": "claude-sonnet-4-5",
+        "price_status": "configured",
+        "pricing_values": {
+          "cache": "4.5",
+          "cache_create": "5.625",
+          "cache_create_1h": "9",
+          "image": "4.5",
+          "input": "4.5",
+          "output": "22.5"
+        },
+        "supported_endpoint_types": [
+          "anthropic",
+          "openai"
+        ]
+      }
+    ],
+    "schema_version": 1,
+    "server_address": "https://api.example.test",
+    "supported_endpoints": {
+      "anthropic": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "openai": {
+        "method": "POST",
+        "path": "/v1/chat/completions"
+      }
+    },
+    "vendors": [
+      {
+        "icon": "OpenAI",
+        "id": -1012,
+        "name": "OpenAI"
+      },
+      {
+        "icon": "Claude.Color",
+        "id": -1002,
+        "name": "Anthropic"
+      }
+    ]
+  },
+  "message": "",
+  "success": true
+}

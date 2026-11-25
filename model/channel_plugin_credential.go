@@ -50,6 +50,7 @@ func sqliteChannelKeyLock(channelID int) *sync.Mutex {
 // stored channel afterwards is returned, a new key is published to this
 // node's channel cache, and a new status to the channel's abilities.
 func UpdateChannelLocked(channelID int, update func(channel *Channel) error) (*Channel, error) {
+	defer beginChannelRoutingMutation(channelID)()
 	channel, written, err := updateChannelStateAndCache(channelID, update)
 	if err != nil {
 		return nil, err
@@ -162,6 +163,7 @@ func updateChannelStateAndCache(channelID int, update func(*Channel) error) (*Ch
 // write. update may change Key, Status and OtherInfo and must not wait on
 // the network. The caller reloads the channel cache.
 func UpdateTaskPluginChannelLocked(channelID int, update func(channel *Channel, others []*Channel) error) error {
+	defer beginChannelRoutingMutation(channelID)()
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		sqlitePluginLoginLock.Lock()
 		defer sqlitePluginLoginLock.Unlock()
@@ -252,6 +254,7 @@ func UpdateScheduledChannelLocked(ctx context.Context, channelID int, update fun
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	defer beginChannelRoutingMutation(channelID)()
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		keyLock := sqliteChannelKeyLock(channelID)
 		keyLock.Lock()

@@ -95,6 +95,7 @@ export function buildModelMarketCatalog(
     id: row.id,
     name: row.name,
     ratio: row.channel_ratio,
+    ...(row.health ? { health: row.health } : {}),
   }))
   const byChannel = new Map(channels.map((row) => [row.id, row]))
   const models = response.models.map((model): MarketModel => {
@@ -133,6 +134,7 @@ export function buildModelMarketCatalog(
           ),
           baseline,
           endpointTypes: offer.supported_endpoint_types,
+          ...(offer.health ? { health: offer.health } : {}),
         })),
     }
   })
@@ -140,10 +142,7 @@ export function buildModelMarketCatalog(
     models,
     channels,
     serverAddress: response.server_address,
-    telemetry: {
-      status: 'unavailable',
-      reason: 'channel_metrics_not_collected',
-    },
+    generatedAt: response.generated_at,
   }
 }
 

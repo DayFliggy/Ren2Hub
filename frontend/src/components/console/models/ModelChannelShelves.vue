@@ -5,15 +5,15 @@ import type { MarketChannelShelf } from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
+import CatalogHealthBadge from './CatalogHealthBadge.vue'
 import ModelIdentity from './ModelIdentity.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
-import ModelStatistics from './ModelStatistics.vue'
 
 defineProps<{ shelves: MarketChannelShelf[] }>()
 const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 const shelvesId = useId()
-function offerDomId(kind: 'meta' | 'price', offerId: string) {
+function offerDomId(kind: 'meta' | 'price' | 'health', offerId: string) {
   return `${shelvesId}-${kind}-${encodeURIComponent(offerId)}`
 }
 function shelfAnchorId(channelId: number) {
@@ -81,7 +81,14 @@ function jumpToShelf(channelId: number) {
             </p>
           </div>
         </div>
-        <div class="market-shelf-statistics"><ModelStatistics compact /></div>
+        <div class="market-shelf-statistics">
+          <CatalogHealthBadge
+            kind="channel"
+            :channel-summary="shelf.channel.health"
+            :filtered-count="shelf.items.length"
+            compact
+          />
+        </div>
       </header>
       <div class="market-shelf-items">
         <article
@@ -115,7 +122,7 @@ function jumpToShelf(channelId: number) {
                     channel: shelf.channel.name,
                   })
                 "
-                :aria-describedby="`${shelvesId}-ratio-${shelf.channel.id} ${offerDomId('meta', offer.id)} ${offerDomId('price', offer.id)}`"
+                :aria-describedby="`${shelvesId}-ratio-${shelf.channel.id} ${offerDomId('meta', offer.id)} ${offerDomId('price', offer.id)} ${offerDomId('health', offer.id)}`"
                 @click="emit('detail', item.model.id, offer.id)"
               />
               <div
@@ -133,8 +140,13 @@ function jumpToShelf(channelId: number) {
                 :id="offerDomId('price', offer.id)"
                 :pricing="offer.pricing"
               />
+              <CatalogHealthBadge
+                :id="offerDomId('health', offer.id)"
+                :health="offer.health"
+                compact
+                class="market-shelf-offer-health"
+              />
             </div>
-            <ModelStatistics compact class="market-shelf-item-stats" />
           </div>
         </article>
       </div>
@@ -310,12 +322,13 @@ function jumpToShelf(channelId: number) {
   font-size: 0.6875rem;
 }
 .market-shelf-offer-heading,
-.market-shelf-offer :deep(.market-price) {
+.market-shelf-offer :deep(.market-price),
+.market-shelf-offer-health {
   position: relative;
   pointer-events: none;
 }
-.market-shelf-item-stats {
-  margin-top: auto;
+.market-shelf-offer-health {
+  margin-top: 0.45rem;
 }
 @container model-market (width > 1100px) {
   .market-shelf-item:nth-child(3n + 1):nth-last-child(-n + 3),

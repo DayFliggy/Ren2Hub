@@ -26,6 +26,7 @@ func UpdateChannelStatusAutomatic(channelId, status int, reason string) ChannelS
 }
 
 func updateChannelStatusDetailed(channelId, status int, reason string, automatic bool) (result ChannelStatusUpdateResult) {
+	defer beginChannelRoutingMutation(channelId)()
 	// Runs after the status and abilities are written and published.
 	defer func() {
 		if result.Changed && !automatic {
