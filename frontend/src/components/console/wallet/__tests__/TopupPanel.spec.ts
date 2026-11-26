@@ -404,18 +404,24 @@ describe('native wallet checkout', () => {
       )
     const wrapper = mount(TopupPanel, {
       props: { paymentMethod: 'waffo', balanceQuota: '500000' },
-      global: { plugins: [i18n] },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
     })
     await flushPromises()
+    const submethod = wrapper.get('[data-testid="topup-submethod"]')
+    await submethod.get('button').trigger('click')
+    await flushPromises()
     const options = wrapper
-      .get('#topup-submethod')
-      .findAll('option')
-      .map((option) => option.text())
+      .findAll('[role="option"]')
+      .map((option) => option.text().trim())
     expect(options.slice(1)).toEqual(['Card', 'Apple Pay'])
     expect(wrapper.text()).toContain('EUR 10.00')
     // The payable label names no currency; the amount carries the quote's.
     expect(wrapper.text()).not.toContain('CNY')
-    await wrapper.get('#topup-submethod').setValue('1')
+    await wrapper
+      .findAll('[role="option"]')
+      .find((option) => option.text().includes('Apple Pay'))!
+      .trigger('click')
+    await flushPromises()
     await submit(wrapper, 'wallet.topupNow').trigger('click')
     await flushPromises()
     expect(request).toHaveBeenLastCalledWith('POST', '/api/user/waffo/pay', {

@@ -80,4 +80,23 @@ describe('TopupRecords', () => {
     expect(wrapper.text()).toContain(order.trade_no)
     wrapper.unmount()
   })
+
+  it('renders loading skeletons while fetching and EmptyState when empty', async () => {
+    let resolveLoad!: (value: unknown) => void
+    vi.spyOn(api, 'get').mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveLoad = resolve
+      }) as never
+    )
+    const wrapper = mount(TopupRecords, {
+      props: { refreshKey: 0 },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true)
+    resolveLoad({ items: [], total: 0, page: 1, page_size: 6 })
+    await flushPromises()
+    expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('No data')
+    wrapper.unmount()
+  })
 })

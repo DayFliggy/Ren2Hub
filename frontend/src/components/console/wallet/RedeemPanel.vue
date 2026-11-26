@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ArrowRight } from 'lucide-vue-next'
 
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { parseRedemption } from '@/api/liveContracts'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
@@ -99,12 +101,9 @@ onBeforeUnmount(() => {
         <h2 class="text-sm font-semibold text-[var(--text-primary)]">
           {{ t('wallet.redeemTitle') }}
         </h2>
-        <span
-          class="rounded-md px-2 py-0.5 text-xs font-medium"
-          style="background: var(--accent-soft); color: var(--accent-text)"
-        >
+        <StatusChip tone="accent">
           {{ t('wallet.redeemLimitOnce') }}
-        </span>
+        </StatusChip>
       </div>
       <TextInput
         id="redeem-input"
@@ -120,7 +119,8 @@ onBeforeUnmount(() => {
         :loading="submittingRedeem"
         :disabled="!code.trim()"
       >
-        → {{ t('wallet.redeemNow') }}
+        <ArrowRight :size="15" aria-hidden="true" />
+        {{ t('wallet.redeemNow') }}
       </ConsoleButton>
     </form>
     <div

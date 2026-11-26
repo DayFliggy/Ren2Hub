@@ -65,4 +65,28 @@ describe('BalanceCard', () => {
     expect(wrapper.text()).toContain('50%')
     wrapper.unmount()
   })
+
+  it('uses display-number monospace styling on spend tiles and monospace on used quota', () => {
+    const wrapper = mount(BalanceCard, {
+      props: {
+        quota: '100000000',
+        usedQuota: '6250000',
+        monthQuota: '7240000',
+        dailyBurn: '955000',
+      },
+      global: { plugins: [i18n] },
+    })
+
+    const tiles = wrapper.findAll('[data-balance-spend-tile]')
+    expect(tiles).toHaveLength(2)
+    for (const tile of tiles) {
+      const value = tile.find('.display-number')
+      expect(value.exists()).toBe(true)
+      expect(value.classes()).toContain('font-mono')
+      expect(value.classes()).not.toContain('font-bold')
+    }
+    const meter = wrapper.get('[data-balance-usage-meter]')
+    expect(meter.find('.font-mono.tabular-nums').text()).toContain('$12.50')
+    wrapper.unmount()
+  })
 })

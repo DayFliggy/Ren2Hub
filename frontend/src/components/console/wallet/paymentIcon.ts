@@ -3,7 +3,7 @@ import { BRAND_MARKS, type BrandMark } from './brandMarks'
 export type PaymentIcon =
   | { kind: 'image'; src: string }
   | { kind: 'brand'; mark: BrandMark }
-  | { kind: 'letter'; letter: string; color: string }
+  | { kind: 'letter'; letter: string; color: string; darkColor?: string }
   | { kind: 'generic'; name: 'card' | 'bank' | 'link' }
 
 type BrandKey = keyof typeof BRAND_MARKS
@@ -26,14 +26,17 @@ const ALIASES: Record<string, BrandKey> = {
   sol: 'solana',
 }
 // Chains without a reliable mark in the icon set.
-const LETTERS: Record<string, { letter: string; color: string }> = {
-  tron: { letter: 'T', color: '#EB0029' },
-  trx: { letter: 'T', color: '#EB0029' },
-  trc20: { letter: 'T', color: '#EB0029' },
+const LETTERS: Record<
+  string,
+  { letter: string; color: string; darkColor?: string }
+> = {
+  tron: { letter: 'T', color: '#EB0029', darkColor: '#FF6B7B' },
+  trx: { letter: 'T', color: '#EB0029', darkColor: '#FF6B7B' },
+  trc20: { letter: 'T', color: '#EB0029', darkColor: '#FF6B7B' },
   aptos: { letter: 'A', color: 'currentColor' },
   apt: { letter: 'A', color: 'currentColor' },
-  plasma: { letter: 'P', color: '#16A34A' },
-  usdc: { letter: 'U', color: '#2775CA' },
+  plasma: { letter: 'P', color: '#16A34A', darkColor: '#4ADE80' },
+  usdc: { letter: 'U', color: '#2775CA', darkColor: '#60A5FA' },
 }
 
 function brandFor(id: string): PaymentIcon | null {

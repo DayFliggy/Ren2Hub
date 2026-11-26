@@ -109,21 +109,21 @@ onBeforeUnmount(() => statusController?.abort())
     >
       <template #actions>
         <div class="flex items-center gap-3">
-          <p class="font-mono tracking-tight text-[var(--text-primary)]">
+          <p
+            class="font-mono tabular-nums tracking-tight text-[var(--text-primary)]"
+          >
             <span
               v-if="balance?.prefix"
-              class="text-lg text-[var(--text-tertiary)]"
+              class="text-base text-[var(--text-tertiary)] sm:text-lg"
               >{{ balance.prefix }}</span
-            >
-            <span class="display-number text-5xl">
-              {{ hidden ? '••••••' : balance ? balance.whole : '—' }}
-            </span>
-            <span
+            ><span class="display-number text-3xl sm:text-5xl">{{
+              hidden ? '••••••' : balance ? balance.whole : '—'
+            }}</span
+            ><span
               v-if="!hidden && balance?.fraction"
-              class="display-number text-xl text-[var(--text-secondary)]"
+              class="display-number text-base text-[var(--text-secondary)] sm:text-xl"
+              >.{{ balance.fraction }}</span
             >
-              .{{ balance.fraction }}
-            </span>
           </p>
           <button
             type="button"

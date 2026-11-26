@@ -41,6 +41,10 @@
   --surface-table-header: #faf5ed;
   --surface-muted: rgba(192, 139, 87, 0.07);
   --surface-hover: rgba(192, 139, 87, 0.12);
+  --wallet-tile-surface: var(--surface-muted);
+  --wallet-choice-surface: var(--surface-muted);
+  --wallet-choice-hover: var(--surface-hover);
+  --studio-balance-meter-normal: var(--status-success);
   --surface-overlay: #fbf6ec;
   --overlay-border: rgba(192, 139, 87, 0.2);
   --overlay-shadow:
@@ -618,12 +622,28 @@ html.dark {
     inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 6px rgba(4, 7, 14, 0.32);
   --studio-balance-bg:
     radial-gradient(
-      120% 100% at 0% 0%,
-      rgba(228, 192, 107, 0.11) 0%,
-      transparent 58%
+      95% 85% at 0% 0%,
+      rgba(228, 192, 107, 0.055) 0%,
+      transparent 55%
     ),
-    linear-gradient(145deg, #2d2d2a 0%, #252933 78%);
-  --studio-balance-border: rgba(228, 192, 107, 0.22);
+    linear-gradient(155deg, #282d38 0%, #232732 82%);
+  --studio-balance-border: var(--outline);
+  --studio-balance-top-line: linear-gradient(
+    90deg,
+    transparent 8%,
+    rgba(228, 192, 107, 0.42) 38%,
+    rgba(228, 192, 107, 0.42) 62%,
+    transparent 92%
+  );
+  --studio-balance-meter-normal: var(--signal);
+  --studio-balance-cta-bg: #463c27;
+  --studio-balance-cta-hover: #53472e;
+  --studio-balance-cta-active: #393120;
+  --studio-balance-cta-text: #f6dca2;
+  --studio-balance-cta-border: rgba(228, 192, 107, 0.34);
+  --wallet-tile-surface: var(--surface-container-low);
+  --wallet-choice-surface: var(--surface-container-low);
+  --wallet-choice-hover: var(--state-hover-layer);
 
   /* 滚动条 */
   --scroll-track: #1c1f26;

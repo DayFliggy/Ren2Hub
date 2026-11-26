@@ -21,6 +21,7 @@ import { ApiError } from '@/api/types'
 import AmountInput from '@/components/common/AmountInput.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import BackupPayments from '@/components/console/wallet/BackupPayments.vue'
 import PaymentMethods from '@/components/console/wallet/PaymentMethods.vue'
 import { choiceClass } from '@/components/console/wallet/choiceStyle'
@@ -106,6 +107,18 @@ const presets = computed(() =>
 )
 const selectedProduct = computed(() =>
   products.value.find((item) => item.productId === product.value)
+)
+const waffoSubmethodOptions = computed(() =>
+  (info.value?.waffo_pay_methods ?? []).map((item, index) => ({
+    value: String(index),
+    label: item.name,
+  }))
+)
+const creemProductOptions = computed(() =>
+  products.value.map((item) => ({
+    value: item.productId,
+    label: `${item.name} · ${item.currency} ${item.price}`,
+  }))
 )
 const invalidAmount = computed(
   () =>
@@ -504,32 +517,24 @@ onUnmounted(() => {
           </p>
         </template>
         <div
-          v-if="method === 'waffo' && info?.waffo_pay_methods?.length"
+          v-if="method === 'waffo' && waffoSubmethodOptions.length"
           class="mt-4"
         >
-          <label
-            class="mb-1 block text-xs text-[var(--text-tertiary)]"
-            for="topup-submethod"
-            >{{ paymentT('nativePayment.methodDetail') }}</label
-          >
-          <select
-            id="topup-submethod"
+          <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
+            {{ paymentT('nativePayment.methodDetail') }}
+          </p>
+          <FilterSelect
             v-model="submethod"
-            class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 text-sm"
-          >
-            <option value="">{{ paymentT('nativePayment.automatic') }}</option>
-            <option
-              v-for="(item, index) in info.waffo_pay_methods"
-              :key="index"
-              :value="String(index)"
-            >
-              {{ item.name }}
-            </option>
-          </select>
+            :options="waffoSubmethodOptions"
+            :label="paymentT('nativePayment.methodDetail')"
+            :placeholder="paymentT('nativePayment.automatic')"
+            :disabled="submittingTopup"
+            data-testid="topup-submethod"
+          />
         </div>
         <p
           v-if="isCrypto"
-          class="mt-4 rounded-xl bg-[var(--surface-muted)] p-3 text-xs text-[var(--text-secondary)]"
+          class="mt-4 rounded-xl border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3 text-xs text-[var(--text-secondary)]"
         >
           {{ t('wallet.gmpayNetworkGuidance') }}
         </p>
@@ -561,25 +566,17 @@ onUnmounted(() => {
         :disabled="submittingTopup"
         class="flex min-w-0 grow flex-col border-0 p-0"
       >
-        <div v-if="method === 'creem' && products.length">
-          <label
-            class="mb-1 block text-xs text-[var(--text-tertiary)]"
-            for="topup-product"
-            >{{ paymentT('nativePayment.product') }}</label
-          >
-          <select
-            id="topup-product"
+        <div v-if="method === 'creem' && creemProductOptions.length">
+          <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
+            {{ paymentT('nativePayment.product') }}
+          </p>
+          <FilterSelect
             v-model="product"
-            class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 text-sm"
-          >
-            <option
-              v-for="item in products"
-              :key="item.productId"
-              :value="item.productId"
-            >
-              {{ item.name }} · {{ item.currency }} {{ item.price }}
-            </option>
-          </select>
+            :options="creemProductOptions"
+            :label="paymentT('nativePayment.product')"
+            :disabled="submittingTopup"
+            data-testid="topup-product"
+          />
         </div>
         <template v-else-if="method !== 'creem'">
           <div
@@ -601,14 +598,19 @@ onUnmounted(() => {
               <!-- Token amounts run to ten digits, so they are smaller; amounts
                    are never cut off. -->
               <span
-                class="display-number max-w-full leading-6 [overflow-wrap:anywhere]"
+                class="display-number font-mono max-w-full leading-6 [overflow-wrap:anywhere]"
                 :class="tokens ? 'text-sm' : 'text-lg'"
               >
                 {{ tokens ? '' : '$' }}{{ card.value }}
               </span>
               <span
                 v-if="card.rate"
-                class="text-xs font-medium leading-4 tabular-nums text-[var(--status-success-text)]"
+                class="font-mono text-xs font-medium leading-4 tabular-nums"
+                :class="
+                  amount === card.value
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-[var(--status-success-text)]'
+                "
               >
                 <span aria-hidden="true">{{
                   t('wallet.presetBonus', { rate: card.rate })
@@ -627,11 +629,14 @@ onUnmounted(() => {
                 class="text-xs font-medium text-[var(--text-secondary)]"
                 >{{ t('wallet.customAmount') }}</label
               >
-              <span class="text-xs tabular-nums text-[var(--text-tertiary)]">{{
-                t('wallet.minimumAmount', {
-                  amount: `${tokens ? '' : '$'}${selectedMinimumTopup}`,
-                })
-              }}</span>
+              <span
+                class="font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+                >{{
+                  t('wallet.minimumAmount', {
+                    amount: `${tokens ? '' : '$'}${selectedMinimumTopup}`,
+                  })
+                }}</span
+              >
             </div>
             <AmountInput
               id="topup-amount"
@@ -639,6 +644,7 @@ onUnmounted(() => {
               :placeholder="t('wallet.amountPlaceholder')"
               :min="selectedMinimumTopup"
               :prefix="tokens ? '' : '$'"
+              :aria-invalid="invalidAmount || balanceOverflow || undefined"
               integer
             />
             <p v-if="tokens" class="mt-2 text-xs text-[var(--text-tertiary)]">
@@ -659,7 +665,7 @@ onUnmounted(() => {
         <!-- The receipt and pay button sit at the bottom when the method card is taller. -->
         <div class="mt-auto pt-6">
           <div
-            class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4"
+            class="rounded-xl border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-4"
           >
             <!-- Paid and credited use different units: side by side, never summed. -->
             <dl class="grid gap-3 sm:grid-cols-2 sm:gap-4">
@@ -670,7 +676,7 @@ onUnmounted(() => {
                   {{ t('wallet.summaryPayNow') }}
                 </dt>
                 <dd
-                  class="display-number text-xl [overflow-wrap:anywhere] text-[var(--text-primary)] sm:mt-1 sm:text-2xl"
+                  class="display-number font-mono text-xl [overflow-wrap:anywhere] text-[var(--text-primary)] sm:mt-1 sm:text-2xl"
                 >
                   {{
                     quote?.pay_amount
@@ -680,7 +686,7 @@ onUnmounted(() => {
                 </dd>
               </div>
               <div
-                class="flex min-w-0 items-baseline justify-between gap-3 border-t border-[var(--border-subtle)] pt-3 sm:block sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"
+                class="flex min-w-0 items-baseline justify-between gap-3 border-t border-[var(--outline-variant)] pt-3 sm:block sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"
               >
                 <dt class="shrink-0 text-xs text-[var(--text-secondary)]">
                   {{ t('wallet.summaryCredit') }}
@@ -688,13 +694,13 @@ onUnmounted(() => {
                 <!-- The rate is on the preset card; here only the bonus amount. -->
                 <dd class="min-w-0 text-right sm:mt-1 sm:text-left">
                   <span
-                    class="display-number block text-xl [overflow-wrap:anywhere] text-[var(--accent-text)] sm:text-2xl"
+                    class="display-number font-mono block text-xl [overflow-wrap:anywhere] text-[var(--accent-text)] sm:text-2xl"
                   >
                     {{ creditedQuota ? formatQuota(creditedQuota, 3) : '—' }}
                   </span>
                   <span
                     v-if="bonus"
-                    class="mt-0.5 block text-xs font-medium tabular-nums text-[var(--status-success-text)]"
+                    class="mt-0.5 block font-mono text-xs font-medium tabular-nums text-[var(--accent-text)] opacity-90"
                   >
                     {{
                       t('wallet.creditBonus', {

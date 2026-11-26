@@ -70,7 +70,7 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
             {{ t('invite.heroTotal') }}
           </p>
           <p
-            class="display-number text-3xl tracking-tight text-[var(--text-primary)]"
+            class="display-number font-mono text-3xl tracking-tight text-[var(--text-primary)]"
           >
             {{ info ? formatQuota(info.reward_total) : '--' }}
           </p>
@@ -91,7 +91,9 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.invitedCount') }}
         </p>
-        <p class="display-number mt-1.5 text-2xl text-[var(--text-primary)]">
+        <p
+          class="display-number mt-1.5 font-mono text-2xl text-[var(--text-primary)]"
+        >
           {{ info ? t('invite.people', { count: info.invited }) : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -103,7 +105,9 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.transferable') }}
         </p>
-        <p class="display-number mt-1.5 text-2xl text-[var(--accent-text)]">
+        <p
+          class="display-number mt-1.5 font-mono text-2xl text-[var(--accent-text)]"
+        >
           {{ info ? formatQuota(info.transferable) : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -115,7 +119,9 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.rebateRate') }}
         </p>
-        <p class="display-number mt-1.5 text-2xl text-[var(--accent-text)]">
+        <p
+          class="display-number mt-1.5 font-mono text-2xl text-[var(--accent-text)]"
+        >
           {{ info ? `${info.effective_rate_percent}%` : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -127,7 +133,9 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.frozenReward') }}
         </p>
-        <p class="display-number mt-1.5 text-2xl text-[var(--text-primary)]">
+        <p
+          class="display-number mt-1.5 font-mono text-2xl text-[var(--text-primary)]"
+        >
           {{ info ? formatQuota(info.frozen_reward) : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">

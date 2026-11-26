@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n'
 
 import { getTopUps } from '@/api/adminOrders'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
@@ -67,11 +69,39 @@ onMounted(load)
       :message="loadError"
       @retry="load"
     />
-    <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)] px-5">
+    <div
+      v-if="loading"
+      class="sibling-divide-y sibling-divide-[var(--border-subtle)] px-5"
+      aria-busy="true"
+    >
+      <div
+        v-for="i in 3"
+        :key="i"
+        class="flex items-center justify-between gap-4 py-3.5"
+      >
+        <div class="min-w-0 flex-1 sibling-space-y-2">
+          <SkeletonBlock rounded="md" class="h-3.5 w-44 max-w-full" />
+          <SkeletonBlock rounded="md" class="h-3 w-32 max-w-full" />
+        </div>
+        <div class="flex shrink-0 flex-col items-end gap-1.5">
+          <SkeletonBlock rounded="md" class="h-4 w-16" />
+          <SkeletonBlock rounded="md" class="h-5 w-14" />
+        </div>
+      </div>
+    </div>
+    <EmptyState
+      v-else-if="!loadError && rows.length === 0"
+      class="!py-8"
+      :title="t('common.none')"
+    />
+    <ul
+      v-else-if="!loadError"
+      class="sibling-divide-y sibling-divide-[var(--border-subtle)] px-5"
+    >
       <li
         v-for="row in rows"
         :key="row.id"
-        class="flex flex-wrap items-center justify-between gap-3 py-3.5"
+        class="-mx-5 flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-[var(--state-hover-layer)]"
       >
         <div class="min-w-0">
           <p class="truncate font-mono text-xs text-[var(--text-secondary)]">
@@ -83,12 +113,14 @@ onMounted(load)
           </p>
         </div>
         <div class="shrink-0 text-right">
-          <p class="text-sm font-bold text-[var(--text-primary)]">
+          <p
+            class="display-number font-mono text-sm text-[var(--text-primary)]"
+          >
             {{ formatAdminOrderAmount(row.amount, row.currency) }}
           </p>
           <p
             v-if="row.status === 'completed'"
-            class="text-[0.6875rem] text-[var(--text-tertiary)]"
+            class="font-mono text-[0.6875rem] tabular-nums text-[var(--text-tertiary)]"
           >
             {{
               BigInt(row.quota) > 0n
@@ -98,7 +130,7 @@ onMounted(load)
           </p>
           <p
             v-if="BigInt(row.bonus_quota) > 0n"
-            class="text-[0.6875rem] text-[var(--status-success-text)]"
+            class="font-mono text-[0.6875rem] tabular-nums text-[var(--accent-text)]"
             data-order-bonus
           >
             {{ t('orders.bonus', { bonus: formatQuota(row.bonus_quota) }) }}
@@ -107,12 +139,6 @@ onMounted(load)
             {{ t(adminOrderStatusLabelKey(row.status)) }}
           </StatusChip>
         </div>
-      </li>
-      <li
-        v-if="!loading && !loadError && rows.length === 0"
-        class="py-10 text-center text-sm text-[var(--text-tertiary)]"
-      >
-        {{ t('common.none') }}
       </li>
     </ul>
     <div class="border-t border-[var(--border-subtle)] px-3">

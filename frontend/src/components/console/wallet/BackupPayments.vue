@@ -46,7 +46,7 @@ const items = computed(() =>
           :href="item.href"
           target="_blank"
           rel="noopener noreferrer"
-          class="focus-ring flex h-11 items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-default)] hover:bg-[var(--surface-hover)]"
+          class="focus-ring flex h-11 items-center justify-between gap-2 rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-choice-surface)] px-3 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--outline)] hover:bg-[var(--wallet-choice-hover)]"
         >
           <span class="flex min-w-0 items-center gap-2">
             <PaymentMethodIcon

@@ -209,9 +209,15 @@ const accountStats = computed(() => [
             <component :is="stat.icon" :size="16" aria-hidden="true" />
           </span>
         </span>
-        <strong class="mt-3 block text-2xl text-[var(--text-primary)]">{{
-          stat.value
-        }}</strong>
+        <span
+          class="display-number mt-3 block font-mono text-2xl"
+          :class="
+            stat.key === 'balance'
+              ? 'text-[var(--accent-text)]'
+              : 'text-[var(--text-primary)]'
+          "
+          >{{ stat.value }}</span
+        >
         <span
           class="mt-2 inline-flex items-center gap-1 text-[0.6875rem] text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--accent-text)]"
         >

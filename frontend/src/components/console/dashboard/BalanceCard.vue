@@ -9,7 +9,7 @@ import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useBalanceVisibility } from '@/composables/useDashboard'
 import { quotaRatio } from '@/utils/quota'
-import { formatQuota } from '@/utils/format'
+import { formatQuota, formatQuotaParts } from '@/utils/format'
 
 const props = withDefaults(
   defineProps<{
@@ -34,12 +34,11 @@ const { t } = useI18n()
 const router = useRouter()
 const { hidden, toggle } = useBalanceVisibility()
 
-const display = computed(() =>
-  props.quota === null
-    ? '--'
-    : hidden.value
-      ? '••••••••'
-      : formatQuota(props.quota)
+const balanceParts = computed(() =>
+  props.quota === null || hidden.value ? null : formatQuotaParts(props.quota, 2)
+)
+const fallbackDisplay = computed(() =>
+  props.quota === null ? '--' : '••••••••'
 )
 
 // This display denominator may exceed one account field's int64 range.
@@ -58,7 +57,7 @@ const usedPercent = computed(() =>
 const meterColor = computed(() => {
   if (usedPercent.value >= 90) return 'var(--status-danger)'
   if (usedPercent.value >= 70) return 'var(--status-warning)'
-  return 'var(--status-success)'
+  return 'var(--studio-balance-meter-normal)'
 })
 
 /** Remaining share of the balance drives the health indicator. */
@@ -107,9 +106,21 @@ const monthSpendDisplay = computed(() => {
     <!-- Balance number: mono font for ledger feel; weight is theme-driven -->
     <div class="mt-3 flex items-center gap-2.5">
       <p
-        class="display-number font-mono text-3xl tracking-tight text-[var(--text-primary)]"
+        class="display-number font-mono tracking-tight text-[var(--text-primary)]"
       >
-        {{ display }}
+        <template v-if="balanceParts"
+          ><span
+            v-if="balanceParts.prefix"
+            class="text-xl text-[var(--text-tertiary)]"
+            >{{ balanceParts.prefix }}</span
+          ><span class="text-3xl">{{ balanceParts.whole }}</span
+          ><span
+            v-if="balanceParts.fraction"
+            class="text-xl text-[var(--text-secondary)]"
+            >.{{ balanceParts.fraction }}</span
+          ></template
+        >
+        <span v-else class="text-3xl">{{ fallbackDisplay }}</span>
       </p>
       <IconButton
         :label="hidden ? t('common.showBalance') : t('common.hideBalance')"
@@ -170,15 +181,16 @@ const monthSpendDisplay = computed(() => {
       >
         <span>
           {{ t('dashboard.usedQuota') }}
-          <span class="font-semibold text-[var(--text-secondary)]">{{
-            formatQuota(usedQuota)
-          }}</span>
+          <span
+            class="font-mono font-medium tabular-nums text-[var(--text-secondary)]"
+            >{{ formatQuota(usedQuota) }}</span
+          >
         </span>
         <span class="font-mono tabular-nums">{{ usedPercent }}%</span>
       </div>
       <!-- Thicker bar with irregular radius for brush-stroke feel -->
       <div
-        class="h-2 overflow-hidden bg-[var(--surface-muted)]"
+        class="h-1.5 overflow-hidden bg-[var(--surface-muted)]"
         style="border-radius: 3px 2px 4px 2px / 2px 3px 2px 4px"
       >
         <div
@@ -201,10 +213,10 @@ const monthSpendDisplay = computed(() => {
       data-balance-spend-summary
     >
       <div
-        class="px-3 py-2.5"
+        class="px-3.5 py-2.5"
         data-balance-spend-tile
         style="
-          background: var(--surface-muted);
+          background: var(--wallet-tile-surface);
           border-radius: var(--sketch-border-radius-sm);
         "
       >
@@ -212,16 +224,16 @@ const monthSpendDisplay = computed(() => {
           {{ t('dashboard.monthSpend') }}
         </p>
         <p
-          class="mt-0.5 font-mono font-bold tabular-nums text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-base text-[var(--text-primary)]"
         >
           {{ monthSpendDisplay }}
         </p>
       </div>
       <div
-        class="px-3 py-2.5"
+        class="px-3.5 py-2.5"
         data-balance-spend-tile
         style="
-          background: var(--surface-muted);
+          background: var(--wallet-tile-surface);
           border-radius: var(--sketch-border-radius-sm);
         "
       >
@@ -229,7 +241,7 @@ const monthSpendDisplay = computed(() => {
           {{ t('dashboard.balanceHint.avgBurn') }}
         </p>
         <p
-          class="mt-0.5 font-mono font-bold tabular-nums text-[var(--text-primary)]"
+          class="display-number mt-1 font-mono text-base text-[var(--text-primary)]"
         >
           {{ dailyBurn === undefined ? '--' : formatQuota(dailyBurn) }}
         </p>
@@ -248,6 +260,7 @@ const monthSpendDisplay = computed(() => {
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
+          aria-hidden="true"
         >
           <rect x="3" y="6" width="18" height="13" rx="2" />
           <path d="M3 10h18M8 15h4" />
@@ -267,11 +280,12 @@ const monthSpendDisplay = computed(() => {
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
+          aria-hidden="true"
         >
           <path
             d="M4 9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V9Z"
           />
-          <path d="M13 7v12" stroke-dasharray="3 3" />
+          <path d="M13 8v8" stroke-opacity="0.65" />
         </svg>
         {{ t('dashboard.redeem') }}
       </ConsoleButton>
@@ -281,43 +295,65 @@ const monthSpendDisplay = computed(() => {
 
 <style scoped>
 html.dark [data-balance-card] {
-  background: var(
-    --studio-balance-bg,
-    linear-gradient(130deg, #383730 0%, #2b2f38 75%)
-  ) !important;
-  border: 1px solid var(--studio-balance-border, rgba(226, 189, 104, 0.22)) !important;
+  position: relative;
+  overflow: hidden;
+  background: var(--studio-balance-bg) !important;
+  border: 1px solid var(--studio-balance-border) !important;
   border-radius: var(--shape-card, 16px) !important;
   box-shadow: var(--elevation-2) !important;
 }
 
+html.dark [data-balance-card]::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: var(--studio-balance-top-line);
+  pointer-events: none;
+}
+
 html.dark [data-balance-card] .display-number {
-  font-weight: 500;
-  letter-spacing: -0.03em;
+  font-weight: var(--display-number-weight, 500);
+  letter-spacing: -0.025em;
 }
 
 html.dark [data-balance-spend-tile] {
-  background: rgba(18, 21, 28, 0.42) !important;
-  border: 1px solid rgba(255, 255, 255, 0.055) !important;
-  border-radius: 10px !important;
+  background: var(--wallet-tile-surface) !important;
+  border: 1px solid var(--outline-variant) !important;
+  border-radius: var(--shape-control, 10px) !important;
   box-shadow: none !important;
 }
 
 html.dark [data-balance-usage-meter] > div:last-child {
   border-radius: 9999px !important;
-  background: rgba(255, 255, 255, 0.07) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  background: var(--surface-container-low) !important;
+  border: 1px solid var(--outline-variant);
+  box-shadow: none;
 }
 
 html.dark [data-balance-usage-meter] > div:last-child > div {
   border-radius: 9999px !important;
 }
 
-@media (max-width: 1023px) {
-  html.dark [data-balance-actions] > :deep(button:first-child) {
-    background: #51452c !important;
-    color: #f6dca2 !important;
-    border: 1px solid rgba(226, 189, 104, 0.35) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 237, 195, 0.09) !important;
-  }
+html.dark [data-balance-actions] > :deep(button:first-child) {
+  background: var(--studio-balance-cta-bg) !important;
+  color: var(--studio-balance-cta-text) !important;
+  border: 1px solid var(--studio-balance-cta-border) !important;
+  font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 237, 195, 0.1) !important;
+}
+
+html.dark [data-balance-actions] > :deep(button:first-child:enabled:hover) {
+  background: var(--studio-balance-cta-hover) !important;
+  border-color: var(--border-strong) !important;
+}
+
+html.dark [data-balance-actions] > :deep(button:first-child:enabled:active) {
+  background: var(--studio-balance-cta-active) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+html.dark [data-balance-actions] > :deep(button:last-child) {
+  font-weight: 500;
 }
 </style>

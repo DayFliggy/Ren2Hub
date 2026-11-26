@@ -35,7 +35,7 @@ const canTransfer = computed(
 
 <template>
   <ConsoleCard :title="t('invite.rewardBalanceTitle')" stretch>
-    <p class="display-number text-3xl text-[var(--accent-text)]">
+    <p class="display-number font-mono text-3xl text-[var(--accent-text)]">
       {{ formatQuota(transferable) }}
     </p>
 
@@ -44,7 +44,9 @@ const canTransfer = computed(
         <dt class="text-[var(--text-tertiary)]">
           {{ t('invite.currentBalance') }}
         </dt>
-        <dd class="font-medium text-[var(--text-primary)]">
+        <dd
+          class="font-mono font-medium tabular-nums text-[var(--text-primary)]"
+        >
           {{ formatQuota(currentBalance) }}
         </dd>
       </div>
@@ -54,7 +56,7 @@ const canTransfer = computed(
         <dt class="text-[var(--text-secondary)]">
           {{ t('invite.balanceAfterTransfer') }}
         </dt>
-        <dd class="font-semibold text-[var(--text-primary)]">
+        <dd class="display-number font-mono text-[var(--text-primary)]">
           {{ afterBalance === null ? '—' : formatQuota(afterBalance) }}
         </dd>
       </div>
@@ -65,7 +67,9 @@ const canTransfer = computed(
         <dt class="text-[var(--text-tertiary)]">
           {{ t('invite.outstandingOffset') }}
         </dt>
-        <dd class="font-medium text-[var(--status-warning-text)]">
+        <dd
+          class="font-mono font-medium tabular-nums text-[var(--status-warning-text)]"
+        >
           {{ formatQuota(outstandingOffset ?? '0') }}
         </dd>
       </div>

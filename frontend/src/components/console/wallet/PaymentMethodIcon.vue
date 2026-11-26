@@ -36,8 +36,11 @@ const generic = { card: CreditCard, bank: Landmark, link: ExternalLink }
   <svg
     v-else-if="resolved.kind === 'brand'"
     viewBox="0 0 24 24"
-    class="size-5 shrink-0"
-    :style="{ color: resolved.mark.color }"
+    class="payment-brand-mark size-5 shrink-0"
+    :style="{
+      '--brand-mark-light': resolved.mark.color,
+      '--brand-mark-dark': resolved.mark.darkColor ?? resolved.mark.color,
+    }"
     fill="currentColor"
     aria-hidden="true"
   >
@@ -45,9 +48,10 @@ const generic = { card: CreditCard, bank: Landmark, link: ExternalLink }
   </svg>
   <span
     v-else-if="resolved.kind === 'letter'"
-    class="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[0.625rem] font-bold leading-none"
+    class="payment-brand-mark inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[0.625rem] font-bold leading-none"
     :style="{
-      color: resolved.color,
+      '--brand-mark-light': resolved.color,
+      '--brand-mark-dark': resolved.darkColor ?? resolved.color,
       boxShadow: 'inset 0 0 0 1.5px currentColor',
     }"
     aria-hidden="true"
@@ -61,3 +65,13 @@ const generic = { card: CreditCard, bank: Landmark, link: ExternalLink }
     aria-hidden="true"
   />
 </template>
+
+<style scoped>
+.payment-brand-mark {
+  color: var(--brand-mark-light);
+}
+
+html.dark .payment-brand-mark {
+  color: var(--brand-mark-dark);
+}
+</style>
