@@ -36188,7 +36188,7 @@
       ]
     },
     "router/api-router.go": {
-      "local_sha256": "71351ed90e59868612dfc33126093bc91939a53e986b673215d24add8238edbd",
+      "local_sha256": "08d12f0a49d767a6253e051d88a124570ea248f241c29c7db1f6f802910f0ff4",
       "hunks": [
         {
           "header": "@@ -17,9 +17,10 @@",
@@ -36197,8 +36197,8 @@
         },
         {
           "header": "@@ -35,6 +36,7 @@",
-          "sha256": "c5f0eac94e8beeb5b6ee21795f3c572e8d67fec40673444d36922936b997b35d",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "sha256": "3c063124df688f6a82373f54f3206ba40322028538a436bf292278d61f30567f",
+          "basis": "保留本地 /home/metrics 路由；/pricing 与 /perf-metrics 已吸收 8542c9d64 的 middleware.DisableCache()。"
         },
         {
           "header": "@@ -88,7 +90,6 @@",
@@ -36236,14 +36236,14 @@
           "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
         },
         {
-          "header": "@@ -349,30 +320,19 @@",
-          "sha256": "a3097ca9b4ff8784974549f7d6dada9551a6b2acb7d15ae316980716461c0627",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -349,31 +320,19 @@",
+          "sha256": "e62f8fa9e23da420ce7aa15f47cb6360dbe75088bdbd09ccbb00e15cbe10a0b2",
+          "basis": "裁剪退役的 /system-info、/group 与 8542c9d64 按分组拆分的 /data/perf-metrics/summary，保留本地 /data/self/summary 与 /data/summary 仪表盘汇总。"
         },
         {
-          "header": "@@ -423,30 +383,5 @@",
-          "sha256": "7214e768e511184f4551e611a12cacb8a3c41c8ba8b46b98cf4a4ce0cae22524",
-          "basis": "AUTH-7/AUD-EXP-1/3/4：导出不限制总量或时间范围；controller 扩展预检写截止，包装链不支持时在流响应头前显式失败，取消/写失败跳过最终刷新且始终复位截止；router 的两个导出路径排除 gzip，middleware 审计 writer 增加 Unwrap 传递截止能力；model 分批查询，ClickHouse 单流分支去掉冗余判断。其他已审查接点保持原合同。"
+          "header": "@@ -424,30 +383,5 @@",
+          "sha256": "3c63fe3abcee9bd05b8531630e684688fbd2f1bb36617943eb50bf41af110298",
+          "basis": "裁剪退役的 /deployments (io.net) 路由。"
         }
       ]
     }

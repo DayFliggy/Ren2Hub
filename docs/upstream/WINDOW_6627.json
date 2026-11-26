@@ -1,0 +1,597 @@
+{
+ "upstream": "QuantumNous/new-api",
+ "role": "唯一上游",
+ "upstream_base_sha": "48f9df96ea7c68eae04a0f3687869f232f48929f",
+ "upstream_target_sha": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+ "implementation_base_sha": "890e981056d2e2ca80969d4fc5b7d1f355fccc96",
+ "candidate_sha": null,
+ "verification": "记录源码处置，定向测试结果见各提交说明。",
+ "counts": {
+  "absorbed_with_local_diff": 10,
+  "absorbed": 10,
+  "skipped": 17,
+  "adapted_to_vue": 10
+ },
+ "files": [
+  {
+   "path": "THIRD-PARTY-LICENSES.md",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "7c653bfa672402ad1600d233ed3236f10f5e63cffdf954b65ab88dbc4c30d408",
+   "local_sha256": "c889b06d83cb84826a4035256b2e8e30e8746b3e0941410bf3d4a886b6938d49",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "核对 moego v0.1.0-alpha.4/alpha.5 的 MIT LICENSE 全字节一致后，同步 Ren2Hub 独立清单中的 moego 版本号，不复制上游 React 清单。"
+  },
+  {
+   "path": "common/endpoint_type.go",
+   "upstream_change": "M",
+   "commits": [
+    "51a1ceeaec14ede2130ade924dcc46a6316a49a5"
+   ],
+   "upstream_sha256": "a894e781ae0ace32824e0b313db5cd972e687e3870ae8bf5e7fddd4c8bf3c7a8",
+   "local_sha256": "dbbe01367140bbf31899ff4cce80fd24c1c7b265be0a16d3ffe2a6cd5dc9c0c3",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "吸收 DeepSeek 支持 OpenAI/Responses/Anthropic 三端点元数据，保留本地 ChannelTypeCodex 退役返回 nil。"
+  },
+  {
+   "path": "common/log_text.zh-CN.json",
+   "upstream_change": "M",
+   "commits": [
+    "1a395c76a9c4111fe83080297b9fd0dfe6600025"
+   ],
+   "upstream_sha256": "5f2cd3558e276f6abfc676fb124a9bd337b0b00f55be694529fcbffcc96a8900",
+   "local_sha256": "993503d585ac7647ee38b10b89a07d5ca8e50a13e858b57e4bfcd10d829ba10c",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "补入易支付 RSA 回调商户 ID 不匹配的中文日志文案，保留本地单 Key 日志调整。"
+  },
+  {
+   "path": "common/model_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "51a1ceeaec14ede2130ade924dcc46a6316a49a5"
+   ],
+   "upstream_sha256": "e440941111e8a16af1b337687c624b4c77a33787813ecb52d25685319aae38b9",
+   "local_sha256": "e440941111e8a16af1b337687c624b4c77a33787813ecb52d25685319aae38b9",
+   "disposition": "absorbed",
+   "basis": "同步 DeepSeek 端点元数据断言。"
+  },
+  {
+   "path": "controller/model_list_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "e64e26f6949c897bbe39200791c69977282b73365ed25aaef54136f2d9dd7557",
+   "local_sha256": "742bf1ce8fb1bb0f6f94b6c0dc5bb0c49937da938d959b64c2a6d50aded0466a",
+   "disposition": "skipped",
+   "basis": "8542c9d64 私有分组隔离测试不适用：Ren2Hub 已删除业务分组，模型广场按平台全局展示。"
+  },
+  {
+   "path": "controller/perf_metrics.go",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "d00fdde2209e746cdf7b7195476d81254239b0fcd5982bc05b28b91639934c78",
+   "local_sha256": "e61799186f4d43e9e17e36643c82717005824b2782eb0ba2309d020c5a40d7a2",
+   "disposition": "skipped",
+   "basis": "8542c9d64 按分组过滤性能指标与 GetDashboardPerfMetricsSummary 不适用：Ren2Hub 已删除业务分组。"
+  },
+  {
+   "path": "controller/pricing.go",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "f6f3ff61cede3855fd95a174dbdc59844d135dbc6cd2208958d8aa1e6cd7d59d",
+   "local_sha256": "a4ca868c11aad2d5bd1872ab1fbe8621a60f0f5a8f4042d44625a802d7de3aff",
+   "disposition": "skipped",
+   "basis": "8542c9d64 按访问者分组过滤模型标签不适用：Ren2Hub 已删除业务分组。"
+  },
+  {
+   "path": "controller/security_account_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "6d9ea429486045846ff85021eeb528b65c2a9489b7dfb0ff911a75e72a8d285c",
+   "local_sha256": "77b0f1273ba4f089fabf7eb34b75c9eae1da10f8ac967efe483dc5100e07f10c",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "统一测试正则库导入为 github.com/MoeForge/moego/regexp，保留本地去分组断言差异。"
+  },
+  {
+   "path": "controller/subscription_payment_epay.go",
+   "upstream_change": "M",
+   "commits": [
+    "1a395c76a9c4111fe83080297b9fd0dfe6600025"
+   ],
+   "upstream_sha256": "eec2b896d71c291d9107a1ec4f67e65fda8a1d8b6ce1f23262cf05e20c91f479",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "站内订阅套餐已退役（合同 retired），不恢复订阅易支付回调文件。"
+  },
+  {
+   "path": "controller/task_plugin_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "21cdde29ce06a02df71da2ebb189db38ef2d47bd8e38baec635fd3e9b69054f5",
+   "local_sha256": "eb7aa4528b1c9fca323d1f2c23bc0d72de11f13a333862eef7699dfaaeaeb45b",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "统一测试正则库导入为 github.com/MoeForge/moego/regexp，保留本地三库方言与去分组断言差异。"
+  },
+  {
+   "path": "controller/topup.go",
+   "upstream_change": "M",
+   "commits": [
+    "1a395c76a9c4111fe83080297b9fd0dfe6600025"
+   ],
+   "upstream_sha256": "44bccd253b00ad01d87c63a74d205dfb5e800b1a388c75dcc1ff385f8b54854a",
+   "local_sha256": "6d0b04cb4e855a58091e485725fedd068885281ee66be0e8869ecff992d9c860",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "吸收 EpayNotify 的 epayCallbackPartnerMatches 校验（RSA 模式强校验 pid 匹配配置 PartnerID，MD5 保持原行为），保留充值加赠、备用支付与单次入账接点。"
+  },
+  {
+   "path": "go.mod",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855",
+    "6627f0e3f37c002564b630a73e5afb0d28a92d3b"
+   ],
+   "upstream_sha256": "e4521287986eafa5583ccb0f043870af2e2106096c1ed2010414378252a8ec95",
+   "local_sha256": "e4521287986eafa5583ccb0f043870af2e2106096c1ed2010414378252a8ec95",
+   "disposition": "absorbed",
+   "basis": "升级 github.com/MoeForge/moego 至 v0.1.0-alpha.5，升级间接依赖 go.opentelemetry.io/otel 与 otel/trace 至 v1.47.0。"
+  },
+  {
+   "path": "go.sum",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855",
+    "6627f0e3f37c002564b630a73e5afb0d28a92d3b"
+   ],
+   "upstream_sha256": "ee144252996cf20f3677e94caed1b37b9411fcb2b62bf275b7306bc889a505a8",
+   "local_sha256": "ee144252996cf20f3677e94caed1b37b9411fcb2b62bf275b7306bc889a505a8",
+   "disposition": "absorbed",
+   "basis": "同步 moego v0.1.0-alpha.5 与 otel v1.47.0 校验和。"
+  },
+  {
+   "path": "middleware/access_token_routes.go",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "d45ca7a075066a777319044217b007c6b85698d99c3595e6139ffdc6472c8a1f",
+   "local_sha256": "3ea1eda6dce86ade163283de88299d8f10a0f12e14f395befdd55983d0a20eac",
+   "disposition": "skipped",
+   "basis": "8542c9d64 新增 /api/data/perf-metrics/summary PAT 规则不适用：Ren2Hub 已删除业务分组，未引入该拆分路由。"
+  },
+  {
+   "path": "plugins/kling_responses_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "ac1330c5c86c3dccd560068706321050de15ea16"
+   ],
+   "upstream_sha256": "682669aaf6bf9a58a089e07fd3965c9e245950a86a03c0a39ea0055b9b0fe047",
+   "local_sha256": "682669aaf6bf9a58a089e07fd3965c9e245950a86a03c0a39ea0055b9b0fe047",
+   "disposition": "absorbed",
+   "basis": "同步 Kling 4.0 4:3 与 3:4 宽高比映射测试。"
+  },
+  {
+   "path": "plugins/tasks/kling/plugin.js",
+   "upstream_change": "M",
+   "commits": [
+    "ac1330c5c86c3dccd560068706321050de15ea16"
+   ],
+   "upstream_sha256": "9fd7b8158b10b8ac729151eeedc21ba6f1062289d7072385eae98d25ea94532f",
+   "local_sha256": "9fd7b8158b10b8ac729151eeedc21ba6f1062289d7072385eae98d25ea94532f",
+   "disposition": "absorbed",
+   "basis": "同步 Kling 4.0 4:3 与 3:4 宽高比映射，保持内置插件上游原文。"
+  },
+  {
+   "path": "relaykit/go.mod",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "46c78a630e869f744b942fd3b9d6797e4b1ac739fab6f635e7a65d1feb799431",
+   "local_sha256": "1408a7fd5c0d16be7cd8dcab43e9682a1b86d87f24ed9d050404a67b85e31b23",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "升级 github.com/MoeForge/moego 至 v0.1.0-alpha.5，保留本地 go 1.26.10 工具链声明。"
+  },
+  {
+   "path": "relaykit/go.sum",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "25df11611752c125f436ad38b66491bced7fc8ef049f1919374f47857b029308",
+   "local_sha256": "25df11611752c125f436ad38b66491bced7fc8ef049f1919374f47857b029308",
+   "disposition": "absorbed",
+   "basis": "同步 relaykit moego v0.1.0-alpha.5 校验和。"
+  },
+  {
+   "path": "relaykit/relayconvert/golden_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "4220fe1ba51c1df1000407a11396f78eccabc65e4c05b2d88d0f04545b36f808",
+   "local_sha256": "4220fe1ba51c1df1000407a11396f78eccabc65e4c05b2d88d0f04545b36f808",
+   "disposition": "absorbed",
+   "basis": "统一测试正则库导入为 github.com/MoeForge/moego/regexp。"
+  },
+  {
+   "path": "relaykit/relayconvert/internal/oai_chat/to_gemini_chat_resp.go",
+   "upstream_change": "M",
+   "commits": [
+    "c53dcf3356744bbb50fc61cb72af05053caed2f6"
+   ],
+   "upstream_sha256": "f264fd7edc39448e8565541aac7743b0c0232f6e34e86edfdc5d70aca253cde9",
+   "local_sha256": "f264fd7edc39448e8565541aac7743b0c0232f6e34e86edfdc5d70aca253cde9",
+   "disposition": "absorbed",
+   "basis": "在非流式、无状态流式与有状态流式 Chat 转 Gemini 响应中补齐 cachedContentTokenCount。"
+  },
+  {
+   "path": "relaykit/relayconvert/reasoning/gemini.go",
+   "upstream_change": "M",
+   "commits": [
+    "a85f7e844d79e705d63d8a3ae38e05624861995e"
+   ],
+   "upstream_sha256": "6d3f6662bbfc19923e7635df682f3466d36c792be6a644478cf5e816df4f65ad",
+   "local_sha256": "6d3f6662bbfc19923e7635df682f3466d36c792be6a644478cf5e816df4f65ad",
+   "disposition": "absorbed",
+   "basis": "Gemini 4 思考等级改为 gemini-4- 前缀匹配，非 neon/hydrogen 上限收紧为 high。"
+  },
+  {
+   "path": "relaykit/relayconvert/reasoning/gemini_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "a85f7e844d79e705d63d8a3ae38e05624861995e"
+   ],
+   "upstream_sha256": "2ea8eb362d518cd0be69286f53728d394e8b03e6937d8a253cb6d0b266cbb1a6",
+   "local_sha256": "9cda3110666cac4bd69b9709ccf1266c7e44fec48d9f56642dfd2a09289d0176",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "吸收上游 Gemini 4 前缀与上限回归用例，保留文件顶部的本地 TestArgonReasoningDefaultsAndExplicitLevels。"
+  },
+  {
+   "path": "relaykit/relayconvert/response_registry_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "c53dcf3356744bbb50fc61cb72af05053caed2f6"
+   ],
+   "upstream_sha256": "20c590067b48137ad332897e73f136f2762bfe9a76d3cb4c44abaa18f63d130e",
+   "local_sha256": "20c590067b48137ad332897e73f136f2762bfe9a76d3cb4c44abaa18f63d130e",
+   "disposition": "absorbed",
+   "basis": "吸收 Chat 与 Claude 转 Gemini 响应 cachedContentTokenCount 回归用例。"
+  },
+  {
+   "path": "router/access_token_scope_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "6e9d3d13e589e7bdc6b34a1af4173669561e01abedbb06b03fddc911366d353d",
+   "local_sha256": "af5a4a2307ddc48a69188e630b6dbed10c019859142be437a3e50a085f53f69a",
+   "disposition": "skipped",
+   "basis": "8542c9d64 /api/data/perf-metrics/summary PAT 作用域测试不适用：未引入该路由。"
+  },
+  {
+   "path": "router/api-router.go",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "ad7008843c545bbbe34a6d5200f96b82bc846b2c6c75acf8c0509eec74a604a9",
+   "local_sha256": "08d12f0a49d767a6253e051d88a124570ea248f241c29c7db1f6f802910f0ff4",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "仅吸收 /api/pricing 与 /api/perf-metrics 的 middleware.DisableCache()；跳过 8542c9d64 的 /api/data/perf-metrics/summary 路由，保留本地路由接点。"
+  },
+  {
+   "path": "router/provider_plugin_relay_test.go",
+   "upstream_change": "M",
+   "commits": [
+    "185e1e51a0110b09098f466cebbdf4633cea2855"
+   ],
+   "upstream_sha256": "191cbc74db2ef5109a9a7136d51f46906b73ac8fcdc85734ed486b0f67080841",
+   "local_sha256": "131fe17c54117b8028ad768b94d58de5e787b576fc9fe7404f9b038b79a3e8c2",
+   "disposition": "absorbed_with_local_diff",
+   "basis": "统一测试正则库导入为 github.com/MoeForge/moego/regexp，保留本地无默认价测试差异。"
+  },
+  {
+   "path": "web/src/features/dashboard/components/models/performance-overview.tsx",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "19bc41a3c7ac42ec4f6fa6cc6745e2be38624ef1bf39b8ab86f88201b03626fa",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "8542c9d64 React 私有分组性能接口适配不适用：Ren2Hub 已删除业务分组且仅交付 Vue 前端。"
+  },
+  {
+   "path": "web/src/features/dashboard/components/overview/performance-health-panel.tsx",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "1f3dfaf717770f651bf4d7b56e85369ee58f88b41e6403da07f822a74f330fb4",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "8542c9d64 React 私有分组性能接口适配不适用：Ren2Hub 已删除业务分组且仅交付 Vue 前端。"
+  },
+  {
+   "path": "web/src/features/performance-metrics/__tests__/summary.test.tsx",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "646be78be71f90067071c8b33f5d1270828a8d14ffbebab82d1af3442cbdedd2",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "8542c9d64 React 私有分组性能接口适配不适用：Ren2Hub 已删除业务分组且仅交付 Vue 前端。"
+  },
+  {
+   "path": "web/src/features/performance-metrics/api.ts",
+   "upstream_change": "M",
+   "commits": [
+    "8542c9d6490b4330fe18160930f81ae7428bc777"
+   ],
+   "upstream_sha256": "9d6fd8380017e5bb02b0d0b6f758bc1fc464562062e30f11006adc7cd70bcc2b",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "8542c9d64 React 私有分组性能接口适配不适用：Ren2Hub 已删除业务分组且仅交付 Vue 前端。"
+  },
+  {
+   "path": "web/src/features/system-settings/__tests__/pricing-sync.test.tsx",
+   "upstream_change": "M",
+   "commits": [
+    "cb074d31e296b53ce252d402a7063079cbf7f990"
+   ],
+   "upstream_sha256": "37dc4c710271935dfd43911cba7c6e42e40c00d907b913af6b5b6ef20be10504",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "cb074d31e React 价格同步阶梯解析展示修复无需移植：Vue PriceFetchDialog/PriceDiffCell 采用原始 billing_expr 无损词法对比，参考价路径已使用 compileBillingExpression。"
+  },
+  {
+   "path": "web/src/features/system-settings/models/upstream-ratio-sync-helpers.ts",
+   "upstream_change": "M",
+   "commits": [
+    "cb074d31e296b53ce252d402a7063079cbf7f990"
+   ],
+   "upstream_sha256": "add05d119e03d07c20c65292d8dbc34468091dfe1b413d6c50bb4378c0c788e3",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "cb074d31e React 价格同步阶梯解析展示修复无需移植：Vue PriceFetchDialog/PriceDiffCell 采用原始 billing_expr 无损词法对比，参考价路径已使用 compileBillingExpression。"
+  },
+  {
+   "path": "web/src/features/task-plugins/__tests__/marketplace-updates-dialog.test.tsx",
+   "upstream_change": "A",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "8e2ed877ea860a718cadbef4742f3d2d0b8455d4b0bfe2b41b55fe7a727a9ee9",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "新增 Vue marketplace-updates-dialog.spec.ts、扩展 marketplace-install-dialog.spec.ts 与 Playwright task-plugins.spec.ts 覆盖批量更新全流程与双主题响应式。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/__tests__/marketplace-updates-dialog.spec.ts",
+    "frontend/src/features/task-plugins/__tests__/marketplace-install-dialog.spec.ts",
+    "frontend/tests/visual/task-plugins.spec.ts"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/__tests__/marketplace.test.ts",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "c94f397ce829740ceccd6c4705974b6f579187e61bb7d771e8f5c586c5b965fc",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "在 Vue marketplace.spec.ts 与 marketplace-install.spec.ts 补齐批量更新筛选、源名本地化与安装守卫单测。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/__tests__/marketplace.spec.ts",
+    "frontend/src/features/task-plugins/__tests__/marketplace-install.spec.ts"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/components/marketplace-install-dialog.tsx",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "b4e6d11bedb08c0a0b5c29465b9a47516859933ad9ba3c21c1633871e96928e7",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "在 Vue MarketplaceInstallDialog.vue 新增 reviewOnly 模式与 name_i18n 本地化展示，并复用 lib/marketplace-install.ts 保留替换二次确认。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/components/MarketplaceInstallDialog.vue"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/components/marketplace-panel.tsx",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "02268b6131d1514360a3c9b2178e6e44974d7b00d9fd3458741cc1ace85b9452",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "在 Vue MarketplacePanel.vue 与 TaskPlugins.vue 接入批量更新入口按钮与弹窗，透传已安装列表加载/错误状态。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/components/MarketplacePanel.vue",
+    "frontend/src/features/task-plugins/TaskPlugins.vue"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/components/marketplace-update-row.tsx",
+   "upstream_change": "A",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "b4b719123fb359b574cf3d32720dedc47a8f9ec6226fef5b363222afdb744559",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "新增 Vue MarketplaceUpdateRow.vue 与 PricingIssueList.vue，使用主题语义令牌与本地化插件名称展示行状态与定价告警。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/components/MarketplaceUpdateRow.vue",
+    "frontend/src/features/task-plugins/components/PricingIssueList.vue"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/components/marketplace-updates-dialog.tsx",
+   "upstream_change": "A",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "334f85c73cbe0d29eb27af065b68b4309a070423ab9c5edbeb1dd1db5675cb06",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "新增 Vue MarketplaceUpdatesDialog.vue，使用 ConsoleModal modalStack 嵌套焦点管理、AbortController 重检拦截变更/撤回/停用与语义令牌。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/components/MarketplaceUpdatesDialog.vue"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/lib/marketplace-install.ts",
+   "upstream_change": "A",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "a4b288d91483f61e30fb24d72c999669091da051ba6f3d3fb994002b8367a9d8",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "在 Vue lib/marketplace-install.ts 本地化实现下载与安装管线，保留 HTTPS 同源、pluginSite、minApiVersion 与 AST 元数据身份守卫，并以类型化错误替代全局 i18next。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/lib/marketplace-install.ts"
+   ]
+  },
+  {
+   "path": "web/src/features/task-plugins/lib/marketplace.ts",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "53f0726914dd166f6edf872912f14257dddbabf95f1b0ed53278e219d63e6f8f",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "在 Vue lib/marketplace.ts 本地化新增 findRevokedEntry、marketplaceSourceDisplayName 与 getMarketplaceUpdates。",
+   "local_paths": [
+    "frontend/src/features/task-plugins/lib/marketplace.ts"
+   ]
+  },
+  {
+   "path": "web/src/i18n/locales/en.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "b12e1b06333ae0db2be7289f121275c91b44f408baa65c4e40b9cb0c95b1624d",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "已按中英文双语规范本地化合入 Vue taskPlugins.ts（单花括号插值、官方源名与社区统计告知本地化）。",
+   "local_paths": [
+    "frontend/src/i18n/taskPlugins.ts"
+   ]
+  },
+  {
+   "path": "web/src/i18n/locales/fr.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "4e22e0be5ac95f4de94f97b58578c3f2e6a05d4d547c69a36aadc6390c7f47bb",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "Ren2Hub 仅发布简体中文与英文，不跟进其他上游语言包。"
+  },
+  {
+   "path": "web/src/i18n/locales/ja.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "da44a3862e7a7cb50ce826d7f593d99ea8f57aaacac7b064f64e677510da5537",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "Ren2Hub 仅发布简体中文与英文，不跟进其他上游语言包。"
+  },
+  {
+   "path": "web/src/i18n/locales/ru.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "bdb22477ec9623f3c7e3216c93324580fefbbbc90143217158885272fa469c34",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "Ren2Hub 仅发布简体中文与英文，不跟进其他上游语言包。"
+  },
+  {
+   "path": "web/src/i18n/locales/vi.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "362fe98bbd69b32dcaa3dfd973d3ee28cf6c92987a7fe2c532c996e9c1e6cbe1",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "Ren2Hub 仅发布简体中文与英文，不跟进其他上游语言包。"
+  },
+  {
+   "path": "web/src/i18n/locales/zh-TW.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "235d414fa4a0cec7c2802c0aae3ccef1f5ab1435a4253859525716b2526b2a24",
+   "local_sha256": null,
+   "disposition": "skipped",
+   "basis": "Ren2Hub 仅发布简体中文与英文，不跟进其他上游语言包。"
+  },
+  {
+   "path": "web/src/i18n/locales/zh.json",
+   "upstream_change": "M",
+   "commits": [
+    "ede88eb1cc8383131d28b60dc86cdbe9194a84a9"
+   ],
+   "upstream_sha256": "d9602ff5c1010108ccbb60e01c9d2d7fc5a0067f238b0883a4e816d5699f4890",
+   "local_sha256": null,
+   "disposition": "adapted_to_vue",
+   "basis": "已按中英文双语规范本地化合入 Vue taskPlugins.ts（单花括号插值、官方源名与社区统计告知本地化）。",
+   "local_paths": [
+    "frontend/src/i18n/taskPlugins.ts"
+   ]
+  }
+ ],
+ "local_adjustments": [
+  {
+   "upstream_commit": "1a395c76a9c4111fe83080297b9fd0dfe6600025",
+   "paths": [
+    "controller/payment_webhook_availability_test.go",
+    "docs/billing/EPAY.md"
+   ],
+   "basis": "新增 TestEpayRSACallbackRejectsMismatchedOrMissingPartnerID 并在三库矩阵 TestEpayRSAModeSignsOrdersAndVerifiesCallbacks 补入跨商户与缺 pid 用例；更新 EPAY.md 说明 RSA 回调 pid 校验合同。"
+  },
+  {
+   "upstream_commit": "8542c9d6490b4330fe18160930f81ae7428bc777",
+   "paths": [
+    "router/extensions.go",
+    "router/pricing_count_test.go",
+    "docs/upstream/NATIVE_B388_REVIEW.json"
+   ],
+   "basis": "同步为扩展路由 /api/pricing/count 挂 middleware.DisableCache()，新增 TestPricingAndPerfMetricsDisableCaching 覆盖四条定价/性能路由缓存头，并更新 router/api-router.go 逐段审查指纹。"
+  },
+  {
+   "upstream_commit": "ede88eb1cc8383131d28b60dc86cdbe9194a84a9",
+   "paths": [
+    "frontend/UPSTREAM_MAPPING.md"
+   ],
+   "basis": "登记 Vue 插件市场批量更新新增落点与组件映射。"
+  }
+ ]
+}

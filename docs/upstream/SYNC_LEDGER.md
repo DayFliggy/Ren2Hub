@@ -6,9 +6,9 @@
 
 NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内部 bare 仓库，不是上游。Sub2API 和 AxonHub 只按具体问题参考，不建远端，不追版本。
 
-冻结同步目标是 `48f9df96ea7c68eae04a0f3687869f232f48929f`（固定 main，`v1.0.0-rc.51` 之后第 21 个提交）。之后的上游提交没有评估，留给下一批。
+冻结同步目标是 `6627f0e3f37c002564b630a73e5afb0d28a92d3b`（固定 main，`v1.0.0-rc.51` 之后第 31 个提交）。之后的上游提交没有评估，留给下一批。
 
-2026-10-17 以 `09109ec31` 重建核心，此后的窗口都已逐提交处置，终点依次是 `206e0fa5c`、`34003e9c2`、`b08ee86fe`、`e449cc700`、`ba5f73677`、`48a6c87f9`（`v1.0.0-rc.49`）、`b20e0566b`、`b388140ac`、`3a407cc9b`、`48f9df96e`。最近一个窗口（`3a407cc9b → 48f9df96e`，5 个提交、21 个文件）的逐文件处置见[窗口清单](WINDOW_48F9.json)；更早窗口的处置记录在 Git 历史。上游 `web/` 的改动按[前端对照表](../../frontend/UPSTREAM_MAPPING.md)找 Vue 落点。
+2026-10-17 以 `09109ec31` 重建核心，此后的窗口都已逐提交处置，终点依次是 `206e0fa5c`、`34003e9c2`、`b08ee86fe`、`e449cc700`、`ba5f73677`、`48a6c87f9`（`v1.0.0-rc.49`）、`b20e0566b`、`b388140ac`、`3a407cc9b`、`48f9df96e`、`6627f0e3f`。最近一个窗口（`48f9df96e → 6627f0e3f`，10 个提交、47 个文件）的逐文件处置见[窗口清单](WINDOW_6627.json)；更早窗口的处置记录在 Git 历史。上游 `web/` 的改动按[前端对照表](../../frontend/UPSTREAM_MAPPING.md)找 Vue 落点。
 
 同步时不吸收：
 
@@ -23,7 +23,7 @@ NewAPI（`QuantumNous/new-api`）是唯一上游。checkout 的 `origin` 是内�
 
 ## 现行本地差异
 
-后端对齐冻结目标 `48f9df96e`，只保留用户批准的独有功能、明确改造和 Vue 实际对接所需的最小接点；历史 `verified_fix` 不构成保留理由。`NATIVE_B388_REVIEW.json` 保存对齐 b388 时对 346 个生产差异文件 1,109 段的逐段裁定（保留 873、恢复原生 169、拆分 67），这是当时的历史裁定，没有按新目标重新逐段复核；之后的窗口里仍有本地差异的文件，按新目标逐段登记在同一文件的 `current_file_reviews`。测试迁移见 `NATIVE_B388_TEST_MIGRATIONS.json`。产品合同摘要见 [AGENTS.md](../../AGENTS.md)，合同目录在 `CORE_SOURCE_DELTA.json` 的 `contracts`。
+后端对齐冻结目标 `6627f0e3f`，只保留用户批准的独有功能、明确改造和 Vue 实际对接所需的最小接点；历史 `verified_fix` 不构成保留理由。`NATIVE_B388_REVIEW.json` 保存对齐 b388 时对 346 个生产差异文件 1,109 段的逐段裁定（保留 873、恢复原生 169、拆分 67），这是当时的历史裁定，没有按新目标重新逐段复核；之后的窗口里仍有本地差异的文件，按新目标逐段登记在同一文件的 `current_file_reviews`。测试迁移见 `NATIVE_B388_TEST_MIGRATIONS.json`。产品合同摘要见 [AGENTS.md](../../AGENTS.md)，合同目录在 `CORE_SOURCE_DELTA.json` 的 `contracts`。
 
 上游管理通过独立的 model、service、controller 与权限资源接入 Sub2API 和 NewAPI 两个远端账号协议。迁移和系统任务注册保留最小接点。渠道状态复用行锁更新，倍率写回只发布渠道缓存同步；托管倍率的表单只读与字段省略在前端执行，原生 `controller/channel.go` 保持不变，直接调原生 API 改写的倍率在下一轮上游同步时校正。倍率数据源与绑定语义见[渠道上游倍率](../channel/UPSTREAM_RATIO.md)。
 
@@ -123,7 +123,7 @@ B2 已批准的权限与输出边界：
 - 非自用模式且用户启用 `AcceptUnsetRatioModel` 时，未设模型倍率、走 token 重算的按量任务按预扣定额结算，多扣或少扣取决于用量（`relay/helper/price.go:212,231`、`setting/ratio_setting/model_ratio.go:103`、`service/task_billing.go:381`、`service/task_polling.go:815`）。自用模式下会按默认倍率重算；是否跳过重算的条件与冻结上游相同，本地只以渠道倍率替代分组倍率。
 - Stripe 在 TOKENS 展示模式下的数量合同不一致，后端保持原生，Vue 停用该入口。
 
-以下计费与任务问题已对照当前源码和冻结上游 `48f9df96e` 核实，相关行为相同，只登记、不修：
+以下计费与任务问题已对照当前源码和冻结上游 `6627f0e3f` 核实，相关行为相同，只登记、不修：
 
 - BILL-1（P2，上游同款多计费，按用户决定只登记）：Realtime 每轮 `preConsumeUsage` 经 `service/quota.go:128` 直扣，用量同时累加；会话结束后又按累计用量结算，存在重复扣费（`relay/channel/openai/relay_realtime.go:195,216,295`、`relay/websocket.go:59`、`service/quota.go:217`）。
 - FUND-3（P2，上游同款多计费，按用户决定只登记）：Waffo 将所有非 `PAY_SUCCESS` 状态（包括处理中状态）写成失败终态，后续成功通知会因订单不再 pending 而不能入账（`controller/topup_waffo.go:383`、`model/topup_settlement.go:177`）。网关是否实际发送处理中通知尚无运行验证。
