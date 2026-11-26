@@ -207,7 +207,7 @@ const today = computed(() =>
           <span class="text-xs text-[var(--text-tertiary)]">{{
             t('nativeAccount.days')
           }}</span
-          ><span class="text-sm font-bold text-[var(--text-primary)]">{{
+          ><span class="display-number text-sm text-[var(--text-primary)]">{{
             status.stats.total_checkins
           }}</span>
         </div>
@@ -215,7 +215,7 @@ const today = computed(() =>
           <span class="text-xs text-[var(--text-tertiary)]">{{
             t('nativeAccount.rewards')
           }}</span
-          ><span class="text-sm font-bold text-[var(--accent-text)]">{{
+          ><span class="display-number text-sm text-[var(--accent-text)]">{{
             formatQuota(status.stats.total_quota)
           }}</span>
         </div>

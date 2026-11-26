@@ -33,7 +33,7 @@ onMounted(() => load())
     <!-- The domain switcher is the first row of the page. -->
     <div class="subtle-scroll max-w-full overflow-x-auto">
       <nav
-        class="flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1"
+        class="settings-domain-track flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1"
         role="tablist"
         :aria-label="t('systemSettings.title')"
       >
@@ -46,7 +46,7 @@ onMounted(() => load())
           class="settings-domain-tab flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-ring lg:min-h-10 sm:text-sm"
           :class="
             activeTab === tab.key
-              ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)] shadow-none'
+              ? 'is-active bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)] shadow-none'
               : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
           "
         >
@@ -63,6 +63,18 @@ onMounted(() => load())
 </template>
 
 <style scoped>
+html.dark .settings-domain-track {
+  background: var(--studio-control-track);
+  border-color: var(--outline-variant);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+html.dark .settings-domain-tab.is-active {
+  background: var(--studio-control-thumb);
+  color: var(--text-primary);
+  box-shadow: var(--studio-control-thumb-shadow);
+}
+
 @media (pointer: coarse) {
   .settings-domain-tab {
     min-height: 2.75rem;

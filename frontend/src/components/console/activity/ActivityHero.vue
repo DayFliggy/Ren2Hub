@@ -31,7 +31,7 @@ const activityBanner = useThemedAsset(activityDayBanner, activityNightBanner)
     <!-- content -->
     <div class="relative z-10 px-8 py-8 sm:py-10">
       <span
-        class="activity-hero__pill inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-[4px]"
+        class="activity-hero__pill inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white"
       >
         {{ pill }}
       </span>

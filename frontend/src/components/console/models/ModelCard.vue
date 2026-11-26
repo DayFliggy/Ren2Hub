@@ -9,10 +9,14 @@ import {
   watch,
 } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { CatalogOfferHealth } from '@/api/modelCatalog'
-import type { MarketModel, ModelPerformanceState } from '@/types/modelMarket'
+import type {
+  MarketModel,
+  MarketOffer,
+  ModelPerformanceState,
+} from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
+import { resolveOfferHealth } from './catalogHealth'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import CatalogHealthBadge from './CatalogHealthBadge.vue'
 import ModelIdentity from './ModelIdentity.vue'
@@ -31,12 +35,25 @@ const cardId = useId()
 const quoteId = `${cardId}-quote`
 const statsId = `${cardId}-stats`
 const overflowMenuId = `${cardId}-overflow`
+const toastId = `${cardId}-health-toast`
 
 const selectedOfferId = ref<string | null>(null)
 const overflowOpen = ref(false)
+const cycleSpin = ref(false)
+let spinTimer: ReturnType<typeof setTimeout> | null = null
 const railEl = ref<HTMLElement | null>(null)
 const cardEl = ref<HTMLElement | null>(null)
+const toastEl = ref<HTMLElement | null>(null)
 const fitCount = ref(MAX_INLINE_CHANNELS)
+
+interface HealthToastState {
+  offer: MarketOffer
+  anchor: HTMLElement
+  left: number
+  top: number
+  placement: 'top' | 'bottom'
+}
+const healthToast = ref<HealthToastState | null>(null)
 
 watch(
   () => props.model.offers,
@@ -48,6 +65,7 @@ watch(
       selectedOfferId.value = null
     }
     overflowOpen.value = false
+    healthToast.value = null
   }
 )
 
@@ -56,39 +74,91 @@ const activeOffer = computed(
     props.model.offers.find((offer) => offer.id === selectedOfferId.value) ??
     props.model.offers[0]
 )
-const channelCount = computed(
-  () => new Set(props.model.offers.map((offer) => offer.channelId)).size
-)
+
+/** One representative offer per distinct channel for round-robin cycling. */
+const distinctChannelOffers = computed(() => {
+  const seen = new Set<number>()
+  const list: MarketOffer[] = []
+  for (const offer of props.model.offers) {
+    if (!seen.has(offer.channelId)) {
+      seen.add(offer.channelId)
+      list.push(offer)
+    }
+  }
+  return list
+})
+const channelCount = computed(() => distinctChannelOffers.value.length)
+const hasMultipleChannels = computed(() => channelCount.value > 1)
+
 const visibleTags = computed(() => props.model.tags.slice(0, 3))
 const hiddenTagCount = computed(() =>
   Math.max(0, props.model.tags.length - visibleTags.value.length)
 )
 
-function offerHealthTone(
-  health?: CatalogOfferHealth
-): 'good' | 'warn' | 'bad' | 'neutral' {
-  if (!health) return 'neutral'
+function offerHealth(offer: MarketOffer) {
+  return resolveOfferHealth(offer.health, t)
+}
+
+const activeToastHealth = computed(() =>
+  healthToast.value ? offerHealth(healthToast.value.offer) : null
+)
+
+function computeToastPosition(anchor: HTMLElement, toastWidth = 240) {
+  const rect = anchor.getBoundingClientRect()
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
+  const pad = 12
+  const half = Math.min(toastWidth / 2, Math.max(0, vw / 2 - pad))
+  const rawCenter = rect.left + rect.width / 2
+  const left = Math.min(Math.max(rawCenter, pad + half), vw - pad - half)
+  const placement: 'top' | 'bottom' = rect.top < 88 ? 'bottom' : 'top'
+  const top = placement === 'top' ? rect.top - 8 : rect.bottom + 8
+  return { left, top, placement }
+}
+
+function showChannelToast(offer: MarketOffer, event: Event) {
+  const anchor = event.currentTarget as HTMLElement | null
+  if (!anchor) return
+  const pos = computeToastPosition(anchor)
+  healthToast.value = { offer, anchor, ...pos }
+  void nextTick(() => {
+    if (!healthToast.value || healthToast.value.anchor !== anchor) return
+    const width = toastEl.value?.offsetWidth || 240
+    const refined = computeToastPosition(anchor, width)
+    healthToast.value = { offer, anchor, ...refined }
+  })
+}
+
+function hideChannelToast(event?: Event) {
   if (
-    health.availability === 'paused' ||
-    (health.availability === 'no_restriction' &&
-      health.quality === 'severely_degraded')
+    event &&
+    healthToast.value &&
+    event.currentTarget !== healthToast.value.anchor
   ) {
-    return 'bad'
+    return
   }
-  if (
-    health.availability === 'limited' ||
-    health.availability === 'recovering' ||
-    (health.availability === 'no_restriction' && health.quality === 'degraded')
-  ) {
-    return 'warn'
+  healthToast.value = null
+}
+
+function cycleChannel() {
+  const candidates = distinctChannelOffers.value
+  if (candidates.length <= 1 || !activeOffer.value) return
+  const currentIndex = candidates.findIndex(
+    (item) => item.channelId === activeOffer.value?.channelId
+  )
+  const nextOffer = candidates[(currentIndex + 1) % candidates.length]!
+  selectedOfferId.value = nextOffer.id
+  overflowOpen.value = false
+  if (healthToast.value) {
+    healthToast.value = { ...healthToast.value, offer: nextOffer }
   }
-  if (
-    health.availability === 'no_restriction' &&
-    health.quality === 'no_downgrade'
-  ) {
-    return 'good'
-  }
-  return 'neutral'
+  cycleSpin.value = false
+  void nextTick(() => {
+    cycleSpin.value = true
+    if (spinTimer) clearTimeout(spinTimer)
+    spinTimer = setTimeout(() => {
+      cycleSpin.value = false
+    }, 300)
+  })
 }
 
 const railOffers = computed(() => {
@@ -100,7 +170,7 @@ const railOffers = computed(() => {
     (item) => item.id === activeOffer.value?.id
   )
   if (activeIndex < maxShown) return offers
-  // Keep the active channel chip visible when selected from the overflow menu.
+  // Keep the active channel chip visible when selected from overflow or cycled.
   const reordered = offers.filter((item) => item.id !== activeOffer.value?.id)
   reordered.splice(Math.max(0, maxShown - 1), 0, activeOffer.value)
   return reordered
@@ -161,6 +231,7 @@ function measureRail() {
 function selectChannel(offerId: string) {
   selectedOfferId.value = offerId
   overflowOpen.value = false
+  healthToast.value = null
 }
 
 function handleDocumentPointer(event: MouseEvent) {
@@ -171,9 +242,14 @@ function handleDocumentPointer(event: MouseEvent) {
 }
 
 function handleDocumentKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && overflowOpen.value) {
-    overflowOpen.value = false
+  if (event.key === 'Escape') {
+    if (overflowOpen.value) overflowOpen.value = false
+    if (healthToast.value) healthToast.value = null
   }
+}
+
+function handleScroll() {
+  if (healthToast.value) healthToast.value = null
 }
 
 let observer: ResizeObserver | null = null
@@ -184,6 +260,7 @@ onMounted(() => {
   }
   document.addEventListener('pointerdown', handleDocumentPointer)
   document.addEventListener('keydown', handleDocumentKeydown)
+  window.addEventListener('scroll', handleScroll, true)
   void nextTick(measureRail)
 })
 watch(
@@ -197,8 +274,10 @@ watch(
 )
 onBeforeUnmount(() => {
   observer?.disconnect()
+  if (spinTimer) clearTimeout(spinTimer)
   document.removeEventListener('pointerdown', handleDocumentPointer)
   document.removeEventListener('keydown', handleDocumentKeydown)
+  window.removeEventListener('scroll', handleScroll, true)
 })
 </script>
 
@@ -241,15 +320,58 @@ onBeforeUnmount(() => {
         data-channel-quote
       >
         <div class="market-quote-heading">
-          <span class="market-channel-name"
-            >{{ activeOffer.channelName }}
+          <span
+            class="market-channel-name market-channel-hover-anchor"
+            @mouseenter="showChannelToast(activeOffer, $event)"
+            @mouseleave="hideChannelToast($event)"
+            @click="emit('detail', model.id, activeOffer.id)"
+            ><span class="market-channel-title">{{
+              activeOffer.channelName
+            }}</span>
             <span class="market-ratio">{{
               formatMarketRatio(activeOffer.ratio)
             }}</span></span
           >
-          <span class="market-billing-label">{{
-            t(`billingModes.${activeOffer.pricing.billingMode}`)
-          }}</span>
+          <div class="market-quote-meta">
+            <span class="market-billing-label">{{
+              t(`billingModes.${activeOffer.pricing.billingMode}`)
+            }}</span>
+            <span
+              class="market-health-badge-anchor"
+              @mouseenter="showChannelToast(activeOffer, $event)"
+              @mouseleave="hideChannelToast($event)"
+              @click="emit('detail', model.id, activeOffer.id)"
+            >
+              <CatalogHealthBadge :health="activeOffer.health" badge />
+            </span>
+            <button
+              v-if="hasMultipleChannels"
+              type="button"
+              class="market-cycle-channel focus-ring touch-target"
+              :class="{ 'is-spinning': cycleSpin }"
+              data-cycle-channel
+              :aria-label="t('cycleChannel')"
+              :title="t('cycleChannel')"
+              @click.stop="cycleChannel"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16h5v5" />
+              </svg>
+            </button>
+          </div>
         </div>
         <p
           v-if="model.baselines.length > 1 || activeOffer.pricing.pluginName"
@@ -260,11 +382,6 @@ onBeforeUnmount(() => {
         <ModelPriceDisplay
           :id="`${quoteId}-price`"
           :pricing="activeOffer.pricing"
-        />
-        <CatalogHealthBadge
-          :health="activeOffer.health"
-          compact
-          class="market-quote-health"
         />
       </div>
       <div v-else :id="quoteId" class="market-quote-stage market-no-offers">
@@ -287,7 +404,7 @@ onBeforeUnmount(() => {
           >
             <span
               class="market-rail-dot"
-              :class="`is-${offerHealthTone(offer.health)}`"
+              :class="`is-${offerHealth(offer).tone}`"
             />
             <span class="market-rail-chip-name">{{ offer.channelName }}</span>
             <span class="market-rail-chip-ratio">{{
@@ -303,12 +420,19 @@ onBeforeUnmount(() => {
           :class="{ active: offer.id === activeOffer?.id }"
           :aria-pressed="offer.id === activeOffer?.id"
           :aria-label="t('previewChannel', { channel: offer.channelName })"
+          :aria-describedby="
+            healthToast?.offer.id === offer.id ? toastId : undefined
+          "
           :data-channel-chip="offer.channelId"
           @click.stop="selectChannel(offer.id)"
+          @mouseenter="showChannelToast(offer, $event)"
+          @mouseleave="hideChannelToast($event)"
+          @focus="showChannelToast(offer, $event)"
+          @blur="hideChannelToast($event)"
         >
           <span
             class="market-rail-dot"
-            :class="`is-${offerHealthTone(offer.health)}`"
+            :class="`is-${offerHealth(offer).tone}`"
             aria-hidden="true"
           />
           <span class="market-rail-chip-name">{{ offer.channelName }}</span>
@@ -347,11 +471,15 @@ onBeforeUnmount(() => {
               class="market-rail-popover-item focus-ring"
               :data-channel-overflow-item="offer.channelId"
               @click="selectChannel(offer.id)"
+              @mouseenter="showChannelToast(offer, $event)"
+              @mouseleave="hideChannelToast($event)"
+              @focus="showChannelToast(offer, $event)"
+              @blur="hideChannelToast($event)"
             >
               <span class="market-rail-popover-main">
                 <span
                   class="market-rail-dot"
-                  :class="`is-${offerHealthTone(offer.health)}`"
+                  :class="`is-${offerHealth(offer).tone}`"
                   aria-hidden="true"
                 />
                 <span class="market-rail-popover-name">{{
@@ -396,6 +524,48 @@ onBeforeUnmount(() => {
           <path d="M5 12h14m-5-5 5 5-5 5" /></svg
       ></span>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="healthToast && activeToastHealth"
+        :id="toastId"
+        ref="toastEl"
+        role="tooltip"
+        class="market-health-toast"
+        :class="[`is-${activeToastHealth.tone}`, `is-${healthToast.placement}`]"
+        :style="{
+          left: `${healthToast.left}px`,
+          top: `${healthToast.top}px`,
+        }"
+        data-channel-health-toast
+        :data-toast-state="activeToastHealth.state"
+      >
+        <div class="market-health-toast-head">
+          <span class="market-health-toast-channel">{{
+            healthToast.offer.channelName
+          }}</span>
+          <span class="market-health-toast-ratio">{{
+            formatMarketRatio(healthToast.offer.ratio)
+          }}</span>
+        </div>
+        <div class="market-health-toast-status">
+          <span
+            class="market-rail-dot"
+            :class="`is-${activeToastHealth.tone}`"
+            aria-hidden="true"
+          />
+          <span class="market-health-toast-primary">{{
+            activeToastHealth.primary
+          }}</span>
+        </div>
+        <p
+          v-if="activeToastHealth.secondary"
+          class="market-health-toast-secondary"
+        >
+          {{ activeToastHealth.secondary }}
+        </p>
+      </div>
+    </Teleport>
   </article>
 </template>
 
@@ -475,40 +645,93 @@ onBeforeUnmount(() => {
   background: var(--surface-muted);
   min-width: 0;
 }
-.market-quote-health {
-  margin-top: 0.5rem;
-}
 .market-quote-heading {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 0.35rem 0.6rem;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.45rem;
   color: var(--text-secondary);
   font-size: 0.75rem;
 }
-.market-quote-heading > span:first-child {
+.market-channel-hover-anchor {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
   min-width: 0;
-  overflow-wrap: anywhere;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .market-channel-name {
   color: var(--text-primary);
   font-weight: 500;
 }
+.market-channel-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .market-ratio {
   display: inline-block;
   padding: 0.05rem 0.35rem;
-  margin-left: 0.25rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--shape-control);
   font: 0.6875rem/1.45 var(--font-mono);
   color: var(--accent-text);
   background: var(--accent-soft);
 }
+.market-quote-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+  margin-left: auto;
+}
 .market-billing-label {
   color: var(--text-tertiary);
   font-size: 0.625rem;
+  white-space: nowrap;
+}
+.market-health-badge-anchor {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.market-cycle-channel {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  background: var(--surface-solid);
+  color: var(--text-tertiary);
+  pointer-events: auto;
+  cursor: pointer;
+  transition:
+    border-color 0.14s,
+    background-color 0.14s,
+    color 0.14s;
+}
+.market-cycle-channel:hover {
+  border-color: var(--border-strong);
+  background: var(--state-hover-layer);
+  color: var(--text-primary);
+}
+.market-cycle-channel svg {
+  transition: transform 0.28s var(--ease-spring-snappy, ease);
+}
+.market-cycle-channel.is-spinning svg {
+  transform: rotate(180deg);
 }
 .market-variant-label {
   font-size: 0.6875rem;
@@ -705,10 +928,13 @@ onBeforeUnmount(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .market-model-card,
-  .market-rail-chip {
+  .market-rail-chip,
+  .market-cycle-channel,
+  .market-cycle-channel svg {
     transition: none;
   }
-  .market-model-card:hover {
+  .market-model-card:hover,
+  .market-cycle-channel.is-spinning svg {
     transform: none;
   }
 }
@@ -719,5 +945,124 @@ html.dark .market-quote-stage {
 html.dark .market-card-footer {
   background: var(--surface-container-low);
   border-top: 1px solid var(--border-subtle);
+}
+</style>
+
+<style>
+/* Teleported floating mini-toast lives under <body>, so rules stay unscoped
+   while tightly prefixed with .market-health-toast. */
+.market-health-toast {
+  position: fixed;
+  z-index: var(--z-tooltip, 300);
+  pointer-events: none;
+  min-width: 10.5rem;
+  max-width: min(17rem, calc(100vw - 1.5rem));
+  padding: 0.45rem 0.65rem 0.48rem 0.72rem;
+  border: 1px solid var(--overlay-border, var(--border-default));
+  border-radius: var(--shape-control, 10px);
+  background: var(--surface-overlay, var(--surface-solid));
+  box-shadow: var(--overlay-shadow, var(--card-shadow-hover));
+  color: var(--text-primary);
+  display: grid;
+  gap: 0.22rem;
+  overflow: hidden;
+}
+html.dark .market-health-toast {
+  --text-tertiary: var(--text-tertiary-overlay);
+  --text-tertiary-base: var(--text-tertiary-overlay);
+  background: var(--surface-container-highest);
+  border-color: var(--outline);
+  box-shadow: var(--elevation-5);
+}
+.market-health-toast.is-top {
+  transform: translate(-50%, -100%);
+}
+.market-health-toast.is-bottom {
+  transform: translate(-50%, 0);
+}
+.market-health-toast::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--load-unchecked);
+}
+.market-health-toast.is-good::before {
+  background: var(--status-success);
+}
+.market-health-toast.is-warn::before {
+  background: var(--status-warning);
+}
+.market-health-toast.is-bad::before {
+  background: var(--status-danger);
+}
+.market-health-toast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+.market-health-toast-channel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.market-health-toast-ratio {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--accent-text);
+}
+.market-health-toast-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.market-health-toast.is-good .market-health-toast-primary {
+  color: var(--status-success-text);
+}
+.market-health-toast.is-warn .market-health-toast-primary {
+  color: var(--status-warning-text);
+}
+.market-health-toast.is-bad .market-health-toast-primary {
+  color: var(--status-danger-text);
+}
+.market-health-toast.is-neutral .market-health-toast-primary {
+  color: var(--text-primary);
+}
+.market-health-toast-secondary {
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--status-warning-text);
+  padding-left: 0.75rem;
+}
+.market-health-toast .market-rail-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex: none;
+}
+.market-health-toast .market-rail-dot.is-good {
+  background: var(--status-success);
+}
+.market-health-toast .market-rail-dot.is-warn {
+  background: var(--status-warning);
+}
+.market-health-toast .market-rail-dot.is-bad {
+  background: var(--status-danger);
+}
+.market-health-toast .market-rail-dot.is-neutral {
+  border: 1.5px solid var(--load-unchecked);
+  background: transparent;
 }
 </style>

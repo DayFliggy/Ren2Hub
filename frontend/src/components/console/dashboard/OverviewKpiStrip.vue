@@ -3,6 +3,7 @@ import { quotaForChart } from '@/utils/quota'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
 import { kpiDividerClasses } from '@/components/console/dashboard/kpiDividers'
 import { useBalanceVisibility } from '@/composables/useDashboard'
@@ -201,9 +202,10 @@ const cells = computed<Cell[]>(() => [
               <span class="truncate">{{ cell.label }}</span>
             </p>
 
-            <p
+            <SkeletonBlock
               v-if="loading"
-              class="mt-1.5 h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
+              rounded="sm"
+              class="mt-1.5 h-7"
               :class="cell.skeleton"
             />
             <p

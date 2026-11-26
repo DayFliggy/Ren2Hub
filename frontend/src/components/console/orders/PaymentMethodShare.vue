@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { SERIES_TOKENS } from '@/charts/palette'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import {
   ADMIN_ORDER_METHODS,
   adminOrderMethodLabelKey,
@@ -60,8 +61,8 @@ function share(amount: number): number {
     />
     <ul v-else-if="loading" class="sibling-space-y-4" aria-hidden="true">
       <li v-for="i in 3" :key="i">
-        <div class="h-5 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
-        <div class="mt-2 h-1 rounded-full bg-[var(--surface-muted)]" />
+        <SkeletonBlock rounded="sm" class="h-5" />
+        <SkeletonBlock rounded="full" class="mt-2 h-1" />
       </li>
     </ul>
     <ul v-else-if="items.length > 0" class="sibling-space-y-4">

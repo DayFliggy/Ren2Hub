@@ -17,7 +17,7 @@ const app = useAppStore()
 
 <template>
   <div
-    class="auth-layout night-page-texture texture-paper draft-grid flex min-h-screen flex-col bg-[var(--page-background)]"
+    class="auth-layout night-page-texture texture-paper draft-grid flex min-h-dvh flex-col bg-[var(--page-background)]"
     data-handdrawn-scope="auth"
   >
     <!-- 品牌栏与主体共用容器，标准桌面限宽，大屏随内容尺寸一起展开。 -->

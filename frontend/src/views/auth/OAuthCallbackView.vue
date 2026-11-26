@@ -90,10 +90,10 @@ onBeforeUnmount(() => {
 <style scoped>
 .oauth-callback {
   display: grid;
-  min-height: 100vh;
+  min-height: 100dvh;
   place-items: center;
   padding: 2rem;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   background: var(--page-background);
   font:
     500 0.95rem/1.5 system-ui,

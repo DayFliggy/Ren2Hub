@@ -3,9 +3,11 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { SERIES_TOKENS } from '@/charts/palette'
+import { tooltipStyle } from '@/charts/themePreset'
 import { useEChart } from '@/charts/useEChart'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { useTableScrollFade } from '@/composables/useTableScrollFade'
 import type { ModelShare } from '@/composables/useDashboard'
 import { quotaForChart, quotaRatio, sumQuota } from '@/utils/quota'
@@ -100,9 +102,7 @@ const { dispatch } = useEChart(
     color: props.items.length ? p.series : [p.borderSubtle],
     tooltip: {
       trigger: 'item',
-      backgroundColor: p.surfaceSolid,
-      borderColor: p.borderSubtle,
-      textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+      ...tooltipStyle(p, scale),
       formatter: (params: { name: string; percent: number; value: number }) => {
         if (!props.items.length) return escapeHtml(t('dashboard.stats.noData'))
         return `${escapeHtml(params.name)}<br/>${escapeHtml(formatMoney(params.value))} · ${escapeHtml(String(params.percent))}%`
@@ -198,16 +198,13 @@ watch(
       v-if="loading"
       class="model-distribution-body grid grow gap-4 lg:gap-5 md:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:grid-cols-[minmax(13rem,15rem)_minmax(0,1fr)]"
     >
-      <div
-        class="h-52 animate-pulse rounded-full bg-[var(--surface-muted)] lg:h-60"
+      <SkeletonBlock
+        rounded="full"
+        class="h-52 lg:h-60"
         data-model-distribution-chart
       />
       <div class="self-center sibling-space-y-2.5">
-        <div
-          v-for="i in 8"
-          :key="i"
-          class="h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
-        />
+        <SkeletonBlock v-for="i in 8" :key="i" rounded="sm" class="h-7" />
       </div>
     </div>
 

@@ -234,10 +234,11 @@ onBeforeUnmount(() => {
         :id="popoverId"
         ref="popoverRef"
         data-log-usage-popover
+        data-handdrawn="menu"
         role="dialog"
         aria-modal="false"
         :aria-labelledby="popoverTitleId"
-        class="fixed z-[100] w-64 rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-3 backdrop-blur-xl"
+        class="fixed z-[var(--z-popover)] w-64 rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-3 shadow-[var(--overlay-shadow)]"
         :class="
           popoverPosition.placement === 'above' ? '-translate-y-full' : ''
         "

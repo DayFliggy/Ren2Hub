@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/common/EmptyState.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import VendorRouteGroup from './VendorRouteGroup.vue'
 import { useAutoRoute } from '@/composables/useAutoRoute'
 
@@ -66,11 +67,7 @@ onMounted(() => void load())
 
     <!-- skeleton -->
     <div v-if="loading" class="sibling-space-y-4">
-      <div
-        v-for="i in 4"
-        :key="i"
-        class="h-32 animate-pulse rounded-2xl bg-[var(--surface-muted)]"
-      />
+      <SkeletonBlock v-for="i in 4" :key="i" rounded="2xl" class="h-32" />
     </div>
 
     <!-- Preserve the historical vendor cards with native catalog facts. -->

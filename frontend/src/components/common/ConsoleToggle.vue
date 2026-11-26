@@ -152,126 +152,61 @@ function toggle(event: MouseEvent) {
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   日间模式：Desert Ledger（温和暖土 · 纸墨手账质感）
+   语义令牌驱动（日间 Desert Ledger / 夜间 B1 Studio 由 tokens.css 统管）
    ═════════════════════════════════════════════════════════════════ */
 html:not(.dark) .console-toggle {
   border-radius: var(--sketch-border-radius-sm);
 }
 
-html:not(.dark) .console-toggle.is-unchecked {
-  background-color: rgba(56, 55, 43, 0.12);
-  border-color: var(--pencil-line-soft);
-  box-shadow:
-    inset 0 1.5px 2.5px rgba(56, 55, 43, 0.1),
-    1px 1px 0 var(--pencil-line-faint);
-}
-
-html:not(.dark) .console-toggle.is-unchecked:hover:not(.is-disabled) {
-  background-color: rgba(56, 55, 43, 0.16);
-  border-color: var(--pencil-line);
-}
-
-html:not(.dark) .console-toggle.is-checked {
-  background-color: var(--accent);
-  border-color: var(--pencil-line-strong);
-  box-shadow:
-    inset 0 1.5px 2.5px rgba(56, 55, 43, 0.22),
-    1px 1px 0 var(--pencil-line-faint);
-}
-
-html:not(.dark) .console-toggle.is-checked:hover:not(.is-disabled) {
-  background-color: var(--accent-hover);
-}
-
-/* 日间滑块：纯净天然奶白宣纸色，手账纸张抬升投影与墨线轮廓 */
-html:not(.dark) .console-toggle-thumb {
-  background-color: var(--surface-solid);
-  border-color: var(--pencil-line-soft);
-  box-shadow:
-    1px 1.5px 0 rgba(56, 55, 43, 0.16),
-    0 2px 4px rgba(56, 55, 43, 0.08);
-}
-
-html:not(.dark) .console-toggle:hover:not(.is-disabled) .console-toggle-thumb {
-  box-shadow:
-    1.5px 2px 0 rgba(56, 55, 43, 0.2),
-    0 3px 6px rgba(56, 55, 43, 0.12);
-}
-
-/* ═════════════════════════════════════════════════════════════════
-   夜间模式：B1 Studio（沉静炭蓝 · 精密流光高阶质感）
-   ═════════════════════════════════════════════════════════════════ */
 html.dark .console-toggle {
   border-radius: 9999px;
 }
 
-/* 夜间未激活：深邃下沉炭黑凹槽，冷灰蓝轮廓清晰，拒绝浑浊一片 */
-html.dark .console-toggle.is-unchecked {
-  background-color: #171b25;
-  border-color: rgba(152, 164, 192, 0.28);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
+.console-toggle.is-unchecked {
+  background-color: var(--toggle-track-off);
+  border-color: var(--toggle-track-off-border);
+  box-shadow: var(--toggle-track-off-shadow);
 }
 
-html.dark .console-toggle.is-unchecked:hover:not(.is-disabled) {
-  background-color: #1a202d;
-  border-color: rgba(152, 164, 192, 0.45);
+.console-toggle.is-unchecked:hover:not(.is-disabled) {
+  background-color: var(--toggle-track-off-hover);
+  border-color: var(--toggle-track-off-border-hover);
 }
 
-/* 夜间激活：星辉浅金光辉轨道，环绕环境微光晕 */
-html.dark .console-toggle.is-checked {
+.console-toggle.is-checked {
   background-color: var(--accent);
-  border-color: rgba(226, 188, 85, 0.85);
-  box-shadow:
-    0 0 12px rgba(226, 188, 85, 0.38),
-    inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  border-color: var(--toggle-track-on-border);
+  box-shadow: var(--toggle-track-on-shadow);
 }
 
-html.dark .console-toggle.is-checked:hover:not(.is-disabled) {
+.console-toggle.is-checked:hover:not(.is-disabled) {
   background-color: var(--accent-hover);
-  box-shadow:
-    0 0 16px rgba(226, 188, 85, 0.5),
-    inset 0 1px 1px rgba(255, 255, 255, 0.45);
+  box-shadow: var(--toggle-track-on-shadow-hover);
 }
 
-/* 夜间滑块 — 彻底修复核心对比度缺陷！ */
-/* 未激活：冰霜高对比冷银白（绝非暗黑炭灰），表面微光立体饱满 */
-html.dark .console-toggle-thumb.thumb-unchecked {
-  background-color: #cbd5e1;
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.45),
-    0 1px 2px rgba(0, 0, 0, 0.25);
+.console-toggle-thumb.thumb-unchecked {
+  background-color: var(--toggle-thumb-off);
+  border-color: var(--toggle-thumb-off-border);
+  box-shadow: var(--toggle-thumb-off-shadow);
 }
 
-html.dark
-  .console-toggle:hover:not(.is-disabled)
-  .console-toggle-thumb.thumb-unchecked {
-  background-color: #e2e8f0;
-  box-shadow:
-    0 3px 7px rgba(0, 0, 0, 0.5),
-    0 1px 3px rgba(0, 0, 0, 0.3);
+.console-toggle:hover:not(.is-disabled) .console-toggle-thumb.thumb-unchecked {
+  background-color: var(--toggle-thumb-off-hover);
+  box-shadow: var(--toggle-thumb-off-shadow-hover);
 }
 
-/* 激活：纯洁高亮亮白（绝非暗黑炭灰），金辉衬托下的莹润晶莹白球 */
-html.dark .console-toggle-thumb.thumb-checked {
-  background-color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.95);
-  box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.3),
-    0 1px 2px rgba(0, 0, 0, 0.2);
+.console-toggle-thumb.thumb-checked {
+  background-color: var(--toggle-thumb-on);
+  border-color: var(--toggle-thumb-on-border);
+  box-shadow: var(--toggle-thumb-on-shadow);
 }
 
-html.dark
-  .console-toggle:hover:not(.is-disabled)
-  .console-toggle-thumb.thumb-checked {
-  background-color: #ffffff;
-  box-shadow:
-    0 3px 8px rgba(0, 0, 0, 0.35),
-    0 0 5px rgba(255, 255, 255, 0.6);
+.console-toggle:hover:not(.is-disabled) .console-toggle-thumb.thumb-checked {
+  background-color: var(--toggle-thumb-on);
+  box-shadow: var(--toggle-thumb-on-shadow-hover);
 }
 
-/* 焦点阴影替换轨道阴影，规则放在末尾靠源码顺序取胜。日间与状态规则同为
-   (0,3,1)；夜间悬停规则是 (0,5,1)，这里用 :is() 与 :not() 补到同级。 */
+/* 焦点阴影替换轨道阴影，规则放在末尾靠源码顺序取胜。 */
 html:not(.dark) .console-toggle:focus-visible {
   box-shadow: 0 0 0 3px var(--state-focus-layer);
 }

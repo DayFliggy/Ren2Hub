@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 
 /**
  * Metric tile for the orders overview. The icon plate is the only coloured
@@ -46,10 +47,7 @@ const plate = computed(() => {
     </span>
     <div class="min-w-0">
       <p class="truncate text-xs text-[var(--text-tertiary)]">{{ label }}</p>
-      <p
-        v-if="loading"
-        class="mt-1.5 h-7 w-24 animate-pulse rounded-sm bg-[var(--surface-muted)]"
-      />
+      <SkeletonBlock v-if="loading" rounded="sm" class="mt-1.5 h-7 w-24" />
       <p
         v-else
         class="display-number mt-0.5 truncate text-2xl tracking-tight text-[var(--text-primary)]"

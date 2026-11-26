@@ -22,6 +22,7 @@ import {
 } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import RequestPolicyPanel from '@/components/console/systemSettings/RequestPolicyPanel.vue'
 import { discoverOidcEndpoints } from '@/api/oidcDiscovery'
 import { ApiError } from '@/api/types'
@@ -274,7 +275,11 @@ onMounted(() => load())
   <div v-if="domainConfig && activeSection" class="settings-domain-layout">
     <!-- Left Section Navigation Rail -->
     <aside class="settings-section-aside">
-      <nav class="settings-section-nav" :aria-label="t(domainConfig.titleKey)">
+      <nav
+        class="settings-section-nav"
+        data-handdrawn="surface"
+        :aria-label="t(domainConfig.titleKey)"
+      >
         <button
           v-for="section in domainConfig.sections"
           :key="section.id"
@@ -346,13 +351,10 @@ onMounted(() => load())
             {{ visibleFields.length }}
           </span>
         </div>
-        <p
-          v-if="loading"
-          role="status"
-          class="mb-4 text-sm text-[var(--text-secondary)]"
-        >
-          {{ t('systemSettings.loading') }}
-        </p>
+        <div v-if="loading" role="status" class="mb-4 sibling-space-y-3">
+          <span class="sr-only">{{ t('systemSettings.loading') }}</span>
+          <SkeletonBlock v-for="i in 4" :key="i" rounded="lg" class="h-12" />
+        </div>
         <div
           v-else-if="!loaded"
           role="alert"
@@ -461,7 +463,9 @@ onMounted(() => load())
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: all 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 .settings-section-link:hover {
   color: var(--text-primary);
@@ -544,7 +548,7 @@ onMounted(() => load())
 }
 .settings-search-empty {
   padding: 1rem;
-  border: 1px dashed var(--border-default);
+  border: 1px var(--row-divider-style, dashed) var(--border-default);
   border-radius: var(--shape-control);
   color: var(--text-secondary);
   font-size: 0.8125rem;

@@ -267,4 +267,111 @@ describe('native catalog cards', () => {
     ])
     wrapper.unmount()
   })
+  it('places compact status badge inline beside billing, shows full status toast on channel hover, and cycles channels only when multiple channels exist', async () => {
+    // Single-channel model must not render the channel-cycle refresh button.
+    const singleModel = buildModelMarketCatalog(modelCatalogFixture())
+      .models[0]!
+    const singleWrapper = mount(ModelCard, {
+      attachTo: document.body,
+      props: { model: singleModel, performance: noSamples },
+      global: { plugins: [i18n] },
+    })
+    expect(singleWrapper.find('[data-cycle-channel]').exists()).toBe(false)
+    const singleBadge = singleWrapper.get(
+      '.market-quote-heading .market-quote-meta [data-catalog-offer-health]'
+    )
+    expect(singleBadge.text()).toBe('暂无')
+    singleWrapper.unmount()
+
+    // Multi-channel model renders badge inline beside billing, hover toast, and cycle button.
+    const fixture = modelCatalogFixture()
+    fixture.offers[0]!.health = {
+      availability: 'no_restriction',
+      quality: 'no_downgrade',
+    }
+    fixture.channels.push(
+      {
+        ...fixture.channels[0]!,
+        id: 10,
+        name: '限流通道',
+        channel_ratio: '0.5',
+      },
+      {
+        ...fixture.channels[0]!,
+        id: 11,
+        name: '恢复通道',
+        channel_ratio: '0.8',
+      }
+    )
+    fixture.offers.push(
+      {
+        ...fixture.offers[0]!,
+        channel_id: 10,
+        channel_ratio: '0.5',
+        pricing_values: { input: '1.25', output: '5.0' },
+        health: { availability: 'limited', quality: 'degraded' },
+      },
+      {
+        ...fixture.offers[0]!,
+        channel_id: 11,
+        channel_ratio: '0.8',
+        pricing_values: { input: '2.0', output: '8.0' },
+        health: { availability: 'recovering', quality: 'unrated' },
+      }
+    )
+    const multiModel = buildModelMarketCatalog(fixture).models[0]!
+    const wrapper = mount(ModelCard, {
+      attachTo: document.body,
+      props: { model: multiModel, performance: noSamples },
+      global: { plugins: [i18n] },
+    })
+
+    // Badge sits inside .market-quote-meta right after .market-billing-label.
+    const quoteMeta = wrapper.get('.market-quote-heading .market-quote-meta')
+    expect(quoteMeta.text()).toContain('按量')
+    expect(
+      quoteMeta.get('[data-catalog-offer-health="no_downgrade"]').text()
+    ).toBe('正常')
+
+    // Hovering a channel chip renders a teleported mini-toast with full status & secondary detail.
+    const secondChip = wrapper.get('[data-channel-chip="10"]')
+    await secondChip.trigger('mouseenter')
+    const toast = document.body.querySelector<HTMLElement>(
+      '[data-channel-health-toast]'
+    )!
+    expect(toast).not.toBeNull()
+    expect(toast.textContent).toContain('限流通道')
+    expect(toast.textContent).toContain('渠道临时受限')
+    expect(toast.textContent).toContain('部分调用质量下降')
+    await secondChip.trigger('mouseleave')
+    expect(
+      document.body.querySelector('[data-channel-health-toast]')
+    ).toBeNull()
+
+    // Clicking the multi-channel cycle button switches sequentially across distinct channels without opening detail modal.
+    const cycleBtn = wrapper.get('[data-cycle-channel]')
+    await cycleBtn.trigger('click')
+    expect(wrapper.emitted('detail')).toBeUndefined()
+    expect(wrapper.get('[data-channel-quote]').text()).toContain('限流通道')
+    expect(
+      wrapper
+        .get('[data-channel-quote] [data-catalog-offer-health="limited"]')
+        .text()
+    ).toBe('受限')
+
+    await cycleBtn.trigger('click')
+    expect(wrapper.get('[data-channel-quote]').text()).toContain('恢复通道')
+    expect(
+      wrapper
+        .get('[data-channel-quote] [data-catalog-offer-health="recovering"]')
+        .text()
+    ).toBe('恢复')
+
+    // Wraps cleanly back to first channel.
+    await cycleBtn.trigger('click')
+    expect(wrapper.get('[data-channel-quote]').text()).toContain(
+      'Fixture channel'
+    )
+    wrapper.unmount()
+  })
 })

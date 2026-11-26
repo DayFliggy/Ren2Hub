@@ -226,7 +226,7 @@ onMounted(loadStats)
 
 <template>
   <section
-    class="settings-maintenance-actions mt-6 border-t border-dashed border-[var(--border-default)] pt-5 text-sm text-[var(--text-secondary)]"
+    class="settings-maintenance-actions mt-6 border-t [border-top-style:var(--row-divider-style)] border-[var(--border-default)] pt-5 text-sm text-[var(--text-secondary)]"
   >
     <div class="flex items-center justify-between gap-4">
       <div>

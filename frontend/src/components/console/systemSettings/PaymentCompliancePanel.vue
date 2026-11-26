@@ -81,7 +81,7 @@ async function confirm() {
   justify-content: space-between;
   gap: 1rem;
   margin-top: 1.5rem;
-  border-top: 1px dashed var(--border-default);
+  border-top: 1px var(--row-divider-style, dashed) var(--border-default);
   padding-top: 1rem;
 }
 .compliance-panel h3 {

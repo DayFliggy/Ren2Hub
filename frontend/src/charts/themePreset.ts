@@ -83,3 +83,18 @@ export function areaGradient(
     { offset: 1, color: color + '05' },
   ]
 }
+
+/**
+ * Shared ECharts tooltip chrome aligned with the overlay surface tier
+ * (--surface-overlay / --overlay-border) so popovers rise above card containers
+ * in both Desert Ledger and B1 Studio.
+ */
+export function tooltipStyle(p: ChartPalette, scale = 1) {
+  return {
+    backgroundColor: p.surfaceOverlay,
+    borderColor: p.overlayBorder,
+    borderWidth: 1,
+    textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+    extraCssText: 'box-shadow: var(--overlay-shadow);',
+  }
+}

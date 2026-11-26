@@ -176,7 +176,7 @@ const topDaySummary = computed(() => {
             {{ periodLabel }} · {{ metricLabel }}
           </p>
           <p
-            class="mt-0.5 truncate text-xl font-bold tabular-nums text-[var(--text-primary)] sm:text-2xl"
+            class="display-number mt-0.5 truncate text-xl tabular-nums text-[var(--text-primary)] sm:text-2xl"
             aria-live="polite"
             data-usage-total
           >

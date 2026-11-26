@@ -97,7 +97,7 @@ function retryMedia(): void {
         :aria-label="`${t(LABEL_KEYS[artifact.type])}: ${artifact.key}`"
         controls
         preload="metadata"
-        class="max-h-[60vh] w-full rounded-md bg-black"
+        class="max-h-[60vh] w-full rounded-md bg-[var(--surface-container-lowest)]"
         @error="mediaFailed = true"
       />
       <audio
@@ -123,7 +123,8 @@ function retryMedia(): void {
       target="_blank"
       rel="noopener noreferrer"
       :aria-label="t('relayLogs.artifactDownloadNamed', { key: artifact.key })"
-      class="focus-ring inline-flex w-fit items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      data-handdrawn="control"
+      class="focus-ring inline-flex min-h-11 w-fit items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] lg:min-h-8"
     >
       <Download class="size-3.5" aria-hidden="true" />
       {{ t('relayLogs.artifactDownload') }}

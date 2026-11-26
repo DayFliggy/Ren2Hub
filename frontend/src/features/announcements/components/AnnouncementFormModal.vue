@@ -305,7 +305,7 @@ function handleSubmit() {
         />
         <div
           v-else
-          class="min-h-48 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+          class="min-h-48 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4"
           data-announcement-markdown-preview
         >
           <MarkdownDocument

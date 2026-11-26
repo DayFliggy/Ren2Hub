@@ -239,7 +239,7 @@ async function submit() {
           name="admin-user-remark"
           :aria-invalid="remarkLength > REMARK_MAX_LENGTH"
           :placeholder="t('users.remarkPlaceholder')"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
+          class="console-input w-full px-4 py-2.5 placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
         />
       </FormField>
 

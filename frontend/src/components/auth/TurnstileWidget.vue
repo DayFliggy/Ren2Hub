@@ -93,8 +93,12 @@ defineExpose({ reset })
 </script>
 
 <template>
-  <div class="sibling-space-y-2">
-    <div ref="container" aria-label="Turnstile verification" />
+  <div class="sibling-space-y-2 max-w-full overflow-x-auto">
+    <div
+      ref="container"
+      class="origin-top-left max-[359px]:scale-[0.9]"
+      aria-label="Turnstile verification"
+    />
     <p v-if="unavailable" class="text-xs text-[var(--status-danger-text)]">
       {{ t('common.turnstileUnavailable') }}
     </p>

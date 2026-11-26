@@ -19,7 +19,7 @@ const emit = defineEmits<{
   <button
     type="button"
     data-log-detail-trigger
-    class="group -my-1 block min-h-6 w-full min-w-0 text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--accent-text)] focus-visible:text-[var(--accent-text)] focus-visible:outline-hidden"
+    class="group -my-1 block min-h-11 w-full min-w-0 text-xs text-[var(--text-tertiary)] transition-colors focus-ring hover:text-[var(--accent-text)] focus-visible:text-[var(--accent-text)] lg:min-h-6"
     :class="align === 'right' ? 'text-right' : 'text-left'"
     :title="content"
     :aria-label="label"

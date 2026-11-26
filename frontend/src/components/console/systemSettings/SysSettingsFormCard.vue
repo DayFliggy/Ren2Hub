@@ -44,7 +44,7 @@ const { t } = useI18n()
 
     <!-- Sticky Save bar -->
     <footer
-      class="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] px-6 py-3.5 backdrop-blur-md"
+      class="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-[var(--surface-solid)] px-6 py-3.5"
     >
       <div class="flex items-center gap-2">
         <span
@@ -52,7 +52,8 @@ const { t } = useI18n()
           class="inline-flex items-center gap-1.5 rounded-md bg-[var(--status-warning-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--status-warning-text)]"
         >
           <span
-            class="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--status-warning)]"
+            class="h-1.5 w-1.5 rounded-full bg-[var(--status-warning)]"
+            aria-hidden="true"
           />
           {{ t('common.unsavedChanges') }}
         </span>

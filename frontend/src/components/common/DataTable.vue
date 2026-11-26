@@ -13,6 +13,7 @@ import { useI18n } from 'vue-i18n'
 import { useTableScrollFade } from '@/composables/useTableScrollFade'
 
 import EmptyState from './EmptyState.vue'
+import SkeletonBlock from './SkeletonBlock.vue'
 
 export interface TableColumn {
   key: string
@@ -699,14 +700,10 @@ onBeforeUnmount(() => {
               class="border-b border-[var(--border-subtle)] last:border-0"
             >
               <td v-if="selectable" class="px-3 py-3">
-                <div
-                  class="h-[22px] w-4 animate-pulse rounded-sm bg-[var(--surface-muted)]"
-                />
+                <SkeletonBlock rounded="sm" class="h-[22px] w-4" />
               </td>
               <td v-for="col in columns" :key="col.key" class="px-3 py-3">
-                <div
-                  class="h-[22px] animate-pulse rounded-sm bg-[var(--surface-muted)]"
-                />
+                <SkeletonBlock rounded="sm" class="h-[22px]" />
               </td>
             </tr>
           </tbody>
@@ -817,6 +814,11 @@ html.dark td[headers$='-actions'] button:not(:hover) {
 }
 .data-table-body-viewport:hover {
   scrollbar-color: var(--scroll-thumb) transparent;
+}
+@media (hover: none), (pointer: coarse) {
+  .data-table-body-viewport {
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
 }
 
 .data-table-body-viewport::-webkit-scrollbar {

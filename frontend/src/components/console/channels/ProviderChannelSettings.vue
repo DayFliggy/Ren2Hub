@@ -27,7 +27,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="awsApiType"
           :aria-label="t('awsApiType')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+          class="console-input h-10 w-full px-3 focus-ring"
         >
           <option value="invoke_model">{{ t('invokeModel') }}</option>
           <option value="mantle">{{ t('mantle') }}</option>
@@ -39,7 +39,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="awsKeyType"
           :aria-label="t('awsKeyType')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+          class="console-input h-10 w-full px-3 focus-ring"
         >
           <option value="ak_sk">{{ t('awsAccessKey') }}</option>
           <option value="api_key">{{ t('apiKey') }}</option>
@@ -59,7 +59,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="vertexApiVersion"
           :aria-label="t('vertexApiVersion')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+          class="console-input h-10 w-full px-3 focus-ring"
         >
           <option value="">{{ t('vertexApiDefault') }}</option>
           <option value="v1">v1</option>
@@ -72,7 +72,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="vertexKeyType"
           :aria-label="t('vertexKeyType')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+          class="console-input h-10 w-full px-3 focus-ring"
         >
           <option value="json">{{ t('serviceAccount') }}</option>
           <option value="api_key">{{ t('apiKey') }}</option>

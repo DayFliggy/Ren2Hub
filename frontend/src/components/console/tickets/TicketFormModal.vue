@@ -143,7 +143,7 @@ async function save() {
               :style="
                 form.category === cat
                   ? 'border-color:var(--accent);background:var(--accent);color:var(--accent-contrast)'
-                  : 'border-color:var(--border-subtle);background:var(--surface-solid);color:var(--text-secondary)'
+                  : 'border-color:var(--border-subtle);background:var(--surface-muted);color:var(--text-secondary)'
               "
               :aria-pressed="form.category === cat"
               @click="form.category = cat"
@@ -162,7 +162,7 @@ async function save() {
               :style="
                 form.priority === pri
                   ? 'border-color:var(--accent);background:var(--accent);color:var(--accent-contrast)'
-                  : 'border-color:var(--border-subtle);background:var(--surface-solid);color:var(--text-secondary)'
+                  : 'border-color:var(--border-subtle);background:var(--surface-muted);color:var(--text-secondary)'
               "
               :aria-pressed="form.priority === pri"
               @click="form.priority = pri"
@@ -180,7 +180,7 @@ async function save() {
           name="ticket-content"
           :aria-label="t('tickets.create.contentLabel')"
           :placeholder="t('tickets.create.contentPlaceholder')"
-          class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
+          class="console-input w-full px-4 py-2.5 placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
         />
         <span
           v-if="errors.content"

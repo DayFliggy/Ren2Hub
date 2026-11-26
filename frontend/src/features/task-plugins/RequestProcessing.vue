@@ -227,7 +227,7 @@ void loadModels()
       <ErrorBanner v-else-if="loadError" :message="loadError" @retry="load" />
       <div
         v-else-if="!instances.length"
-        class="rounded-xl border border-dashed border-[var(--border-strong)]"
+        class="rounded-xl border [border-style:var(--row-divider-style)] border-[var(--border-strong)]"
       >
         <EmptyState
           :title="t('pluginExtensions.rp.empty')"

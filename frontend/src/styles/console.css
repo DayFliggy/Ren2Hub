@@ -281,6 +281,10 @@ html.dark [data-surface-variant='default'] .table-scroll-fade {
  * solid surface so rows do not show through. Desktop tables keep their own
  * sticky header, so the bar stays in flow there.
  */
+.console-bulk-bar {
+  background: var(--surface-muted);
+}
+
 @media (max-width: 1023.98px) {
   .console-bulk-bar {
     position: sticky;

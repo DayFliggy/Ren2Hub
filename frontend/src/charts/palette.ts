@@ -23,8 +23,10 @@ export interface ChartPalette {
   textSecondary: string
   textTertiary: string
   borderSubtle: string
+  overlayBorder: string
   chartGrid: string
   surfaceSolid: string
+  surfaceOverlay: string
   /** resolved theme at build time — presets branch day/night on this */
   isDark: boolean
   /** night-only line glow color; transparent by day */
@@ -95,10 +97,18 @@ export function chartPalette(): ChartPalette {
       '#6c6955'
     ),
     borderSubtle: resolveToken('--border-subtle', 'rgba(56,55,43,.08)'),
+    overlayBorder: resolveToken(
+      '--overlay-border',
+      isDark ? 'rgba(226,232,245,.16)' : 'rgba(192,139,87,.2)'
+    ),
     chartGrid: resolveToken('--chart-grid-line', 'rgba(56,55,43,.08)'),
     surfaceSolid: normalizeOpaqueColor(
       resolveToken('--surface-solid'),
       '#fffdf8'
+    ),
+    surfaceOverlay: normalizeOpaqueColor(
+      resolveToken('--surface-overlay'),
+      isDark ? '#373d4b' : '#fbf6ec'
     ),
     isDark,
     lineGlow: isDark

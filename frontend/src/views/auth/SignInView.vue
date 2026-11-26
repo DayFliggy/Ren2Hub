@@ -287,7 +287,8 @@ async function signInOAuth(provider: string) {
             />
             <button
               type="button"
-              class="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
+              data-handdrawn="control"
+              class="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring lg:right-1.5 lg:h-8 lg:w-8"
               :aria-label="
                 showPassword ? t('auth.hidePassword') : t('auth.showPassword')
               "
@@ -328,7 +329,7 @@ async function signInOAuth(provider: string) {
       <div v-if="!twoFactorFlowToken" class="flex justify-end">
         <RouterLink
           :to="{ name: 'reset' }"
-          class="-mx-2 -my-2 inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-[var(--accent-text)] hover:underline focus-ring"
+          class="-mx-2 -my-2 inline-flex min-h-11 items-center rounded-md px-2 text-xs font-medium text-[var(--accent-text)] hover:underline focus-ring lg:min-h-8"
         >
           {{ t('auth.forgot') }}
         </RouterLink>

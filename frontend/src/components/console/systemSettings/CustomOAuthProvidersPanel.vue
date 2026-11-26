@@ -436,7 +436,7 @@ onMounted(loadProviders)
 <style scoped>
 .custom-oauth-panel {
   margin-top: 1.5rem;
-  border-top: 1px dashed var(--border-default);
+  border-top: 1px var(--row-divider-style, dashed) var(--border-default);
   padding-top: 1rem;
 }
 .custom-oauth-panel-header,

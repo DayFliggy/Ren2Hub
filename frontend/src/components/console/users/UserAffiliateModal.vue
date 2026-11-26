@@ -13,6 +13,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import type { AdminUser } from '@/types/console'
@@ -171,9 +172,9 @@ async function resetCode() {
     @close="close"
   >
     <div v-if="loading || !detail" class="sibling-space-y-4" aria-hidden="true">
-      <div class="h-20 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
-      <div class="h-11 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
-      <div class="h-28 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
+      <SkeletonBlock rounded="sm" class="h-20" />
+      <SkeletonBlock rounded="sm" class="h-11" />
+      <SkeletonBlock rounded="sm" class="h-28" />
     </div>
 
     <div v-else class="sibling-space-y-5 text-left">
@@ -317,8 +318,8 @@ async function resetCode() {
   width: 100%;
   height: 2.75rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  background: var(--surface-solid);
+  border-radius: var(--shape-control);
+  background: var(--studio-control-track, var(--surface-solid));
   padding: 0 0.875rem;
   color: var(--text-primary);
   font-size: 0.875rem;

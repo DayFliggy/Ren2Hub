@@ -73,7 +73,7 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         class="fixed inset-0 flex items-center justify-center p-6"
-        style="z-index: 95"
+        style="z-index: calc(var(--z-modal) + 5)"
         role="dialog"
         aria-modal="true"
         :aria-label="t('common.imagePreview')"

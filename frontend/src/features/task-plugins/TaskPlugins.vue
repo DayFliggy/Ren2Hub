@@ -11,7 +11,9 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import IconButton from '@/components/common/IconButton.vue'
+import { useFloatingPanel } from '@/composables/useFloatingPanel'
 import { useToast } from '@/composables/useToast'
 
 import {
@@ -43,6 +45,13 @@ const tabs = computed(() => [
   { key: 'installed', label: t('taskPlugins.installed') },
   { key: 'marketplace', label: t('taskPlugins.marketplace') },
 ])
+const kindOptions = computed(() => [
+  { value: 'all', label: t('common.all') },
+  ...(['task', 'provider', 'transform'] as const).map((value) => ({
+    value,
+    label: t(`pluginExtensions.${value}`),
+  })),
+])
 
 const plugins = ref<TaskPluginListItem[]>([])
 const pluginsLoading = ref(true)
@@ -53,6 +62,13 @@ const enabledSaving = ref(false)
 const confirmDisable = ref(false)
 const helpOpen = ref(false)
 const help = ref<HTMLElement | null>(null)
+const helpPanel = ref<HTMLElement | null>(null)
+const { style: helpPanelStyle, scope: helpPanelScope } = useFloatingPanel(
+  help,
+  helpPanel,
+  helpOpen,
+  { align: 'end', gap: 8 }
+)
 const detail = ref<TaskPluginListItem | null>(null)
 const upload = ref<{ key: string } | null>(null)
 let listSequence = 0
@@ -102,7 +118,7 @@ function toggleEnabled(value: boolean) {
   else confirmDisable.value = true
 }
 
-onClickOutside(help, () => (helpOpen.value = false))
+onClickOutside(helpPanel, () => (helpOpen.value = false), { ignore: [help] })
 void loadPlugins()
 void loadEnabled()
 
@@ -148,24 +164,33 @@ const overrides = computed(() =>
             >
               <CircleHelp :size="16" aria-hidden="true" />
             </IconButton>
-            <div
-              v-if="helpOpen"
-              id="task-plugin-help"
-              role="dialog"
-              :aria-label="t('taskPlugins.behaviorHelp')"
-              class="absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] sibling-space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 text-sm shadow-lg"
-            >
-              <p class="font-medium">
-                {{ t('taskPlugins.enableTaskPlugins') }}
-              </p>
-              <p class="text-[var(--text-secondary)]">
-                {{ t('taskPlugins.masterSwitchHelp') }}
-              </p>
-              <p class="font-medium">{{ t('taskPlugins.behaviorHelp') }}</p>
-              <p class="text-[var(--text-secondary)]">
-                {{ t('taskPlugins.factoryBehaviorHelp') }}
-              </p>
-            </div>
+            <Teleport to="body">
+              <div
+                v-if="helpOpen"
+                id="task-plugin-help"
+                ref="helpPanel"
+                role="dialog"
+                data-handdrawn="menu"
+                :data-handdrawn-scope="helpPanelScope"
+                :aria-label="t('taskPlugins.behaviorHelp')"
+                :style="helpPanelStyle"
+                class="w-80 max-w-[calc(100vw-2rem)] sibling-space-y-2 rounded-xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-4 text-sm shadow-[var(--overlay-shadow)]"
+                @keydown.escape="helpOpen = false"
+              >
+                <p class="font-medium text-[var(--text-primary)]">
+                  {{ t('taskPlugins.enableTaskPlugins') }}
+                </p>
+                <p class="text-[var(--text-secondary)]">
+                  {{ t('taskPlugins.masterSwitchHelp') }}
+                </p>
+                <p class="font-medium text-[var(--text-primary)]">
+                  {{ t('taskPlugins.behaviorHelp') }}
+                </p>
+                <p class="text-[var(--text-secondary)]">
+                  {{ t('taskPlugins.factoryBehaviorHelp') }}
+                </p>
+              </div>
+            </Teleport>
           </div>
         </div>
         <ConsoleButton
@@ -186,24 +211,21 @@ const overrides = computed(() =>
     />
     <div
       id="task-plugins-panel"
+      :key="tab"
+      class="console-panel-enter"
       role="tabpanel"
       :aria-labelledby="`task-plugins-panel-tab-${tab}`"
     >
       <template v-if="tab === 'installed'">
-        <select
-          v-model="kind"
-          :aria-label="t('pluginExtensions.plugin')"
-          class="mb-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2 text-sm"
-        >
-          <option value="all">{{ t('common.all') }}</option>
-          <option
-            v-for="value in ['task', 'provider', 'transform']"
-            :key="value"
-            :value="value"
-          >
-            {{ t(`pluginExtensions.${value}`) }}
-          </option>
-        </select>
+        <div class="mb-3 max-w-52">
+          <FilterSelect
+            v-model="kind"
+            :options="kindOptions"
+            :label="t('pluginExtensions.plugin')"
+            variant="facet"
+            size="compact"
+          />
+        </div>
         <ErrorBanner
           v-if="pluginsError"
           class="mb-3"

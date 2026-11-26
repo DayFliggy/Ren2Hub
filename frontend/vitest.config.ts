@@ -14,9 +14,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/__tests__/setup.ts'],
     include: ['src/**/*.{spec,test}.ts'],
-    // Stylesheets import as empty text in tests, except this one, whose
-    // rules a spec reads.
-    css: { include: /home-font-subsets\.css/ },
+    // Stylesheets import as empty text in tests, except those whose raw rules
+    // a spec inspects directly.
+    css: { include: /(?:home-font-subsets|tailwind)\.css/ },
     restoreMocks: true,
   },
 })

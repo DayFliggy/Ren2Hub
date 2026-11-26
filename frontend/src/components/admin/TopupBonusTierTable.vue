@@ -232,7 +232,7 @@ function text(event: Event) {
 .bonus-table-empty {
   padding: 1rem;
   text-align: center;
-  border: 1px dashed var(--border-default);
+  border: 1px var(--row-divider-style, dashed) var(--border-default);
   border-radius: 0.625rem;
 }
 .bonus-tiers {

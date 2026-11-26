@@ -3,6 +3,7 @@ import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { useTableScrollFade } from '@/composables/useTableScrollFade'
 import { formatQuota, formatNumber } from '@/utils/format'
 import { SERIES_TOKENS } from '@/charts/palette'
@@ -37,11 +38,7 @@ watch(
 
     <!-- skeleton -->
     <div v-if="loading" class="sibling-space-y-3">
-      <div
-        v-for="i in 4"
-        :key="i"
-        class="h-10 animate-pulse rounded-lg bg-[var(--surface-muted)]"
-      />
+      <SkeletonBlock v-for="i in 4" :key="i" rounded="lg" class="h-10" />
     </div>
 
     <!--
@@ -70,27 +67,27 @@ watch(
               class="border-b border-[var(--border-subtle)] text-[0.6875rem] tracking-wider text-[var(--text-tertiary)]"
             >
               <th
-                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-left font-semibold"
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-table-header)] px-3 py-2.5 text-left font-semibold"
               >
                 {{ t('dashboard.stats.model') }}
               </th>
               <th
-                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-2.5 py-2.5 text-right font-semibold"
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-table-header)] px-2.5 py-2.5 text-right font-semibold"
               >
                 {{ t('dashboard.stats.tokens') }}
               </th>
               <th
-                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-right font-semibold"
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-table-header)] px-3 py-2.5 text-right font-semibold"
               >
                 {{ t('dashboard.stats.spend') }}
               </th>
               <th
-                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-2.5 py-2.5 text-right font-semibold"
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-table-header)] px-2.5 py-2.5 text-right font-semibold"
               >
                 {{ t('dashboard.stats.requests') }}
               </th>
               <th
-                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-right font-semibold"
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-table-header)] px-3 py-2.5 text-right font-semibold"
               >
                 {{ t('dashboard.stats.share') }}
               </th>

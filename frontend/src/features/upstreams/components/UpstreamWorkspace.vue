@@ -459,9 +459,10 @@ watch(
     </div>
     <div
       :id="panelId"
+      :key="tab"
       role="tabpanel"
       :aria-labelledby="`${panelId}-tab-${tab}`"
-      class="px-4 pb-5 sm:px-5"
+      class="console-panel-enter px-4 pb-5 sm:px-5"
     >
       <template v-if="tab === 'keys'">
         <p

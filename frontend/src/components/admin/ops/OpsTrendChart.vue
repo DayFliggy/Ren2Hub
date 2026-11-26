@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { tooltipStyle } from '@/charts/themePreset'
 import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 
@@ -253,9 +254,7 @@ useEChart(
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: palette.surfaceSolid,
-        borderColor: palette.borderSubtle,
-        textStyle: { color: palette.textPrimary, fontSize: 12 * scale },
+        ...tooltipStyle(palette, scale),
       },
       xAxis: {
         type: 'time',

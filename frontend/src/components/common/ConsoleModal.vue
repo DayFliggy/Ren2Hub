@@ -58,7 +58,14 @@ const titleId = useId()
 const subtitleId = useId()
 const stackEntry = Symbol('ConsoleModal')
 const panel = ref<HTMLElement | null>(null)
+const viewportHeight = ref<number | null>(null)
 let previouslyFocused: HTMLElement | null = null
+
+function syncViewportHeight() {
+  viewportHeight.value = window.visualViewport
+    ? Math.round(window.visualViewport.height)
+    : null
+}
 
 function focusableEls(): HTMLElement[] {
   return panel.value ? tabbableElements(panel.value) : []
@@ -112,7 +119,9 @@ watch(
       lockBodyScroll(stackEntry)
       openModalDialog(stackEntry)
       previouslyFocused = document.activeElement as HTMLElement | null
+      syncViewportHeight()
       window.addEventListener('keydown', onKeydown)
+      window.visualViewport?.addEventListener('resize', syncViewportHeight)
       // Move focus into the dialog once it has rendered.
       nextTick(() => {
         const els = focusableEls()
@@ -122,6 +131,8 @@ watch(
       closeModalDialog(stackEntry)
       unlockBodyScroll(stackEntry)
       window.removeEventListener('keydown', onKeydown)
+      window.visualViewport?.removeEventListener('resize', syncViewportHeight)
+      viewportHeight.value = null
       const restoreTarget = previouslyFocused
       previouslyFocused = null
       nextTick(() => restoreTarget?.isConnected && restoreTarget.focus())
@@ -134,6 +145,7 @@ onBeforeUnmount(() => {
   closeModalDialog(stackEntry)
   unlockBodyScroll(stackEntry)
   window.removeEventListener('keydown', onKeydown)
+  window.visualViewport?.removeEventListener('resize', syncViewportHeight)
   const restoreTarget = previouslyFocused
   previouslyFocused = null
   nextTick(() => restoreTarget?.isConnected && restoreTarget.focus())
@@ -170,12 +182,13 @@ onBeforeUnmount(() => {
         <div
           ref="panel"
           tabindex="-1"
-          class="pencil-surface-strong relative flex max-h-[calc(100dvh-2rem)] w-full flex-col border border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper animate-scale-in focus:outline-hidden"
+          class="pencil-surface-strong relative flex max-h-[calc(var(--modal-vh,100dvh)-2rem)] w-full flex-col border border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper animate-scale-in focus:outline-hidden"
           data-handdrawn="modal"
-          style="
-            border-radius: var(--shape-overlay);
-            box-shadow: var(--overlay-shadow);
-          "
+          :style="{
+            borderRadius: 'var(--shape-overlay)',
+            boxShadow: 'var(--overlay-shadow)',
+            '--modal-vh': viewportHeight ? `${viewportHeight}px` : undefined,
+          }"
           :class="[
             widths[size],
             { 'console-drawer-panel': presentation === 'drawer' },

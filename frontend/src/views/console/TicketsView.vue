@@ -8,10 +8,12 @@ import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import TicketFormModal from '@/components/console/tickets/TicketFormModal.vue'
@@ -164,53 +166,56 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
         </ConsoleButton>
       </div>
 
-      <DataTable
-        :columns="columns"
-        :rows="rows"
-        row-key="id"
-        :loading="loading"
-        :skeleton-rows="pageSize"
-        adaptive-scroll
-        :page-size="pageSize"
-        :scroll-region-label="t('tickets.breadcrumb.1')"
-        :empty-title="t('tickets.emptyTitle')"
-        empty-illustration="empty-tickets"
-      >
-        <template #cell-title="{ row }">
-          <button
-            type="button"
-            class="display-title -my-0.5 min-h-6 max-w-full truncate text-left font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--accent-text)]"
-            :title="(row as TicketRow).title"
-            @click="openDetail((row as TicketRow).id)"
+      <div class="lg:hidden">
+        <div
+          v-if="loading"
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+        >
+          <div v-for="i in 4" :key="i" class="px-4 py-4">
+            <SkeletonBlock rounded="xl" class="h-20" />
+          </div>
+        </div>
+        <EmptyState
+          v-else-if="rows.length === 0"
+          :title="t('tickets.emptyTitle')"
+          illustration="empty-tickets"
+        />
+        <ul
+          v-else
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+        >
+          <li
+            v-for="row in rows"
+            :key="row.id"
+            class="flex items-start justify-between gap-3 px-4 py-3.5"
           >
-            {{ (row as TicketRow).title }}
-          </button>
-        </template>
-        <template #cell-category="{ row }">
-          <span class="text-xs text-[var(--text-secondary)]">
-            {{ t(`tickets.category.${(row as TicketRow).category}`) }}
-          </span>
-        </template>
-        <template #cell-status="{ row }">
-          <StatusChip :tone="ticketStatusTone[(row as TicketRow).status]">
-            {{ t(`tickets.status.${(row as TicketRow).status}`) }}
-          </StatusChip>
-        </template>
-        <template #cell-created="{ row }">
-          <span class="text-xs text-[var(--text-tertiary)]">
-            {{ relativeTime((row as TicketRow).created, locale) }}
-          </span>
-        </template>
-        <template #cell-updated="{ row }">
-          <span class="text-xs text-[var(--text-tertiary)]">
-            {{ relativeTime((row as TicketRow).updated, locale) }}
-          </span>
-        </template>
-        <template #cell-actions="{ row }">
-          <div class="flex items-center justify-end">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="display-title min-h-11 max-w-full truncate text-left text-sm font-medium text-[var(--text-primary)] transition-colors focus-ring hover:text-[var(--accent-text)]"
+                  :title="row.title"
+                  @click="openDetail(row.id)"
+                >
+                  {{ row.title }}
+                </button>
+              </div>
+              <div
+                class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-[var(--text-tertiary)]"
+              >
+                <StatusChip :tone="ticketStatusTone[row.status]">
+                  {{ t(`tickets.status.${row.status}`) }}
+                </StatusChip>
+                <span class="text-[var(--text-secondary)]">
+                  {{ t(`tickets.category.${row.category}`) }}
+                </span>
+                <span>{{ relativeTime(row.updated, locale) }}</span>
+              </div>
+            </div>
             <IconButton
               :label="t('tickets.viewTicket')"
-              @click="openDetail((row as TicketRow).id)"
+              class="shrink-0"
+              @click="openDetail(row.id)"
             >
               <svg
                 width="16"
@@ -219,22 +224,98 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
+                aria-hidden="true"
               >
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </IconButton>
-          </div>
-        </template>
-        <template #footer>
-          <div class="border-t border-[var(--border-subtle)]">
-            <TablePagination
-              v-model:page="page"
-              v-model:page-size="pageSize"
-              :total="total"
-            />
-          </div>
-        </template>
-      </DataTable>
+          </li>
+        </ul>
+        <div
+          v-if="!loading && rows.length > 0"
+          class="border-t border-[var(--border-subtle)]"
+        >
+          <TablePagination
+            v-model:page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+          />
+        </div>
+      </div>
+
+      <div class="hidden lg:block">
+        <DataTable
+          :columns="columns"
+          :rows="rows"
+          row-key="id"
+          :loading="loading"
+          :skeleton-rows="pageSize"
+          adaptive-scroll
+          :page-size="pageSize"
+          :scroll-region-label="t('tickets.breadcrumb.1')"
+          :empty-title="t('tickets.emptyTitle')"
+          empty-illustration="empty-tickets"
+        >
+          <template #cell-title="{ row }">
+            <button
+              type="button"
+              class="display-title -my-0.5 min-h-6 max-w-full truncate text-left font-medium text-[var(--text-primary)] transition-colors focus-ring hover:text-[var(--accent-text)]"
+              :title="(row as TicketRow).title"
+              @click="openDetail((row as TicketRow).id)"
+            >
+              {{ (row as TicketRow).title }}
+            </button>
+          </template>
+          <template #cell-category="{ row }">
+            <span class="text-xs text-[var(--text-secondary)]">
+              {{ t(`tickets.category.${(row as TicketRow).category}`) }}
+            </span>
+          </template>
+          <template #cell-status="{ row }">
+            <StatusChip :tone="ticketStatusTone[(row as TicketRow).status]">
+              {{ t(`tickets.status.${(row as TicketRow).status}`) }}
+            </StatusChip>
+          </template>
+          <template #cell-created="{ row }">
+            <span class="text-xs text-[var(--text-tertiary)]">
+              {{ relativeTime((row as TicketRow).created, locale) }}
+            </span>
+          </template>
+          <template #cell-updated="{ row }">
+            <span class="text-xs text-[var(--text-tertiary)]">
+              {{ relativeTime((row as TicketRow).updated, locale) }}
+            </span>
+          </template>
+          <template #cell-actions="{ row }">
+            <div class="flex items-center justify-end">
+              <IconButton
+                :label="t('tickets.viewTicket')"
+                @click="openDetail((row as TicketRow).id)"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </IconButton>
+            </div>
+          </template>
+          <template #footer>
+            <div class="border-t border-[var(--border-subtle)]">
+              <TablePagination
+                v-model:page="page"
+                v-model:page-size="pageSize"
+                :total="total"
+              />
+            </div>
+          </template>
+        </DataTable>
+      </div>
     </ConsoleCard>
 
     <TicketFormModal

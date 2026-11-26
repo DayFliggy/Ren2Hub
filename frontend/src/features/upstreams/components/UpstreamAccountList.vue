@@ -231,7 +231,7 @@ watch(
             class="relative block px-4 py-3 transition-colors focus-ring"
             :class="
               row.account.id === selectedId
-                ? 'bg-[var(--surface-solid)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--accent)]'
+                ? 'bg-[var(--accent-soft)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--accent)]'
                 : 'hover:bg-[var(--state-hover-layer)]'
             "
             data-upstream-site

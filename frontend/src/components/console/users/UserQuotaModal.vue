@@ -203,8 +203,8 @@ async function submit() {
   width: 100%;
   height: 2.75rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
-  background: var(--surface-solid);
+  border-radius: var(--shape-control);
+  background: var(--studio-control-track, var(--surface-solid));
   /* Left room for the currency sign; a padding utility cannot override this rule. */
   padding: 0 1rem 0 2rem;
   color: var(--text-primary);

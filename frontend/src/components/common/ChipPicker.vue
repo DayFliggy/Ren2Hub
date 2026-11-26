@@ -152,7 +152,7 @@ onBeforeUnmount(() => {
         :aria-label="placeholder"
         :placeholder="placeholder"
         :disabled="disabled"
-        class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
+        class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--studio-control-track,var(--surface-solid))] px-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
         @focus="onFocus"
         @click="onFocus"
         @blur="onBlur"
@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
         {{ option }}
         <button
           type="button"
-          class="absolute -right-1.5 -top-1.5 flex items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--surface-solid)]"
+          class="chip-picker-remove absolute -right-1.5 -top-1.5 flex items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--surface-solid)] focus-ring"
           style="height: 18px; width: 18px"
           :aria-label="t('common.removeItem', { item: option })"
           :disabled="disabled"
@@ -216,3 +216,24 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Keep the compact 18px badge while giving touch/narrow viewports a 44px hit box. */
+.chip-picker-remove::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  transform: translate(-50%, -50%);
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .chip-picker-remove::after {
+    min-width: 0;
+    min-height: 0;
+  }
+}
+</style>

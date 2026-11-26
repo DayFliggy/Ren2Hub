@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { adminOrderRankStyle } from '@/constants/adminOrders'
 import type { AdminOrderSpender } from '@/types/console'
 import { formatQuota } from '@/utils/format'
@@ -29,11 +30,9 @@ const { t } = useI18n()
       :hint="error || t('orders.summaryUnavailableHint')"
     />
     <ul v-else-if="loading" class="sibling-space-y-3.5" aria-hidden="true">
-      <li
-        v-for="i in 5"
-        :key="i"
-        class="h-9 animate-pulse rounded-sm bg-[var(--surface-muted)]"
-      />
+      <li v-for="i in 5" :key="i">
+        <SkeletonBlock rounded="sm" class="h-9" />
+      </li>
     </ul>
     <!-- list and scope note share one branch so the empty state stays on this v-if chain -->
     <template v-else-if="items.length > 0">

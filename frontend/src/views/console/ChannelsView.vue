@@ -1127,7 +1127,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
       <div
         v-if="selectedIds.length > 0"
         data-channel-bulk-actions
-        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5"
       >
         <span
           class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"

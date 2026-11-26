@@ -39,7 +39,8 @@ async function copyCode() {
     </span>
     <button
       type="button"
-      class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:h-5 sm:w-5"
+      data-handdrawn="control"
+      class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:h-5 lg:w-5"
       :aria-label="t('redemption.copyCode')"
       @click.stop="copyCode"
     >

@@ -3,8 +3,9 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
-import { areaGradient, lineMood } from '@/charts/themePreset'
+import { areaGradient, lineMood, tooltipStyle } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { formatAdminOrderAmount } from '@/constants/adminOrders'
 import type { AdminOrderDailyPoint } from '@/types/console'
 
@@ -82,9 +83,7 @@ useEChart(
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: p.surfaceSolid,
-        borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+        ...tooltipStyle(p, scale),
         axisPointer: { type: 'line', lineStyle: { color: p.borderSubtle } },
       },
       xAxis: {
@@ -201,11 +200,7 @@ useEChart(
         role="img"
         :aria-label="t('orders.chart.title')"
       />
-      <div
-        v-if="loading"
-        class="absolute inset-0 animate-pulse rounded-xl bg-[var(--surface-muted)]"
-        aria-hidden="true"
-      />
+      <SkeletonBlock v-if="loading" rounded="xl" class="absolute inset-0" />
     </div>
     <!-- Canvas carries no text for assistive tech, so the same figures are
          reachable as a table. -->

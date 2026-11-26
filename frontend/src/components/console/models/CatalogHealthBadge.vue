@@ -6,9 +6,11 @@ import type {
   CatalogOfferHealth,
 } from '@/api/modelCatalog'
 import { modelMarketMessages } from '@/i18n/modelMarket'
-
-type HealthTone = 'good' | 'warn' | 'bad' | 'neutral'
-type HealthIcon = 'check' | 'pause' | 'limit' | 'recover' | 'down' | 'dash'
+import {
+  resolveOfferHealth,
+  type CatalogHealthIcon as HealthIcon,
+  type CatalogHealthTone as HealthTone,
+} from './catalogHealth'
 
 const props = withDefaults(
   defineProps<{
@@ -18,6 +20,8 @@ const props = withDefaults(
     /** Number of models currently shown after client filters; when below visible_models, show visible scope note. */
     filteredCount?: number
     compact?: boolean
+    /** Compact corner badge beside billing mode on model aggregation cards. */
+    badge?: boolean
     detail?: boolean
   }>(),
   {
@@ -26,101 +30,20 @@ const props = withDefaults(
     channelSummary: undefined,
     filteredCount: undefined,
     compact: false,
+    badge: false,
     detail: false,
   }
 )
 
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 
-const offerView = computed(() => {
-  const health = props.health
-  if (!health) {
-    return {
-      state: 'unavailable',
-      tone: 'neutral' as HealthTone,
-      icon: 'dash' as HealthIcon,
-      primary: t('channelHealth.unavailable'),
-      secondary: '',
-    }
-  }
-  const hasQualityIssue =
-    health.quality === 'degraded' || health.quality === 'severely_degraded'
-  const secondaryQuality = hasQualityIssue
-    ? t(`channelHealth.quality.${health.quality}`)
-    : ''
+const offerView = computed(() => resolveOfferHealth(props.health, t))
 
-  if (health.availability === 'paused') {
-    return {
-      state: 'paused',
-      tone: 'bad' as HealthTone,
-      icon: 'pause' as HealthIcon,
-      primary: t('channelHealth.availability.paused'),
-      secondary: secondaryQuality,
-    }
-  }
-  if (health.availability === 'limited') {
-    return {
-      state: 'limited',
-      tone: 'warn' as HealthTone,
-      icon: 'limit' as HealthIcon,
-      primary: t('channelHealth.availability.limited'),
-      secondary: secondaryQuality,
-    }
-  }
-  if (health.availability === 'recovering') {
-    return {
-      state: 'recovering',
-      tone: 'warn' as HealthTone,
-      icon: 'recover' as HealthIcon,
-      primary: t('channelHealth.availability.recovering'),
-      secondary: secondaryQuality,
-    }
-  }
-  if (health.availability === 'unknown') {
-    return {
-      state: 'unknown',
-      tone: 'neutral' as HealthTone,
-      icon: 'dash' as HealthIcon,
-      primary: t('channelHealth.availability.unknown'),
-      secondary: '',
-    }
-  }
-  // availability === 'no_restriction': quality decides visual tone (never green when unrated).
-  if (health.quality === 'severely_degraded') {
-    return {
-      state: 'severely_degraded',
-      tone: 'bad' as HealthTone,
-      icon: 'down' as HealthIcon,
-      primary: t('channelHealth.quality.severely_degraded'),
-      secondary: '',
-    }
-  }
-  if (health.quality === 'degraded') {
-    return {
-      state: 'degraded',
-      tone: 'warn' as HealthTone,
-      icon: 'down' as HealthIcon,
-      primary: t('channelHealth.quality.degraded'),
-      secondary: '',
-    }
-  }
-  if (health.quality === 'no_downgrade') {
-    return {
-      state: 'no_downgrade',
-      tone: 'good' as HealthTone,
-      icon: 'check' as HealthIcon,
-      primary: t('channelHealth.quality.no_downgrade'),
-      secondary: '',
-    }
-  }
-  return {
-    state: 'unrated',
-    tone: 'neutral' as HealthTone,
-    icon: 'dash' as HealthIcon,
-    primary: t('channelHealth.quality.unrated'),
-    secondary: '',
-  }
-})
+const offerFullLabel = computed(() =>
+  offerView.value.secondary
+    ? `${offerView.value.primary} · ${offerView.value.secondary}`
+    : offerView.value.primary
+)
 
 const summaryView = computed(() => {
   const s = props.channelSummary
@@ -293,7 +216,42 @@ const filteredScopeText = computed(() =>
     <p class="catalog-health-detail-note">{{ t('channelHealth.scopeNote') }}</p>
   </div>
 
-  <!-- Compact inline offer badge (shelves, model card, matrix, detail rows) -->
+  <!-- Compact corner badge (inline beside billing mode on ModelCard) -->
+  <span
+    v-else-if="badge"
+    class="catalog-health-pill catalog-health-badge"
+    :class="`is-${offerView.tone}`"
+    :data-catalog-offer-health="offerView.state"
+    :aria-label="offerFullLabel"
+  >
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path v-if="offerView.icon === 'check'" d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+      <path v-else-if="offerView.icon === 'pause'" d="M5.5 3.5v9M10.5 3.5v9" />
+      <path
+        v-else-if="offerView.icon === 'limit'"
+        d="M8 3.5v5m0 3h.01M8 1.75a6.25 6.25 0 1 1 0 12.5 6.25 6.25 0 0 1 0-12.5Z"
+      />
+      <path
+        v-else-if="offerView.icon === 'recover'"
+        d="M12.5 8a4.5 4.5 0 1 1-1.3-3.2M12.5 3v2.5H10"
+      />
+      <path v-else-if="offerView.icon === 'down'" d="M4 6l4 4 4-4" />
+      <path v-else d="M4 8h8" />
+    </svg>
+    <span>{{ offerView.badge }}</span>
+  </span>
+
+  <!-- Compact inline offer badge (shelves, matrix, detail rows) -->
   <span
     v-else
     class="catalog-health-inline"
@@ -376,6 +334,14 @@ const filteredScopeText = computed(() =>
   overflow-wrap: anywhere;
 }
 .catalog-health-pill svg {
+  flex: none;
+}
+.catalog-health-badge {
+  padding: 0.08rem 0.36rem;
+  gap: 0.22rem;
+  font-size: 0.625rem;
+  line-height: 1.35;
+  white-space: nowrap;
   flex: none;
 }
 .catalog-health-pill.is-good {

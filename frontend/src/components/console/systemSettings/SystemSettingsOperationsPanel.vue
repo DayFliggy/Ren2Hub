@@ -23,7 +23,7 @@ const { t } = useI18n()
   justify-content: space-between;
   gap: 0.75rem;
   margin-top: 1.5rem;
-  border-top: 1px dashed var(--border-default);
+  border-top: 1px var(--row-divider-style, dashed) var(--border-default);
   padding-top: 1rem;
   font-size: 0.875rem;
   color: var(--text-secondary);

@@ -323,7 +323,8 @@ onBeforeUnmount(() => {
         :data-metric="tooltip.metric"
         :data-tone="tooltipTone"
         role="tooltip"
-        class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-full items-center gap-2 rounded-md border border-[var(--overlay-border)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-xs backdrop-blur-xl"
+        data-handdrawn="toast"
+        class="pointer-events-none fixed z-[var(--z-tooltip)] flex -translate-x-1/2 -translate-y-full items-center gap-2 rounded-md border border-[var(--overlay-border)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-xs shadow-[var(--overlay-shadow)]"
         :style="tooltipStyle"
       >
         <span

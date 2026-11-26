@@ -4,9 +4,10 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
-import { areaGradient, lineMood } from '@/charts/themePreset'
+import { areaGradient, lineMood, tooltipStyle } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import type { FlowPoint } from '@/composables/useDashboard'
 import type { StatsComparison, StatsKpi } from '@/composables/useDashboardStats'
 import { formatNumber, formatQuota, formatMoney } from '@/utils/format'
@@ -93,9 +94,7 @@ useEChart(
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: palette.surfaceSolid,
-        borderColor: palette.borderSubtle,
-        textStyle: { color: palette.textPrimary, fontSize: 12 * scale },
+        ...tooltipStyle(palette, scale),
         formatter: (params: TooltipParam[]) => {
           if (!params.length) return ''
           const rows = params
@@ -267,13 +266,14 @@ useEChart(
             {{ t('dashboard.stats.spend') }}
           </p>
           <div class="mt-1 flex min-w-0 items-center gap-1.5 sm:gap-2">
-            <span
+            <SkeletonBlock
               v-if="loading"
-              class="inline-block h-7 w-24 animate-pulse rounded-sm bg-[var(--surface-muted)]"
+              rounded="sm"
+              class="inline-block h-7 w-24"
             />
             <strong
               v-else
-              class="truncate text-xl font-bold tabular-nums text-[var(--text-primary)] sm:text-2xl"
+              class="display-number truncate text-xl tabular-nums text-[var(--text-primary)] sm:text-2xl"
               data-trend-spend
             >
               {{ kpi ? formatQuota(kpi.totalQuota) : '—' }}
@@ -308,13 +308,14 @@ useEChart(
             {{ t('dashboard.stats.requests') }}
           </p>
           <div class="mt-1 flex min-w-0 items-center gap-1.5 sm:gap-2">
-            <span
+            <SkeletonBlock
               v-if="loading"
-              class="inline-block h-7 w-20 animate-pulse rounded-sm bg-[var(--surface-muted)]"
+              rounded="sm"
+              class="inline-block h-7 w-20"
             />
             <strong
               v-else
-              class="truncate text-xl font-bold tabular-nums text-[var(--signal)] sm:text-2xl"
+              class="display-number truncate text-xl tabular-nums text-[var(--signal)] sm:text-2xl"
               data-trend-requests
             >
               {{ kpi ? formatNumber(kpi.totalRequests) : '—' }}
@@ -366,10 +367,7 @@ useEChart(
       </div>
     </div>
 
-    <div
-      v-if="loading"
-      class="mt-4 h-64 grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-56"
-    />
+    <SkeletonBlock v-if="loading" rounded="xl" class="mt-4 h-64 grow sm:h-56" />
     <EmptyState
       v-else-if="error"
       class="mt-4 grow"

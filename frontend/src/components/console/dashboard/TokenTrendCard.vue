@@ -3,9 +3,10 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
-import { areaGradient, lineMood } from '@/charts/themePreset'
+import { areaGradient, lineMood, tooltipStyle } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import { formatCompact } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
@@ -124,9 +125,7 @@ useEChart(
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: p.surfaceSolid,
-        borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+        ...tooltipStyle(p, scale),
         formatter: (params: TooltipParam[]) => {
           if (!params.length) return ''
           const rows = params
@@ -236,9 +235,10 @@ useEChart(
       </div>
     </template>
 
-    <div
+    <SkeletonBlock
       v-if="loading"
-      class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"
+      rounded="xl"
+      class="h-[11.875rem] grow sm:h-[12.25rem]"
     />
     <EmptyState
       v-else-if="unavailableReason"

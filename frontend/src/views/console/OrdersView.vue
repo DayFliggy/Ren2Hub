@@ -324,6 +324,8 @@ onBeforeUnmount(() => exportController?.abort())
 
     <div
       :id="ordersPanelId"
+      :key="activeTab"
+      class="console-panel-enter"
       role="tabpanel"
       :aria-labelledby="`${ordersPanelId}-tab-${activeTab}`"
     >

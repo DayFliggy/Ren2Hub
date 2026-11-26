@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import EmptyState from '@/components/common/EmptyState.vue'
 import IconButton from '@/components/common/IconButton.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import {
   adminOrderMethodLabelKey,
@@ -32,7 +33,7 @@ const { t } = useI18n()
     class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
   >
     <div v-for="i in 5" :key="i" class="px-4 py-4" :aria-hidden="true">
-      <div class="h-24 animate-pulse rounded-xl bg-[var(--surface-muted)]" />
+      <SkeletonBlock rounded="xl" class="h-24" />
     </div>
   </div>
 

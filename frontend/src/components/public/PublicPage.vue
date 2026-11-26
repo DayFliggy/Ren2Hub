@@ -6,10 +6,10 @@ defineProps<{ title: string }>()
 
 <template>
   <div
-    class="public-page min-h-screen bg-[var(--page-background)] text-[var(--text-primary)]"
+    class="public-page min-h-dvh bg-[var(--page-background)] text-[var(--text-primary)]"
   >
     <AppNavbar />
-    <main class="site-container min-h-[calc(100vh-6rem)] pb-12 pt-28">
+    <main class="site-container min-h-[calc(100dvh-6rem)] pb-12 pt-28">
       <header
         class="mb-8 flex min-w-0 flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5"
       >

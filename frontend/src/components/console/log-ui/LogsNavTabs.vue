@@ -30,7 +30,7 @@ const tabs = [
 <template>
   <div class="subtle-scroll max-w-full overflow-x-auto sm:ml-auto">
     <nav
-      class="flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1"
+      class="logs-nav-tabs flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1"
       :aria-label="t('relayLogs.tabsLabel')"
     >
       <RouterLink
@@ -39,10 +39,10 @@ const tabs = [
         )"
         :key="tab.key"
         :to="{ name: tab.routeName }"
-        class="flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-ring sm:min-h-8"
+        class="logs-nav-tab flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-ring lg:min-h-8"
         :class="
           active === tab.key
-            ? 'bg-[var(--accent-soft)] text-[var(--accent-text)] font-semibold shadow-none'
+            ? 'is-active bg-[var(--accent-soft)] text-[var(--accent-text)] font-semibold shadow-none'
             : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
         "
         :aria-current="active === tab.key ? 'page' : undefined"
@@ -52,3 +52,23 @@ const tabs = [
     </nav>
   </div>
 </template>
+
+<style scoped>
+html.dark .logs-nav-tabs {
+  background: var(--studio-control-track);
+  border-color: var(--outline-variant);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+html.dark .logs-nav-tab.is-active {
+  background: var(--studio-control-thumb);
+  color: var(--text-primary);
+  box-shadow: var(--studio-control-thumb-shadow);
+}
+
+@media (pointer: coarse) {
+  .logs-nav-tab {
+    min-height: 2.75rem;
+  }
+}
+</style>

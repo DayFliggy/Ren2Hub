@@ -354,6 +354,30 @@
   /* 表格行分隔样式参数（日间虚线账本；夜间 solid hairline） */
   --row-divider-style: dashed;
   --row-divider-color: var(--dec-grid-line);
+  /* 开关控件语义令牌（日间宣纸炭墨；夜间曜石高对比冷银） */
+  --toggle-track-off: rgba(56, 55, 43, 0.12);
+  --toggle-track-off-hover: rgba(56, 55, 43, 0.16);
+  --toggle-track-off-border: var(--pencil-line-soft);
+  --toggle-track-off-border-hover: var(--pencil-line);
+  --toggle-track-off-shadow:
+    inset 0 1.5px 2.5px rgba(56, 55, 43, 0.1),
+    1px 1px 0 var(--pencil-line-faint);
+  --toggle-track-on-border: var(--pencil-line-strong);
+  --toggle-track-on-shadow:
+    inset 0 1.5px 2.5px rgba(56, 55, 43, 0.22),
+    1px 1px 0 var(--pencil-line-faint);
+  --toggle-track-on-shadow-hover: var(--toggle-track-on-shadow);
+  --toggle-thumb-off: var(--surface-solid);
+  --toggle-thumb-off-hover: var(--surface-solid);
+  --toggle-thumb-off-border: var(--pencil-line-soft);
+  --toggle-thumb-off-shadow:
+    1px 1.5px 0 rgba(56, 55, 43, 0.16), 0 2px 4px rgba(56, 55, 43, 0.08);
+  --toggle-thumb-off-shadow-hover:
+    1.5px 2px 0 rgba(56, 55, 43, 0.2), 0 3px 6px rgba(56, 55, 43, 0.12);
+  --toggle-thumb-on: var(--surface-solid);
+  --toggle-thumb-on-border: var(--pencil-line-soft);
+  --toggle-thumb-on-shadow: var(--toggle-thumb-off-shadow);
+  --toggle-thumb-on-shadow-hover: var(--toggle-thumb-off-shadow-hover);
   /* 台账 ruling：日间横线格；夜间 none */
   --ledger-ruling: repeating-linear-gradient(
     transparent 0 39px,
@@ -713,6 +737,32 @@ html.dark {
   --brush-highlight-clip: none;
   --row-divider-style: solid;
   --row-divider-color: var(--outline-variant);
+  /* 开关控件语义令牌（夜间曜石凹槽与高对比冷银/亮白滑块） */
+  --toggle-track-off: var(--surface-container-lowest);
+  --toggle-track-off-hover: var(--studio-control-track);
+  --toggle-track-off-border: rgba(152, 164, 192, 0.28);
+  --toggle-track-off-border-hover: rgba(152, 164, 192, 0.45);
+  --toggle-track-off-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
+  --toggle-track-on-border: rgb(var(--accent-rgb) / 0.85);
+  --toggle-track-on-shadow:
+    0 0 12px rgb(var(--accent-rgb) / 0.38),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  --toggle-track-on-shadow-hover:
+    0 0 16px rgb(var(--accent-rgb) / 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.45);
+  --toggle-thumb-off: var(--text-secondary);
+  --toggle-thumb-off-hover: var(--text-primary);
+  --toggle-thumb-off-border: rgba(255, 255, 255, 0.4);
+  --toggle-thumb-off-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --toggle-thumb-off-shadow-hover:
+    0 3px 7px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --toggle-thumb-on: var(--on-colored);
+  --toggle-thumb-on-border: rgba(255, 255, 255, 0.92);
+  --toggle-thumb-on-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --toggle-thumb-on-shadow-hover:
+    0 3px 8px rgba(0, 0, 0, 0.35), 0 0 5px rgba(255, 255, 255, 0.55);
   --ledger-ruling: none;
   --chip-bar-width: 0px;
   --chip-radius: 6px;

@@ -1,6 +1,6 @@
 <template>
   <header
-    class="app-navbar fixed inset-x-0 top-0 z-[70] transition-all duration-300"
+    class="app-navbar fixed inset-x-0 top-0 z-[var(--z-topbar)] transition-all duration-300"
     data-hero-canvas-boundary
     :data-scrolled="scrolled"
     :class="

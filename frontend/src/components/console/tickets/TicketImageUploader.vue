@@ -120,11 +120,11 @@ onBeforeUnmount(() => {
     <button
       v-if="canAddMore()"
       type="button"
-      class="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-center transition-colors focus-ring"
+      class="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border [border-style:var(--row-divider-style)] px-4 py-6 text-center transition-colors focus-ring"
       :class="
         dragOver
           ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-          : 'border-[var(--border-subtle)] bg-[var(--surface-solid)] hover:border-[var(--border-strong)]'
+          : 'border-[var(--border-subtle)] bg-[var(--surface-muted)] hover:border-[var(--border-strong)]'
       "
       @click="pickFiles"
       @dragover.prevent="dragOver = true"

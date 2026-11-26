@@ -17,6 +17,7 @@ import { ApiError } from '@/api/types'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
@@ -185,11 +186,7 @@ onMounted(() => void loadSessions())
     </header>
 
     <div v-if="loading" class="sibling-space-y-3 px-5 py-5 sm:px-6">
-      <div
-        v-for="n in 2"
-        :key="n"
-        class="h-20 animate-pulse rounded-xl bg-[var(--surface-muted)]"
-      />
+      <SkeletonBlock v-for="n in 2" :key="n" rounded="xl" class="h-20" />
     </div>
     <div v-else-if="loadError" class="px-5 py-8 text-center sm:px-6">
       <p class="text-sm text-[var(--status-danger-text)]">{{ loadError }}</p>

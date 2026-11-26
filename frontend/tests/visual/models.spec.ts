@@ -346,6 +346,16 @@ for (const [theme, width] of [
     await page.setViewportSize({ width, height: 900 })
     const fixture = createModelMarketFixture()
     fixture.models[0]!.tags = '推理,视觉,代码,长上下文'
+    // Keep one single-channel model to verify the cycle-channel button stays hidden.
+    fixture.offers = fixture.offers.filter(
+      (offer) =>
+        !(offer.model_id === 'audio-preview' && offer.channel_id !== 11)
+    )
+    const ch12 = fixture.channels.find((ch) => ch.id === 12)
+    if (ch12?.health) {
+      ch12.health.visible_models -= 1
+      ch12.health.unrated_models -= 1
+    }
     for (const [id, name, ratio] of [
       [14, '低价聚合', '0.4'],
       [15, '极速直连', '0.8'],
@@ -471,11 +481,38 @@ for (const [theme, width] of [
     await expect(menu).toHaveCount(0)
     await expect(card.locator('[data-channel-quote]')).toContainText('海外备用')
     await expect(card.locator('[data-channel-quote]')).toContainText('$3.000')
+    const badge = card.locator(
+      '[data-channel-quote] .market-quote-meta [data-catalog-offer-health="recovering"]'
+    )
+    await expect(badge).toContainText('恢复')
+    // Status badge sits inline on the same row as the billing label (not on a separate row below prices).
+    const billingBox = (await card
+      .locator('[data-channel-quote] .market-billing-label')
+      .boundingBox())!
+    const badgeBox = (await badge.boundingBox())!
+    expect(Math.abs(badgeBox.y - billingBox.y)).toBeLessThanOrEqual(8)
+    expect(badgeBox.x).toBeGreaterThan(billingBox.x)
+    // Hovering the status badge reveals the floating mini-toast with full status wording.
+    await badge.hover()
+    const toast = page.locator('[data-channel-health-toast]')
+    await expect(toast).toBeVisible()
+    await expect(toast).toContainText('恢复观察')
+    await expect(toast).toContainText('部分调用质量下降')
+    await captureEvidence(page, {
+      path: testInfo.outputPath(`mode-a-toast-${theme}-${width}.png`),
+    })
+    // Multi-channel refresh button cycles to a different channel; single-channel cards hide it.
+    const cycleBtn = card.locator('[data-cycle-channel]')
+    await expect(cycleBtn).toBeVisible()
+    await cycleBtn.click()
+    await expect(card.locator('[data-channel-quote]')).not.toContainText(
+      '海外备用'
+    )
     await expect(
-      card.locator(
-        '[data-channel-quote] [data-catalog-offer-health="recovering"]'
-      )
-    ).toContainText('恢复观察')
+      page
+        .locator('[data-model-card][data-model-name="audio-preview"]')
+        .locator('[data-cycle-channel]')
+    ).toHaveCount(0)
     await assertNoHorizontalOverflow(page)
 
     await card

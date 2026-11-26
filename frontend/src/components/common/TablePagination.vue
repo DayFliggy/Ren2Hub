@@ -81,7 +81,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
     >
       <button
         type="button"
-        class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+        class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
         :disabled="page <= 1"
         :aria-label="t('common.prevPage')"
         @click="emit('update:page', page - 1)"
@@ -105,7 +105,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
       </span>
       <button
         type="button"
-        class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+        class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
         :disabled="page >= pageCount"
         :aria-label="t('common.nextPage')"
         @click="emit('update:page', page + 1)"
@@ -132,7 +132,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
     >
       <button
         type="button"
-        class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+        class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
         :disabled="page <= 1"
         :aria-label="t('common.prevPage')"
         @click="emit('update:page', page - 1)"
@@ -158,7 +158,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
         <button
           v-else
           type="button"
-          class="h-9 min-w-9 rounded-md px-2.5 font-medium transition-colors"
+          class="h-9 min-w-9 rounded-md px-2.5 font-medium transition-colors focus-ring"
           :style="
             item === page
               ? 'background:var(--accent);color:var(--accent-contrast)'
@@ -177,7 +177,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
       </template>
       <button
         type="button"
-        class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+        class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
         :disabled="page >= pageCount"
         :aria-label="t('common.nextPage')"
         @click="emit('update:page', page + 1)"
@@ -231,7 +231,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
       >
         <button
           type="button"
-          class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+          class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
           :disabled="page <= 1"
           :aria-label="t('common.prevPage')"
           @click="emit('update:page', page - 1)"
@@ -258,7 +258,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
         </span>
         <button
           type="button"
-          class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+          class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
           :disabled="page >= pageCount"
           :aria-label="t('common.nextPage')"
           @click="emit('update:page', page + 1)"
@@ -286,7 +286,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
       >
         <button
           type="button"
-          class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+          class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
           :disabled="page <= 1"
           :aria-label="t('common.prevPage')"
           @click="emit('update:page', page - 1)"
@@ -312,7 +312,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
           <button
             v-else
             type="button"
-            class="h-9 min-w-9 rounded-md px-2.5 font-medium transition-colors"
+            class="h-9 min-w-9 rounded-md px-2.5 font-medium transition-colors focus-ring"
             :style="
               item === page
                 ? 'background:var(--accent);color:var(--accent-contrast)'
@@ -331,7 +331,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
         </template>
         <button
           type="button"
-          class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+          class="flex h-9 min-w-9 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors focus-ring enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
           :disabled="page >= pageCount"
           :aria-label="t('common.nextPage')"
           @click="emit('update:page', page + 1)"

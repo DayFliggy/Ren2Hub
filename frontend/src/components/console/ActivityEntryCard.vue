@@ -48,7 +48,7 @@ const imageOk = ref(true)
     <div class="relative z-10 flex flex-col justify-between p-5">
       <div>
         <span
-          class="activity-entry__tag inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-[4px]"
+          class="activity-entry__tag inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-white"
         >
           {{ emoji }} {{ tag }}
         </span>

@@ -714,7 +714,7 @@ onBeforeUnmount(() => {
 
           <p
             v-if="draft.entries.length === 0 && !draft.orphan"
-            class="rounded-xl border border-dashed border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
+            class="rounded-xl border [border-style:var(--row-divider-style)] border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary-overlay,var(--text-tertiary))]"
           >
             {{
               ordered

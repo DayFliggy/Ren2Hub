@@ -337,6 +337,10 @@ function onPageHide() {
   resetInteraction()
   scene?.stop()
 }
+function onPageShow() {
+  resizeScene()
+  syncRunning()
+}
 
 let disposed = false
 
@@ -357,6 +361,7 @@ onMounted(async () => {
     // init() waits for the icons; a viewport change in that window must still
     // reach the scene, so listen before awaiting it.
     window.addEventListener('resize', onResize)
+    window.visualViewport?.addEventListener('resize', onResize)
     await scene.init()
   } catch (error) {
     // No 2D context (unsupported/constrained env) or init failed. The map is
@@ -384,6 +389,7 @@ onMounted(async () => {
   window.addEventListener('touchcancel', onWindowTouchCancel)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('pageshow', onPageShow)
 
   io = new IntersectionObserver(
     ([entry]) => {
@@ -400,6 +406,7 @@ onBeforeUnmount(() => {
   disposed = true
   cancelBoost() // clear any in-flight long-press timer
   window.removeEventListener('resize', onResize)
+  window.visualViewport?.removeEventListener('resize', onResize)
   window.removeEventListener('pointermove', onWindowMove)
   window.removeEventListener('click', onWindowClick)
   window.removeEventListener('focusin', onWindowFocusIn)
@@ -410,6 +417,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('touchcancel', onWindowTouchCancel)
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('pagehide', onPageHide)
+  window.removeEventListener('pageshow', onPageShow)
   io?.disconnect()
   scene?.dispose()
   scene = null // 卸载后防抖尾调用触发时 scene?.resize() 即为 no-op

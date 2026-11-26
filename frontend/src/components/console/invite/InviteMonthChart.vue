@@ -3,9 +3,10 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
-import { lineMood } from '@/charts/themePreset'
+import { lineMood, tooltipStyle } from '@/charts/themePreset'
 import type { AffiliateMonth } from '@/api/affiliate'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
@@ -17,6 +18,10 @@ const el = ref<HTMLElement | null>(null)
 
 type Mode = 'new' | 'cumulative'
 const mode = ref<Mode>('new')
+const modeOptions = computed(() => [
+  { value: 'new', label: t('invite.chartTabNew') },
+  { value: 'cumulative', label: t('invite.chartTabCumulative') },
+])
 
 const categories = computed(() => props.series.map((p) => p.month))
 const values = computed(() =>
@@ -38,9 +43,7 @@ useEChart(
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: p.surfaceSolid,
-      borderColor: p.borderSubtle,
-      textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+      ...tooltipStyle(p, scale),
       formatter: (params: { name: string; value: number }[]) => {
         const item = params[0]
         if (!item) return ''
@@ -91,26 +94,12 @@ useEChart(
 <template>
   <ConsoleCard :title="t('invite.chartTitle')">
     <template #action>
-      <div class="flex gap-1 rounded-lg bg-[var(--surface-muted)] p-0.5">
-        <button
-          v-for="m in ['new', 'cumulative'] as Mode[]"
-          :key="m"
-          type="button"
-          class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
-          :style="
-            mode === m
-              ? 'background:var(--surface-solid);color:var(--text-primary)'
-              : 'color:var(--text-tertiary)'
-          "
-          @click="mode = m"
-        >
-          {{
-            m === 'new'
-              ? t('invite.chartTabNew')
-              : t('invite.chartTabCumulative')
-          }}
-        </button>
-      </div>
+      <SegmentedToggle
+        v-model="mode"
+        :options="modeOptions"
+        :label="t('invite.chartTitle')"
+        size="sm"
+      />
     </template>
 
     <p

@@ -931,7 +931,7 @@ async function submit() {
           v-model="pluginKeys"
           multiple
           :size="Math.min(5, Math.max(2, availablePlugins.length))"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
+          class="console-input w-full p-2"
           @change="selectPluginKeys"
         >
           <option
@@ -980,7 +980,7 @@ async function submit() {
               <div class="relative" @keydown.esc="onTypeDropdownEscape">
                 <button
                   type="button"
-                  class="channel-type-trigger flex h-11 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
+                  class="channel-type-trigger flex h-11 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--studio-control-track,var(--surface-solid))] px-3 text-left text-sm focus-ring"
                   :aria-expanded="typeDropdownOpen"
                   :disabled="typeLocked"
                   @click="typeDropdownOpen = !typeDropdownOpen"
@@ -1002,7 +1002,8 @@ async function submit() {
 
                 <div
                   v-if="typeDropdownOpen"
-                  class="absolute left-0 top-[calc(100%+4px)] z-20 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-lg"
+                  data-handdrawn="menu"
+                  class="absolute left-0 top-[calc(100%+4px)] z-[var(--z-popover)] w-full rounded-xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] shadow-[var(--overlay-shadow)]"
                 >
                   <div class="p-2">
                     <input
@@ -1521,7 +1522,7 @@ async function submit() {
             <template v-if="modelMappingTab === 'visual'">
               <div
                 v-if="mappingRows.length === 0"
-                class="rounded-xl border border-dashed border-[var(--border-subtle)] px-4 py-5 text-center text-sm text-[var(--text-tertiary)]"
+                class="rounded-xl border [border-style:var(--row-divider-style)] border-[var(--border-subtle)] px-4 py-5 text-center text-sm text-[var(--text-tertiary)]"
               >
                 {{ t('channels.modelMappingEmpty') }}
               </div>
@@ -1559,7 +1560,7 @@ async function submit() {
               </div>
               <button
                 type="button"
-                class="mt-2 w-full rounded-xl border border-dashed border-[var(--border-subtle)] py-2 text-sm text-[var(--text-tertiary)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-colors"
+                class="mt-2 w-full rounded-xl border [border-style:var(--row-divider-style)] border-[var(--border-subtle)] py-2 text-sm text-[var(--text-tertiary)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-colors"
                 @click="addMappingRow"
               >
                 {{ t('channels.addMapping') }}

@@ -232,19 +232,8 @@ html.dark .landing-shell .signal-console {
   text-shadow: none;
 }
 
-/* The quieter rows stay at 4.5:1 or more against the page. */
-html.dark .landing-shell .signal-console__telemetry-row,
-html.dark .landing-shell .signal-console__capability,
-html.dark .landing-shell .signal-console__trace-record {
-  opacity: 0.8;
-}
-
-html.dark .landing-shell .signal-console__telemetry-row.is-target,
-html.dark .landing-shell .signal-console__capability.is-active,
-html.dark .landing-shell .signal-console__trace-record.is-focus {
-  opacity: 1;
-}
-
+/* Quiet rows rely on explicit --text-secondary / --text-tertiary tokens rather
+   than dark-mode opacity dimming so every label stays >= 4.5:1 on the backdrop. */
 html.dark .landing-shell .signal-console__rule {
   opacity: 0.34;
 }

@@ -417,7 +417,11 @@ html.dark .market-type-tab {
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  transition: all 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 html.dark .market-type-tab::before {
   display: none;
@@ -428,7 +432,7 @@ html.dark .market-type-tab:hover {
 }
 html.dark .market-type-tab.active {
   background: var(--studio-control-thumb);
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--outline-variant);
   box-shadow: var(--studio-control-thumb-shadow);
   color: var(--text-primary);
 }

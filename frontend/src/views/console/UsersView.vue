@@ -464,7 +464,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
       <div
         v-if="selectedIds.length > 0"
         data-user-bulk-actions
-        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+        class="console-bulk-bar flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5"
       >
         <div class="mr-auto min-w-0" aria-live="polite">
           <p class="text-xs font-semibold text-[var(--text-secondary)]">

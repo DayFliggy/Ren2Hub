@@ -433,7 +433,7 @@ onClickOutside(root, () => close())
 .theme-switcher__menu {
   position: absolute;
   right: 0;
-  z-index: 90;
+  z-index: var(--z-popover);
   width: 12.5rem;
   margin-top: 0.5rem;
   padding: 0.25rem;
@@ -442,7 +442,6 @@ onClickOutside(root, () => close())
   border-radius: 0.75rem;
   background: var(--theme-switcher-menu);
   box-shadow: var(--menu-shadow);
-  backdrop-filter: blur(20px);
 }
 
 .theme-switcher__option {

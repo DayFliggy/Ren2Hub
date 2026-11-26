@@ -3,9 +3,10 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
-import { lineMood } from '@/charts/themePreset'
+import { lineMood, tooltipStyle } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import type { HourlyPoint } from '@/composables/useDashboardStats'
 import { formatTime } from '@/utils/format'
 
@@ -68,9 +69,7 @@ useEChart(
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: p.surfaceSolid,
-        borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+        ...tooltipStyle(p, scale),
         axisPointer: p.isDark
           ? { type: 'shadow' }
           : {
@@ -132,9 +131,10 @@ useEChart(
     </template>
 
     <!-- h-36 is the floor; `grow` fills the row set by the model table beside it -->
-    <div
+    <SkeletonBlock
       v-if="loading"
-      class="h-52 grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-44 xl:h-36"
+      rounded="xl"
+      class="h-52 grow sm:h-44 xl:h-36"
     />
     <EmptyState
       v-else-if="error"

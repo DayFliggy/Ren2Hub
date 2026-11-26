@@ -2,16 +2,18 @@
 withDefaults(
   defineProps<{
     bordered?: boolean
-    rounded?: 'md' | 'lg' | 'xl' | '2xl'
+    rounded?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
   }>(),
   { bordered: false, rounded: '2xl' }
 )
 
 const roundedClass = {
+  sm: 'rounded-sm',
   md: 'rounded-md',
   lg: 'rounded-lg',
   xl: 'rounded-xl',
   '2xl': 'rounded-2xl',
+  full: 'rounded-full',
 } as const
 </script>
 

@@ -107,7 +107,7 @@ defineExpose({ validate, isDirty })
     <div v-else class="sibling-space-y-2">
       <p
         v-if="!rows.length"
-        class="rounded-xl border border-dashed border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary)]"
+        class="rounded-xl border [border-style:var(--row-divider-style)] border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary)]"
       >
         {{ t('endpointsEmpty') }}
       </p>

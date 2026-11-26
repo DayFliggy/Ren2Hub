@@ -30,7 +30,7 @@ function onChange(event: Event) {
 
 <template>
   <div
-    class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-6 text-center transition-colors"
+    class="flex flex-col items-center gap-2 rounded-xl border [border-style:var(--row-divider-style)] px-4 py-6 text-center transition-colors"
     :class="
       dragActive
         ? 'border-[var(--accent)] bg-[var(--accent-soft)]'

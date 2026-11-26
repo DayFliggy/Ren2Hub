@@ -184,7 +184,7 @@ onBeforeUnmount(() => {
           </span>
         </div>
         <div
-          class="h-2 overflow-hidden rounded-full bg-[var(--surface-solid)]"
+          class="h-2 overflow-hidden rounded-full bg-[var(--studio-control-track,var(--surface-muted))]"
           role="progressbar"
           :aria-valuenow="readPercent"
           aria-valuemin="0"
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
           <li
             v-for="row in rows"
             :key="row.user_id"
-            class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-3"
+            class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">

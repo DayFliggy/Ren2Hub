@@ -107,6 +107,7 @@ onBeforeUnmount(() => {
         v-if="shown"
         :id="id"
         role="tooltip"
+        data-handdrawn="toast"
         class="channel-status-reason"
         :style="position"
       >
@@ -128,7 +129,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .channel-status-reason {
   position: fixed;
-  z-index: 80;
+  z-index: var(--z-tooltip);
   width: min(20rem, calc(100vw - 2rem));
   max-height: min(20rem, 45vh);
   overflow: auto;
