@@ -27,7 +27,7 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 
 	// The guest home page shows only the model count, behind the /api/pricing gate.
 	middleware.DeclareAnyAccessTokenRoute(http.MethodGet, joinPaths(api.BasePath(), "/pricing/count"))
-	api.GET("/pricing/count", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricingCount)
+	api.GET("/pricing/count", middleware.DisableCache(), middleware.HeaderNavModuleAuth("pricing"), controller.GetPricingCount)
 	user := api.Group("/tickets", middleware.UserAuth())
 	handleSessionRoute(user, http.MethodGet, "", controller.ListTickets)
 	handleSessionRoute(user, http.MethodPost, "", middleware.CriticalRateLimit(), controller.CreateTicket)

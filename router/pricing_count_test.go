@@ -108,3 +108,23 @@ func TestPricingCountFollowsThePricingCatalogAndGate(t *testing.T) {
 		})
 	}
 }
+
+func TestPricingAndPerfMetricsDisableCaching(t *testing.T) {
+	engine, db := setupDashboardSystemStatusRouter(t)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
+	model.InvalidatePricingCache()
+	t.Cleanup(model.InvalidatePricingCache)
+
+	for _, path := range []string{
+		"/api/pricing",
+		"/api/pricing/count",
+		"/api/perf-metrics",
+		"/api/perf-metrics/summary",
+	} {
+		t.Run(path, func(t *testing.T) {
+			resp := getAPIWithBearer(engine, path, "")
+			assert.Contains(t, resp.Header().Get("Cache-Control"), "no-store")
+			assert.Equal(t, "no-cache", resp.Header().Get("Pragma"))
+		})
+	}
+}
