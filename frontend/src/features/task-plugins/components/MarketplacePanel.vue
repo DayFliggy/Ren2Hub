@@ -413,6 +413,7 @@ function openBulkUpdates() {
       :key="`${installTarget.source.index_url}-${installTarget.plugin.key}-${installTarget.version}`"
       :target="installTarget"
       @close="installTarget = null"
+      @changed="emit('changed')"
       @installed="onInstalled"
     />
   </div>

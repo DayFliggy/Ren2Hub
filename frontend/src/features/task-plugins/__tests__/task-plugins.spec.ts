@@ -186,4 +186,16 @@ describe('task plugin page', () => {
       expect(wrapper!.text()).not.toContain('Plugin is still in use')
     }
   )
+
+  it('dismisses the teleported help popover on Escape even after focus leaves the trigger', async () => {
+    await mountPage()
+    const trigger = wrapper!.get('[aria-controls="task-plugin-help"]')
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('#task-plugin-help').exists()).toBe(true)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper!.find('#task-plugin-help').exists()).toBe(false)
+  })
 })

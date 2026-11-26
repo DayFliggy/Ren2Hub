@@ -206,8 +206,11 @@ html.dark .console-toggle {
   box-shadow: var(--toggle-thumb-on-shadow-hover);
 }
 
-/* 焦点阴影替换轨道阴影，规则放在末尾靠源码顺序取胜。 */
-html:not(.dark) .console-toggle:focus-visible {
+/* 焦点阴影替换轨道阴影，规则放在末尾且选择器权重高于 checked:hover。 */
+html:not(.dark)
+  .console-toggle:is(.is-checked, .is-unchecked):focus-visible:not(
+    .is-disabled
+  ) {
   box-shadow: 0 0 0 3px var(--state-focus-layer);
 }
 

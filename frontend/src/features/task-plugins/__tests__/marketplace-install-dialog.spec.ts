@@ -260,4 +260,58 @@ describe('marketplace install dialog', () => {
     expect(button('Install and enable')).toBeUndefined()
     expect(button('Back')).toBeDefined()
   })
+
+  it('keeps the dialog open and shows activation errors without emitting installed prematurely', async () => {
+    await open(digest, { status: 'not_installed' })
+    vi.mocked(pluginApi.installMarketplacePlugin).mockResolvedValue({
+      plugin: {
+        id: 2,
+        key: 'fixture',
+        api_version: 1,
+        version: '2.0.0',
+        source,
+        source_hash: digest,
+        enabled: true,
+        active: false,
+        factory: false,
+        created_at: 1,
+        remark: 'Fixture source v2.0.0',
+      },
+      meta: {
+        key: 'fixture',
+        name: 'Fixture',
+        version: '2.0.0',
+        apiVersion: 1,
+        models: [],
+      },
+      source,
+      layer: 'override',
+    })
+    vi.mocked(pluginApi.activateTaskPlugin).mockRejectedValue(
+      new Error('route conflict')
+    )
+
+    await button('Install and enable').trigger('click')
+    await flushPromises()
+
+    expect(wrapper!.emitted('changed')).toHaveLength(1)
+    expect(wrapper!.emitted('installed')).toBeUndefined()
+    expect(wrapper!.text()).toContain('route conflict')
+  })
+
+  it('does not show identityMismatch when source download fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', { status: 503 })
+    )
+    wrapper = mount(MarketplaceInstallDialog, {
+      props: { target: target(digest, { status: 'not_installed' }) },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await vi.waitFor(() =>
+      expect(wrapper!.text()).toContain('Could not fetch the plugin source')
+    )
+    expect(wrapper!.text()).not.toContain(
+      'does not match the marketplace index'
+    )
+  })
 })

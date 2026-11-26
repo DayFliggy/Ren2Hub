@@ -60,7 +60,7 @@ const props = withDefaults(
   defineProps<{ target: MarketplaceInstallTarget; reviewOnly?: boolean }>(),
   { reviewOnly: false }
 )
-const emit = defineEmits<{ close: []; installed: [] }>()
+const emit = defineEmits<{ close: []; changed: []; installed: [] }>()
 const { t, locale } = useI18n()
 const notifyChange = usePluginChangeNotice()
 const plugin = props.target.plugin
@@ -159,12 +159,13 @@ const digestMismatch = computed(() =>
 const validationError = computed(() => {
   const version = entry.value
   if (!version) return ''
+  if ((version.minApiVersion ?? 1) > 1) return t('taskPlugins.unsupported')
+  if (loading.value || !fetched.value) return ''
   const issue = validateMarketplaceReleaseIdentity(
     plugin,
     version,
     previewMeta.value
   )
-  if (issue === 'unsupported_api') return t('taskPlugins.unsupported')
   if (issue === 'identity_mismatch') return t('taskPlugins.identityMismatch')
   return ''
 })
@@ -228,7 +229,6 @@ async function install() {
   installing.value = true
   installError.value = ''
   try {
-    let activatedFromInactive = false
     const detail = await installMarketplaceRelease(
       props.target.source,
       plugin,
@@ -236,17 +236,14 @@ async function install() {
       source,
       {
         previewMeta: previewMeta.value,
-        onUploaded: (uploaded) => {
-          // Refresh the installed list immediately after upload. Activation is
-          // a separate step and may fail even though the version was saved.
-          activatedFromInactive = Boolean(
-            uploaded.plugin && !uploaded.plugin.active
-          )
-          emit('installed')
+        onUploaded: () => {
+          // Refresh the installed list immediately after upload without closing
+          // the dialog so an activation failure stays visible to the admin.
+          emit('changed')
         },
       }
     )
-    if (activatedFromInactive) emit('installed')
+    emit('installed')
     notifyChange(
       t('taskPlugins.installedToast', {
         name: detail.meta.name,

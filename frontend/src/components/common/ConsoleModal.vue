@@ -289,7 +289,8 @@ html.dark .pencil-surface-strong[data-handdrawn='modal'] {
 @media (max-width: 639px) {
   [data-handdrawn='modal']:not(.console-drawer-panel) {
     max-height: calc(
-      100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+      var(--modal-vh, 100dvh) - 2rem - env(safe-area-inset-top) -
+        env(safe-area-inset-bottom)
     );
   }
 }

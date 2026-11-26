@@ -4,7 +4,7 @@
 // The page stays usable when the master switch is off.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { onClickOutside } from '@vueuse/core'
+import { onClickOutside, onKeyStroke } from '@vueuse/core'
 import { CircleHelp, Upload } from 'lucide-vue-next'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -119,6 +119,11 @@ function toggleEnabled(value: boolean) {
 }
 
 onClickOutside(helpPanel, () => (helpOpen.value = false), { ignore: [help] })
+onKeyStroke('Escape', (event) => {
+  if (!helpOpen.value || event.defaultPrevented) return
+  event.preventDefault()
+  helpOpen.value = false
+})
 void loadPlugins()
 void loadEnabled()
 
