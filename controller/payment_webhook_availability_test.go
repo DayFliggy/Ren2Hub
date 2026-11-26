@@ -429,6 +429,21 @@ func TestEpayRSAModeSignsOrdersAndVerifiesCallbacks(t *testing.T) {
 	require.NoError(t, err)
 	md5Signed, err := md5Client.SignParams(paidFields)
 	require.NoError(t, err)
+	otherMerchantPlatform, err := epay.NewClient(&epay.Config{
+		PartnerID: "other_merchant", SignType: epay.SignTypeRSA,
+		MerchantPrivateKey: platformPrivateKey, PlatformPublicKey: merchantPublicKey,
+	}, "https://pay.example.com")
+	require.NoError(t, err)
+	otherMerchantPaid, err := otherMerchantPlatform.SignParams(paidFields)
+	require.NoError(t, err)
+	missingPIDPlatform, err := epay.NewClient(&epay.Config{
+		PartnerID: "", SignType: epay.SignTypeRSA,
+		MerchantPrivateKey: platformPrivateKey, PlatformPublicKey: merchantPublicKey,
+	}, "https://pay.example.com")
+	require.NoError(t, err)
+	missingPIDPaid, err := missingPIDPlatform.SignParams(paidFields)
+	require.NoError(t, err)
+	delete(missingPIDPaid, "pid")
 	unsigned := maps.Clone(paid)
 	delete(unsigned, "sign")
 
@@ -437,6 +452,8 @@ func TestEpayRSAModeSignsOrdersAndVerifiesCallbacks(t *testing.T) {
 		{name: "tampered amount", params: tampered},
 		{name: "signed with merchant key", params: merchantSigned},
 		{name: "MD5 signature in RSA mode", params: md5Signed},
+		{name: "mismatched partner id", params: otherMerchantPaid},
+		{name: "missing partner id", params: missingPIDPaid},
 		{name: "missing signature", params: unsigned},
 	})
 
@@ -480,6 +497,126 @@ func TestEpayRSAModeSignsOrdersAndVerifiesCallbacks(t *testing.T) {
 	var topupLogs int64
 	require.NoError(t, db.Model(&model.Log{}).Where("user_id = ? AND type = ?", user.Id, model.LogTypeTopup).Count(&topupLogs).Error)
 	assert.EqualValues(t, 1, topupLogs)
+}
+
+func TestEpayRSACallbackRejectsMismatchedOrMissingPartnerID(t *testing.T) {
+	setupEpayCallbackTest(t)
+	paymentSetting := operation_setting.GetPaymentSetting()
+	merchantPrivateKey, merchantPublicKey := newEpayRSAKeyPairForTest(t)
+	platformPrivateKey, platformPublicKey := newEpayRSAKeyPairForTest(t)
+	paymentSetting.EpaySignType = operation_setting.EpaySignTypeRSA
+	paymentSetting.EpayMerchantPrivateKey = merchantPrivateKey
+	paymentSetting.EpayPlatformPublicKey = platformPublicKey
+
+	db := modelManagementDB(t, "sqlite", "")
+	require.NoError(t, db.AutoMigrate(&model.TopUp{}, &model.Log{}, &model.AffiliateRecord{}, &model.TopUpBonusDecisionRecord{}, &model.TopUpBonusConfigVersion{}, &model.TopUpBonusUsageHourly{}, &model.SystemTask{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+
+	user := model.User{Username: "rsa-pid-payer", AffCode: "rsa-pid-payer"}
+	require.NoError(t, db.Create(&user).Error)
+	orderRow := model.TopUp{
+		UserId: user.Id, TradeNo: "rsa-pid-order", Amount: 1, Money: 1, Currency: "CNY",
+		PayAmount: "1.00", ExpectedQuota: 500000, PaymentMethod: "alipay",
+		PaymentProvider: model.PaymentProviderEpay, Status: common.TopUpStatusPending,
+	}
+	require.NoError(t, db.Create(&orderRow).Error)
+
+	paidFields := map[string]string{
+		"type": "alipay", "money": "1.00", "name": "item",
+		"out_trade_no": orderRow.TradeNo, "trade_status": epay.StatusTradeSuccess,
+	}
+	otherPlatform, err := epay.NewClient(&epay.Config{
+		PartnerID: "other_merchant", SignType: epay.SignTypeRSA,
+		MerchantPrivateKey: platformPrivateKey, PlatformPublicKey: merchantPublicKey,
+	}, "https://pay.example.com")
+	require.NoError(t, err)
+	otherSigned, err := otherPlatform.SignParams(paidFields)
+	require.NoError(t, err)
+
+	missingPIDPlatform, err := epay.NewClient(&epay.Config{
+		PartnerID: "", SignType: epay.SignTypeRSA,
+		MerchantPrivateKey: platformPrivateKey, PlatformPublicKey: merchantPublicKey,
+	}, "https://pay.example.com")
+	require.NoError(t, err)
+	missingPIDSigned, err := missingPIDPlatform.SignParams(paidFields)
+	require.NoError(t, err)
+	delete(missingPIDSigned, "pid")
+
+	send := func(method string, params map[string]string) *httptest.ResponseRecorder {
+		values := url.Values{}
+		for key, value := range params {
+			values.Set(key, value)
+		}
+		req := httptest.NewRequest(method, "/api/user/epay/notify?"+values.Encode(), nil)
+		if method == http.MethodPost {
+			req = httptest.NewRequest(method, "/api/user/epay/notify", strings.NewReader(values.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = req
+		EpayNotify(ctx)
+		return recorder
+	}
+
+	for _, tc := range []struct {
+		name   string
+		params map[string]string
+	}{
+		{"mismatched pid", otherSigned},
+		{"missing pid", missingPIDSigned},
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			t.Run(tc.name+"/"+method, func(t *testing.T) {
+				recorder := send(method, tc.params)
+				assert.Equal(t, http.StatusOK, recorder.Code)
+				assert.Equal(t, "fail", recorder.Body.String())
+				require.NoError(t, db.First(&user, user.Id).Error)
+				require.NoError(t, db.First(&orderRow, orderRow.Id).Error)
+				assert.Equal(t, 0, user.Quota)
+				assert.Equal(t, common.TopUpStatusPending, orderRow.Status)
+			})
+		}
+	}
+
+	// Matching RSA partner ID settles the pending order once.
+	ownPlatform, err := epay.NewClient(&epay.Config{
+		PartnerID: "epay_id", SignType: epay.SignTypeRSA,
+		MerchantPrivateKey: platformPrivateKey, PlatformPublicKey: merchantPublicKey,
+	}, "https://pay.example.com")
+	require.NoError(t, err)
+	ownSigned, err := ownPlatform.SignParams(paidFields)
+	require.NoError(t, err)
+	recorder := send(http.MethodPost, ownSigned)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "success", recorder.Body.String())
+	require.NoError(t, db.First(&user, user.Id).Error)
+	require.NoError(t, db.First(&orderRow, orderRow.Id).Error)
+	assert.Equal(t, 500000, user.Quota)
+	assert.Equal(t, common.TopUpStatusSuccess, orderRow.Status)
+
+	// MD5 mode keeps existing behavior even when callback pid differs or is omitted.
+	paymentSetting.EpaySignType = operation_setting.EpaySignTypeMD5
+	operation_setting.EpayKey = "test-key"
+	md5Order := model.TopUp{
+		UserId: user.Id, TradeNo: "md5-pid-order", Amount: 1, Money: 1, Currency: "CNY",
+		PayAmount: "1.00", ExpectedQuota: 500000, PaymentMethod: "alipay",
+		PaymentProvider: model.PaymentProviderEpay, Status: common.TopUpStatusPending,
+	}
+	require.NoError(t, db.Create(&md5Order).Error)
+	md5Params := map[string]string{
+		"type": "alipay", "money": "1.00", "name": "item",
+		"out_trade_no": md5Order.TradeNo, "trade_status": epay.StatusTradeSuccess,
+		"sign_type": "MD5",
+		"sign":      epay.MD5String("money=1.00&name=item&out_trade_no=md5-pid-order&trade_status=TRADE_SUCCESS&type=alipay", "test-key"),
+	}
+	md5Recorder := send(http.MethodGet, md5Params)
+	assert.Equal(t, http.StatusOK, md5Recorder.Code)
+	assert.Equal(t, "success", md5Recorder.Body.String())
+	require.NoError(t, db.First(&md5Order, md5Order.Id).Error)
+	assert.Equal(t, common.TopUpStatusSuccess, md5Order.Status)
 }
 
 func TestUpdateOptionValidatesEpaySignSettings(t *testing.T) {
