@@ -3,27 +3,35 @@
 // requested; alternates stay idle until the administrator switches.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RefreshCw, Settings2, TriangleAlert } from 'lucide-vue-next'
+import {
+  ListRestart,
+  RefreshCw,
+  Settings2,
+  TriangleAlert,
+} from 'lucide-vue-next'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
+import { formatNumber } from '@/utils/format'
+import { localizedText } from '@/utils/localizedText'
 
 import { pluginSite } from '../lib/plugin-site'
-import { localizedText } from '@/utils/localizedText'
 import { listMarketplaceSources } from '../api'
 import {
-  DEFAULT_MARKETPLACE_INDEX_URL,
   deriveInstallState,
   fetchMarketplaceIndex,
   findPluginByCode,
-  marketplaceSourceKind,
+  findRevokedEntry,
+  getMarketplaceUpdates,
   indexHasIntegrityHashes,
   isDefaultMarketplaceSource,
+  marketplaceSourceDisplayName,
+  marketplaceSourceKind,
 } from '../lib/marketplace'
-import { PluginSourceFetchError } from '../lib/plugin-url'
+import { formatMarketplaceIndexError } from '../lib/marketplace-install'
 import type {
   MarketplaceIndex,
   MarketplaceSource,
@@ -34,9 +42,19 @@ import MarketplaceInstallDialog, {
 } from './MarketplaceInstallDialog.vue'
 import MarketplacePluginCard from './MarketplacePluginCard.vue'
 import MarketplaceSourcesDialog from './MarketplaceSourcesDialog.vue'
+import MarketplaceUpdatesDialog, {
+  type MarketplaceUpdateSelection,
+} from './MarketplaceUpdatesDialog.vue'
 import PluginAlert from './PluginAlert.vue'
 
-const props = defineProps<{ installed: TaskPluginListItem[] }>()
+const props = withDefaults(
+  defineProps<{
+    installed: TaskPluginListItem[]
+    installedLoading?: boolean
+    installedError?: string
+  }>(),
+  { installedLoading: false, installedError: '' }
+)
 const emit = defineEmits<{ changed: [] }>()
 const { t, locale } = useI18n()
 
@@ -77,6 +95,7 @@ async function resolveCode() {
 }
 onBeforeUnmount(() => codeRequest.abort())
 const installTarget = ref<MarketplaceInstallTarget | null>(null)
+const updateSelection = ref<MarketplaceUpdateSelection | null>(null)
 let controller: AbortController | undefined
 
 const selected = computed(
@@ -90,14 +109,36 @@ const sourceOptions = computed(() =>
     // The built-in source names come from the server as English identifiers.
     // Keep custom names editable while presenting the defaults in the active
     // console language.
-    label:
-      source.index_url === DEFAULT_MARKETPLACE_INDEX_URL
-        ? t('taskPlugins.official')
-        : source.name,
+    label: marketplaceSourceDisplayName(source, t('taskPlugins.official')),
   }))
 )
 const missingHashes = computed(() =>
   index.value ? !indexHasIntegrityHashes(index.value) : false
+)
+const revokedAlerts = computed(() => {
+  const currentIndex = index.value
+  if (!currentIndex?.revoked?.length) return []
+  const seen = new Set<string>()
+  return props.installed.flatMap((plugin) => {
+    const entry = findRevokedEntry(currentIndex, plugin.source_hash)
+    if (!entry || seen.has(entry.sha256)) return []
+    seen.add(entry.sha256)
+    return [entry]
+  })
+})
+const updates = computed(() =>
+  index.value ? getMarketplaceUpdates(index.value, props.installed) : []
+)
+const readyUpdateCount = computed(
+  () => updates.value.filter((item) => !item.skip).length
+)
+const bulkUpdateDisabled = computed(
+  () =>
+    !selected.value ||
+    indexLoading.value ||
+    Boolean(indexError.value) ||
+    props.installedLoading ||
+    Boolean(props.installedError)
 )
 
 async function loadSources() {
@@ -134,12 +175,7 @@ async function loadIndex() {
     if (!request.signal.aborted) index.value = result
   } catch (error) {
     if (request.signal.aborted) return
-    indexError.value =
-      error instanceof PluginSourceFetchError && error.reason === 'not_found'
-        ? t('taskPlugins.indexHttp', { status: error.status ?? 0 })
-        : error instanceof Error
-          ? error.message
-          : String(error)
+    indexError.value = formatMarketplaceIndexError(error, t)
   } finally {
     if (!request.signal.aborted) indexLoading.value = false
   }
@@ -159,6 +195,12 @@ function onInstalled() {
   installTarget.value = null
   emit('changed')
 }
+
+function openBulkUpdates() {
+  if (!selected.value || bulkUpdateDisabled.value || updates.value.length === 0)
+    return
+  updateSelection.value = { source: selected.value, updates: updates.value }
+}
 </script>
 
 <template>
@@ -174,25 +216,36 @@ function onInstalled() {
         <option value="pro">www.newapi.pro</option>
       </select>
     </div>
-    <template v-for="entry in index?.revoked ?? []" :key="entry.sha256"
-      ><PluginAlert
-        v-if="
-          installed.some(
-            (plugin) => plugin.source_hash?.toLowerCase() === entry.sha256
-          )
-        "
-        tone="danger"
-        >{{
-          t('pluginExtensions.revoked', { name: entry.key || entry.sha256 })
-        }}
-        {{ localizedText(entry.reason, locale) }}</PluginAlert
-      ></template
+    <PluginAlert
+      v-for="entry in revokedAlerts"
+      :key="entry.sha256"
+      tone="danger"
+      >{{ t('pluginExtensions.revoked', { name: entry.key || entry.sha256 }) }}
+      {{ localizedText(entry.reason, locale) }}</PluginAlert
     >
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-[var(--text-secondary)]">
         {{ t('taskPlugins.marketHint') }}
       </p>
-      <div class="flex shrink-0 gap-2">
+      <div class="flex flex-wrap shrink-0 gap-2">
+        <ConsoleButton
+          v-if="updates.length > 0"
+          :variant="readyUpdateCount > 0 ? 'primary' : 'secondary'"
+          size="sm"
+          :disabled="bulkUpdateDisabled"
+          @click="openBulkUpdates"
+        >
+          <ListRestart :size="14" aria-hidden="true" />
+          {{
+            readyUpdateCount > 0
+              ? t('taskPlugins.updateAllCount', {
+                  total: formatNumber(readyUpdateCount),
+                })
+              : t('taskPlugins.skippedCount', {
+                  total: formatNumber(updates.length),
+                })
+          }}
+        </ConsoleButton>
         <ConsoleButton
           variant="secondary"
           size="sm"
@@ -275,9 +328,7 @@ function onInstalled() {
         <h3 class="text-sm font-semibold">
           {{
             index?.name ||
-            (selected.index_url === DEFAULT_MARKETPLACE_INDEX_URL
-              ? t('taskPlugins.official')
-              : selected.name)
+            marketplaceSourceDisplayName(selected, t('taskPlugins.official'))
           }}
         </h3>
         <StatusChip
@@ -349,6 +400,13 @@ function onInstalled() {
       :sources="sources ?? []"
       @close="sourcesOpen = false"
       @saved="sourcesSaved"
+    />
+    <MarketplaceUpdatesDialog
+      v-if="updateSelection"
+      :source="updateSelection.source"
+      :updates="updateSelection.updates"
+      @close="updateSelection = null"
+      @changed="emit('changed')"
     />
     <MarketplaceInstallDialog
       v-if="installTarget"

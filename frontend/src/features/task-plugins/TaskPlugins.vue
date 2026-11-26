@@ -240,7 +240,13 @@ const overrides = computed(() =>
           @changed="loadPlugins"
         />
       </template>
-      <MarketplacePanel v-else :installed="plugins" @changed="loadPlugins" />
+      <MarketplacePanel
+        v-else
+        :installed="plugins"
+        :installed-loading="pluginsLoading"
+        :installed-error="pluginsError"
+        @changed="loadPlugins"
+      />
     </div>
     <PluginDetailSheet
       v-if="detail"

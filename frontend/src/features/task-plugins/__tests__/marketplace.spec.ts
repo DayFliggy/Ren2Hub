@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DEFAULT_MARKETPLACE_INDEX_URL,
   deriveInstallState,
+  findRevokedEntry,
+  getMarketplaceUpdates,
+  marketplaceSourceDisplayName,
   parseMarketplaceIndex,
   replaceConfirmationReason,
   resolvePluginSourceUrl,
@@ -10,7 +14,11 @@ import {
   previewFromServer,
   resolvePluginMetaPreview,
 } from '../lib/plugin-meta-preview'
-import type { MarketplacePlugin, TaskPluginListItem } from '../types'
+import type {
+  MarketplaceIndex,
+  MarketplacePlugin,
+  TaskPluginListItem,
+} from '../types'
 
 const plugin: MarketplacePlugin = {
   key: 'fixture',
@@ -160,5 +168,109 @@ describe('server metadata preview', () => {
     })
     // A field the source omits stays "not declared", never an index hint.
     expect(fields.baseUrl).toEqual({ state: 'missing', origin: 'source' })
+  })
+})
+
+describe('bulk update eligibility and source localization', () => {
+  const oldHash = 'a'.repeat(64)
+  const newHash = 'b'.repeat(64)
+  const listedPlugin: MarketplacePlugin = {
+    key: 'doubao',
+    name: 'Doubao',
+    latest: '1.2.0',
+    versions: [
+      { version: '1.2.0', path: 'doubao/1.2.0.js', sha256: newHash },
+      { version: '1.0.0', path: 'doubao/1.0.0.js', sha256: oldHash },
+    ],
+  }
+  const index: MarketplaceIndex = {
+    indexVersion: 1,
+    name: 'Official',
+    plugins: [listedPlugin],
+  }
+  const localItem = (
+    version: string,
+    overrides: Partial<TaskPluginListItem> = {}
+  ): TaskPluginListItem => ({
+    ...installed(version)[0]!,
+    meta: { ...installed(version)[0]!.meta, key: 'doubao', name: 'Doubao' },
+    source_hash: oldHash.toUpperCase(),
+    ...overrides,
+  })
+
+  it('includes each eligible key once and ignores current, unlisted, and uninstalled plugins', () => {
+    const updates = getMarketplaceUpdates(
+      { ...index, plugins: [listedPlugin, listedPlugin] },
+      [localItem('1.0.0')]
+    )
+    expect(
+      updates.map((item) => [item.plugin.key, item.target.version, item.skip])
+    ).toEqual([['doubao', '1.2.0', undefined]])
+
+    for (const items of [
+      [],
+      [localItem('1.2.0')],
+      [localItem('1.5.0-local')],
+    ]) {
+      expect(getMarketplaceUpdates(index, items)).toEqual([])
+    }
+  })
+
+  it('classifies revoked, disabled, unverified, and modified plugins in priority order', () => {
+    const local = localItem('1.0.0')
+    expect(
+      getMarketplaceUpdates(index, [{ ...local, enabled: false }])[0]?.skip
+    ).toBe('disabled')
+    expect(
+      getMarketplaceUpdates(index, [
+        { ...local, source_hash: 'c'.repeat(64) },
+      ])[0]?.skip
+    ).toBe('modified')
+
+    for (const hash of [oldHash, newHash]) {
+      expect(
+        getMarketplaceUpdates({ ...index, revoked: [{ sha256: hash }] }, [
+          { ...local, enabled: false },
+        ])[0]?.skip
+      ).toBe('revoked')
+    }
+
+    for (const entry of listedPlugin.versions) {
+      const versions = listedPlugin.versions.map((v) =>
+        v.version === entry.version ? { ...v, sha256: 'invalid' } : v
+      )
+      expect(
+        getMarketplaceUpdates(
+          { ...index, plugins: [{ ...listedPlugin, versions }] },
+          [local]
+        )[0]?.skip
+      ).toBe('unverified')
+    }
+    expect(
+      getMarketplaceUpdates(index, [{ ...local, source_hash: '' }])[0]?.skip
+    ).toBe('unverified')
+  })
+
+  it('normalizes revoked hash lookups and localizes the default official source name', () => {
+    const revokedIndex: MarketplaceIndex = {
+      ...index,
+      revoked: [{ sha256: oldHash, key: 'doubao' }],
+    }
+    expect(findRevokedEntry(revokedIndex, oldHash.toUpperCase())?.key).toBe(
+      'doubao'
+    )
+    expect(findRevokedEntry(revokedIndex, '')).toBeUndefined()
+    expect(
+      marketplaceSourceDisplayName(
+        { name: 'Official', index_url: DEFAULT_MARKETPLACE_INDEX_URL },
+        '官方'
+      )
+    ).toBe('官方')
+    expect(
+      marketplaceSourceDisplayName(
+        { name: 'Mirror', index_url: 'https://mirror.example/index.json' },
+        '官方'
+      )
+    ).toBe('Mirror')
   })
 })

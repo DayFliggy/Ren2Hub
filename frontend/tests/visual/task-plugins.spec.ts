@@ -121,9 +121,12 @@ for (const [theme, width] of [
       await route.fulfill({ json: { success: true, data } })
     })
     const englishNotes =
-      '---\nchangelogVersion: 1\nplugin: fixture\nversion: 1.0.0\nlocale: en\ntranslations:\n  zh-CN: CHANGELOG.zh-CN.md\n---\n# Changelog\n## [1.0.0]\n### Fixed\n- Corrected fixture handling.\n'
+      '---\nchangelogVersion: 1\nplugin: fixture\nversion: 1.1.0\nlocale: en\ntranslations:\n  zh-CN: CHANGELOG.zh-CN.md\n---\n# Changelog\n## [1.1.0]\n### Fixed\n- Corrected fixture handling.\n'
     const chineseNotes =
-      '---\nchangelogVersion: 1\nplugin: fixture\nversion: 1.0.0\nlocale: zh-CN\n---\n# Changelog\n## [1.0.0]\n### Fixed\n- 修复示例处理。\n'
+      '---\nchangelogVersion: 1\nplugin: fixture\nversion: 1.1.0\nlocale: zh-CN\n---\n# Changelog\n## [1.1.0]\n### Fixed\n- 修复示例处理。\n'
+    const upgradedSource =
+      'export const meta = { key: "fixture", name: "Fixture Driver", version: "1.1.0", apiVersion: 1 }\n'
+    const upgradedHash = 'b'.repeat(64)
     await page.route('https://plugins.example/**', (route) => {
       const path = new URL(route.request().url()).pathname
       if (path.endsWith('index.json'))
@@ -133,8 +136,14 @@ for (const [theme, width] of [
             plugins: [
               {
                 ...meta,
-                latest: meta.version,
+                name_i18n: { 'zh-CN': '示例驱动', en: 'Fixture Driver' },
+                latest: '1.1.0',
                 versions: [
+                  {
+                    version: '1.1.0',
+                    path: 'fixture/1.1.0/plugin.js',
+                    sha256: upgradedHash,
+                  },
                   {
                     version: meta.version,
                     path: 'fixture/1.0.0/plugin.js',
@@ -144,6 +153,11 @@ for (const [theme, width] of [
               },
             ],
           },
+        })
+      if (path.endsWith('/1.1.0/plugin.js'))
+        return route.fulfill({
+          contentType: 'text/javascript',
+          body: upgradedSource,
         })
       return route.fulfill({
         contentType: 'text/plain',
@@ -221,13 +235,13 @@ for (const [theme, width] of [
       path: test.info().outputPath('plugin-pricing-warning.png'),
     })
 
-    // Marketplace: the index hash does not match the served source.
+    // Marketplace: single install integrity check + localized bulk updates dialog.
     await page.getByRole('tab', { name: '插件市场', exact: true }).click()
     await expect(
       page.getByText('图片与视频任务', { exact: true })
     ).toBeVisible()
     await page.getByRole('button', { name: '安装', exact: true }).click()
-    const install = page.getByRole('dialog', { name: '安装 Fixture Driver' })
+    const install = page.getByRole('dialog', { name: '安装 示例驱动' })
     await expect(install.getByText('完整性校验失败')).toBeVisible()
     await expect(
       install.getByRole('button', { name: '安装并启用' })
@@ -238,6 +252,29 @@ for (const [theme, width] of [
     ).toBeVisible()
     await assertNoHorizontalOverflow(page)
     await install.getByRole('button', { name: '取消', exact: true }).click()
+
+    // Bulk updates dialog with localized names and nested review-only diff modal.
+    await page.getByRole('button', { name: '更新全部（1）' }).click()
+    const bulk = page.getByRole('dialog', { name: '更新已安装插件' })
+    await expect(bulk.getByText('示例驱动')).toBeVisible()
+    await expect(bulk.getByText('v1.0.0')).toBeVisible()
+    await expect(bulk.getByText('v1.1.0')).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await bulk.getByRole('button', { name: '查看「示例驱动」的变更' }).click()
+    const review = page.getByRole('dialog', { name: '示例驱动' })
+    await expect(review.getByRole('tab', { name: '更新日志' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await expect(
+      review.getByRole('button', { name: '安装并启用' })
+    ).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
+    await page.keyboard.press('Escape')
+    await expect(review).toHaveCount(0)
+    await expect(bulk).toBeVisible()
+    await bulk.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(bulk).toHaveCount(0)
     await assertNoHorizontalOverflow(page)
   })
 }

@@ -12,31 +12,28 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
+import { localizedText } from '@/utils/localizedText'
 import { usePluginChangeNotice } from '../usePluginChangeNotice'
 
+import { getTaskPlugin, previewTaskPlugin } from '../api'
 import {
-  activateTaskPlugin,
-  getTaskPlugin,
-  installMarketplacePlugin,
-  previewTaskPlugin,
-} from '../api'
-import {
-  DEFAULT_MARKETPLACE_INDEX_URL,
   findMarketplaceVersion,
+  marketplaceSourceDisplayName,
   replaceConfirmationReason,
-  resolvePluginSourceUrl,
   type InstallState,
 } from '../lib/marketplace'
-import { fetchPluginIconDataUri } from '../lib/plugin-icon-file'
+import {
+  downloadMarketplaceRelease,
+  formatMarketplaceInstallError,
+  installMarketplaceRelease,
+  MarketplaceActivationError,
+  validateMarketplaceReleaseIdentity,
+  type MarketplaceReleaseDownload,
+} from '../lib/marketplace-install'
 import {
   previewFromServer,
   unavailablePreview,
 } from '../lib/plugin-meta-preview'
-import {
-  computeSourceSha256,
-  fetchPluginSourceText,
-  PluginSourceFetchError,
-} from '../lib/plugin-url'
 import type {
   MarketplacePlugin,
   MarketplaceSource,
@@ -59,26 +56,28 @@ export type MarketplaceInstallTarget = {
   installState: InstallState
 }
 
-const props = defineProps<{ target: MarketplaceInstallTarget }>()
+const props = withDefaults(
+  defineProps<{ target: MarketplaceInstallTarget; reviewOnly?: boolean }>(),
+  { reviewOnly: false }
+)
 const emit = defineEmits<{ close: []; installed: [] }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const notifyChange = usePluginChangeNotice()
 const plugin = props.target.plugin
 const state = props.target.installState
 const hasInstalled = state.status !== 'not_installed'
 const selectedVersion = ref(props.target.version)
-const reviewTab = ref('details')
+const reviewTab = ref(props.reviewOnly ? 'changelog' : 'details')
 const entry = computed(() =>
   findMarketplaceVersion(plugin, selectedVersion.value)
+)
+const displayName = computed(
+  () => localizedText(plugin.name_i18n, locale.value) || plugin.name
 )
 
 const loading = ref(false)
 const fetchError = ref('')
-const fetched = ref<{
-  text: string
-  digest: string | null
-  icon: string | null
-} | null>(null)
+const fetched = ref<MarketplaceReleaseDownload | null>(null)
 const preview = ref<PluginMetaPreview | undefined>()
 const previewMeta = ref<Record<string, unknown> | null>(null)
 const installedSource = ref<string | null>(null)
@@ -101,35 +100,21 @@ async function loadSource() {
   fetchError.value = ''
   const version = entry.value
   if (!version) return
-  const url = resolvePluginSourceUrl(
-    props.target.source.index_url,
-    version.path
-  )
-  if (!url) {
-    fetchError.value = t('taskPlugins.pathOutside')
-    return
-  }
   loading.value = true
   try {
-    const text = await fetchPluginSourceText(url, request.signal)
-    // Computed for display and blocking only; the server re-hashes on upload.
-    const digest = await computeSourceSha256(text)
-    const iconUrl = plugin.iconFile
-      ? resolvePluginSourceUrl(
-          props.target.source.index_url,
-          plugin.iconFile.path
-        )
-      : null
-    const icon = iconUrl
-      ? await fetchPluginIconDataUri(iconUrl, {
-          sha256: plugin.iconFile?.sha256,
-          signal: request.signal,
-        })
-      : null
+    const release = await downloadMarketplaceRelease(
+      props.target.source,
+      plugin,
+      version,
+      request.signal
+    )
     if (request.signal.aborted) return
-    fetched.value = { text, digest, icon }
+    fetched.value = release
     try {
-      const serverPreview = await previewTaskPlugin(text, request.signal)
+      const serverPreview = await previewTaskPlugin(
+        release.text,
+        request.signal
+      )
       previewMeta.value = serverPreview.meta
       preview.value = previewFromServer(serverPreview)
     } catch {
@@ -139,12 +124,7 @@ async function loadSource() {
     }
   } catch (error) {
     if (request.signal.aborted) return
-    fetchError.value =
-      error instanceof PluginSourceFetchError
-        ? error.reason === 'too_large'
-          ? t('taskPlugins.sourceTooLarge')
-          : t('taskPlugins.fetchSourceFailed')
-        : message(error)
+    fetchError.value = formatMarketplaceInstallError(error, t)
   } finally {
     if (!request.signal.aborted) loading.value = false
   }
@@ -179,15 +159,18 @@ const digestMismatch = computed(() =>
 const validationError = computed(() => {
   const version = entry.value
   if (!version) return ''
-  if ((version.minApiVersion ?? 1) > 1) return t('taskPlugins.unsupported')
-  const meta = previewMeta.value
-  if (!meta) return t('taskPlugins.identityMismatch')
-  if (meta.key !== plugin.key || meta.version !== selectedVersion.value)
-    return t('taskPlugins.identityMismatch')
+  const issue = validateMarketplaceReleaseIdentity(
+    plugin,
+    version,
+    previewMeta.value
+  )
+  if (issue === 'unsupported_api') return t('taskPlugins.unsupported')
+  if (issue === 'identity_mismatch') return t('taskPlugins.identityMismatch')
   return ''
 })
 const canInstall = computed(
   () =>
+    !props.reviewOnly &&
     Boolean(entry.value && fetched.value) &&
     !loading.value &&
     !fetchError.value &&
@@ -234,45 +217,49 @@ async function install() {
   const version = entry.value
   confirmOpen.value = false
   // The digest gate is re-checked here so no caller can bypass it.
-  if (!source || !version || digestMismatch.value || validationError.value)
+  if (
+    props.reviewOnly ||
+    !source ||
+    !version ||
+    digestMismatch.value ||
+    validationError.value
+  )
     return
   installing.value = true
   installError.value = ''
   try {
-    const detail = await installMarketplacePlugin({
-      source: source.text,
-      marketplaceIndexUrl: props.target.source.index_url,
-      sourceSha256: version.sha256,
-      remark: `${props.target.source.name} v${selectedVersion.value}`,
-      icon: source.icon ?? undefined,
-    })
-    // Refresh the installed list immediately after the upload. Activation is
-    // a separate operation and may fail even though the version was saved.
-    emit('installed')
-    let issues = detail.pricing_issues
-    if (detail.plugin && !detail.plugin.active) {
-      try {
-        const notice = await activateTaskPlugin(
-          detail.meta.key,
-          detail.meta.version
-        )
-        issues = notice?.pricing_issues
-        emit('installed')
-      } catch (error) {
-        installError.value = message(error)
-        return
+    let activatedFromInactive = false
+    const detail = await installMarketplaceRelease(
+      props.target.source,
+      plugin,
+      version,
+      source,
+      {
+        previewMeta: previewMeta.value,
+        onUploaded: (uploaded) => {
+          // Refresh the installed list immediately after upload. Activation is
+          // a separate step and may fail even though the version was saved.
+          activatedFromInactive = Boolean(
+            uploaded.plugin && !uploaded.plugin.active
+          )
+          emit('installed')
+        },
       }
-    }
+    )
+    if (activatedFromInactive) emit('installed')
     notifyChange(
       t('taskPlugins.installedToast', {
         name: detail.meta.name,
         version: detail.meta.version,
       }),
-      issues
+      detail.pricing_issues
     )
   } catch (error) {
-    // Verbatim: preflight rejections name the conflicting plugin.
-    installError.value = message(error)
+    // Verbatim: preflight or activation rejections name the conflicting plugin.
+    installError.value =
+      error instanceof MarketplaceActivationError
+        ? error.message
+        : formatMarketplaceInstallError(error, t)
   } finally {
     installing.value = false
   }
@@ -282,14 +269,18 @@ async function install() {
 <template>
   <ConsoleModal
     :open="true"
-    :title="t('taskPlugins.installName', { name: plugin.name })"
+    :title="
+      reviewOnly
+        ? displayName
+        : t('taskPlugins.installName', { name: displayName })
+    "
     :subtitle="
       t('taskPlugins.fromSource', {
         key: plugin.key,
-        source:
-          target.source.index_url === DEFAULT_MARKETPLACE_INDEX_URL
-            ? t('taskPlugins.official')
-            : target.source.name,
+        source: marketplaceSourceDisplayName(
+          target.source,
+          t('taskPlugins.official')
+        ),
       })
     "
     size="lg"
@@ -304,6 +295,7 @@ async function install() {
         />
         <div class="min-w-0 flex-1 sibling-space-y-1">
           <FilterSelect
+            v-if="!reviewOnly"
             v-model="selectedVersion"
             :options="versionOptions"
             :label="t('taskPlugins.selectVersion')"
@@ -449,9 +441,10 @@ async function install() {
           :disabled="installing"
           @click="emit('close')"
         >
-          {{ t('common.cancel') }}
+          {{ reviewOnly ? t('common.back') : t('common.cancel') }}
         </ConsoleButton>
         <ConsoleButton
+          v-if="!reviewOnly"
           :disabled="!canInstall"
           :loading="installing"
           @click="requestInstall"
@@ -467,6 +460,7 @@ async function install() {
     </template>
   </ConsoleModal>
   <PluginConfirmDialog
+    v-if="!reviewOnly"
     :open="confirmOpen"
     :title="t('taskPlugins.confirmReplaceTitle')"
     :message="

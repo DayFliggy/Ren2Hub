@@ -218,4 +218,46 @@ describe('marketplace install dialog', () => {
     expect(button('Install and enable').attributes('disabled')).toBeDefined()
     expect(pluginApi.installMarketplacePlugin).not.toHaveBeenCalled()
   })
+
+  it('opens on changelog in reviewOnly mode without version picker or install button', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(source))
+    vi.mocked(pluginApi.previewTaskPlugin).mockResolvedValue({
+      meta: { key: 'fixture', version: '2.0.0', models: ['m1'] },
+      unresolved: [],
+      source_hash: digest,
+    })
+    vi.mocked(pluginApi.getTaskPlugin).mockResolvedValue({
+      meta: {
+        key: 'fixture',
+        name: 'Fixture',
+        version: '1.0.0',
+        apiVersion: 1,
+        models: [],
+      },
+      source: 'export const meta = { key: "fixture", version: "1.0.0" }',
+      layer: 'override',
+    })
+    const base = target(digest, {
+      status: 'upgradable',
+      installedVersion: '1.0.0',
+      latestVersion: '2.0.0',
+    })
+    base.plugin.name_i18n = { en: 'Fixture Localized' }
+    wrapper = mount(MarketplaceInstallDialog, {
+      props: { target: base, reviewOnly: true },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Fixture Localized')
+    expect(wrapper.text()).not.toContain('Install Fixture Localized')
+    expect(
+      wrapper
+        .findAll('[role="tab"]')
+        .find((tab) => tab.text() === 'Changelog')
+        ?.attributes('aria-selected')
+    ).toBe('true')
+    expect(wrapper.find('[aria-label="Select version"]').exists()).toBe(false)
+    expect(button('Install and enable')).toBeUndefined()
+    expect(button('Back')).toBeDefined()
+  })
 })
