@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { Zap } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import type { LogItem } from '@/types/console'
@@ -155,7 +156,7 @@ onBeforeUnmount(() => {
       data-log-performance-details
       :aria-label="t('logs.hideTimingDetails')"
       :aria-expanded="true"
-      class="flex max-w-full flex-wrap items-center gap-2 text-left focus-visible:outline-hidden"
+      class="flex max-w-full flex-wrap items-center gap-1.5 text-left focus-visible:outline-hidden"
       @click="toggleDetails"
     >
       <span
@@ -163,20 +164,20 @@ onBeforeUnmount(() => {
         data-log-performance-detail-metric
         data-metric="first-token"
         :data-tone="firstTokenTone"
-        class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs tabular-nums"
+        class="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 font-mono text-xs tabular-nums"
         :class="tonePillClass[firstTokenTone]"
       >
-        <span class="opacity-75">{{ t('logs.firstToken') }}</span>
+        <span class="font-sans opacity-80">{{ t('logs.firstToken') }}</span>
         <strong class="font-semibold">{{ firstTokenLabel }}</strong>
       </span>
       <span
         data-log-performance-detail-metric
         data-metric="duration"
         :data-tone="durationTone"
-        class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs tabular-nums"
+        class="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 font-mono text-xs tabular-nums"
         :class="tonePillClass[durationTone]"
       >
-        <span class="opacity-75">{{ t('logs.totalDuration') }}</span>
+        <span class="font-sans opacity-80">{{ t('logs.totalDuration') }}</span>
         <strong class="font-semibold">{{ durationLabel }}</strong>
       </span>
     </button>
@@ -184,13 +185,13 @@ onBeforeUnmount(() => {
     <span
       v-else-if="!interactive"
       data-log-performance-details
-      class="flex min-w-0 items-center gap-2 text-left"
+      class="flex min-w-0 items-center gap-2.5 text-left"
     >
       <span
         data-log-performance-indicator
         :data-mode="log.request_mode"
-        class="flex w-1.5 shrink-0 overflow-hidden rounded-full"
-        :class="stream ? 'h-[52px] flex-col' : 'h-7'"
+        class="flex w-1 shrink-0 overflow-hidden rounded-full"
+        :class="stream ? 'h-9 flex-col' : 'h-5'"
         aria-hidden="true"
       >
         <template v-if="stream">
@@ -208,7 +209,7 @@ onBeforeUnmount(() => {
           <strong
             data-metric="first-token"
             :data-tone="firstTokenTone"
-            class="font-semibold tabular-nums"
+            class="font-mono font-medium tabular-nums"
             :class="toneTextClass[firstTokenTone]"
           >
             {{ firstTokenLabel }}
@@ -221,7 +222,7 @@ onBeforeUnmount(() => {
           <strong
             data-metric="duration"
             :data-tone="durationTone"
-            class="font-semibold tabular-nums"
+            class="font-mono font-medium tabular-nums"
             :class="toneTextClass[durationTone]"
           >
             {{ durationLabel }}
@@ -233,12 +234,12 @@ onBeforeUnmount(() => {
     <div
       v-else
       data-log-performance-summary
-      class="flex w-full min-w-0 items-center py-0.5"
+      class="flex w-full min-w-0 flex-wrap items-center gap-1.5"
     >
       <span
         data-log-performance-indicator
         :data-mode="log.request_mode"
-        class="flex h-4 w-full min-w-0 shrink-0 rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)]"
+        class="inline-flex max-w-full flex-wrap items-center gap-1.5"
       >
         <button
           type="button"
@@ -249,19 +250,21 @@ onBeforeUnmount(() => {
             tooltip?.metric === 'duration' ? tooltipId : undefined
           "
           :aria-label="`${metricLabel('duration')}: ${durationLabel}. ${t('logs.showTimingDetails')}`"
-          class="relative min-h-0 flex-1 transition-[filter] duration-100 before:absolute before:inset-x-0 before:-inset-y-1.5 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
-          :class="[
-            barToneClass[durationTone],
-            stream
-              ? 'rounded-l-[5px] border-r border-[var(--surface-solid)]'
-              : 'rounded-[5px]',
-          ]"
+          class="inline-flex h-6 items-center gap-1.5 rounded-md border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] px-2 font-mono text-xs font-medium tabular-nums transition-colors hover:border-[var(--outline)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
+          :class="toneTextClass[durationTone]"
           @pointerenter="showTooltip('duration', $event)"
           @pointerleave="hideTooltip"
           @focus="showTooltip('duration', $event)"
           @blur="hideTooltip"
           @click="toggleDetails"
-        />
+        >
+          <span
+            aria-hidden="true"
+            class="h-1.5 w-1.5 shrink-0 rounded-full"
+            :class="barToneClass[durationTone]"
+          />
+          <span>{{ durationLabel }}</span>
+        </button>
         <button
           v-if="stream"
           type="button"
@@ -272,19 +275,22 @@ onBeforeUnmount(() => {
             tooltip?.metric === 'first-token' ? tooltipId : undefined
           "
           :aria-label="`${metricLabel('first-token')}: ${firstTokenLabel}. ${t('logs.showTimingDetails')}`"
-          class="relative min-h-0 flex-1 transition-[filter] duration-100 before:absolute before:inset-x-0 before:-inset-y-1.5 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
-          :class="[barToneClass[firstTokenTone], 'rounded-r-[5px]']"
+          class="inline-flex h-6 items-center gap-1 rounded-md border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] px-2 font-mono text-xs font-medium tabular-nums transition-colors hover:border-[var(--outline)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
+          :class="toneTextClass[firstTokenTone]"
           @pointerenter="showTooltip('first-token', $event)"
           @pointerleave="hideTooltip"
           @focus="showTooltip('first-token', $event)"
           @blur="hideTooltip"
           @click="toggleDetails"
-        />
+        >
+          <Zap :size="11" aria-hidden="true" class="shrink-0 opacity-80" />
+          <span>{{ firstTokenLabel }}</span>
+        </button>
       </span>
     </div>
 
     <span
-      class="flex items-center gap-1.5 pl-0.5 text-xs leading-none text-[var(--text-tertiary)]"
+      class="flex items-center gap-1.5 pl-0.5 text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
     >
       <span
         class="font-medium"
@@ -297,7 +303,7 @@ onBeforeUnmount(() => {
         {{ stream ? t('logs.stream') : t('logs.sync') }}
       </span>
       <span aria-hidden="true">&middot;</span>
-      <span class="tabular-nums">{{ tpsLabel }}</span>
+      <span class="font-mono tabular-nums">{{ tpsLabel }}</span>
     </span>
   </div>
 

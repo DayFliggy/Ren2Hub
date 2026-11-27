@@ -73,6 +73,7 @@ async function mountAuditLogs(respond: () => unknown = () => auditPage()) {
       plugins: [i18n, router],
       stubs: {
         LogsNavTabs: true,
+        Teleport: true,
         ConsoleModal: {
           props: ['open'],
           template: '<div v-if="open"><slot/><slot name="footer"/></div>',
@@ -190,8 +191,12 @@ it('labels payment webhook rejections as Payment risk and forwards username in a
   expect(new Set(categoryChipTones(wrapper, 'Payment risk'))).toEqual(
     new Set(['danger'])
   )
+  expect(wrapper.text()).toContain('Payment webhook')
+  expect(wrapper.text()).toContain('External webhook')
   expect(wrapper.find('[data-audit-retention-notice]').exists()).toBe(true)
 
+  await wrapper.get('[data-log-search-field-trigger]').trigger('click')
+  await wrapper.get('[data-search-field-option="username"]').trigger('click')
   await wrapper.get('[name="audit-log-username"]').setValue('alice')
   await vi.waitFor(() =>
     expect(lastParams()).toHaveProperty('username', 'alice')

@@ -92,14 +92,18 @@ function closePreview(): void {
 </script>
 
 <template>
-  <span
-    v-if="mode === 'discarded'"
-    class="cursor-help text-xs text-[var(--text-tertiary)] underline decoration-dotted underline-offset-2"
-    :title="t('relayLogs.resultDiscardedHint')"
-    data-task-result-discarded
-  >
-    {{ t('relayLogs.resultDiscarded') }}
-  </span>
+  <div v-if="mode === 'discarded'" class="inline-flex flex-col items-start">
+    <span
+      class="cursor-help text-xs text-[var(--text-tertiary)] underline decoration-dotted underline-offset-2"
+      :title="t('relayLogs.resultDiscardedHint')"
+      data-task-result-discarded
+    >
+      {{ t('relayLogs.resultDiscarded') }}
+    </span>
+    <span class="mt-0.5 text-[0.6875rem] text-[var(--text-tertiary)] lg:hidden">
+      {{ t('relayLogs.resultDiscardedHint') }}
+    </span>
+  </div>
   <span v-else-if="mode === 'none'" class="text-xs text-[var(--text-tertiary)]"
     >-</span
   >

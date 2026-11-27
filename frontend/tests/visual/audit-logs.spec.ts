@@ -74,9 +74,12 @@ async function inspectAuditLogs(
     'page'
   )
   expect(paths).toContain('/api/audit')
+  await expect(page.locator('[data-log-search-input]:visible')).toHaveCount(1)
+  await page.locator('[data-log-search-field-trigger]:visible').click()
   await expect(
-    page.getByRole('searchbox', { name: '按令牌指纹筛选…' })
+    page.locator('[data-search-field-option="token_ref"]')
   ).toBeVisible()
+  await page.keyboard.press('Escape')
   await expect(
     page
       .getByText('更新用户', { exact: false })
@@ -131,6 +134,7 @@ test('members read only their own audit events', async ({ page }) => {
   expect(paths.length).toBeGreaterThan(0)
   expect(paths.every((path) => path === '/api/audit/self')).toBe(true)
   await expect(page.getByText('查看范围', { exact: false })).toHaveCount(0)
+  await expect(page.locator('[data-log-search-field-trigger]')).toHaveCount(0)
   await expect(
     page.getByRole('searchbox', { name: '按令牌指纹筛选…' })
   ).toHaveCount(0)

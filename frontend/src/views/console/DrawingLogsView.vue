@@ -15,11 +15,14 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import AsyncTaskSubTabs from '@/components/console/log-ui/AsyncTaskSubTabs.vue'
+import LogFilterToolbar, {
+  type ActiveFilterChip,
+} from '@/components/console/log-ui/LogFilterToolbar.vue'
+import type { LogSearchField } from '@/components/console/log-ui/LogUnifiedSearch.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
   relayTaskDurationSeconds,
@@ -107,6 +110,93 @@ const statusOptions = computed(() => [
     tone: 'danger' as const,
   },
 ])
+
+const activeSearchField = ref('mj_id')
+
+const searchFields = computed<LogSearchField[]>(() => [
+  {
+    key: 'mj_id',
+    label: t('logs.searchFields.taskId'),
+    placeholder: t('relayLogs.taskIdPlaceholder'),
+    inputName: 'drawing-task-search',
+  },
+  ...(readingAll.value
+    ? [
+        {
+          key: 'channel_id',
+          label: t('logs.searchFields.channelId'),
+          placeholder: t('relayLogs.channelIdPlaceholder'),
+          inputName: 'drawing-log-channel',
+        },
+      ]
+    : []),
+])
+
+const searchValues = computed<Record<string, string>>(() => ({
+  mj_id: taskId.value,
+  channel_id: channelId.value,
+}))
+
+function updateSearchValue(key: string, value: string): void {
+  if (key === 'mj_id') taskId.value = value
+  else if (key === 'channel_id') channelId.value = value
+}
+
+const secondaryActiveCount = computed(
+  () =>
+    Number(Boolean(status.value)) +
+    Number(Boolean(startDate.value || endDate.value))
+)
+
+const extraActiveChips = computed<ActiveFilterChip[]>(() => {
+  const chips: ActiveFilterChip[] = []
+  if (status.value) {
+    const label =
+      statusOptions.value.find((opt) => opt.value === status.value)?.label ??
+      status.value
+    chips.push({
+      key: 'status',
+      label: t('relayLogs.statusLabel'),
+      value: label,
+    })
+  }
+  if (startDate.value || endDate.value) {
+    chips.push({
+      key: 'date',
+      label: t('logs.dateRange'),
+      value: `${startDate.value || '…'} ~ ${endDate.value || '…'}`,
+    })
+  }
+  return chips
+})
+
+const hasActiveFilters = computed(() => {
+  const hasSearch = searchFields.value.some((f) =>
+    Boolean(searchValues.value[f.key]?.trim())
+  )
+  return hasSearch || secondaryActiveCount.value > 0
+})
+
+function clearFilterChip(key: string): void {
+  if (key === 'status') {
+    status.value = ''
+    return
+  }
+  if (key === 'date') {
+    startDate.value = ''
+    endDate.value = ''
+    return
+  }
+  updateSearchValue(key, '')
+}
+
+function resetFilters(): void {
+  taskId.value = ''
+  status.value = ''
+  channelId.value = ''
+  startDate.value = ''
+  endDate.value = ''
+}
 
 const columns = computed<TableColumn[]>(() => [
   { key: 'submitted', label: t('relayLogs.colSubmitted'), width: '170px' },
@@ -265,45 +355,41 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
     <AsyncTaskSubTabs active="midjourney" :scope-all="readingAll" />
 
     <!-- filter toolbar -->
-    <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+    <LogFilterToolbar
+      :search-fields="searchFields"
+      :search-values="searchValues"
+      :search-field="activeSearchField"
+      :secondary-active-count="secondaryActiveCount"
+      :active-chips="extraActiveChips"
+      :has-active-filters="hasActiveFilters"
+      @update:search-value="updateSearchValue"
+      @update:search-field="activeSearchField = $event"
+      @clear-chip="clearFilterChip"
+      @reset="resetFilters"
     >
-      <SearchInput
-        v-model="taskId"
-        :placeholder="t('relayLogs.taskIdPlaceholder')"
-        :aria-label="t('relayLogs.taskIdPlaceholder')"
-        name="drawing-task-search"
-        class="w-full sm:w-56"
-      />
-      <FilterSelect
-        v-if="canReadAll"
-        v-model="scope"
-        :options="scopeOptions"
-        :label="t('relayLogs.scopeLabel')"
-        :prefix-label="t('relayLogs.scopeLabel') + ':'"
-        class="w-full sm:w-48"
-      />
-      <FilterSelect
-        v-model="status"
-        :options="statusOptions"
-        :label="t('relayLogs.statusLabel')"
-        :prefix-label="t('relayLogs.statusLabel') + ':'"
-        class="w-full sm:w-44"
-      />
-      <SearchInput
-        v-if="readingAll"
-        v-model="channelId"
-        :placeholder="t('relayLogs.channelIdPlaceholder')"
-        :aria-label="t('relayLogs.channelIdPlaceholder')"
-        name="drawing-log-channel"
-        class="w-full sm:w-36"
-      />
-      <DateRangePicker
-        v-model:start="startDate"
-        v-model:end="endDate"
-        class="w-full sm:w-64"
-      />
-    </div>
+      <template #filters>
+        <FilterSelect
+          v-if="canReadAll"
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('relayLogs.scopeLabel')"
+          :prefix-label="t('relayLogs.scopeLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <FilterSelect
+          v-model="status"
+          :options="statusOptions"
+          :label="t('relayLogs.statusLabel')"
+          :prefix-label="t('relayLogs.statusLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <DateRangePicker
+          v-model:start="startDate"
+          v-model:end="endDate"
+          class="w-full sm:w-56"
+        />
+      </template>
+    </LogFilterToolbar>
 
     <ConsoleCard class="hidden lg:block" :padded="false">
       <EmptyState
@@ -334,7 +420,9 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
       >
         <template #cell-submitted="{ row }">
           <div class="flex min-w-0 flex-col items-start gap-1.5">
-            <span class="whitespace-nowrap text-xs text-[var(--text-tertiary)]">
+            <span
+              class="whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{
                 formatTime(
                   Math.floor((row as DrawingLogItem).submit_time / 1000)
@@ -391,18 +479,39 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
         </template>
         <template #cell-prompt="{ row }">
           <button
-            v-if="(row as DrawingLogItem).prompt"
+            v-if="
+              (row as DrawingLogItem).prompt ||
+              (row as DrawingLogItem).fail_reason
+            "
             type="button"
-            class="block max-w-[300px] truncate text-left text-xs text-[var(--text-secondary)] underline-offset-2 hover:underline"
+            class="flex w-full min-w-0 max-w-full flex-col items-start gap-0.5 text-left text-xs underline-offset-2 hover:underline focus-ring"
             :title="t('relayLogs.viewDetails')"
             @click="detailRow = row as DrawingLogItem"
           >
-            {{ (row as DrawingLogItem).prompt }}
+            <span
+              v-if="(row as DrawingLogItem).prompt"
+              class="block max-w-full truncate text-[var(--text-secondary)]"
+            >
+              {{ (row as DrawingLogItem).prompt }}
+            </span>
+            <span
+              v-if="(row as DrawingLogItem).fail_reason"
+              class="block max-w-full truncate text-[var(--status-danger-text)]"
+            >
+              {{
+                translateServerText(
+                  getLocale(),
+                  (row as DrawingLogItem).fail_reason
+                )
+              }}
+            </span>
           </button>
           <span v-else class="text-xs text-[var(--text-tertiary)]">-</span>
         </template>
         <template #cell-progress="{ row }">
-          <div class="flex min-w-0 flex-col items-start gap-1">
+          <div
+            class="flex min-w-0 flex-col items-start gap-1 font-mono tabular-nums"
+          >
             <span class="text-xs text-[var(--text-secondary)]">
               {{ (row as DrawingLogItem).progress || '-' }}
             </span>
@@ -429,11 +538,19 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
           >
             {{ t('relayLogs.copyResultLink') }}
           </button>
+          <button
+            v-else-if="(row as DrawingLogItem).fail_reason"
+            type="button"
+            class="text-xs text-[var(--status-danger-text)] underline-offset-2 hover:underline"
+            @click="detailRow = row as DrawingLogItem"
+          >
+            {{ t('relayLogs.viewDetails') }}
+          </button>
           <span v-else class="text-xs text-[var(--text-tertiary)]">-</span>
         </template>
         <template #cell-cost="{ row }">
           <span
-            class="whitespace-nowrap text-sm font-semibold tabular-nums text-[var(--text-primary)]"
+            class="whitespace-nowrap font-mono text-sm font-semibold tabular-nums text-[var(--text-primary)]"
           >
             {{ formatQuota((row as DrawingLogItem).quota) }}
           </span>
@@ -486,7 +603,9 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
             <StatusChip :tone="relayTaskStatusMeta(row.status).tone">
               {{ t(relayTaskStatusMeta(row.status).labelKey) }}
             </StatusChip>
-            <span class="text-xs text-[var(--text-tertiary)]">
+            <span
+              class="font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{ formatTime(Math.floor(row.submit_time / 1000)) }}
             </span>
           </div>
@@ -507,35 +626,51 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
             {{ row.action || '-' }} · {{ row.mj_id || '-' }}
           </p>
           <button
-            v-if="row.prompt"
+            v-if="row.prompt || row.fail_reason"
             type="button"
-            class="mt-2 block w-full truncate text-left text-sm text-[var(--text-secondary)]"
+            class="mt-2 flex min-h-9 w-full flex-col justify-center gap-0.5 text-left"
             @click="detailRow = row"
           >
-            {{ row.prompt }}
+            <span
+              v-if="row.prompt"
+              class="block w-full truncate text-sm text-[var(--text-secondary)]"
+            >
+              {{ row.prompt }}
+            </span>
+            <span
+              v-if="row.fail_reason"
+              class="block w-full truncate text-xs text-[var(--status-danger-text)]"
+            >
+              {{ translateServerText(getLocale(), row.fail_reason) }}
+            </span>
           </button>
           <div class="mt-3 flex items-center justify-between gap-2">
-            <span class="text-xs text-[var(--text-tertiary)]">
+            <span
+              class="font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{ row.progress || '-' }} · {{ formatDuration(row) }}
             </span>
-            <span class="text-sm font-semibold tabular-nums">
+            <span class="font-mono text-sm font-semibold tabular-nums">
               {{ formatQuota(row.quota) }}
             </span>
           </div>
-          <div v-if="rawResultUrl(row)" class="mt-2">
+          <div
+            v-if="rawResultUrl(row)"
+            class="mt-2 border-t border-[var(--border-subtle)] pt-2"
+          >
             <a
               v-if="resultUrl(row)"
               :href="resultUrl(row) ?? undefined"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-[var(--accent-text)] underline-offset-2 hover:underline"
+              class="inline-flex min-h-9 items-center text-xs font-medium text-[var(--accent-text)] underline-offset-2 hover:underline"
             >
               {{ t('relayLogs.viewResult') }}
             </a>
             <button
               v-else
               type="button"
-              class="text-xs text-[var(--text-secondary)] underline-offset-2 hover:underline"
+              class="inline-flex min-h-9 items-center text-xs font-medium text-[var(--text-secondary)] underline-offset-2 hover:underline"
               @click="copyResultUrl(row)"
             >
               {{ t('relayLogs.copyResultLink') }}
@@ -575,34 +710,42 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
       @close="detailRow = null"
     >
       <div v-if="detailRow" class="sibling-space-y-4">
-        <div>
+        <div
+          class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3.5"
+        >
           <p class="mb-1 text-xs font-semibold text-[var(--text-tertiary)]">
             {{ t('relayLogs.colPrompt') }}
           </p>
           <p
-            class="whitespace-pre-wrap break-words text-sm text-[var(--text-primary)]"
+            class="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-primary)]"
           >
             {{ detailRow.prompt || '-' }}
           </p>
         </div>
         <div
           v-if="detailRow.prompt_en && detailRow.prompt_en !== detailRow.prompt"
+          class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3.5"
         >
           <p class="mb-1 text-xs font-semibold text-[var(--text-tertiary)]">
             {{ t('relayLogs.promptEn') }}
           </p>
           <p
-            class="whitespace-pre-wrap break-words text-sm text-[var(--text-secondary)]"
+            class="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-secondary)]"
           >
             {{ detailRow.prompt_en }}
           </p>
         </div>
-        <div v-if="detailRow.fail_reason">
-          <p class="mb-1 text-xs font-semibold text-[var(--text-tertiary)]">
+        <div
+          v-if="detailRow.fail_reason"
+          class="rounded-lg border border-[var(--status-danger)] bg-[var(--status-danger-soft)] p-3.5"
+        >
+          <p
+            class="mb-1 text-xs font-semibold text-[var(--status-danger-text)]"
+          >
             {{ t('relayLogs.failReason') }}
           </p>
           <p
-            class="whitespace-pre-wrap break-words text-sm text-[var(--status-danger-text)]"
+            class="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--status-danger-text)]"
           >
             {{ translateServerText(getLocale(), detailRow.fail_reason) }}
           </p>

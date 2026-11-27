@@ -37,10 +37,10 @@ beforeAll(async () => {
 afterAll(() => setLocale('zh-CN'))
 
 describe('LogUsageCell', () => {
-  it('shows exact input/output and compact cache summary without total tokens', () => {
+  it('hides cache read/write counts inline and reveals them in a hover tooltip on the cache bar', async () => {
     const wrapper = mount(LogUsageCell, {
       props: { log: baseLog },
-      global: { plugins: [i18n] },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
     })
 
     expect(wrapper.find('[data-log-usage-total]').exists()).toBe(false)
@@ -50,11 +50,26 @@ describe('LogUsageCell', () => {
     expect(wrapper.get('[data-log-usage-trigger]').classes()).toContain(
       'self-center'
     )
-    expect(wrapper.text()).toContain('600')
-    expect(wrapper.text()).toContain('200')
+    expect(wrapper.find('[data-log-usage-cache-bar]').exists()).toBe(true)
+    expect(
+      wrapper.get('[data-log-usage-cache-fill]').attributes('style')
+    ).toContain('width: 60%')
+    expect(wrapper.text()).not.toContain('600')
+    expect(wrapper.text()).not.toContain('200')
     expect(wrapper.text()).not.toContain('1,300')
     expect(wrapper.text()).not.toContain('Cache hit rate')
     expect(wrapper.text()).not.toContain('99.82%')
+
+    await wrapper.get('[data-log-usage-cache-bar]').trigger('pointerenter')
+    const tooltip = wrapper.get('[data-log-usage-cache-tooltip]')
+    expect(tooltip.text()).toContain('Cache read')
+    expect(tooltip.text()).toContain('600')
+    expect(tooltip.text()).toContain('Cache write')
+    expect(tooltip.text()).toContain('200')
+    expect(tooltip.text()).toContain('60.00%')
+
+    await wrapper.get('[data-log-usage-cache-bar]').trigger('pointerleave')
+    expect(wrapper.find('[data-log-usage-cache-tooltip]').exists()).toBe(false)
   })
 
   it('opens complete usage details with cache hit rate icon', async () => {
@@ -216,6 +231,8 @@ describe('LogUsageCell', () => {
     expect(wrapper.get('[data-log-usage-output]').text()).toBe('100')
     expect(wrapper.text()).not.toContain('1,100')
     expect(wrapper.text()).toContain('Cache —')
+    expect(wrapper.find('[data-log-usage-cache-bar]').exists()).toBe(true)
+    expect(wrapper.find('[data-log-usage-cache-fill]').exists()).toBe(false)
   })
 
   it('renders a placeholder without a details control for non-request logs', () => {

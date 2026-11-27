@@ -267,6 +267,30 @@ export function auditLogRoleKey(role: number | null): string {
   return 'auditLogs.role.user'
 }
 
+export function auditLogActorName(
+  log: Pick<AuditLogItem, 'actor' | 'action'>,
+  t: Translate
+): string {
+  if (log.actor.username) return log.actor.username
+  if (log.actor.id) return t('auditLogs.actorId', { id: log.actor.id })
+  if (log.actor.auth_method === 'webhook' || isPaymentRiskAudit(log)) {
+    return t('auditLogs.actorWebhook')
+  }
+  return t('auditLogs.actorSystem')
+}
+
+export function auditLogActorRoleKey(
+  log: Pick<AuditLogItem, 'actor' | 'action'>
+): string {
+  if (!log.actor.id && !log.actor.username) {
+    if (log.actor.auth_method === 'webhook' || isPaymentRiskAudit(log)) {
+      return 'auditLogs.role.webhook'
+    }
+    return 'auditLogs.role.system'
+  }
+  return auditLogRoleKey(log.actor.role)
+}
+
 export function auditLogAuthMethodKey(method: string): string | null {
   if (method === 'session') return 'auditLogs.auth.session'
   if (method === 'access_token') return 'auditLogs.auth.accessToken'

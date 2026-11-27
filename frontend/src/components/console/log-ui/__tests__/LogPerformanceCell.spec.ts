@@ -40,7 +40,7 @@ beforeAll(async () => {
 afterAll(() => setLocale('zh-CN'))
 
 describe('log performance presentation', () => {
-  it('shows full-width status segments and reveals bordered values after a click', async () => {
+  it('shows compact timing chips directly and toggles labeled pills on click', async () => {
     const wrapper = mount(LogPerformanceCell, {
       props: { log: baseLog },
       global: { plugins: [i18n], stubs: { Teleport: true } },
@@ -56,11 +56,11 @@ describe('log performance presentation', () => {
     ).toEqual(['duration', 'first-token'])
     expect(wrapper.text()).toContain('Stream')
     expect(wrapper.text()).toContain('34 t/s')
+    expect(wrapper.text()).toContain('6.99s')
+    expect(wrapper.text()).toContain('4.04s')
     expect(wrapper.text()).not.toContain('First token')
     expect(wrapper.text()).not.toContain('Total duration')
     expect(wrapper.text()).not.toContain('Healthy')
-    expect(wrapper.text()).not.toContain('4.04s')
-    expect(wrapper.text()).not.toContain('6.99s')
     expect(durationTrigger.attributes('title')).toBeUndefined()
     expect(durationTrigger.attributes('aria-label')).toBe(
       'Total duration: 6.99s. Show timing details'
@@ -93,7 +93,13 @@ describe('log performance presentation', () => {
 
     expect(wrapper.find('[data-log-performance-summary]').exists()).toBe(false)
     expect(wrapper.get('[data-log-performance-details]').text()).toContain(
+      'First token'
+    )
+    expect(wrapper.get('[data-log-performance-details]').text()).toContain(
       '4.04s'
+    )
+    expect(wrapper.get('[data-log-performance-details]').text()).toContain(
+      'Total duration'
     )
     expect(wrapper.get('[data-log-performance-details]').text()).toContain(
       '6.99s'
@@ -136,9 +142,9 @@ describe('log performance presentation', () => {
 
     expect(wrapper.text()).toContain('Sync')
     expect(wrapper.text()).toContain('42 t/s')
+    expect(wrapper.text()).toContain('12.0s')
     expect(wrapper.find('[data-metric="first-token"]').exists()).toBe(false)
     expect(triggers).toHaveLength(1)
-    expect(durationTrigger.classes()).toContain('flex-1')
     expect(durationTrigger.attributes('aria-label')).toBe(
       'Total duration: 12.0s. Show timing details'
     )
@@ -229,8 +235,8 @@ describe('log performance presentation', () => {
     expect(wrapper.text()).toContain('320')
     expect(wrapper.text()).toContain('680')
     expect(wrapper.text()).not.toContain('1,700')
-    expect(wrapper.text()).toContain('500')
-    expect(wrapper.text()).toContain('200')
+    expect(wrapper.find('[data-log-usage-cache-bar]').exists()).toBe(true)
+    expect(wrapper.find('[data-log-usage-cache-fill]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Request completed')
     expect(wrapper.find('[data-log-usage-trigger]').exists()).toBe(true)
     expect(wrapper.find('[data-log-performance-trigger]').exists()).toBe(false)

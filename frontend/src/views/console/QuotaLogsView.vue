@@ -17,12 +17,15 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import FormField from '@/components/common/FormField.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import SearchInput from '@/components/common/SearchInput.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import LogBillingDetail from '@/components/console/log-ui/LogBillingDetail.vue'
+import LogFilterToolbar, {
+  type ActiveFilterChip,
+} from '@/components/console/log-ui/LogFilterToolbar.vue'
+import type { LogSearchField } from '@/components/console/log-ui/LogUnifiedSearch.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
   classifyQuotaLog,
@@ -110,6 +113,89 @@ const typeOptions = computed(() => [
   },
 ])
 
+const activeSearchField = ref('request_id')
+
+const searchFields = computed<LogSearchField[]>(() => [
+  {
+    key: 'request_id',
+    label: t('logs.searchFields.requestId'),
+    placeholder: t('logs.keywordPlaceholder'),
+    inputName: 'quota-log-search',
+  },
+  ...(readingAll.value
+    ? [
+        {
+          key: 'username',
+          label: t('logs.searchFields.username'),
+          placeholder: t('logs.usernamePlaceholder'),
+          inputName: 'quota-log-username',
+        },
+      ]
+    : []),
+])
+
+const searchValues = computed<Record<string, string>>(() => ({
+  request_id: requestId.value,
+  username: usernameFilter.value,
+}))
+
+function updateSearchValue(key: string, value: string): void {
+  if (key === 'request_id') requestId.value = value
+  else if (key === 'username') usernameFilter.value = value
+}
+
+const secondaryActiveCount = computed(
+  () =>
+    Number(Boolean(type.value)) +
+    Number(Boolean(startDate.value || endDate.value))
+)
+
+const extraActiveChips = computed<ActiveFilterChip[]>(() => {
+  const chips: ActiveFilterChip[] = []
+  if (type.value) {
+    const label =
+      typeOptions.value.find((opt) => opt.value === type.value)?.label ??
+      type.value
+    chips.push({ key: 'type', label: t('quotaLogs.typeLabel'), value: label })
+  }
+  if (startDate.value || endDate.value) {
+    chips.push({
+      key: 'date',
+      label: t('logs.dateRange'),
+      value: `${startDate.value || '…'} ~ ${endDate.value || '…'}`,
+    })
+  }
+  return chips
+})
+
+const hasActiveFilters = computed(() => {
+  const hasSearch = searchFields.value.some((f) =>
+    Boolean(searchValues.value[f.key]?.trim())
+  )
+  return hasSearch || secondaryActiveCount.value > 0
+})
+
+function clearFilterChip(key: string): void {
+  if (key === 'type') {
+    type.value = ''
+    return
+  }
+  if (key === 'date') {
+    startDate.value = ''
+    endDate.value = ''
+    return
+  }
+  updateSearchValue(key, '')
+}
+
+function resetFilters(): void {
+  requestId.value = ''
+  usernameFilter.value = ''
+  type.value = ''
+  startDate.value = ''
+  endDate.value = ''
+}
+
 const columns = computed<TableColumn[]>(() => [
   { key: 'created', label: t('quotaLogs.colTime'), width: '150px' },
   ...(readingAll.value
@@ -120,10 +206,10 @@ const columns = computed<TableColumn[]>(() => [
   {
     key: 'amount',
     label: t('quotaLogs.colAmount'),
-    width: '140px',
+    width: '160px',
     align: 'right',
   },
-  { key: 'reference', label: t('quotaLogs.colReference'), width: '176px' },
+  { key: 'reference', label: t('quotaLogs.colReference'), width: '188px' },
   {
     key: 'detail',
     label: t('quotaLogs.colDetail'),
@@ -342,54 +428,51 @@ onBeforeUnmount(() => {
     </PageBreadcrumb>
 
     <!-- filter toolbar -->
-    <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+    <LogFilterToolbar
+      :search-fields="searchFields"
+      :search-values="searchValues"
+      :search-field="activeSearchField"
+      :secondary-active-count="secondaryActiveCount"
+      :active-chips="extraActiveChips"
+      :has-active-filters="hasActiveFilters"
+      @update:search-value="updateSearchValue"
+      @update:search-field="activeSearchField = $event"
+      @clear-chip="clearFilterChip"
+      @reset="resetFilters"
     >
-      <SearchInput
-        v-model="requestId"
-        :placeholder="t('logs.keywordPlaceholder')"
-        :aria-label="t('logs.keywordPlaceholder')"
-        name="quota-log-search"
-        class="w-full sm:w-56"
-      />
-      <FilterSelect
-        v-if="canReadAll"
-        v-model="scope"
-        :options="scopeOptions"
-        :label="t('quotaLogs.scopeLabel')"
-        :prefix-label="t('quotaLogs.scopeLabel') + ':'"
-        class="w-full sm:w-48"
-      />
-      <FilterSelect
-        v-model="type"
-        :options="typeOptions"
-        :label="t('quotaLogs.typeLabel')"
-        :prefix-label="t('quotaLogs.typeLabel') + ':'"
-        class="w-full sm:w-52"
-      />
-      <SearchInput
-        v-if="readingAll"
-        v-model="usernameFilter"
-        :placeholder="t('logs.usernamePlaceholder')"
-        :aria-label="t('logs.usernamePlaceholder')"
-        name="quota-log-username"
-        class="w-full sm:w-44"
-      />
-      <DateRangePicker
-        v-model:start="startDate"
-        v-model:end="endDate"
-        class="w-full sm:w-64"
-      />
-      <ConsoleButton
-        v-if="canExport"
-        class="ml-auto w-full sm:w-auto"
-        variant="secondary"
-        @click="openExport"
-      >
-        <Download :size="16" aria-hidden="true" />
-        {{ t('common.export') }}
-      </ConsoleButton>
-    </div>
+      <template #filters>
+        <FilterSelect
+          v-if="canReadAll"
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('quotaLogs.scopeLabel')"
+          :prefix-label="t('quotaLogs.scopeLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <FilterSelect
+          v-model="type"
+          :options="typeOptions"
+          :label="t('quotaLogs.typeLabel')"
+          :prefix-label="t('quotaLogs.typeLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <DateRangePicker
+          v-model:start="startDate"
+          v-model:end="endDate"
+          class="w-full sm:w-56"
+        />
+      </template>
+      <template v-if="canExport" #actions>
+        <ConsoleButton
+          class="w-full sm:w-auto"
+          variant="secondary"
+          @click="openExport"
+        >
+          <Download :size="16" aria-hidden="true" />
+          {{ t('common.export') }}
+        </ConsoleButton>
+      </template>
+    </LogFilterToolbar>
 
     <ConsoleCard v-if="loadError && !loading" :padded="false">
       <EmptyState
@@ -420,7 +503,9 @@ onBeforeUnmount(() => {
         empty-illustration="empty-logs"
       >
         <template #cell-created="{ row }">
-          <span class="whitespace-nowrap text-xs text-[var(--text-tertiary)]">
+          <span
+            class="whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+          >
             {{ formatTime((row as LogItem).created) }}
           </span>
         </template>
@@ -449,7 +534,7 @@ onBeforeUnmount(() => {
         <template #cell-amount="{ row }">
           <span
             data-quota-log-amount
-            class="whitespace-nowrap text-sm font-semibold tabular-nums"
+            class="whitespace-nowrap font-mono text-sm font-semibold tabular-nums"
             :class="
               amountToneClass[classifyQuotaLog(row as LogItem).amountTone]
             "
@@ -565,13 +650,15 @@ onBeforeUnmount(() => {
                   {{ row.username }}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-[var(--text-tertiary)]">
+              <p
+                class="mt-1 font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+              >
                 {{ formatTime(row.created) }}
               </p>
             </div>
             <span
               data-quota-log-amount
-              class="shrink-0 text-sm font-semibold tabular-nums"
+              class="shrink-0 font-mono text-sm font-semibold tabular-nums"
               :class="amountToneClass[classifyQuotaLog(row).amountTone]"
             >
               {{ classifyQuotaLog(row).amountText ?? '—' }}
@@ -640,7 +727,7 @@ onBeforeUnmount(() => {
       @close="detailLog = null"
     >
       <template v-if="detailLog">
-        <LogBillingDetail :log="detailLog" />
+        <LogBillingDetail :log="detailLog" mode="quota" />
       </template>
       <template #footer>
         <div class="flex justify-end">

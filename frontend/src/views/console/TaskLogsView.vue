@@ -15,11 +15,14 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import AsyncTaskSubTabs from '@/components/console/log-ui/AsyncTaskSubTabs.vue'
+import LogFilterToolbar, {
+  type ActiveFilterChip,
+} from '@/components/console/log-ui/LogFilterToolbar.vue'
+import type { LogSearchField } from '@/components/console/log-ui/LogUnifiedSearch.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
   TASK_PLATFORM_PRESETS,
@@ -151,6 +154,131 @@ const resolvedPlatform = computed(() => {
   return platformPreset.value.trim()
 })
 
+const activeSearchField = ref('task_id')
+
+const searchFields = computed<LogSearchField[]>(() => [
+  {
+    key: 'task_id',
+    label: t('logs.searchFields.taskId'),
+    placeholder: t('relayLogs.taskIdPlaceholder'),
+    inputName: 'task-log-search',
+  },
+  ...(platformPreset.value === CUSTOM_PLATFORM_VALUE
+    ? [
+        {
+          key: 'custom_platform',
+          label: t('logs.searchFields.customPlatform'),
+          placeholder: t('relayLogs.platformPlaceholder'),
+          inputName: 'task-log-platform',
+        },
+      ]
+    : []),
+  ...(readingAll.value
+    ? [
+        {
+          key: 'channel_id',
+          label: t('logs.searchFields.channelId'),
+          placeholder: t('relayLogs.channelIdPlaceholder'),
+          inputName: 'task-log-channel',
+        },
+      ]
+    : []),
+])
+
+const searchValues = computed<Record<string, string>>(() => ({
+  task_id: taskId.value,
+  custom_platform: customPlatform.value,
+  channel_id: channelId.value,
+}))
+
+function updateSearchValue(key: string, value: string): void {
+  if (key === 'task_id') taskId.value = value
+  else if (key === 'custom_platform') customPlatform.value = value
+  else if (key === 'channel_id') channelId.value = value
+}
+
+watch(platformPreset, (next) => {
+  if (next === CUSTOM_PLATFORM_VALUE) {
+    activeSearchField.value = 'custom_platform'
+  } else if (activeSearchField.value === 'custom_platform') {
+    activeSearchField.value = 'task_id'
+  }
+})
+
+const secondaryActiveCount = computed(
+  () =>
+    Number(Boolean(platformPreset.value)) +
+    Number(Boolean(status.value)) +
+    Number(Boolean(startDate.value || endDate.value))
+)
+
+const extraActiveChips = computed<ActiveFilterChip[]>(() => {
+  const chips: ActiveFilterChip[] = []
+  if (platformPreset.value && platformPreset.value !== CUSTOM_PLATFORM_VALUE) {
+    const label =
+      platformOptions.value.find((opt) => opt.value === platformPreset.value)
+        ?.label ?? platformPreset.value
+    chips.push({
+      key: 'platform',
+      label: t('relayLogs.platformLabel'),
+      value: label,
+    })
+  }
+  if (status.value) {
+    const label =
+      statusOptions.value.find((opt) => opt.value === status.value)?.label ??
+      status.value
+    chips.push({
+      key: 'status',
+      label: t('relayLogs.statusLabel'),
+      value: label,
+    })
+  }
+  if (startDate.value || endDate.value) {
+    chips.push({
+      key: 'date',
+      label: t('logs.dateRange'),
+      value: `${startDate.value || '…'} ~ ${endDate.value || '…'}`,
+    })
+  }
+  return chips
+})
+
+const hasActiveFilters = computed(() => {
+  const hasSearch = searchFields.value.some((f) =>
+    Boolean(searchValues.value[f.key]?.trim())
+  )
+  return hasSearch || secondaryActiveCount.value > 0
+})
+
+function clearFilterChip(key: string): void {
+  if (key === 'platform') {
+    platformPreset.value = ''
+    customPlatform.value = ''
+    return
+  }
+  if (key === 'status') {
+    status.value = ''
+    return
+  }
+  if (key === 'date') {
+    startDate.value = ''
+    endDate.value = ''
+    return
+  }
+  updateSearchValue(key, '')
+}
+
+function resetFilters(): void {
+  taskId.value = ''
+  platformPreset.value = ''
+  customPlatform.value = ''
+  status.value = ''
+  channelId.value = ''
+  startDate.value = ''
+  endDate.value = ''
+}
+
 function endpoint(): '/api/task/self' | '/api/task' {
   return readingAll.value ? '/api/task' : '/api/task/self'
 }
@@ -278,60 +406,48 @@ function formatDuration(row: RelayTaskLogItem): string {
     <AsyncTaskSubTabs active="general" :scope-all="readingAll" />
 
     <!-- filter toolbar -->
-    <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+    <LogFilterToolbar
+      :search-fields="searchFields"
+      :search-values="searchValues"
+      :search-field="activeSearchField"
+      :secondary-active-count="secondaryActiveCount"
+      :active-chips="extraActiveChips"
+      :has-active-filters="hasActiveFilters"
+      @update:search-value="updateSearchValue"
+      @update:search-field="activeSearchField = $event"
+      @clear-chip="clearFilterChip"
+      @reset="resetFilters"
     >
-      <SearchInput
-        v-model="taskId"
-        :placeholder="t('relayLogs.taskIdPlaceholder')"
-        :aria-label="t('relayLogs.taskIdPlaceholder')"
-        name="task-log-search"
-        class="w-full sm:w-56"
-      />
-      <FilterSelect
-        v-if="canReadAll"
-        v-model="scope"
-        :options="scopeOptions"
-        :label="t('relayLogs.scopeLabel')"
-        :prefix-label="t('relayLogs.scopeLabel') + ':'"
-        class="w-full sm:w-48"
-      />
-      <FilterSelect
-        v-model="platformPreset"
-        :options="platformOptions"
-        :label="t('relayLogs.platformLabel')"
-        :prefix-label="t('relayLogs.platformLabel') + ':'"
-        class="w-full sm:w-52"
-      />
-      <SearchInput
-        v-if="platformPreset === CUSTOM_PLATFORM_VALUE"
-        v-model="customPlatform"
-        :placeholder="t('relayLogs.platformPlaceholder')"
-        :aria-label="t('relayLogs.platformPlaceholder')"
-        name="task-log-platform"
-        class="w-full sm:w-52"
-      />
-      <FilterSelect
-        v-model="status"
-        :options="statusOptions"
-        :label="t('relayLogs.statusLabel')"
-        :prefix-label="t('relayLogs.statusLabel') + ':'"
-        class="w-full sm:w-44"
-      />
-      <SearchInput
-        v-if="readingAll"
-        v-model="channelId"
-        :placeholder="t('relayLogs.channelIdPlaceholder')"
-        :aria-label="t('relayLogs.channelIdPlaceholder')"
-        name="task-log-channel"
-        class="w-full sm:w-36"
-      />
-      <DateRangePicker
-        v-model:start="startDate"
-        v-model:end="endDate"
-        class="w-full sm:w-64"
-      />
-    </div>
+      <template #filters>
+        <FilterSelect
+          v-if="canReadAll"
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('relayLogs.scopeLabel')"
+          :prefix-label="t('relayLogs.scopeLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <FilterSelect
+          v-model="platformPreset"
+          :options="platformOptions"
+          :label="t('relayLogs.platformLabel')"
+          :prefix-label="t('relayLogs.platformLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <FilterSelect
+          v-model="status"
+          :options="statusOptions"
+          :label="t('relayLogs.statusLabel')"
+          :prefix-label="t('relayLogs.statusLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <DateRangePicker
+          v-model:start="startDate"
+          v-model:end="endDate"
+          class="w-full sm:w-56"
+        />
+      </template>
+    </LogFilterToolbar>
 
     <ConsoleCard class="hidden lg:block" :padded="false">
       <EmptyState
@@ -362,7 +478,9 @@ function formatDuration(row: RelayTaskLogItem): string {
       >
         <template #cell-submitted="{ row }">
           <div class="flex min-w-0 flex-col items-start gap-1.5">
-            <span class="whitespace-nowrap text-xs text-[var(--text-tertiary)]">
+            <span
+              class="whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{ formatTime((row as RelayTaskLogItem).submit_time) }}
             </span>
             <StatusChip
@@ -454,7 +572,9 @@ function formatDuration(row: RelayTaskLogItem): string {
           </StatusChip>
         </template>
         <template #cell-progress="{ row }">
-          <div class="flex min-w-0 flex-col items-start gap-1">
+          <div
+            class="flex min-w-0 flex-col items-start gap-1 font-mono tabular-nums"
+          >
             <span class="text-xs text-[var(--text-secondary)]">
               {{ (row as RelayTaskLogItem).progress || '-' }}
             </span>
@@ -477,7 +597,7 @@ function formatDuration(row: RelayTaskLogItem): string {
         </template>
         <template #cell-cost="{ row }">
           <span
-            class="whitespace-nowrap text-sm font-semibold tabular-nums text-[var(--text-primary)]"
+            class="whitespace-nowrap font-mono text-sm font-semibold tabular-nums text-[var(--text-primary)]"
           >
             {{ formatQuota((row as RelayTaskLogItem).quota) }}
           </span>
@@ -535,7 +655,9 @@ function formatDuration(row: RelayTaskLogItem): string {
                 {{ taskPlatformLabel(row.platform) }}
               </StatusChip>
             </div>
-            <span class="text-xs text-[var(--text-tertiary)]">
+            <span
+              class="font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{ formatTime(row.submit_time) }}
             </span>
           </div>
@@ -562,30 +684,50 @@ function formatDuration(row: RelayTaskLogItem): string {
           <p
             class="mt-1 truncate font-mono text-xs text-[var(--text-tertiary)]"
           >
-            {{ taskPlatformLabel(row.platform) }} · {{ row.action || '-' }} ·
-            {{ row.task_id || '-' }}
+            {{ row.action || '-' }} · {{ row.task_id || '-' }}
           </p>
           <button
             v-if="row.fail_reason"
             type="button"
-            class="mt-2 block w-full truncate text-left text-sm text-[var(--status-danger-text)]"
+            class="mt-2 block min-h-9 w-full truncate text-left text-sm text-[var(--status-danger-text)] underline-offset-2 hover:underline"
             @click="failureRow = row"
           >
             {{ failReason(row) }}
           </button>
           <div class="mt-3 flex items-center justify-between gap-2">
-            <span class="text-xs text-[var(--text-tertiary)]">
+            <span
+              class="font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{ row.progress || '-' }} · {{ formatDuration(row) }}
             </span>
-            <span class="text-sm font-semibold tabular-nums">
+            <span class="font-mono text-sm font-semibold tabular-nums">
               {{ formatQuota(row.quota) }}
             </span>
           </div>
           <div
-            v-if="!row.fail_reason && taskPreviewMode(row) !== 'none'"
-            class="mt-2"
+            v-if="
+              (!row.fail_reason && taskPreviewMode(row) !== 'none') ||
+              (hasRouter && row.admin_info?.request_id)
+            "
+            class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-2.5"
           >
-            <TaskArtifactsCell :task="row" />
+            <TaskArtifactsCell
+              v-if="!row.fail_reason && taskPreviewMode(row) !== 'none'"
+              :task="row"
+            />
+            <RouterLink
+              v-if="hasRouter && row.admin_info?.request_id"
+              :to="{
+                name: 'logs',
+                query: {
+                  request_id: row.admin_info.request_id,
+                  ...(readingAll ? { scope: 'all' } : {}),
+                },
+              }"
+              class="inline-flex min-h-8 items-center text-xs font-medium text-[var(--accent-text)] underline-offset-2 hover:underline"
+            >
+              {{ t('relayLogs.openCallLog') }}
+            </RouterLink>
           </div>
         </article>
       </div>
@@ -620,11 +762,47 @@ function formatDuration(row: RelayTaskLogItem): string {
       size="md"
       @close="failureRow = null"
     >
-      <p
-        class="whitespace-pre-wrap break-words text-sm text-[var(--status-danger-text)]"
-      >
-        {{ failureRow ? failReason(failureRow) : '' }}
-      </p>
+      <div v-if="failureRow" class="sibling-space-y-4">
+        <dl class="grid gap-2.5 sm:grid-cols-2">
+          <div
+            class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+          >
+            <dt class="text-xs text-[var(--text-tertiary)]">
+              {{ t('relayLogs.colTask') }}
+            </dt>
+            <dd
+              class="mt-1 break-all font-mono text-xs text-[var(--text-primary)]"
+            >
+              {{ failureRow.task_id || '-' }}
+            </dd>
+          </div>
+          <div
+            class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+          >
+            <dt class="text-xs text-[var(--text-tertiary)]">
+              {{ t('relayLogs.colPlatform') }}
+            </dt>
+            <dd class="mt-1 text-xs font-medium text-[var(--text-primary)]">
+              {{ taskPlatformLabel(failureRow.platform) }}
+              <template v-if="failureRow.origin_model_name">
+                ·
+                <span class="font-mono">{{
+                  failureRow.origin_model_name
+                }}</span>
+              </template>
+            </dd>
+          </div>
+        </dl>
+        <div
+          class="rounded-lg border border-[var(--status-danger)] bg-[var(--status-danger-soft)] p-3.5"
+        >
+          <p
+            class="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--status-danger-text)]"
+          >
+            {{ failReason(failureRow) }}
+          </p>
+        </div>
+      </div>
       <template #footer>
         <div class="flex justify-end">
           <ConsoleButton variant="secondary" @click="failureRow = null">

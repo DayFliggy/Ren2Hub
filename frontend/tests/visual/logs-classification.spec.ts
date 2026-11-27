@@ -299,9 +299,16 @@ for (const scenario of [
         .filter({ visible: true })
         .first()
     ).toBeVisible()
+    await expect(page.locator('[data-log-search-input]:visible')).toHaveCount(1)
+    if (scenario.mobile) {
+      await page.locator('[data-log-mobile-filters-toggle]:visible').click()
+    }
     await expect(page.getByRole('combobox', { name: '查看范围' })).toHaveCount(
       scenario.role >= 10 ? 1 : 0
     )
+    if (scenario.mobile) {
+      await page.locator('[data-log-mobile-filters-toggle]:visible').click()
+    }
     await assertNoHorizontalOverflow(page)
     await assertInteractiveCentersVisible(page)
     await captureEvidence(page, {
@@ -401,6 +408,9 @@ for (const scenario of [
         .first()
     ).toBeVisible()
 
+    if (scenario.mobile) {
+      await page.locator('[data-log-mobile-filters-toggle]:visible').click()
+    }
     await page.getByRole('combobox', { name: '事件类别' }).click()
     const expectedAuditOptions =
       scenario.role >= 10

@@ -80,13 +80,25 @@ describe('LogsView business log filters', () => {
     expect(options).not.toContain('登录')
   })
 
-  it('forwards model_name and token_name filters cleanly', async () => {
+  it('forwards model_name and token_name filters cleanly through the unified search box', async () => {
     wrapper = mount(LogsView, {
-      global: { plugins: [createPinia(), i18n], stubs: { LogsNavTabs: true } },
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia(), i18n],
+        stubs: { LogsNavTabs: true, Teleport: true },
+      },
     })
     await flushPromises()
+    expect(wrapper.findAll('input[type="search"]')).toHaveLength(1)
+
+    await wrapper.get('[data-log-search-field-trigger]').trigger('click')
+    await wrapper.get('[data-search-field-option="model"]').trigger('click')
     await wrapper.get('input[name="log-model-search"]').setValue('gpt-4%')
+
+    await wrapper.get('[data-log-search-field-trigger]').trigger('click')
+    await wrapper.get('[data-search-field-option="token"]').trigger('click')
     await wrapper.get('input[name="log-token-search"]').setValue('prod-key')
+
     await new Promise((resolve) => setTimeout(resolve, 350))
     await flushPromises()
 
@@ -98,6 +110,12 @@ describe('LogsView business log filters', () => {
       token_name: 'prod-key',
       types: '2,5',
     })
+    expect(wrapper.findAll('[data-log-filter-chip]')).toHaveLength(2)
+
+    await wrapper.get('[data-log-reset-filters]').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await flushPromises()
+    expect(wrapper.findAll('[data-log-filter-chip]')).toHaveLength(0)
   })
 })
 

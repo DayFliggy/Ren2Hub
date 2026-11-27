@@ -108,7 +108,7 @@ const linkedTask = computed(() => logLinkedTask(props.log))
       </div>
       <p
         data-log-cost
-        class="shrink-0 text-sm font-semibold tabular-nums"
+        class="shrink-0 font-mono text-sm font-semibold tabular-nums"
         :class="
           ['topup', 'refund', 'manage', 'system'].includes(log.type)
             ? 'text-[var(--status-success-text)]'
@@ -120,7 +120,7 @@ const linkedTask = computed(() => logLinkedTask(props.log))
     </header>
 
     <div
-      class="mt-3 min-h-[58px] rounded-lg bg-[var(--surface-muted)] px-3 py-2.5"
+      class="mt-3 min-h-[58px] rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] px-3 py-2.5"
     >
       <LogPerformanceCell :log="log" :interactive="false" />
     </div>

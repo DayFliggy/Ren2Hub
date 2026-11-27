@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Download, Eye } from 'lucide-vue-next'
+import { Download, Eye, Info } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -17,12 +17,17 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import FormField from '@/components/common/FormField.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
+import LogFilterToolbar, {
+  type ActiveFilterChip,
+} from '@/components/console/log-ui/LogFilterToolbar.vue'
+import type { LogSearchField } from '@/components/console/log-ui/LogUnifiedSearch.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
+  auditLogActorName,
+  auditLogActorRoleKey,
   auditLogAuthMethodKey,
   auditLogDisplayCategoryLabel,
   auditLogDisplayCategoryTone,
@@ -31,7 +36,6 @@ import {
   auditLogRequestText,
   auditLogResultKey,
   auditLogResultTone,
-  auditLogRoleKey,
   auditLogSummary,
 } from '@/components/console/log-ui/auditLog'
 import { useLatestRequest } from '@/composables/useLatestRequest'
@@ -72,8 +76,10 @@ const tokenRef = ref('')
 const scope = ref<'self' | 'all'>(
   route.query.scope === 'all' && canReadAll.value ? 'all' : 'self'
 )
-const startDate = ref(dateInputValue(-29))
-const endDate = ref(dateInputValue())
+const defaultStartDate = dateInputValue(-29)
+const defaultEndDate = dateInputValue()
+const startDate = ref(defaultStartDate)
+const endDate = ref(defaultEndDate)
 
 const detailLog = ref<AuditLogItem | null>(null)
 const exportOpen = ref(false)
@@ -86,7 +92,7 @@ const columns = computed<TableColumn[]>(() => [
   {
     key: 'result',
     label: t('auditLogs.columns.categoryResult'),
-    width: '150px',
+    width: '188px',
   },
   { key: 'summary', label: t('auditLogs.columns.summary') },
   { key: 'source', label: t('auditLogs.columns.source'), width: '150px' },
@@ -158,6 +164,124 @@ const detailParams = computed(() =>
 )
 
 const readingAll = computed(() => scope.value === 'all' && canReadAll.value)
+
+const activeSearchField = ref('request_id')
+
+const searchFields = computed<LogSearchField[]>(() => [
+  {
+    key: 'request_id',
+    label: t('logs.searchFields.requestId'),
+    placeholder: t('auditLogs.requestIdPlaceholder'),
+    maxlength: 64,
+    inputName: 'audit-log-request-id',
+  },
+  ...(readingAll.value
+    ? [
+        {
+          key: 'username',
+          label: t('logs.searchFields.username'),
+          placeholder: t('auditLogs.usernamePlaceholder'),
+          inputName: 'audit-log-username',
+        },
+        {
+          key: 'token_ref',
+          label: t('logs.searchFields.tokenRef'),
+          placeholder: t('auditLogs.tokenRefPlaceholder'),
+          maxlength: 64,
+          inputName: 'audit-log-token-ref',
+        },
+      ]
+    : []),
+])
+
+const searchValues = computed<Record<string, string>>(() => ({
+  request_id: requestId.value,
+  username: usernameFilter.value,
+  token_ref: tokenRef.value,
+}))
+
+function updateSearchValue(key: string, value: string): void {
+  if (key === 'request_id') requestId.value = value
+  else if (key === 'username') usernameFilter.value = value
+  else if (key === 'token_ref') tokenRef.value = value
+}
+
+const hasCustomDateRange = computed(
+  () => startDate.value !== defaultStartDate || endDate.value !== defaultEndDate
+)
+
+const secondaryActiveCount = computed(
+  () =>
+    Number(category.value !== 'all') +
+    Number(outcome.value !== 'all') +
+    Number(hasCustomDateRange.value)
+)
+
+const extraActiveChips = computed<ActiveFilterChip[]>(() => {
+  const chips: ActiveFilterChip[] = []
+  if (category.value !== 'all') {
+    const label =
+      categoryOptions.value.find((opt) => opt.value === category.value)
+        ?.label ?? category.value
+    chips.push({
+      key: 'category',
+      label: t('auditLogs.categoryLabel'),
+      value: label,
+    })
+  }
+  if (outcome.value !== 'all') {
+    const label =
+      outcomeOptions.value.find((opt) => opt.value === outcome.value)?.label ??
+      outcome.value
+    chips.push({
+      key: 'outcome',
+      label: t('auditLogs.resultLabel'),
+      value: label,
+    })
+  }
+  if (hasCustomDateRange.value) {
+    chips.push({
+      key: 'date',
+      label: t('logs.dateRange'),
+      value: `${startDate.value || '…'} ~ ${endDate.value || '…'}`,
+    })
+  }
+  return chips
+})
+
+const hasActiveFilters = computed(() => {
+  const hasSearch = searchFields.value.some((f) =>
+    Boolean(searchValues.value[f.key]?.trim())
+  )
+  return hasSearch || secondaryActiveCount.value > 0
+})
+
+function clearFilterChip(key: string): void {
+  if (key === 'category') {
+    category.value = 'all'
+    return
+  }
+  if (key === 'outcome') {
+    outcome.value = 'all'
+    return
+  }
+  if (key === 'date') {
+    startDate.value = defaultStartDate
+    endDate.value = defaultEndDate
+    return
+  }
+  updateSearchValue(key, '')
+}
+
+function resetFilters(): void {
+  requestId.value = ''
+  usernameFilter.value = ''
+  tokenRef.value = ''
+  category.value = 'all'
+  outcome.value = 'all'
+  startDate.value = defaultStartDate
+  endDate.value = defaultEndDate
+}
 
 function endpoint(): string {
   return readingAll.value ? '/api/audit' : '/api/audit/self'
@@ -251,10 +375,11 @@ watch(pageSize, reload)
 watch(page, load)
 
 function actorName(log: AuditLogItem): string {
-  return (
-    log.actor.username ||
-    (log.actor.id ? t('auditLogs.actorId', { id: log.actor.id }) : '-')
-  )
+  return auditLogActorName(log, t)
+}
+
+function actorRoleLabel(log: AuditLogItem): string {
+  return t(auditLogActorRoleKey(log))
 }
 
 function authMethod(log: AuditLogItem): string {
@@ -309,7 +434,7 @@ function exportValues(log: AuditLogItem): readonly unknown[] {
   return [
     formatTime(log.created_at),
     actorName(log),
-    t(auditLogRoleKey(log.actor.role)),
+    actorRoleLabel(log),
     auditLogDisplayCategoryLabel(log, t),
     t(auditLogResultKey(log)),
     auditLogSummary(log, t),
@@ -416,76 +541,69 @@ onBeforeUnmount(() => {
       </template>
     </PageBreadcrumb>
 
-    <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+    <LogFilterToolbar
+      :search-fields="searchFields"
+      :search-values="searchValues"
+      :search-field="activeSearchField"
+      :secondary-active-count="secondaryActiveCount"
+      :active-chips="extraActiveChips"
+      :has-active-filters="hasActiveFilters"
+      @update:search-value="updateSearchValue"
+      @update:search-field="activeSearchField = $event"
+      @clear-chip="clearFilterChip"
+      @reset="resetFilters"
     >
-      <SearchInput
-        v-model="requestId"
-        maxlength="64"
-        :placeholder="t('auditLogs.requestIdPlaceholder')"
-        :aria-label="t('auditLogs.requestIdPlaceholder')"
-        name="audit-log-request-id"
-        class="w-full sm:w-64"
-      />
-      <FilterSelect
-        v-if="canReadAll"
-        v-model="scope"
-        :options="scopeOptions"
-        :label="t('auditLogs.scopeLabel')"
-        :prefix-label="t('auditLogs.scopeLabel') + ':'"
-        class="w-full sm:w-48"
-      />
-      <FilterSelect
-        v-model="category"
-        :options="categoryOptions"
-        :label="t('auditLogs.categoryLabel')"
-        :prefix-label="t('auditLogs.categoryLabel') + ':'"
-        class="w-full sm:w-48"
-      />
-      <FilterSelect
-        v-model="outcome"
-        :options="outcomeOptions"
-        :label="t('auditLogs.resultLabel')"
-        :prefix-label="t('auditLogs.resultLabel') + ':'"
-        class="w-full sm:w-40"
-      />
-      <DateRangePicker
-        v-model:start="startDate"
-        v-model:end="endDate"
-        class="w-full sm:w-64"
-      />
-      <SearchInput
-        v-if="canReadAll && scope === 'all'"
-        v-model="usernameFilter"
-        :placeholder="t('auditLogs.usernamePlaceholder')"
-        :aria-label="t('auditLogs.usernamePlaceholder')"
-        name="audit-log-username"
-        class="w-full sm:w-44"
-      />
-      <SearchInput
-        v-if="canReadAll && scope === 'all'"
-        v-model="tokenRef"
-        maxlength="64"
-        :placeholder="t('auditLogs.tokenRefPlaceholder')"
-        :aria-label="t('auditLogs.tokenRefPlaceholder')"
-        name="audit-log-token-ref"
-        class="w-full sm:w-56"
-      />
-      <ConsoleButton
-        class="ml-auto w-full sm:w-auto"
-        variant="secondary"
-        @click="exportOpen = true"
-      >
-        <Download :size="16" aria-hidden="true" />
-        {{ t('common.export') }}
-      </ConsoleButton>
-    </div>
+      <template #filters>
+        <FilterSelect
+          v-if="canReadAll"
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('auditLogs.scopeLabel')"
+          :prefix-label="t('auditLogs.scopeLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <FilterSelect
+          v-model="category"
+          :options="categoryOptions"
+          :label="t('auditLogs.categoryLabel')"
+          :prefix-label="t('auditLogs.categoryLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <FilterSelect
+          v-model="outcome"
+          :options="outcomeOptions"
+          :label="t('auditLogs.resultLabel')"
+          :prefix-label="t('auditLogs.resultLabel') + ':'"
+          class="w-full sm:w-auto"
+        />
+        <DateRangePicker
+          v-model:start="startDate"
+          v-model:end="endDate"
+          class="w-full sm:w-56"
+        />
+      </template>
+      <template #actions>
+        <ConsoleButton
+          class="w-full sm:w-auto"
+          variant="secondary"
+          @click="exportOpen = true"
+        >
+          <Download :size="16" aria-hidden="true" />
+          {{ t('common.export') }}
+        </ConsoleButton>
+      </template>
+    </LogFilterToolbar>
 
     <p
       data-audit-retention-notice
-      class="mb-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3.5 py-2 text-xs text-[var(--text-secondary)]"
+      class="mb-3 flex items-center gap-2 rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] px-3.5 py-2 text-xs text-[var(--text-secondary)]"
     >
-      {{ t('auditLogs.retentionNotice') }}
+      <Info
+        :size="14"
+        aria-hidden="true"
+        class="shrink-0 text-[var(--text-tertiary)]"
+      />
+      <span>{{ t('auditLogs.retentionNotice') }}</span>
     </p>
 
     <ConsoleCard v-if="loadError && !loading" :padded="false">
@@ -512,7 +630,9 @@ onBeforeUnmount(() => {
         empty-illustration="empty-logs"
       >
         <template #cell-created="{ row }">
-          <span class="whitespace-nowrap text-xs text-[var(--text-tertiary)]">
+          <span
+            class="whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+          >
             {{ formatTime((row as AuditLogItem).created_at) }}
           </span>
         </template>
@@ -525,7 +645,7 @@ onBeforeUnmount(() => {
               {{ actorName(row as AuditLogItem) }}
             </p>
             <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-              {{ t(auditLogRoleKey((row as AuditLogItem).actor.role)) }}
+              {{ actorRoleLabel(row as AuditLogItem) }}
             </p>
           </div>
         </template>
@@ -565,7 +685,9 @@ onBeforeUnmount(() => {
             >
               {{ auditLogRequestText(row as AuditLogItem) || '-' }}
             </p>
-            <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
+            <p
+              class="mt-0.5 font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            >
               {{
                 t('auditLogs.httpStatus', {
                   status: statusText(row as AuditLogItem),
@@ -648,7 +770,9 @@ onBeforeUnmount(() => {
               <p class="truncate font-mono" :title="row.ip || '-'">
                 {{ row.ip || '-' }}
               </p>
-              <p class="mt-1">{{ formatTime(row.created_at) }}</p>
+              <p class="mt-1 font-mono tabular-nums">
+                {{ formatTime(row.created_at) }}
+              </p>
             </div>
             <ConsoleButton size="sm" variant="ghost" @click="detailLog = row">
               <Eye :size="15" aria-hidden="true" />
@@ -689,7 +813,9 @@ onBeforeUnmount(() => {
             {{ t('auditLogs.sections.actor') }}
           </h3>
           <dl class="mt-3 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.account') }}
               </dt>
@@ -697,15 +823,19 @@ onBeforeUnmount(() => {
                 {{ actorName(detailLog) }}
               </dd>
             </div>
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.role') }}
               </dt>
               <dd class="mt-1 text-sm text-[var(--text-primary)]">
-                {{ t(auditLogRoleKey(detailLog.actor.role)) }}
+                {{ actorRoleLabel(detailLog) }}
               </dd>
             </div>
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.authMethod') }}
               </dt>
@@ -713,11 +843,15 @@ onBeforeUnmount(() => {
                 {{ authMethod(detailLog) }}
               </dd>
             </div>
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.time') }}
               </dt>
-              <dd class="mt-1 text-sm text-[var(--text-primary)]">
+              <dd
+                class="mt-1 font-mono text-xs tabular-nums text-[var(--text-primary)]"
+              >
                 {{ formatTime(detailLog.created_at) }}
               </dd>
             </div>
@@ -734,7 +868,7 @@ onBeforeUnmount(() => {
             </StatusChip>
           </div>
           <p
-            class="mt-3 break-words rounded-lg bg-[var(--surface-muted)] p-3 text-sm leading-6 text-[var(--text-primary)]"
+            class="mt-3 break-words rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3 text-sm leading-6 text-[var(--text-primary)]"
           >
             {{ auditLogSummary(detailLog, t) }}
           </p>
@@ -742,7 +876,7 @@ onBeforeUnmount(() => {
             <div
               v-for="[key, value] in detailParams"
               :key="key"
-              class="min-w-0 rounded-lg border border-[var(--border-subtle)] p-3"
+              class="min-w-0 rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
             >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ auditLogParamLabel(key, t) }}
@@ -761,7 +895,9 @@ onBeforeUnmount(() => {
             {{ t('auditLogs.sections.source') }}
           </h3>
           <dl class="mt-3 sibling-space-y-3">
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.ip') }}
               </dt>
@@ -771,7 +907,9 @@ onBeforeUnmount(() => {
                 {{ detailLog.ip || '-' }}
               </dd>
             </div>
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.userAgent') }}
               </dt>
@@ -783,7 +921,7 @@ onBeforeUnmount(() => {
             </div>
             <div
               v-if="detailLog.token_ref"
-              class="rounded-lg bg-[var(--surface-muted)] p-3"
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
             >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.tokenRef') }}
@@ -802,7 +940,9 @@ onBeforeUnmount(() => {
             {{ t('auditLogs.sections.request') }}
           </h3>
           <dl class="mt-3 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3 sm:col-span-2">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3 sm:col-span-2"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.route') }}
               </dt>
@@ -812,15 +952,21 @@ onBeforeUnmount(() => {
                 {{ auditLogRequestText(detailLog) || '-' }}
               </dd>
             </div>
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.httpStatus') }}
               </dt>
-              <dd class="mt-1 text-sm text-[var(--text-primary)]">
+              <dd
+                class="mt-1 font-mono text-sm tabular-nums text-[var(--text-primary)]"
+              >
                 {{ statusText(detailLog) }}
               </dd>
             </div>
-            <div class="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3"
+            >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.result') }}
               </dt>
@@ -832,7 +978,7 @@ onBeforeUnmount(() => {
             </div>
             <div
               v-if="detailLog.request_id"
-              class="rounded-lg bg-[var(--surface-muted)] p-3 sm:col-span-2"
+              class="rounded-lg border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3 sm:col-span-2"
             >
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.requestId') }}

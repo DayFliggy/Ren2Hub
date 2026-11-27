@@ -188,16 +188,23 @@ describe('QuotaLogsView', () => {
     expect(get.mock.calls.at(-1)?.[1]).not.toHaveProperty('types')
   })
 
-  it('restricts all-accounts scope to admins and queries /api/log/ with username when selected', async () => {
+  it('restricts all-accounts scope to admins and exposes username search field only in all-accounts scope', async () => {
     const member = await mountQuotaLogs(1, '/usage-logs/quota?scope=all')
     expect(member.get.mock.calls[0]?.[0]).toBe('/api/log/self')
     expect(
-      member.wrapper.find('input[name="quota-log-username"]').exists()
+      member.wrapper.find('[data-log-search-field-trigger]').exists()
     ).toBe(false)
     member.wrapper.unmount()
 
     const admin = await mountQuotaLogs(10, '/usage-logs/quota?scope=all')
     expect(admin.get.mock.calls[0]?.[0]).toBe('/api/log/')
+    await admin.wrapper.get('[data-log-search-field-trigger]').trigger('click')
+    const usernameOption = document.body.querySelector<HTMLButtonElement>(
+      '[data-search-field-option="username"]'
+    )
+    expect(usernameOption).not.toBeNull()
+    usernameOption!.click()
+    await flushPromises()
     expect(
       admin.wrapper.find('input[name="quota-log-username"]').exists()
     ).toBe(true)

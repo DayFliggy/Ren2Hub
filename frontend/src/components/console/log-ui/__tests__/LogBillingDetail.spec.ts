@@ -43,4 +43,49 @@ describe('native consumption log detail', () => {
     expect(wrapper.text()).not.toContain('quote_hash')
     wrapper.unmount()
   })
+
+  it('shows semantic quota delta in quota mode instead of $0.00 final charge', () => {
+    const wrapper = mount(LogBillingDetail, {
+      props: {
+        mode: 'quota',
+        log: {
+          id: 9,
+          type: 'topup',
+          model: '',
+          quota: '0',
+          content: 'Decreased user quota by 1000000',
+          other: JSON.stringify({
+            op: { action: 'user.quota_subtract', params: { quota: 1000000 } },
+          }),
+        } as LogItem,
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.get('[data-quota-detail-amount]').text()).toContain('-$2.00')
+    expect(wrapper.text()).not.toContain('Final charge')
+    wrapper.unmount()
+  })
+
+  it('deduplicates request_plugins from the raw evidence JSON block', () => {
+    const wrapper = mount(LogBillingDetail, {
+      props: {
+        log: {
+          model: 'gpt-4o',
+          quota: '5000',
+          other: JSON.stringify({
+            model_ratio: 1,
+            request_plugins: [{ name: 'guardrail', applied: true }],
+          }),
+        } as LogItem,
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(
+      JSON.parse(wrapper.get('[data-log-request-plugins]').text())
+    ).toEqual([{ name: 'guardrail', applied: true }])
+    expect(JSON.parse(wrapper.get('[data-log-raw-evidence]').text())).toEqual({
+      model_ratio: 1,
+    })
+    wrapper.unmount()
+  })
 })

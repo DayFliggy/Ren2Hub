@@ -10,6 +10,7 @@ import {
   watch,
 } from 'vue'
 import { onClickOutside } from '@vueuse/core'
+import { Download, SlidersHorizontal } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, routeLocationKey, routerKey } from 'vue-router'
 
@@ -30,8 +31,11 @@ import FilterSelect from '@/components/common/FilterSelect.vue'
 import FormField from '@/components/common/FormField.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
+import LogFilterToolbar, {
+  type ActiveFilterChip,
+} from '@/components/console/log-ui/LogFilterToolbar.vue'
+import type { LogSearchField } from '@/components/console/log-ui/LogUnifiedSearch.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
-import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import LogDetailTrigger from '@/components/console/log-ui/LogDetailTrigger.vue'
@@ -246,20 +250,139 @@ const typeOptions = computed(() => [
   { value: 'error', label: t('logs.typeError'), tone: 'danger' as const },
 ])
 
+const activeSearchField = ref('request_id')
+
+const searchFields = computed<LogSearchField[]>(() => [
+  {
+    key: 'request_id',
+    label: t('logs.searchFields.requestId'),
+    placeholder: t('logs.keywordPlaceholder'),
+    inputName: 'log-search',
+  },
+  {
+    key: 'model',
+    label: t('logs.searchFields.model'),
+    placeholder: t('logs.modelPlaceholder'),
+    inputName: 'log-model-search',
+  },
+  {
+    key: 'token',
+    label: t('logs.searchFields.token'),
+    placeholder: t('logs.tokenPlaceholder'),
+    inputName: 'log-token-search',
+  },
+  ...(readingAll.value
+    ? [
+        {
+          key: 'username',
+          label: t('logs.searchFields.username'),
+          placeholder: t('logs.usernamePlaceholder'),
+          inputName: 'log-username-search',
+        },
+        {
+          key: 'channel',
+          label: t('logs.searchFields.channelId'),
+          placeholder: t('logs.channelIdPlaceholder'),
+          inputName: 'log-channel-search',
+        },
+        {
+          key: 'upstream_request_id',
+          label: t('logs.searchFields.upstreamRequestId'),
+          placeholder: t('logs.upstreamRequestIdPlaceholder'),
+          inputName: 'log-upstream-request-search',
+        },
+      ]
+    : []),
+])
+
+const searchValues = computed<Record<string, string>>(() => ({
+  request_id: keyword.value,
+  model: modelFilter.value,
+  token: tokenFilter.value,
+  username: usernameFilter.value,
+  channel: channelFilter.value,
+  upstream_request_id: upstreamRequestId.value,
+}))
+
+function updateSearchValue(key: string, value: string): void {
+  if (key === 'request_id') keyword.value = value
+  else if (key === 'model') modelFilter.value = value
+  else if (key === 'token') tokenFilter.value = value
+  else if (key === 'username') usernameFilter.value = value
+  else if (key === 'channel') channelFilter.value = value
+  else if (key === 'upstream_request_id') upstreamRequestId.value = value
+}
+
+const secondaryActiveCount = computed(
+  () =>
+    Number(Boolean(type.value)) +
+    Number(Boolean(startDate.value || endDate.value))
+)
+
+const extraActiveChips = computed<ActiveFilterChip[]>(() => {
+  const chips: ActiveFilterChip[] = []
+  if (type.value) {
+    const label =
+      typeOptions.value.find((opt) => opt.value === type.value)?.label ??
+      type.value
+    chips.push({ key: 'type', label: t('logs.typeLabel'), value: label })
+  }
+  if (startDate.value || endDate.value) {
+    chips.push({
+      key: 'date',
+      label: t('logs.dateRange'),
+      value: `${startDate.value || '…'} ~ ${endDate.value || '…'}`,
+    })
+  }
+  return chips
+})
+
+const hasActiveFilters = computed(() => {
+  const hasSearch = searchFields.value.some((f) =>
+    Boolean(searchValues.value[f.key]?.trim())
+  )
+  return hasSearch || secondaryActiveCount.value > 0
+})
+
+function clearFilterChip(key: string): void {
+  if (key === 'type') {
+    type.value = ''
+    return
+  }
+  if (key === 'date') {
+    startDate.value = ''
+    endDate.value = ''
+    return
+  }
+  updateSearchValue(key, '')
+}
+
+function resetFilters(): void {
+  keyword.value = ''
+  modelFilter.value = ''
+  tokenFilter.value = ''
+  usernameFilter.value = ''
+  channelFilter.value = ''
+  upstreamRequestId.value = ''
+  type.value = ''
+  startDate.value = ''
+  endDate.value = ''
+}
+
 // ---------- columns (dynamic, driven by visibleCols) ----------
 
 const COL_META: Record<
   ColKey,
   { labelKey: string; width?: string; align?: 'left' | 'right' | 'center' }
 > = {
-  created: { labelKey: 'logs.colTime', width: '130px' },
-  identity: { labelKey: 'logs.colIdentity', width: '148px' },
-  route: { labelKey: 'logs.colRoute', width: '152px' },
-  reasoning: { labelKey: 'logs.colReasoning', width: '84px' },
-  performance: { labelKey: 'logs.colPerformance', width: '144px' },
-  usage: { labelKey: 'logs.colUsage', width: '162px' },
-  cost: { labelKey: 'logs.colCost', width: '80px', align: 'right' },
-  content: { labelKey: 'logs.colContent', width: '114px', align: 'right' },
+  created: { labelKey: 'logs.colTime', width: '126px' },
+  identity: { labelKey: 'logs.colIdentity', width: '132px' },
+  route: { labelKey: 'logs.colRoute', width: '184px' },
+  reasoning: { labelKey: 'logs.colReasoning', width: '72px' },
+  performance: { labelKey: 'logs.colPerformance', width: '166px' },
+  usage: { labelKey: 'logs.colUsage', width: '200px' },
+  cost: { labelKey: 'logs.colCost', width: '76px', align: 'right' },
+  content: { labelKey: 'logs.colContent', width: '144px', align: 'right' },
 }
 
 const columns = computed<TableColumn[]>(() =>
@@ -559,74 +682,42 @@ onBeforeUnmount(() => {
     </PageBreadcrumb>
 
     <!-- filter toolbar -->
-    <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+    <LogFilterToolbar
+      :search-fields="searchFields"
+      :search-values="searchValues"
+      :search-field="activeSearchField"
+      :secondary-active-count="secondaryActiveCount"
+      :active-chips="extraActiveChips"
+      :has-active-filters="hasActiveFilters"
+      @update:search-value="updateSearchValue"
+      @update:search-field="activeSearchField = $event"
+      @clear-chip="clearFilterChip"
+      @reset="resetFilters"
     >
-      <SearchInput
-        v-model="keyword"
-        :placeholder="t('logs.keywordPlaceholder')"
-        :aria-label="t('logs.keywordPlaceholder')"
-        name="log-search"
-        class="w-full sm:w-52"
-      />
-      <FilterSelect
-        v-if="canReadAll"
-        v-model="scope"
-        :options="scopeOptions"
-        :label="t('logs.scopeLabel')"
-        :prefix-label="t('logs.scopeLabel') + ':'"
-        class="w-full sm:w-48"
-      />
-      <FilterSelect
-        v-model="type"
-        :options="typeOptions"
-        :label="t('logs.typeLabel')"
-        :prefix-label="t('logs.typeLabel') + ':'"
-        class="w-full sm:w-44"
-      />
-      <SearchInput
-        v-model="modelFilter"
-        :placeholder="t('logs.modelPlaceholder')"
-        :aria-label="t('logs.modelPlaceholder')"
-        name="log-model-search"
-        class="w-full sm:w-48"
-      />
-      <SearchInput
-        v-model="tokenFilter"
-        :placeholder="t('logs.tokenPlaceholder')"
-        :aria-label="t('logs.tokenPlaceholder')"
-        name="log-token-search"
-        class="w-full sm:w-44"
-      />
-      <DateRangePicker
-        v-model:start="startDate"
-        v-model:end="endDate"
-        class="w-full sm:w-64"
-      />
-      <template v-if="readingAll">
-        <SearchInput
-          v-model="usernameFilter"
-          :placeholder="t('logs.usernamePlaceholder')"
-          :aria-label="t('logs.usernamePlaceholder')"
-          name="log-username-search"
-          class="w-full sm:w-44"
+      <template #filters>
+        <FilterSelect
+          v-if="canReadAll"
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('logs.scopeLabel')"
+          :prefix-label="t('logs.scopeLabel') + ':'"
+          class="w-full sm:w-auto"
         />
-        <SearchInput
-          v-model="channelFilter"
-          :placeholder="t('logs.channelIdPlaceholder')"
-          :aria-label="t('logs.channelIdPlaceholder')"
-          name="log-channel-search"
-          class="w-full sm:w-36"
+        <FilterSelect
+          v-model="type"
+          :options="typeOptions"
+          :label="t('logs.typeLabel')"
+          :prefix-label="t('logs.typeLabel') + ':'"
+          class="w-full sm:w-auto"
         />
-        <SearchInput
-          v-model="upstreamRequestId"
-          :placeholder="t('logs.upstreamRequestIdPlaceholder')"
-          :aria-label="t('logs.upstreamRequestIdPlaceholder')"
-          name="log-upstream-request-search"
-          class="w-full sm:w-48"
+        <DateRangePicker
+          v-model:start="startDate"
+          v-model:end="endDate"
+          class="w-full sm:w-56"
         />
       </template>
-      <div class="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
+
+      <template #actions>
         <div
           ref="colSettingsRef"
           class="relative hidden lg:block"
@@ -636,7 +727,7 @@ onBeforeUnmount(() => {
           <IconButton
             ref="colSettingsTriggerRef"
             :label="t('logs.colSettings')"
-            class="h-11 w-11 border border-[var(--border-default)] sm:h-8 sm:w-8"
+            class="h-11 w-11 border border-[var(--border-default)] sm:h-10 sm:w-10"
             :class="
               colSettingsOpen
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
@@ -647,23 +738,7 @@ onBeforeUnmount(() => {
             :aria-controls="colSettingsPanelId"
             @click="toggleColSettings"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M4 6h3m4 0h9M4 12h9m4 0h3M4 18h4m4 0h8" />
-              <circle cx="9" cy="6" r="2" />
-              <circle cx="15" cy="12" r="2" />
-              <circle cx="10" cy="18" r="2" />
-            </svg>
+            <SlidersHorizontal :size="16" aria-hidden="true" />
           </IconButton>
 
           <Transition name="col-panel">
@@ -732,23 +807,11 @@ onBeforeUnmount(() => {
         </div>
 
         <ConsoleButton v-if="canExport" variant="secondary" @click="openExport">
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-          >
-            <path
-              d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
-            />
-          </svg>
+          <Download :size="16" aria-hidden="true" />
           {{ t('common.export') }}
         </ConsoleButton>
-      </div>
-    </div>
+      </template>
+    </LogFilterToolbar>
 
     <ConsoleCard class="hidden lg:block" :padded="false">
       <DataTable
@@ -766,7 +829,9 @@ onBeforeUnmount(() => {
         empty-illustration="empty-logs"
       >
         <template #cell-created="{ row }">
-          <span class="whitespace-nowrap text-xs text-[var(--text-tertiary)]">
+          <span
+            class="whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+          >
             {{ formatTime((row as LogItem).created) }}
           </span>
         </template>
@@ -840,7 +905,7 @@ onBeforeUnmount(() => {
         <template #cell-cost="{ row }">
           <span
             data-log-cost
-            class="whitespace-nowrap text-sm font-semibold tabular-nums"
+            class="whitespace-nowrap font-mono text-sm font-semibold tabular-nums"
             :class="
               ['topup', 'refund', 'manage', 'system'].includes(
                 (row as LogItem).type
