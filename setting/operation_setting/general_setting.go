@@ -20,16 +20,19 @@ type GeneralSetting struct {
 	CustomCurrencySymbol string `json:"custom_currency_symbol"`
 	// 自定义货币与美元汇率（1 USD = X Custom）
 	CustomCurrencyExchangeRate float64 `json:"custom_currency_exchange_rate"`
+	// 丢弃上游注入的伪心跳 data 事件（"SSE-Keep-Alive"），避免污染 TTFT 并破坏严格客户端的事件顺序
+	DropUpstreamKeepAliveEnabled bool `json:"drop_upstream_keepalive_enabled"`
 }
 
 // 默认配置
 var generalSetting = GeneralSetting{
-	DocsLink:                   "https://docs.newapi.pro",
-	PingIntervalEnabled:        false,
-	PingIntervalSeconds:        60,
-	QuotaDisplayType:           QuotaDisplayTypeUSD,
-	CustomCurrencySymbol:       "¤",
-	CustomCurrencyExchangeRate: 1.0,
+	DocsLink:                     "https://docs.newapi.pro",
+	PingIntervalEnabled:          false,
+	PingIntervalSeconds:          60,
+	QuotaDisplayType:             QuotaDisplayTypeUSD,
+	CustomCurrencySymbol:         "¤",
+	CustomCurrencyExchangeRate:   1.0,
+	DropUpstreamKeepAliveEnabled: true,
 }
 
 func init() {

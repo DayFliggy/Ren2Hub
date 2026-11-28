@@ -33726,7 +33726,7 @@
       ]
     },
     "relay/channel/openai/relay_responses.go": {
-      "local_sha256": "d9ea53912d2f12a2dff7e1db133de61977ac74fec73d69ee0b113223bddd08fb",
+      "local_sha256": "41d12e5c2d24d99f73a4df728c106280e30833fae935c2335ea8e6f463eef228",
       "hunks": [
         {
           "header": "@@ -27,6 +27,7 @@",
@@ -33734,9 +33734,19 @@
           "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
         },
         {
-          "header": "@@ -77,6 +78,7 @@",
-          "sha256": "596ef608f5eec739a1facdb8c507eea94919282f0f109c5d8e5cda26acdd37cc",
-          "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。"
+          "header": "@@ -37,6 +38,7 @@",
+          "sha256": "6e856c2101e6d4d8df3c54e1db336b1106be4e151fc6c9f582239b92de756b60",
+          "basis": "OaiResponsesHandler 与 OaiResponsesStreamHandler 接入 fillResponsesTextFormat 补全缺失的 text.format（SYNC_LEDGER.md#现行本地差异）。"
+        },
+        {
+          "header": "@@ -77,6 +79,7 @@",
+          "sha256": "071022cf688101440c6cd27290c5f1ad7748dd448beea18e9ab48b5df63144fb",
+          "basis": "OaiResponsesHandler 与 OaiResponsesStreamHandler 接入 fillResponsesTextFormat 补全缺失的 text.format（SYNC_LEDGER.md#现行本地差异）。"
+        },
+        {
+          "header": "@@ -86,7 +89,8 @@",
+          "sha256": "6ebb131dd781fa280989b10a9634b3f22befe4ceccebdb27a4577de4f26457b7",
+          "basis": "OaiResponsesHandler 与 OaiResponsesStreamHandler 接入 fillResponsesTextFormat 补全缺失的 text.format（SYNC_LEDGER.md#现行本地差异）。"
         }
       ]
     },
@@ -35763,8 +35773,13 @@
       ]
     },
     "relay/helper/stream_scanner.go": {
-      "local_sha256": "e32bfece8b866ca75544e8b92111e6e13f8b63ab35196e79f5df3b72a79e9ce6",
+      "local_sha256": "d019838cac5a109f4210a6d0b04efb4649866dba2bcd3f4e61f9a4fc8599e46d",
       "hunks": [
+        {
+          "header": "@@ -50,7 +50,7 @@",
+          "sha256": "6ebd08f284cb8af5341000d5b4a4bf1281f2965afc22ed4693c5cf626a5dabb5",
+          "basis": "NewStreamScanner 接入 wrapKeepAliveFilterReader 过滤上游空 SSE-Keep-Alive 伪心跳（SYNC_LEDGER.md#现行本地差异）。"
+        },
         {
           "header": "@@ -62,7 +62,7 @@",
           "sha256": "55e06586fdd612e159dde73099de79de0840b3e4f002bebfce7e671c6ffadd1f",
@@ -36008,7 +36023,7 @@
       ]
     },
     "model/user.go": {
-      "local_sha256": "1ca017f00ee0c115215aec68ebe10022a02756ccd54142c819a4b3a8f6de311a",
+      "local_sha256": "b3ffdc1ce09eb03b000a66d1c6f05f076980bd4de705b99315f92b4ba7e9465f",
       "hunks": [
         {
           "header": "@@ -10,7 +10,6 @@",
@@ -36034,6 +36049,11 @@
           "header": "@@ -224,13 +229,6 @@",
           "sha256": "8857a211cadc3a20f61386872ba779f6c9e32b4707c67d5cf2a30cffb37fb9b6",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
+        },
+        {
+          "header": "@@ -287,14 +285,14 @@",
+          "sha256": "2bd5ad4e459d9181ed1219bd959e8e399e7fca1acb015a6c7e4722e61030ddf8",
+          "basis": "CheckUserExistOrDeleted 改按 LOWER(username) = ? 做大小写不敏感查重（SYNC_LEDGER.md#现行本地差异）。"
         },
         {
           "header": "@@ -435,7 +433,7 @@",

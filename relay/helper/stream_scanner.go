@@ -50,7 +50,7 @@ func NewStreamScanner(reader io.Reader, maxBytes ...int) *bufio.Scanner {
 	if len(maxBytes) > 0 && maxBytes[0] > 0 {
 		limit = min(limit, maxBytes[0])
 	}
-	scanner := bufio.NewScanner(reader)
+	scanner := bufio.NewScanner(wrapKeepAliveFilterReader(reader))
 	scanner.Buffer(make([]byte, min(InitialScannerBufferSize, limit)), limit)
 	return scanner
 }

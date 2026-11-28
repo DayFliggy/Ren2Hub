@@ -42,6 +42,7 @@ MATRIX_TESTS = {
         "TestNativeTopUpFacadeDatabaseMatrix", "TestQuotaReserveRedisLossDatabaseMatrix", "TestQuotaBatchHydrationAtomicityDatabaseMatrix", "TestQuotaDirectSyncHydrationDatabaseMatrix", "TestQuotaBatchDeletedBalancesDatabaseMatrix", "TestVerifiedTopUpReceiptDatabaseMatrix", "TestBackupPaymentLinksOptionDatabaseRoundTrip",
         "TestBatchSetChannelTagDatabaseMatrix",
         "TestReadRouteChannelsAndModelsDatabaseMatrix",
+        "TestCheckUserExistOrDeletedCaseInsensitiveDatabases",
     ),
     "controller": (
         "TestModelPricingConversionDatabaseMatrix", "TestProviderChannelManagementDatabaseMatrix", "TestModelManagementDatabaseMatrix",

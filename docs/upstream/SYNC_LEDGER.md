@@ -116,6 +116,13 @@ B2 已批准的权限与输出边界：
 - 状态更新失败返回明确错误；不存在、未变与持久化失败分开，批量列出失败项。缓存只在事务提交后发布，快照不原地修改；刷新读取失败保留原缓存并报告。仅显式的自动停用/恢复调用在缓存已处于目标状态或人工停用挡住自动停用时走读取快路径，不等待状态锁或查库；管理员单个、批量与标签启停始终以数据库事务为依据，不因陈旧缓存值相同而跳过。普通编辑的能力事务边界仍属 ROUTE-1。
 - 上游响应复制过滤凭据、Cookie 和逐跳头（含 Connection 声明项）；通配请求头不转发 WebSocket 认证子协议。错误各字符串字段、嵌套 metadata 与前置日志共用净化，内部重试码及 cause 保留；错误体读取失败仍关闭响应体。
 
+用户批准吸收的协议兼容与边界修复（`audit-local-safety`）：
+
+- 流内协议失败摘要：`relay/common/stream_status.go` 新增仅输出到服务端 `Summary()` 的 `failureMessage`（保留首条非空文本，上限 500 rune 并经 `common.MaskSensitiveInfo` 脱敏，不进入 `StreamOutcome` 与用户可见日志），`service/responses_usage.go` 的 `ObserveResponsesOutcome` 在失败分支写入该文本；`relay/helper/stream_scanner.go` 的 `StreamScannerHandler` 函数体受 `known_upstream_logger_race.json` 冻结约束，暂保持原文不改其日志级别行。
+- 上游伪心跳过滤：`setting/operation_setting/general_setting.go` 新增 `DropUpstreamKeepAliveEnabled`（`general_setting.drop_upstream_keepalive_enabled`，默认 `true`），扩展文件 `relay/helper/stream_scanner_keepalive.go` 实现 `IsUpstreamKeepAliveEvent` 与行级流式 `keepAliveFilterReader`，在 `relay/helper/stream_scanner.go` 的 `NewStreamScanner` 接入最小接点，于首响应计数前丢弃空 `SSE-Keep-Alive` 事件且超长行原样透传。
+- Responses 缺失 `text.format` 补全：扩展文件 `relay/channel/openai/relay_responses_text_format.go` 在目标 `text`/`response.text` 为 JSON 对象且缺失 `format` 时补入 `{"type":"text"}`，`relay/channel/openai/relay_responses.go` 在流式与非流式两处接入单行调用。
+- 用户名大小写查重：`model/user.go` 的 `CheckUserExistOrDeleted` 按 `LOWER(username) = ?` 查重（覆盖活跃与软删除用户），避免 PostgreSQL/SQLite 下的大小写变体绕过；不向 `users` 表插入保留名占位记录。
+
 ## 与上游相同、未在本地修复的已知问题
 
 原生文件保持上游原文；与上游相同的多扣问题按用户决定不在本地修复。恢复原生后重新出现的退步逐项列在[披露](NATIVE_B388_DISCLOSURES.md)（任务缺渠道不退款、管理员列表可见范围、调试日志、配置原子性、支付回调确认、定价与日志计数竞争等）。HTTP 流失败后的亲和写回、Remix 与 Midjourney 续作的共有缺陷列在[等待上游](WAITING_UPSTREAM.md)。另有以下几项只登记、不修：

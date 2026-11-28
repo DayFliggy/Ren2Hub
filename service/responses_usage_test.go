@@ -340,3 +340,32 @@ func TestResponsesUsageAccumulatorMissingUsageEstimation(t *testing.T) {
 		})
 	}
 }
+
+func TestObserveResponsesOutcomeRecordsFailureMessage(t *testing.T) {
+	t.Run("flat error event records message", func(t *testing.T) {
+		info := &relaycommon.RelayInfo{StreamStatus: relaycommon.NewStreamStatus()}
+		ObserveResponsesOutcome(info, &dto.ResponsesStreamResponse{
+			Type:    "error",
+			Code:    "rate_limit_exceeded",
+			Message: "upstream rate limit hit",
+		})
+		assert.True(t, info.StreamStatus.ResponseFailed())
+		assert.Equal(t, "upstream rate limit hit", info.StreamStatus.FailureMessage())
+	})
+
+	t.Run("response.failed extracts nested openai error message", func(t *testing.T) {
+		var event dto.ResponsesStreamResponse
+		require.NoError(t, common.Unmarshal([]byte(`{
+			"type":"response.failed",
+			"response":{
+				"status":"failed",
+				"error":{"code":"server_error","type":"api_error","message":"backend overloaded"}
+			}
+		}`), &event))
+		info := &relaycommon.RelayInfo{StreamStatus: relaycommon.NewStreamStatus()}
+		ObserveResponsesOutcome(info, &event)
+		assert.True(t, info.StreamStatus.ResponseFailed())
+		assert.Equal(t, "backend overloaded", info.StreamStatus.FailureMessage())
+		assert.Contains(t, info.StreamStatus.Summary(), `response=failed code="server_error" type="api_error" message="backend overloaded"`)
+	})
+}

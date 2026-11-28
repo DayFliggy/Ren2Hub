@@ -3,9 +3,9 @@
   "implementation_base_sha": "2382fbdd55a6d76d73d8e5b314c7765c98cd8da6",
   "scope": "固定上游全后端目录并集，另含bin迁移SQL与恢复的e2e测试；Vue、根发布自动化与文档分别审阅。文件指纹不声明候选验收。",
   "counts": {
-    "upstream_equal": 827,
-    "adapted": 337,
-    "extension": 543,
+    "upstream_equal": 822,
+    "adapted": 342,
+    "extension": 548,
     "removed": 47
   },
   "files": [
@@ -6536,7 +6536,7 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "1ca017f00ee0c115215aec68ebe10022a02756ccd54142c819a4b3a8f6de311a",
+      "local_sha256": "b3ffdc1ce09eb03b000a66d1c6f05f076980bd4de705b99315f92b4ba7e9465f",
       "reasons": [
         "affiliate",
         "announcements",
@@ -6549,7 +6549,7 @@
       ],
       "review": {
         "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。 CheckUserExistOrDeleted 改按 LOWER(username) = ? 做大小写不敏感查重（SYNC_LEDGER.md#现行本地差异）。",
         "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
         "current_hunk_review": true
       }
@@ -6611,6 +6611,12 @@
       "status": "adapted",
       "upstream_sha256": "826047fe0be237e53fe9b2dae82657290ac4d8fdfcdc70fb6b64b22c8d1d4a07",
       "local_sha256": "09c63927e9e7a8268fb4e3b324789f20927c42f676ce3b453d743c09a6055c8c"
+    },
+    {
+      "path": "model/user_case_insensitive_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "baf0da2d3d4fb9ff53b95cb3be2c7e672d37fa3204638fa56c0ad01741e851ad"
     },
     {
       "path": "model/user_oauth_binding.go",
@@ -8848,13 +8854,14 @@
       "path": "relay/channel/openai/relay_responses.go",
       "status": "adapted",
       "upstream_sha256": "b56754ed2ada30bf8727db4cd386a0abc0a8636cb08e2389f15ed7395b0bd293",
-      "local_sha256": "d9ea53912d2f12a2dff7e1db133de61977ac74fec73d69ee0b113223bddd08fb",
+      "local_sha256": "41d12e5c2d24d99f73a4df728c106280e30833fae935c2335ea8e6f463eef228",
       "reasons": [
+        "audit-local-safety",
         "token-routing"
       ],
       "review": {
         "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
-        "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。",
+        "basis": "在 OaiResponsesHandler、OaiResponsesStreamHandler 接收供应商原始计数，转换、填补和结算前按路由尝试记录缓存字段存在性。 OaiResponsesHandler 与 OaiResponsesStreamHandler 接入 fillResponsesTextFormat 补全缺失的 text.format（SYNC_LEDGER.md#现行本地差异）。",
         "current_hunk_review": true
       }
     },
@@ -8879,6 +8886,25 @@
         "method": "保留既有批准接点，审阅本批最小差异并以先失败回归验证。",
         "current_hunk_review": true
       }
+    },
+    {
+      "path": "relay/channel/openai/relay_responses_text_format.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4bd5d175b3ca9e7dda23309b548a15d875e9ece8aef56dd8d321e321698d7141",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+        "basis": "扩展实现 fillResponsesTextFormat，为缺失 format 的 Responses text 对象补全默认 {\"type\":\"text\"}（SYNC_LEDGER.md#现行本地差异）。"
+      }
+    },
+    {
+      "path": "relay/channel/openai/relay_responses_text_format_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "52ff109138b28d53e844234ab08cd47067a9f6ccea1e8773cc7f17862690663c"
     },
     {
       "path": "relay/channel/openai/request_field_conflict.go",
@@ -9773,15 +9799,22 @@
     },
     {
       "path": "relay/common/stream_status.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "1c3bb784a7ff47c51871196252cd9a084f7eccd4513a32be44ec5a7da1e4f1db",
-      "local_sha256": "1c3bb784a7ff47c51871196252cd9a084f7eccd4513a32be44ec5a7da1e4f1db"
+      "local_sha256": "5c33feed58afd0f047cab352c8002d45855ff23f0a3f7a3314a600820553cc62",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+        "basis": "StreamStatus 增加仅输出到服务端 Summary() 的脱敏 failureMessage 字段与 RecordFailureMessage/FailureMessage 方法（SYNC_LEDGER.md#现行本地差异）。"
+      }
     },
     {
       "path": "relay/common/stream_status_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "bf63a05a01123ce0d82eb62bbe9495c03889e9fe79b12cbab329b895cdb5fa28",
-      "local_sha256": "bf63a05a01123ce0d82eb62bbe9495c03889e9fe79b12cbab329b895cdb5fa28"
+      "local_sha256": "97a16320445fa3e06e42a7f78dcbba02661d2c9d9e6fe3b29646c4845a0bba73"
     },
     {
       "path": "relay/common/tool_usage.go",
@@ -10074,17 +10107,36 @@
       "path": "relay/helper/stream_scanner.go",
       "status": "adapted",
       "upstream_sha256": "0ce0797e4ab920313591f21456f029ee23f9e2c59c126f68c01f952481cbc59f",
-      "local_sha256": "e32bfece8b866ca75544e8b92111e6e13f8b63ab35196e79f5df3b72a79e9ce6",
+      "local_sha256": "d019838cac5a109f4210a6d0b04efb4649866dba2bcd3f4e61f9a4fc8599e46d",
       "reasons": [
         "audit-local-safety",
         "stream-output-observation"
       ],
       "review": {
         "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：relay/helper/stream_scanner.go#1, relay/helper/stream_scanner.go#3, relay/helper/stream_scanner.go#4, relay/helper/stream_scanner.go#5 RELAY-4/5/6/8：响应与透传凭据过滤、错误各字符串与日志统一净化、内部分类保留原文、读取失败关闭响应体。 NewStreamScanner 接入 wrapKeepAliveFilterReader 过滤上游空 SSE-Keep-Alive 伪心跳（SYNC_LEDGER.md#现行本地差异）。",
         "method": "审阅与上游差异及调用方语义；批准逻辑放扩展文件，原生保留必要接点，并以失败/恢复/权限回归验证。",
         "current_hunk_review": true
       }
+    },
+    {
+      "path": "relay/helper/stream_scanner_keepalive.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a71b336a8085fca88371700c22f601babd55bd9f9a5999f2ba149ab30025e53f",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+        "basis": "扩展实现 IsUpstreamKeepAliveEvent 与流式 keepAliveFilterReader，在首响应计数前过滤空 SSE-Keep-Alive 伪心跳（SYNC_LEDGER.md#现行本地差异）。"
+      }
+    },
+    {
+      "path": "relay/helper/stream_scanner_keepalive_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "7bd8eb9c16aecbe9c03d490935347ca3709aafd914c293d81b48aeccd389e72b"
     },
     {
       "path": "relay/helper/stream_scanner_test.go",
@@ -13937,15 +13989,22 @@
     },
     {
       "path": "service/responses_usage.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "d80759b99cf24ef1fd45a7710a2f965c87be7a18c5e6ce595977eccca2bbfe25",
-      "local_sha256": "d80759b99cf24ef1fd45a7710a2f965c87be7a18c5e6ce595977eccca2bbfe25"
+      "local_sha256": "87fb793770157ffd466da4678a6589702bd9e15b6b13dd4ebdd9defd6dff26f4",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+        "basis": "ObserveResponsesOutcome 在失败事件分支记录上游失败消息到 StreamStatus.RecordFailureMessage（SYNC_LEDGER.md#现行本地差异）。"
+      }
     },
     {
       "path": "service/responses_usage_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "fb8ce5dd30d438513430d253fa5d91211e3cbd7db5085588ad8fbe3256340596",
-      "local_sha256": "fb8ce5dd30d438513430d253fa5d91211e3cbd7db5085588ad8fbe3256340596"
+      "local_sha256": "bce65ada21f56ae7adf365535e4237279a956b5c562a218cd280c2e383410f68"
     },
     {
       "path": "service/return_path.go",
@@ -15367,9 +15426,16 @@
     },
     {
       "path": "setting/operation_setting/general_setting.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "4d65b47af661993cf94dde4308e1be86402e0adeda1662cadacdd3ceb1bf8f0f",
-      "local_sha256": "4d65b47af661993cf94dde4308e1be86402e0adeda1662cadacdd3ceb1bf8f0f"
+      "local_sha256": "e1399bbace2e71f387ef3594b29897214b59c78d4d3500bd94cc7f65ada6b10c",
+      "reasons": [
+        "audit-local-safety"
+      ],
+      "review": {
+        "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+        "basis": "GeneralSetting 新增 DropUpstreamKeepAliveEnabled 开关（默认 true）控制上游伪心跳过滤（SYNC_LEDGER.md#现行本地差异）。"
+      }
     },
     {
       "path": "setting/operation_setting/log_setting.go",

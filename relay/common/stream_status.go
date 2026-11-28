@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
 type StreamEndReason string
@@ -55,6 +57,10 @@ type StreamStatus struct {
 	errorStatus      int
 	incompleteReason string
 	expectsTerminal  bool
+	// failureMessage is the upstream's own text for a protocol failure. It is
+	// kept out of StreamOutcome and stored logs; only the server log line of
+	// Summary carries it, masked.
+	failureMessage string
 }
 
 // StreamOutcome holds classification facts only; upstream messages never
@@ -157,6 +163,37 @@ func (s *StreamStatus) MarkFailed(code, errorType string, status int) {
 	}
 }
 
+// maxFailureMessageRunes bounds the upstream failure text kept for the log.
+const maxFailureMessageRunes = 500
+
+// RecordFailureMessage keeps the first non-empty upstream failure text.
+func (s *StreamStatus) RecordFailureMessage(message string) {
+	if s == nil {
+		return
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	if runes := []rune(message); len(runes) > maxFailureMessageRunes {
+		message = string(runes[:maxFailureMessageRunes]) + "..."
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failureMessage == "" {
+		s.failureMessage = message
+	}
+}
+
+func (s *StreamStatus) FailureMessage() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.failureMessage
+}
+
 func (s *StreamStatus) ResponseOutcome() string {
 	if s == nil {
 		return ""
@@ -227,6 +264,18 @@ func (s *StreamStatus) Summary() string {
 	s.mu.Lock()
 	if s.ErrorCount > 0 {
 		fmt.Fprintf(b, " soft_errors=%d", s.ErrorCount)
+	}
+	if s.response == ResponseOutcomeFailed {
+		b.WriteString(" response=failed")
+		if s.errorCode != "" {
+			fmt.Fprintf(b, " code=%q", s.errorCode)
+		}
+		if s.errorType != "" {
+			fmt.Fprintf(b, " type=%q", s.errorType)
+		}
+		if s.failureMessage != "" {
+			fmt.Fprintf(b, " message=%q", common.MaskSensitiveInfo(s.failureMessage))
+		}
 	}
 	s.mu.Unlock()
 	return b.String()

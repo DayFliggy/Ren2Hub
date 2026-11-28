@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -179,4 +180,41 @@ func TestStreamStatus_Summary_NilSafe(t *testing.T) {
 	t.Parallel()
 	var s *StreamStatus
 	assert.Equal(t, "StreamStatus<nil>", s.Summary())
+}
+
+func TestStreamStatus_RecordFailureMessageAndSummary(t *testing.T) {
+	t.Parallel()
+
+	var nilStatus *StreamStatus
+	nilStatus.RecordFailureMessage("ignored")
+	assert.Empty(t, nilStatus.FailureMessage())
+
+	s := NewStreamStatus()
+	s.SetEndReason(StreamEndReasonDone, nil)
+	s.MarkFailed("server_error", "api_error", 500)
+	s.RecordFailureMessage("   ")
+	assert.Empty(t, s.FailureMessage())
+
+	s.RecordFailureMessage("upstream failed for api_key:AIzaSyAAAaUooTUni8AdaOkSRMda30n_Q4vrV70 at https://upstream.example/v1?key=topsecret")
+	s.RecordFailureMessage("later message should not overwrite")
+	assert.Equal(t, "upstream failed for api_key:AIzaSyAAAaUooTUni8AdaOkSRMda30n_Q4vrV70 at https://upstream.example/v1?key=topsecret", s.FailureMessage())
+
+	// Failure text never leaks into StreamOutcome, and Summary masks credentials.
+	outcome := s.OutcomeSnapshot()
+	assert.Equal(t, ResponseOutcomeFailed, outcome.Response)
+	assert.Equal(t, "server_error", outcome.ErrorCode)
+	assert.Equal(t, "api_error", outcome.ErrorType)
+
+	summary := s.Summary()
+	assert.Contains(t, summary, `response=failed`)
+	assert.Contains(t, summary, `code="server_error"`)
+	assert.Contains(t, summary, `type="api_error"`)
+	assert.Contains(t, summary, `message=`)
+	assert.NotContains(t, summary, "AIzaSyAAAaUooTUni8AdaOkSRMda30n_Q4vrV70")
+	assert.NotContains(t, summary, "topsecret")
+
+	longStatus := NewStreamStatus()
+	longMsg := strings.Repeat("a", maxFailureMessageRunes+40)
+	longStatus.RecordFailureMessage(longMsg)
+	assert.Equal(t, strings.Repeat("a", maxFailureMessageRunes)+"...", longStatus.FailureMessage())
 }
