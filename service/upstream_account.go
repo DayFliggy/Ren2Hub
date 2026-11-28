@@ -229,6 +229,9 @@ func UpdateManagedBinding(ctx context.Context, id, channelID int, enabled *bool,
 	if target == nil {
 		return gorm.ErrRecordNotFound
 	}
+	// Level 1 -> Level 2 before the commit: a probe holding the channel lock finishes first,
+	// and later probes read the committed sync settings.
+	defer lockUpstreamRatioChannel(channelID)()
 	if err := model.UpdateUpstreamBinding(target.ID, updates); err != nil {
 		return err
 	}
@@ -245,11 +248,12 @@ func UpdateManagedBinding(ctx context.Context, id, channelID int, enabled *bool,
 		return nil
 	}
 	a, err := model.GetUpstreamAccount(id)
-	if err != nil || a.Status != "active" {
+	if err != nil {
+		return err
+	}
+	if a.Status != "active" {
 		return nil
 	}
-	// Strictly Level 1 (lockManagedAccount) -> Level 2 (lockUpstreamRatioChannel).
-	defer lockUpstreamRatioChannel(channelID)()
 	ch, err := model.GetChannelById(channelID, true)
 	if err != nil {
 		return handleBindingError(*target, err)
@@ -263,17 +267,14 @@ func UpdateManagedBinding(ctx context.Context, id, channelID int, enabled *bool,
 		(rec == nil || !rec.BelongsTo(ch) ||
 			(rec.Mode != model.UpstreamRatioModeManual &&
 				(rec.Status != model.UpstreamRatioStatusOK || rec.CredentialFP != upstreamRatioFingerprint(ch) || now.Unix() > rec.FreshUntil)))
-	if needsSub2Probe && ctx != nil && ctx.Err() == nil {
+	if needsSub2Probe {
+		// The probe records upstream failures in the ratio record and applies the bound ratio itself.
 		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		probed, probeErr := probeAndSaveUpstreamRatioLocked(probeCtx, channelID, false, UpstreamRatioKindSub2API)
-		cancel()
-		if probeErr == nil && probed != nil {
-			// probeAndSaveUpstreamRatioLocked already applied immediate bound ratio.
-			return nil
-		}
+		defer cancel()
+		_, err := probeAndSaveUpstreamRatioLocked(probeCtx, channelID, false, UpstreamRatioKindSub2API)
+		return err
 	}
-	applyImmediateBoundRatioLocked(target, ch, rec, now)
-	return nil
+	return applyImmediateBoundRatioLocked(target, ch, rec, now)
 }
 
 func ReverifyManagedBinding(ctx context.Context, id, channelID int) error {
@@ -322,29 +323,18 @@ func ReverifyManagedBinding(ctx context.Context, id, channelID int) error {
 			return false, nil
 		}
 		if ad.platform == "newapi" {
-			snap, snapErr := ad.Snapshot(ctx)
-			if snapErr != nil {
-				return false, nil
+			snap, err := ad.Snapshot(ctx)
+			if err != nil {
+				return false, err
 			}
 			return false, syncUpstreamBinding(a, *updated, key, snap)
 		}
-		// Sub2API: best-effort probe under Level 1 -> Level 2, then apply bound ratio if enabled.
-		func() {
-			defer lockUpstreamRatioChannel(channelID)()
-			probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			probed, probeErr := probeAndSaveUpstreamRatioLocked(probeCtx, channelID, false, UpstreamRatioKindSub2API)
-			if probeErr != nil || probed == nil {
-				if updated.RatioSyncEnabled {
-					if ch, chErr := model.GetChannelById(channelID, true); chErr == nil {
-						if rec, recErr := model.GetChannelUpstreamRatio(channelID); recErr == nil {
-							applyImmediateBoundRatioLocked(updated, ch, rec, time.Now())
-						}
-					}
-				}
-			}
-		}()
-		return false, nil
+		// Sub2API: Level 1 -> Level 2; the probe records upstream failures and applies the bound ratio.
+		defer lockUpstreamRatioChannel(channelID)()
+		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		_, err = probeAndSaveUpstreamRatioLocked(probeCtx, channelID, false, UpstreamRatioKindSub2API)
+		return false, err
 	})
 	return err
 }
@@ -385,7 +375,8 @@ func BindManagedChannel(ctx context.Context, id, keyID, channelID int) error {
 		}
 		if a.Platform == "newapi" && key.Status == "active" {
 			if snap, ok := cachedAccountSnapshot(a); ok {
-				_, _ = managedRatioRecord(a, ch, *b, key, snap, b.Verify)
+				_, err := managedRatioRecord(a, ch, *b, key, snap, b.Verify)
+				logManagedRatioRecordError(ch.Id, err)
 			}
 		}
 		return false, nil
@@ -471,9 +462,18 @@ func CreateManagedChannel(ctx context.Context, id, keyID int, newKey *UpstreamKe
 	b := &model.UpstreamChannelBinding{AccountID: id, RemoteKeyID: key.ID, RemoteStatus: key.Status}
 	err = model.CreateBoundUpstreamChannel(b, ch, upstreamRatioFingerprint)
 	if err == nil && a.Platform == "newapi" && key.Status == "active" {
-		_, _ = managedRatioRecord(a, ch, *b, key, snapshot, b.Verify)
+		_, recordErr := managedRatioRecord(a, ch, *b, key, snapshot, b.Verify)
+		logManagedRatioRecordError(ch.Id, recordErr)
 	}
 	return ch.Id, err
+}
+
+// logManagedRatioRecordError reports a failed initial ratio record after the binding is
+// already committed; the next account sync rewrites the record, so the bind still succeeds.
+func logManagedRatioRecordError(channelID int, err error) {
+	if err != nil {
+		common.SysLog(common.LogText("channel %d initial upstream ratio record failed: %v", channelID, err))
+	}
 }
 func sameUpstreamOrigin(base, channel string) bool {
 	a, e := url.Parse(base)

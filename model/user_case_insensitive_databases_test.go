@@ -83,6 +83,14 @@ func TestCheckUserExistOrDeletedCaseInsensitiveDatabases(t *testing.T) {
 			require.NoError(t, db.Create(deleted).Error)
 			require.NoError(t, db.Delete(deleted).Error)
 
+			// SQLite LOWER() folds only ASCII; the exact match must still collide.
+			require.NoError(t, db.Create(&User{
+				Username: "Émile",
+				Password: "password-hash",
+				Status:   common.UserStatusEnabled,
+				AffCode:  "aff-unicode",
+			}).Error)
+
 			for _, tc := range []struct {
 				name     string
 				username string
@@ -95,6 +103,7 @@ func TestCheckUserExistOrDeletedCaseInsensitiveDatabases(t *testing.T) {
 				{"deleted mixed case", "dElEtEdCaSe", "", true},
 				{"deleted with unrelated email", "DELETEDCASE", "other@example.com", true},
 				{"distinct username matched by email case-insensitively", "brandnew", "ALICECASE@example.com", true},
+				{"non-ascii exact name", "Émile", "", true},
 				{"unrelated username and email", "brandnew", "brandnew@example.com", false},
 			} {
 				t.Run(tc.name, func(t *testing.T) {

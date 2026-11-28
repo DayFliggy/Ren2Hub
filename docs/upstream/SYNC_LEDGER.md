@@ -121,7 +121,7 @@ B2 已批准的权限与输出边界：
 - 流内协议失败摘要：`relay/common/stream_status.go` 新增仅输出到服务端 `Summary()` 的 `failureMessage`（保留首条非空文本，上限 500 rune 并经 `common.MaskSensitiveInfo` 脱敏，不进入 `StreamOutcome` 与用户可见日志），`service/responses_usage.go` 的 `ObserveResponsesOutcome` 在失败分支写入该文本；`relay/helper/stream_scanner.go` 的 `StreamScannerHandler` 函数体受 `known_upstream_logger_race.json` 冻结约束，暂保持原文不改其日志级别行。
 - 上游伪心跳过滤：`setting/operation_setting/general_setting.go` 新增 `DropUpstreamKeepAliveEnabled`（`general_setting.drop_upstream_keepalive_enabled`，默认 `true`），扩展文件 `relay/helper/stream_scanner_keepalive.go` 实现 `IsUpstreamKeepAliveEvent` 与行级流式 `keepAliveFilterReader`，在 `relay/helper/stream_scanner.go` 的 `NewStreamScanner` 接入最小接点，于首响应计数前丢弃空 `SSE-Keep-Alive` 事件且超长行原样透传。
 - Responses 缺失 `text.format` 补全：扩展文件 `relay/channel/openai/relay_responses_text_format.go` 在目标 `text`/`response.text` 为 JSON 对象且缺失 `format` 时补入 `{"type":"text"}`，`relay/channel/openai/relay_responses.go` 在流式与非流式两处接入单行调用。
-- 用户名大小写查重：`model/user.go` 的 `CheckUserExistOrDeleted` 按 `LOWER(username) = ?` 查重（覆盖活跃与软删除用户），避免 PostgreSQL/SQLite 下的大小写变体绕过；不向 `users` 表插入保留名占位记录。
+- 用户名大小写查重：`model/user.go` 的 `CheckUserExistOrDeleted` 按 `username = ? OR LOWER(username) = ?` 查重（精确匹配保证 SQLite 等仅折叠 ASCII 的库里非 ASCII 用户名仍能撞重）（覆盖活跃与软删除用户），避免 PostgreSQL/SQLite 下的大小写变体绕过；不向 `users` 表插入保留名占位记录。
 
 ## 与上游相同、未在本地修复的已知问题
 

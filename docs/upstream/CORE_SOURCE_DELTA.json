@@ -6549,7 +6549,7 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
-      "local_sha256": "b3ffdc1ce09eb03b000a66d1c6f05f076980bd4de705b99315f92b4ba7e9465f",
+      "local_sha256": "8789b2d58986fa08e0eccc6c5ff96575435057ca776511c541723997f22a93a2",
       "reasons": [
         "affiliate",
         "announcements",
@@ -6562,7 +6562,7 @@
       ],
       "review": {
         "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
-        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。 CheckUserExistOrDeleted 改按 LOWER(username) = ? 做大小写不敏感查重（SYNC_LEDGER.md#现行本地差异）。",
+        "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。 CheckUserExistOrDeleted 改按 username = ? OR LOWER(username) = ? 做大小写不敏感查重（精确匹配保留 SQLite 下非 ASCII 用户名撞重）（SYNC_LEDGER.md#现行本地差异）。",
         "method": "对照冻结上游及调用方，原生文件只保留共享扩展接点，以交错红绿回归、适用三库与并发验证。",
         "current_hunk_review": true
       }
@@ -6629,7 +6629,7 @@
       "path": "model/user_case_insensitive_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "baf0da2d3d4fb9ff53b95cb3be2c7e672d37fa3204638fa56c0ad01741e851ad"
+      "local_sha256": "6f8792d54823663547e52aa98a45351fc1084b3772836464ee6daf3960e03dfc"
     },
     {
       "path": "model/user_oauth_binding.go",
@@ -12880,7 +12880,7 @@
       "path": "service/channel_upstream_ratio_record.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "77b362b005d204db3c2cf5f4b5f4307f524cf6f10b19887bf23f3118860abaee",
+      "local_sha256": "95d45d78b02ab196041bc6458afb6f53ffa4acab08e539aa2c21aeac3676383f",
       "reasons": [
         "upstream-management",
         "upstream-ratio"
@@ -14971,7 +14971,7 @@
       "path": "service/upstream_account.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "58e92f58ea01d0fca12374f70123a202912716395b404574c1da058b8b3ba7f1",
+      "local_sha256": "83bfa107c91c57e554532f1ba74bbf7aa006afbf7160b7cf8a0fc8fe486185f9",
       "reasons": [
         "upstream-management"
       ],

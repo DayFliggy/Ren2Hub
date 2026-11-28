@@ -36023,7 +36023,7 @@
       ]
     },
     "model/user.go": {
-      "local_sha256": "b3ffdc1ce09eb03b000a66d1c6f05f076980bd4de705b99315f92b4ba7e9465f",
+      "local_sha256": "8789b2d58986fa08e0eccc6c5ff96575435057ca776511c541723997f22a93a2",
       "hunks": [
         {
           "header": "@@ -10,7 +10,6 @@",
@@ -36051,98 +36051,98 @@
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -287,14 +285,14 @@",
-          "sha256": "2bd5ad4e459d9181ed1219bd959e8e399e7fca1acb015a6c7e4722e61030ddf8",
-          "basis": "CheckUserExistOrDeleted 改按 LOWER(username) = ? 做大小写不敏感查重（SYNC_LEDGER.md#现行本地差异）。"
+          "header": "@@ -290,11 +288,13 @@",
+          "sha256": "b29083fb52dc123b7bba96f4060a89e6801948ee12941abcc663235f411aa844",
+          "basis": "CheckUserExistOrDeleted 改按 username = ? OR LOWER(username) = ? 做大小写不敏感查重（精确匹配保留 SQLite 下非 ASCII 用户名撞重）（SYNC_LEDGER.md#现行本地差异）。"
         },
         {
-          "header": "@@ -435,7 +433,7 @@",
-          "sha256": "1fe930a644b215d4da607d09e2db54d72ff7a7ce1325ad16cbbede9f5136fd34",
+          "header": "@@ -435,7 +435,7 @@",
+          "sha256": "2fa6fdebc7313648b4619aaca032b7f94a6630f511bd1ab674745e265ce5d506",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -467,9 +465,6 @@",
-          "sha256": "bcd02f85cdff872df7a1ebc2c1274d4bfa0d89c7de5e845dacef8580ba8ada6b",
+          "header": "@@ -467,9 +467,6 @@",
+          "sha256": "c5a5d0162b66c1173b9f3681eecf9454faee8f66d2344ec42730eb5d07f9f9e2",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -531,8 +526,8 @@",
-          "sha256": "cc0b84709fbdb5cb67c5d5b226c3667bbc5eb196fc36aa0cfec0add1507512f4",
+          "header": "@@ -531,8 +528,8 @@",
+          "sha256": "182d334facd249b8efee31886a1f79339087c718c491383b72f8e475f7b1fab6",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -540,15 +535,6 @@",
-          "sha256": "76a95fe73b312131c5c5afdfeeab49d9248f09fad73b74d5e2406fefdfcd2c17",
+          "header": "@@ -540,15 +537,6 @@",
+          "sha256": "f74693613b96c33c716cff800653048d04f71ebe2ef50fc5c7783c1e1c3a21dc",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -567,58 +553,6 @@",
-          "sha256": "6b08308ab3139761711c8aa5685057f699ef22528ea9f3d5e25e76e0dfc43138",
+          "header": "@@ -567,58 +555,6 @@",
+          "sha256": "8e13025c85ccae219b663191d5bd4fab5d568d2d499564e359e37fa2e863e276",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -679,7 +613,9 @@",
-          "sha256": "97bfd0848e8c2012aa8c16db67aa9830af49ba65cef6a7261327252ac34b50c6",
+          "header": "@@ -679,7 +615,9 @@",
+          "sha256": "82824786718df242fe9d409dd263d247392fa250c2d991ef57efcf1b2bdad233",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -717,17 +653,6 @@",
-          "sha256": "eec07a5b87921da04f165193e49288d4dceb5720e9c3f0a861c1ecb92ba2e049",
+          "header": "@@ -717,17 +655,6 @@",
+          "sha256": "87ed2ef560d480e707d82d0a893764a106c42ba90e1372669d66f34274a2b8a0",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -743,7 +668,9 @@",
-          "sha256": "bc5565d1ff3c3f74c7a09843fff0bd9a35f2ddfeff5f6ada27eb3f70b5eb89de",
+          "header": "@@ -743,7 +670,9 @@",
+          "sha256": "5e41de962c1f797d9454fe2a75308ed0dff8d8221b3ed264117b0b0c368d54be",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -774,16 +701,6 @@",
-          "sha256": "42421748a4e5279c570f90f751bd815cc395351c16a6142132a048caae65657c",
+          "header": "@@ -774,16 +703,6 @@",
+          "sha256": "b2cf305662ed5f799e417ec294b6e232742ec00b3a7e5fcd8b8fc9a89793c3a4",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -821,11 +738,10 @@",
-          "sha256": "7607b936eac48d0365cc0b82448a4500ccde6fc5f8f5f2009b136fcdc494736c",
+          "header": "@@ -821,11 +740,10 @@",
+          "sha256": "a0faa88ce8c056501e125f74a3849a97d9e703cfd6406e62ea97d532005d7bdb",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -840,6 +756,7 @@",
-          "sha256": "6762fe733f308c5ed3491caf77bfc5f7597be0c8b1384a42773075a529946a29",
+          "header": "@@ -840,6 +758,7 @@",
+          "sha256": "8dea39229c16615f0f2b59cfacef51562ad1fe924b465ad6442d1ff325f494fd",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -878,10 +795,10 @@",
-          "sha256": "8afede0e13be5ffcee2b16368b51937de66d9c1132a3b45cf9c01f7f7fb09688",
+          "header": "@@ -878,10 +797,10 @@",
+          "sha256": "e21fe0ee2f628174c16a83529dc1cbaf390c255431993869821ea337283eee9f",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -891,7 +808,7 @@",
-          "sha256": "cc36f9e043943e6b785783908510a74090ab8a9aaff12fe7cb1dc0a601ad117b",
+          "header": "@@ -891,7 +810,7 @@",
+          "sha256": "3cbc8bc7eb0970d4861c349e1ff7648579919a833567168f09272a2d785186f9",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1015,6 +932,9 @@",
-          "sha256": "4386b7447e7ff535f8dcb8a464757b068d167371a76d241aa8de339bc4332db6",
+          "header": "@@ -1015,6 +934,9 @@",
+          "sha256": "50bc266d6737249a780f16f6fa5ec119964c4428984ffd8bf2438fa9e3ff2e15",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1051,6 +971,9 @@",
-          "sha256": "bccacf580096f168658073e3e5618d444f7d76f3fa950766dfd2bbd8138de5b2",
+          "header": "@@ -1051,6 +973,9 @@",
+          "sha256": "41f836b03914770c42b46a6b195e7880d53b6b7ccbb5d07de4923fa32006c34e",
           "basis": "硬删除用户事务内同步清理公告已读记录（deleteUserAnnouncementReads，announcements）。"
         },
         {
-          "header": "@@ -1269,34 +1192,6 @@",
-          "sha256": "362da07e4ff89eb94e4eab03ce6f8f110af9fbf59141e89381c893fb7793235c",
+          "header": "@@ -1269,34 +1194,6 @@",
+          "sha256": "43683b551f9edb847dd82bc53a3325254d023a7e13103644cbb2a1c9892fc4b1",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1345,23 +1240,9 @@",
-          "sha256": "2d6014b44aace388745a952d13d01e632b58e72b937cf84b39b0b538e3124680",
+          "header": "@@ -1345,23 +1242,9 @@",
+          "sha256": "6a7eafa24f0703e29dfdfa684eeacccf92fb3e18acb1a9e352550359a7cb3057",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         },
         {
-          "header": "@@ -1388,17 +1269,10 @@",
-          "sha256": "b21235658fbf3b488ef2c06964f7dd0a9b1d4425ad5b06ec158aa21b57f6c100",
+          "header": "@@ -1388,17 +1271,10 @@",
+          "sha256": "532265051fe88748ac8b748b282f1069024f52089ec3d3cd355d2363b93069b6",
           "basis": "本轮逐段合同及必要接点见 NATIVE_B388_REVIEW.json：model/user.go#1, model/user.go#11, model/user.go#12, model/user.go#13, model/user.go#14, model/user.go#15, model/user.go#16, model/user.go#17, model/user.go#18, model/user.go#19, model/user.go#2, model/user.go#20, model/user.go#21, model/user.go#22, model/user.go#23, model/user.go#24, model/user.go#25, model/user.go#26, model/user.go#3, model/user.go#4, model/user.go#5, model/user.go#9；2026-11-17 起两个 used_quota 函数恢复上游原文，充值加赠不再在本文件接入（SYNC_LEDGER.md#充值加赠接点） R2 AUD-FUND-1/2/4：批量缓存增减与记录同锁同步，水合二查；全局批量锁外落库，失败合并、软删除记账与硬删除终止。 R3 AUD-FUND-5：直接额度变更及授信提交后复用同一分片锁内缓存边界，落库待处理预扣后按最新数据库同步余额；签到、管理员调整不保留裸增量旁路。"
         }
       ]
