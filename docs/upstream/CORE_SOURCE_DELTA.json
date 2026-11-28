@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 822,
     "adapted": 342,
-    "extension": 548,
+    "extension": 549,
     "removed": 47
   },
   "files": [
@@ -1100,7 +1100,7 @@
       "path": "controller/channel.go",
       "status": "adapted",
       "upstream_sha256": "acd8081b1208f6bba858062a6b248a602c78aa5124e913a143ec69ab53126c6f",
-      "local_sha256": "86e0d46df977ac5e2b1edbae4aaed6ceed8e3fea5950a1fce854354f83a15a8e",
+      "local_sha256": "ea1eec4a7f28d11b2db5f0eb94faacbbf5bbfc2fafa5059cb0898928d53bb8fe",
       "reasons": [
         "audit-local-safety",
         "catalog-stats",
@@ -1359,6 +1359,19 @@
       "status": "upstream_equal",
       "upstream_sha256": "346cdd1c8daf607810b0bef7575503252dc58418b5fac695b15d9f47ccbe3e47",
       "local_sha256": "346cdd1c8daf607810b0bef7575503252dc58418b5fac695b15d9f47ccbe3e47"
+    },
+    {
+      "path": "controller/channel_upstream_filter.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "170a6e28e4cd2ab6008f8e7a9e458a0e31e49b75ac3838039fd0a34345f4466e",
+      "reasons": [
+        "upstream-management"
+      ],
+      "review": {
+        "target": "6627f0e3f37c002564b630a73e5afb0d28a92d3b",
+        "basis": " 上游管理 v2：账号凭据、渠道绑定或任务与鉴权接点见 SYNC_LEDGER.md。"
+      }
     },
     {
       "path": "controller/channel_upstream_ratio.go",
@@ -3388,7 +3401,7 @@
       "path": "controller/upstream_account.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8711b22f224210a190baec6f3378c5b8f79ae16c1a7305c84bac5f3583f43364",
+      "local_sha256": "6920f33f093d8c48db1bb5964ccfe7496ff7b8af6bad1af390f7cf3e8c78cdc5",
       "reasons": [
         "upstream-management"
       ],
@@ -4984,7 +4997,7 @@
       "path": "model/channel_upstream_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f73db9334b8776054c0796cd3ad6c266b4d285263b01b2bc3f8ff46650e9d8e9",
+      "local_sha256": "a92079c2574e1d63eae13dfc71efcb6687df147cf1586f7a394c12558e8c4f48",
       "reasons": [
         "upstream-management",
         "upstream-ratio"
@@ -6466,7 +6479,7 @@
       "path": "model/upstream_channel_binding.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "360c9f2f460ade47919ff0f89578e2d470c65c0f06e418935df0990c6bacb7e1",
+      "local_sha256": "ac422185d0b4a252921e2065d628ed6bcdae41c681f80f0ee82fd2b82ac92a07",
       "reasons": [
         "upstream-management"
       ],
@@ -11865,7 +11878,7 @@
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "306612b3ec13656926ed5d2bf5a440017a9b5e989e5452c87331d28163c0e4f9",
+      "local_sha256": "b4d9eb957cdeae5c73059f949485e28854889b11ca7aae8c4aa2dfe6aad9167b",
       "reasons": [
         "affiliate",
         "announcements",
@@ -12204,7 +12217,7 @@
       "path": "router/upstream_account_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f5ec480cc10ec237a9a08d4eb81b9a597111bc32da90912a1f863047970f0043"
+      "local_sha256": "b1d6e97692d42d4c1e888ad91b99256c0966ae17a54b32f6d97f6d6b3309b1bf"
     },
     {
       "path": "router/user_data_boundary_test.go",
@@ -12867,7 +12880,7 @@
       "path": "service/channel_upstream_ratio_record.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d385b0fdf93c7e67c316bb92a328a53ba0f34c3745f17439e84575b074eb5a82",
+      "local_sha256": "77b362b005d204db3c2cf5f4b5f4307f524cf6f10b19887bf23f3118860abaee",
       "reasons": [
         "upstream-management",
         "upstream-ratio"
@@ -14958,7 +14971,7 @@
       "path": "service/upstream_account.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d230732015e287e623fc4baa3ed1d01400a60a504d76172bc8ba34e2702973a6",
+      "local_sha256": "58e92f58ea01d0fca12374f70123a202912716395b404574c1da058b8b3ba7f1",
       "reasons": [
         "upstream-management"
       ],
@@ -15080,7 +15093,7 @@
       "path": "service/upstream_sync_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5542e313e345d2ab13690f14ba19810336ff31f002b9b45b233ff38c10617436"
+      "local_sha256": "c762268dba3265564f88d07785ef546f6589e6a381feeab73577417e88a9600e"
     },
     {
       "path": "service/upstream_usage_billing_test.go",

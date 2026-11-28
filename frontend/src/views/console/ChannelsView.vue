@@ -9,6 +9,7 @@ import {
   Coins,
   Gauge,
   GitCompareArrows,
+  Link2,
   LoaderCircle,
   Pencil,
   Plus,
@@ -41,6 +42,7 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
+import ChannelBindUpstreamModal from '@/components/console/channels/ChannelBindUpstreamModal.vue'
 import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
@@ -59,6 +61,9 @@ import {
   useAdminChannels,
 } from '@/composables/useAdminChannels'
 import { useChannelBalanceTask } from '@/composables/useChannelBalanceTask'
+import type { ChannelUpstreamRatio } from '@/api/channelUpstreamRatio'
+import { upstreamsApi, type UpstreamAccount } from '@/api/upstreams'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useChannelUpstreamBindings } from '@/composables/useChannelUpstreamBindings'
 import { useChannelUpstreamRatios } from '@/composables/useChannelUpstreamRatios'
 import {
@@ -136,6 +141,7 @@ const {
   lab,
   labs,
   status,
+  upstreamAccount,
   hasFilters,
   resetFilters,
   sortBy,
@@ -200,62 +206,121 @@ watch(canOperate, (allowed) => {
 const { ratios: upstreamRatios, update: updateUpstreamRatio } =
   useChannelUpstreamRatios(rows, canRead)
 const editingUpstreamRatio = ref<AdminChannel | null>(null)
+const bindingUpstreamChannel = ref<AdminChannel | null>(null)
 
 const route = useRoute()
 const router = useRouter()
 const canReadUpstream = computed(() => auth.hasPermission('upstream', 'read'))
-const { bindings: upstreamBindings } = useChannelUpstreamBindings(
-  rows,
-  canReadUpstream
+const canWriteUpstream = computed(() => auth.hasPermission('upstream', 'write'))
+const canManageUpstreamBindings = computed(
+  () => canWriteUpstream.value && canSensitiveWrite.value
 )
-// Client-side filter over the loaded page; /api/channel/ params stay unchanged.
-const upstreamAccountFilter = computed({
-  get() {
-    const raw = route.query.upstream_account
-    return canReadUpstream.value &&
-      typeof raw === 'string' &&
-      /^[1-9]\d*$/.test(raw)
-      ? raw
-      : ''
+const { bindings: upstreamBindings, reload: reloadBindings } =
+  useChannelUpstreamBindings(rows, canReadUpstream)
+const upstreamAccounts = ref<UpstreamAccount[]>([])
+const upstreamAccountsRequest = useLatestRequest()
+
+async function loadUpstreamAccounts() {
+  if (!canReadUpstream.value) {
+    upstreamAccountsRequest.cancel()
+    upstreamAccounts.value = []
+    return
+  }
+  const result = await upstreamAccountsRequest.run((signal) =>
+    upstreamsApi.list(signal)
+  )
+  if (result.stale || !result.ok) return
+  upstreamAccounts.value = result.value
+}
+watch(canReadUpstream, () => void loadUpstreamAccounts(), { immediate: true })
+
+const upstreamAccountNameById = computed(
+  () => new Map(upstreamAccounts.value.map((item) => [item.id, item.name]))
+)
+
+// Server-side filter synced with ?upstream_account=<id> (validated on backend with upstream:read).
+watch(
+  () => [route.query.upstream_account, canReadUpstream.value] as const,
+  ([raw, allowed]) => {
+    const next =
+      allowed && typeof raw === 'string' && /^[1-9]\d*$/.test(raw) ? raw : ''
+    if (upstreamAccount.value !== next) upstreamAccount.value = next
   },
+  { immediate: true }
+)
+
+const upstreamAccountFilter = computed({
+  get: () => upstreamAccount.value,
   set(value: string) {
+    upstreamAccount.value = value
     const query = { ...route.query }
     if (value) query.upstream_account = value
     else delete query.upstream_account
     void router.replace({ query })
   },
 })
+
 const upstreamAccountOptions = computed(() => {
-  const ids = new Set(
-    Object.values(upstreamBindings.value).map((item) => item.account_id)
-  )
+  const ids = new Set<number>([
+    ...upstreamAccounts.value.map((item) => item.id),
+    ...Object.values(upstreamBindings.value).map((item) => item.account_id),
+  ])
   if (upstreamAccountFilter.value) ids.add(Number(upstreamAccountFilter.value))
   return [
     { value: '', label: t('upstreams.channelLink.allAccounts') },
     ...[...ids]
       .sort((left, right) => left - right)
-      .map((id) => ({
-        value: String(id),
-        label: t('upstreams.channelLink.account', { id }),
-      })),
+      .map((id) => {
+        const name = upstreamAccountNameById.value.get(id)
+        return {
+          value: String(id),
+          label: name
+            ? t('upstreams.channelLink.accountNamed', { name, id })
+            : t('upstreams.channelLink.account', { id }),
+        }
+      }),
   ]
 })
-const visibleRows = computed(() => {
-  const account = Number(upstreamAccountFilter.value)
-  if (!account) return rows.value
-  return rows.value.filter(
-    (channel) => upstreamBindings.value[channel.id]?.account_id === account
-  )
-})
+
+const visibleRows = computed(() => rows.value)
 const hasAnyFilter = computed(
   () => hasFilters.value || Boolean(upstreamAccountFilter.value)
 )
 function resetAllFilters() {
   resetFilters()
-  if (upstreamAccountFilter.value) upstreamAccountFilter.value = ''
+  if (route.query.upstream_account) {
+    const query = { ...route.query }
+    delete query.upstream_account
+    void router.replace({ query })
+  }
 }
 function upstreamBindingFor(channel: AdminChannel | null) {
   return channel ? (upstreamBindings.value[channel.id] ?? null) : null
+}
+function upstreamAccountNameFor(channel: AdminChannel | null): string {
+  const binding = upstreamBindingFor(channel)
+  if (!binding) return ''
+  return upstreamAccountNameById.value.get(binding.account_id) ?? ''
+}
+function onUpstreamRatioSaved(next: ChannelUpstreamRatio) {
+  updateUpstreamRatio(next)
+  void reloadBindings()
+  void load({ background: true })
+}
+function onUpstreamBindingUpdated() {
+  void reloadBindings()
+  void load({ background: true })
+}
+function onChannelBoundToUpstream() {
+  bindingUpstreamChannel.value = null
+  void reloadBindings()
+  void load({ background: true })
+}
+function openRatioFromForm() {
+  const target = editing.value
+  if (!target) return
+  closeForm()
+  openUpstreamRatio(target)
 }
 
 const formOpen = ref(false)
@@ -778,6 +843,18 @@ function rowMenuItems(channel: AdminChannel): ActionMenuItem[] {
       icon: Scale,
     })
   }
+  if (
+    !retired &&
+    canManageUpstreamBindings.value &&
+    !upstreamBindingFor(channel)
+  ) {
+    items.push({
+      key: 'bind-upstream',
+      label: t('upstreams.channelLink.bindAction'),
+      icon: Link2,
+      disabled: !canMutate.value,
+    })
+  }
   if (canSensitiveWrite.value) {
     items.push({
       key: 'delete',
@@ -796,6 +873,7 @@ function onRowMenuSelect(channel: AdminChannel, key: string) {
   else if (key === 'runtime') openRuntime(channel)
   else if (key === 'test') openTest(channel)
   else if (key === 'upstream-ratio') openUpstreamRatio(channel)
+  else if (key === 'bind-upstream') bindingUpstreamChannel.value = channel
   else if (key === 'delete') requestDelete(channel)
 }
 
@@ -951,7 +1029,10 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             class="min-w-0 grow"
           />
         </div>
-        <div class="flex flex-wrap items-center gap-2" data-channel-facets>
+        <div
+          class="flex flex-wrap items-center gap-1.5 max-sm:[&_.filter-facet]:gap-1 max-sm:[&_.filter-facet]:px-2 sm:gap-2"
+          data-channel-facets
+        >
           <FilterSelect
             v-model="status"
             :options="statusOptions"
@@ -981,7 +1062,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
             v-model="upstreamAccountFilter"
             :options="upstreamAccountOptions"
             :label="t('upstreams.channelLink.filter')"
-            :prefix-label="t('upstreams.channelLink.filter')"
+            :prefix-label="t('upstreams.channelLink.filterShort')"
             variant="facet"
             size="compact"
             data-channel-upstream-filter
@@ -1426,6 +1507,11 @@ function routeQualitySummary(row: AdminChannelTableRow) {
                     upstreamBindingFor(
                       channelFromRow(row as AdminChannelTableRow)
                     )!
+                  "
+                  :account-name="
+                    upstreamAccountNameFor(
+                      channelFromRow(row as AdminChannelTableRow)
+                    )
                   "
                 />
                 <p
@@ -1937,6 +2023,7 @@ function routeQualitySummary(row: AdminChannelTableRow) {
       :save="saveForm"
       :fetch-models="fetchUpstreamModels"
       @close="closeForm"
+      @open-upstream-ratio="openRatioFromForm"
     />
     <ChannelModelSyncDialog
       :channel="syncingModels"
@@ -1948,10 +2035,20 @@ function routeQualitySummary(row: AdminChannelTableRow) {
     <ChannelUpstreamRatioDialog
       :channel="editingUpstreamRatio"
       :binding="upstreamBindingFor(editingUpstreamRatio)"
+      :account-name="upstreamAccountNameFor(editingUpstreamRatio)"
       :can-operate="canOperate && canMutate"
       :can-write="canWrite && canMutate"
+      :can-manage-binding="canManageUpstreamBindings && canMutate"
       @close="editingUpstreamRatio = null"
-      @saved="updateUpstreamRatio"
+      @saved="onUpstreamRatioSaved"
+      @binding-updated="onUpstreamBindingUpdated"
+    />
+
+    <ChannelBindUpstreamModal
+      :channel="bindingUpstreamChannel"
+      :accounts="upstreamAccounts"
+      @close="bindingUpstreamChannel = null"
+      @bound="onChannelBoundToUpstream"
     />
 
     <ChannelTestModal

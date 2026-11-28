@@ -147,19 +147,27 @@ func DeleteOrphanChannelUpstreamRatios() (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
-// GetDueUpstreamRatioChannels 返回到期需要探测的渠道：type 59/60 且尚无记录的渠道视为到期；
-// 已有记录的只看自动模式、已确定来源且 next_probe_at 已过的。
+// GetDueUpstreamRatioChannels 返回到期需要探测的渠道：type 59/60 以及绑定到活跃 Sub2API 上游账号
+// 且尚无记录的渠道视为到期；已有记录的只看自动模式、已确定来源且 next_probe_at 已过的。
 func GetDueUpstreamRatioChannels(now int64, limit int) ([]*Channel, error) {
 	var channels []*Channel
 	recorded := DB.Model(&ChannelUpstreamRatio{}).Select("channel_id")
 	due := DB.Model(&ChannelUpstreamRatio{}).Select("channel_id").
 		Where("mode = ? AND source <> ? AND next_probe_at <= ?", UpstreamRatioModeAuto, "", now)
-	accounts := DB.Model(&UpstreamAccount{}).Select("id").Where("status = ? AND platform = ?", "active", UpstreamRatioSourceNewAPI)
+	newAPIAccounts := DB.Model(&UpstreamAccount{}).Select("id").Where("status = ? AND platform = ?", "active", UpstreamRatioSourceNewAPI)
+	sub2APIAccounts := DB.Model(&UpstreamAccount{}).Select("id").Where("status = ? AND platform = ?", "active", UpstreamRatioSourceSub2API)
 	if err := CheckUpstreamBindingIdentities(context.Background(), 0); err != nil {
 		return nil, err
 	}
-	managed := DB.Model(&UpstreamChannelBinding{}).Select("channel_id, channel_created_time").Where("stale = ? AND account_id IN (?)", false, accounts)
-	err := DB.Where("(id, COALESCE(created_time,0)) NOT IN (?)", managed).Where(DB.Where("type IN ? AND id NOT IN (?)", []int{constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI}, recorded).Or("id IN (?)", due)).Order("id").Limit(limit).Find(&channels).Error
+	managedNewAPI := DB.Model(&UpstreamChannelBinding{}).Select("channel_id, channel_created_time").Where("stale = ? AND account_id IN (?)", false, newAPIAccounts)
+	managedSub2API := DB.Model(&UpstreamChannelBinding{}).Select("channel_id, channel_created_time").Where("stale = ? AND account_id IN (?)", false, sub2APIAccounts)
+	initialDue := DB.Where("id NOT IN (?)", recorded).Where(
+		DB.Where("type IN ?", []int{constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI}).
+			Or("(id, COALESCE(created_time,0)) IN (?)", managedSub2API),
+	)
+	err := DB.Where("(id, COALESCE(created_time,0)) NOT IN (?)", managedNewAPI).
+		Where(DB.Where(initialDue).Or("id IN (?)", due)).
+		Order("id").Limit(limit).Find(&channels).Error
 	return channels, err
 }
 

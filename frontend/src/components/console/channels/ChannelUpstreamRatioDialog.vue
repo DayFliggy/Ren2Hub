@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink, routerKey } from 'vue-router'
 import {
   channelUpstreamRatioApi,
   type ChannelUpstreamRatio,
@@ -8,13 +9,18 @@ import {
   type UpstreamRatioMode,
 } from '@/api/channelUpstreamRatio'
 import { ApiError } from '@/api/types'
-import type { UpstreamBinding } from '@/api/upstreams'
+import { upstreamsApi, type UpstreamBinding } from '@/api/upstreams'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
+import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
+import TextInput from '@/components/common/TextInput.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
+import { useToast } from '@/composables/useToast'
+import { upstreamErrorText } from '@/features/upstreams/lib/upstreamText'
 import type { AdminChannel } from '@/types/console'
-import { isDecimal } from '@/utils/decimal'
+import { isValidChannelRatio } from '@/utils/channelRatio'
+import { compareDecimal, isDecimal, multiplyDecimal } from '@/utils/decimal'
 import { relativeTime } from '@/utils/format'
 import {
   upstreamRatioErrorText,
@@ -22,15 +28,32 @@ import {
   upstreamRatioValue,
 } from './upstreamRatioText'
 
-const props = defineProps<{
-  channel: AdminChannel | null
-  canOperate: boolean
-  canWrite: boolean
-  /** Upstream account binding; ratio sync then writes the channel ratio. */
-  binding?: UpstreamBinding | null
+const props = withDefaults(
+  defineProps<{
+    channel: AdminChannel | null
+    canOperate: boolean
+    canWrite: boolean
+    /** Upstream account binding; ratio sync then writes the channel ratio. */
+    binding?: UpstreamBinding | null
+    /** Display name of the bound upstream account, when loaded. */
+    accountName?: string
+    /** True when the operator holds both upstream:write and channel:sensitive_write. */
+    canManageBinding?: boolean
+  }>(),
+  {
+    binding: null,
+    accountName: '',
+    canManageBinding: false,
+  }
+)
+const emit = defineEmits<{
+  close: []
+  saved: [view: ChannelUpstreamRatio]
+  'binding-updated': []
 }>()
-const emit = defineEmits<{ close: []; saved: [view: ChannelUpstreamRatio] }>()
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
+const toast = useToast()
+const hasRouter = Boolean(inject(routerKey, null))
 const request = useLatestRequest()
 const view = ref<ChannelUpstreamRatio | null>(null)
 const mode = ref<UpstreamRatioMode>('auto')
@@ -38,15 +61,116 @@ const manualRatio = ref('')
 const groupName = ref('')
 const busy = ref(false)
 const error = ref('')
+const bindingBusy = ref(false)
+const bindingError = ref('')
+const syncDraft = reactive({ enabled: false, factor: '1' })
+
+const activeBinding = computed(() => {
+  const b = props.binding
+  if (!b || b.channel_id !== props.channel?.id) return null
+  return b
+})
 
 const syncNote = computed(() => {
-  const binding = props.binding
-  if (!binding || binding.channel_id !== props.channel?.id) return ''
-  if (binding.stale || !binding.ratio_sync_enabled) return ''
+  const binding = activeBinding.value
+  if (!binding || binding.stale || !binding.ratio_sync_enabled) return ''
   return t('upstreams.channelLink.ratioDialogSync', {
     factor: binding.ratio_sync_factor,
   })
 })
+
+watch(
+  activeBinding,
+  (next) => {
+    bindingError.value = ''
+    if (!next) return
+    syncDraft.enabled = next.ratio_sync_enabled
+    syncDraft.factor = next.ratio_sync_factor
+  },
+  { immediate: true }
+)
+
+const syncFactorValid = computed(() =>
+  isValidChannelRatio(syncDraft.factor.trim())
+)
+const syncDirty = computed(() => {
+  const b = activeBinding.value
+  if (!b) return false
+  return (
+    syncDraft.enabled !== b.ratio_sync_enabled ||
+    syncDraft.factor.trim() !== b.ratio_sync_factor
+  )
+})
+const currentUpstreamRatio = computed(() =>
+  view.value ? upstreamRatioValue(view.value) : ''
+)
+const previewTargetRatio = computed(() => {
+  const upstream = currentUpstreamRatio.value
+  const factor = syncDraft.factor.trim()
+  if (
+    !upstream ||
+    !isDecimal(upstream) ||
+    compareDecimal(upstream, '0') <= 0 ||
+    !isValidChannelRatio(factor)
+  ) {
+    return ''
+  }
+  const product = multiplyDecimal(upstream, factor)
+  if (
+    compareDecimal(product, '0') <= 0 ||
+    compareDecimal(product, '1000') > 0
+  ) {
+    return ''
+  }
+  return product
+})
+
+async function saveBindingSync() {
+  const b = activeBinding.value
+  if (
+    !b ||
+    !props.canManageBinding ||
+    !syncDirty.value ||
+    !syncFactorValid.value
+  )
+    return
+  bindingBusy.value = true
+  bindingError.value = ''
+  try {
+    await upstreamsApi.updateBinding(b.account_id, b.channel_id, {
+      ...(syncDraft.enabled !== b.ratio_sync_enabled
+        ? { ratio_sync_enabled: syncDraft.enabled }
+        : {}),
+      ...(syncDraft.factor.trim() !== b.ratio_sync_factor
+        ? { ratio_sync_factor: syncDraft.factor.trim() }
+        : {}),
+    })
+    toast.success(t('upstreams.bindings.saved'))
+    emit('binding-updated')
+    load()
+  } catch (cause) {
+    bindingError.value = upstreamErrorText(cause, t, te)
+  } finally {
+    bindingBusy.value = false
+  }
+}
+
+async function reverifyBinding() {
+  const b = activeBinding.value
+  if (!b || !props.canManageBinding) return
+  bindingBusy.value = true
+  bindingError.value = ''
+  try {
+    await upstreamsApi.reverifyBinding(b.account_id, b.channel_id)
+    toast.success(t('upstreams.bindings.reverified'))
+    emit('binding-updated')
+    load()
+  } catch (cause) {
+    bindingError.value = upstreamErrorText(cause, t, te)
+  } finally {
+    bindingBusy.value = false
+  }
+}
 
 const mappableGroups = computed(() =>
   (view.value?.groups ?? []).filter(
@@ -176,6 +300,125 @@ watch(
     >
       {{ syncNote }}
     </p>
+    <section
+      v-if="activeBinding && canManageBinding"
+      data-upstream-binding-controls
+      class="mb-4 space-y-3 rounded-xl border border-[var(--outline-variant)] bg-[var(--wallet-tile-surface)] p-3.5 text-sm"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="font-semibold text-[var(--text-primary)]">
+          {{ t('upstreams.channelLink.syncSectionTitle') }}
+        </span>
+        <RouterLink
+          v-if="hasRouter"
+          :to="{
+            name: 'upstreams',
+            query: {
+              account: String(activeBinding.account_id),
+              tab: 'bindings',
+            },
+          }"
+          class="text-xs font-medium text-[var(--accent-text)] hover:underline"
+        >
+          {{
+            accountName
+              ? t('upstreams.channelLink.accountNamed', {
+                  name: accountName,
+                  id: activeBinding.account_id,
+                })
+              : t('upstreams.channelLink.account', {
+                  id: activeBinding.account_id,
+                })
+          }}
+        </RouterLink>
+      </div>
+      <div
+        v-if="activeBinding.stale"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--status-warning-soft)] px-3 py-2 text-xs text-[var(--status-warning-text)]"
+      >
+        <span>{{ t('upstreams.bindings.stale') }}</span>
+        <ConsoleButton
+          size="sm"
+          variant="secondary"
+          :loading="bindingBusy"
+          data-upstream-ratio-reverify
+          @click="reverifyBinding"
+        >
+          {{ t('upstreams.bindings.reverify') }}
+        </ConsoleButton>
+      </div>
+      <template v-else>
+        <div class="flex flex-wrap items-end gap-3">
+          <ConsoleToggle
+            v-model="syncDraft.enabled"
+            :label="t('upstreams.bindings.ratioSync')"
+            name="ratio-dialog-sync-enabled"
+            :disabled="bindingBusy"
+          />
+          <label class="w-28">
+            <span class="mb-1 block text-xs text-[var(--text-tertiary)]">
+              {{ t('upstreams.bindings.factor') }}
+            </span>
+            <TextInput
+              v-model="syncDraft.factor"
+              name="ratio-dialog-sync-factor"
+              inputmode="decimal"
+              :readonly="bindingBusy"
+            />
+          </label>
+          <ConsoleButton
+            size="sm"
+            variant="secondary"
+            :disabled="!syncDirty || !syncFactorValid || bindingBusy"
+            :loading="bindingBusy"
+            data-upstream-ratio-save-sync
+            @click="saveBindingSync"
+          >
+            {{ t('upstreams.bindings.save') }}
+          </ConsoleButton>
+        </div>
+        <p
+          v-if="!syncFactorValid"
+          class="text-xs text-[var(--status-danger-text)]"
+        >
+          {{ t('upstreams.channelForm.factorInvalid') }}
+        </p>
+        <p
+          v-else-if="syncDraft.enabled && previewTargetRatio"
+          class="font-mono text-xs tabular-nums text-[var(--text-secondary)]"
+          data-upstream-ratio-preview
+        >
+          {{
+            t('upstreams.bindings.ratioFormula', {
+              upstream: currentUpstreamRatio,
+              factor: syncDraft.factor.trim(),
+              target: previewTargetRatio,
+            })
+          }}
+          <template v-if="channel?.channel_ratio">
+            ·
+            {{
+              t('upstreams.bindings.channelRatio', {
+                current: channel.channel_ratio,
+              })
+            }}
+          </template>
+        </p>
+        <p
+          v-else-if="!syncDraft.enabled"
+          class="text-xs text-[var(--text-tertiary)]"
+        >
+          {{ t('upstreams.channelLink.syncDisabled') }}
+        </p>
+      </template>
+      <p
+        v-if="bindingError"
+        role="alert"
+        class="text-xs text-[var(--status-danger-text)]"
+      >
+        {{ bindingError }}
+      </p>
+    </section>
     <p
       v-if="error"
       role="alert"

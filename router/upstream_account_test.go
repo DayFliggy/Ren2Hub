@@ -63,7 +63,7 @@ func TestUpstreamRoutesAuthzPermissionsAndRetiredGroups(t *testing.T) {
 		{"PATCH", "/1", admin, `{"base_url":"https://new.invalid"}`, 400},
 		{"POST", "/1/keys", admin, `{"name":"x"}`, 403},
 		{"POST", "/1/keys/7/bind", patRaw, `{"channel_id":8}`, 403}, {"POST", "/1/keys/7/channel", patRaw, `{"name":"x"}`, 403},
-		{"POST", "/1/channels", patRaw, `{"name":"x","new_key":{"name":"x"}}`, 403}, {"PATCH", "/1/bindings/8", patRaw, `{"ratio_sync_enabled":true}`, 403}, {"DELETE", "/1/bindings/8", patRaw, "", 403},
+		{"POST", "/1/channels", patRaw, `{"name":"x","new_key":{"name":"x"}}`, 403}, {"PATCH", "/1/bindings/8", patRaw, `{"ratio_sync_enabled":true}`, 403}, {"POST", "/1/bindings/8/reverify", patRaw, "", 403}, {"DELETE", "/1/bindings/8", patRaw, "", 403},
 	} {
 		w := call(tc.method, tc.path, tc.bearer, tc.body)
 		require.Equal(t, tc.status, w.Code, "%s %s %s", tc.method, tc.path, w.Body.String())
@@ -78,6 +78,7 @@ func TestUpstreamRoutesAuthzPermissionsAndRetiredGroups(t *testing.T) {
 			{"POST", "/1/keys/7/channel", `{"name":"new","models":"m"}`},
 			{"POST", "/1/channels", `{"name":"new","models":"m","new_key":{"name":"new"}}`},
 			{"PATCH", fmt.Sprintf("/1/bindings/%d", ch.Id), `{"ratio_sync_enabled":true}`},
+			{"POST", fmt.Sprintf("/1/bindings/%d/reverify", ch.Id), ""},
 			{"DELETE", fmt.Sprintf("/1/bindings/%d", ch.Id), ""},
 		} {
 			resp := call(op.method, op.path, bearer, op.body)
@@ -181,4 +182,87 @@ func TestUpstreamTwoAccountsContendForChannelThroughRouter(t *testing.T) {
 	rows, err := model.ListUpstreamBindingsForChannels([]int{ch.Id})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+}
+
+func TestChannelUpstreamAccountServerFilterAndAuthz(t *testing.T) {
+	// Ensure model dialect column names (commonKeyCol) are initialized for SearchChannels.
+	prevSQLitePath := common.SQLitePath
+	prevMainType, prevLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	common.SQLitePath = fmt.Sprintf("file:%s_colinit?mode=memory&cache=shared", t.Name())
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Setenv("SQL_DSN", "")
+	require.NoError(t, model.InitDB())
+	if model.DB != nil {
+		if sqlDB, err := model.DB.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+	common.SQLitePath = prevSQLitePath
+	common.SetDatabaseTypes(prevMainType, prevLogType)
+
+	engine, db := setupDashboardSystemStatusRouter(t)
+	master := common.IsMasterNode
+	common.IsMasterNode = true
+	t.Cleanup(func() { common.IsMasterNode = master })
+	require.NoError(t, db.AutoMigrate(&model.UpstreamAccount{}, &model.UpstreamChannelBinding{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Channel{}, &model.Model{}, &model.Vendor{}))
+	require.NoError(t, authz.Init(db))
+
+	_, rootSession := createSystemStatusSession(t, db, 92301, "ch-filter-root", common.RoleRootUser)
+	noUpstreamAdmin, noUpstreamSession := createSystemStatusSession(t, db, 92302, "ch-filter-no-up", common.RoleAdminUser)
+	require.NoError(t, authz.SetUserPermissions(noUpstreamAdmin.Id, authz.PermissionsMap{
+		"channel":  {"read": true},
+		"upstream": {"read": false},
+	}))
+
+	a1 := model.UpstreamAccount{Name: "acct-1", Platform: "newapi", BaseURL: "https://one.invalid", Status: "active"}
+	a2 := model.UpstreamAccount{Name: "acct-2", Platform: "sub2api", BaseURL: "https://two.invalid", Status: "active"}
+	require.NoError(t, model.CreateUpstreamAccount(&a1))
+	require.NoError(t, model.CreateUpstreamAccount(&a2))
+
+	c1 := model.Channel{Name: "alpha-bound-1", Key: "k1", Models: "gpt-4o", Type: 60, Status: common.ChannelStatusEnabled, CreatedTime: 1001}
+	c2 := model.Channel{Name: "alpha-bound-2", Key: "k2", Models: "gpt-4o", Type: 59, Status: common.ChannelStatusEnabled, CreatedTime: 1002}
+	c3 := model.Channel{Name: "alpha-unbound", Key: "k3", Models: "gpt-4o", Type: 1, Status: common.ChannelStatusEnabled, CreatedTime: 1003}
+	require.NoError(t, db.Create(&c1).Error)
+	require.NoError(t, db.Create(&c2).Error)
+	require.NoError(t, db.Create(&c3).Error)
+
+	require.NoError(t, db.Create(&model.UpstreamChannelBinding{
+		AccountID: a1.ID, RemoteKeyID: 10, ChannelID: c1.Id, ChannelCreatedTime: c1.CreatedTime, ChannelFP: "fp1", RemoteStatus: "active",
+	}).Error)
+	require.NoError(t, db.Create(&model.UpstreamChannelBinding{
+		AccountID: a2.ID, RemoteKeyID: 20, ChannelID: c2.Id, ChannelCreatedTime: c2.CreatedTime, ChannelFP: "fp2", RemoteStatus: "active",
+	}).Error)
+
+	call := func(path, bearer string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		return w
+	}
+
+	// 1. Missing upstream:read permission gets 403 on both list and search when filtering by upstream_account.
+	require.Equal(t, http.StatusForbidden, call(fmt.Sprintf("/api/channel/?upstream_account=%d", a1.ID), noUpstreamSession).Code)
+	require.Equal(t, http.StatusForbidden, call(fmt.Sprintf("/api/channel/search?keyword=alpha&upstream_account=%d", a1.ID), noUpstreamSession).Code)
+	// Same admin can still list channels normally without upstream_account.
+	require.Equal(t, http.StatusOK, call("/api/channel/", noUpstreamSession).Code)
+
+	// 2. Invalid upstream_account returns 400.
+	require.Equal(t, http.StatusBadRequest, call("/api/channel/?upstream_account=abc", rootSession).Code)
+	require.Equal(t, http.StatusBadRequest, call("/api/channel/search?keyword=alpha&upstream_account=0", rootSession).Code)
+
+	// 3. Valid upstream_account filters list & search accurately on the server side.
+	wList := call(fmt.Sprintf("/api/channel/?upstream_account=%d", a1.ID), rootSession)
+	require.Equal(t, http.StatusOK, wList.Code)
+	require.Contains(t, wList.Body.String(), "alpha-bound-1")
+	require.NotContains(t, wList.Body.String(), "alpha-bound-2")
+	require.NotContains(t, wList.Body.String(), "alpha-unbound")
+	require.Contains(t, wList.Body.String(), `"total":1`)
+
+	wSearch := call(fmt.Sprintf("/api/channel/search?keyword=alpha&upstream_account=%d", a2.ID), rootSession)
+	require.Equal(t, http.StatusOK, wSearch.Code)
+	require.Contains(t, wSearch.Body.String(), "alpha-bound-2")
+	require.NotContains(t, wSearch.Body.String(), "alpha-bound-1")
+	require.NotContains(t, wSearch.Body.String(), "alpha-unbound")
+	require.Contains(t, wSearch.Body.String(), `"total":1`)
 }

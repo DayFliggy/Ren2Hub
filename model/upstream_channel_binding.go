@@ -37,6 +37,85 @@ func ListUpstreamBindingsForChannels(ids []int) ([]UpstreamChannelBinding, error
 	return rows, err
 }
 
+func GetUpstreamBindingForChannel(channelID int) (*UpstreamChannelBinding, error) {
+	if channelID <= 0 {
+		return nil, nil
+	}
+	var row UpstreamChannelBinding
+	current := upstreamDB().Model(&Channel{}).Select("id, COALESCE(created_time, 0)").Where("id = ?", channelID)
+	err := upstreamDB().Where("channel_id = ? AND (channel_id, channel_created_time) IN (?)", channelID, current).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func ListUpstreamChannelIDsForAccount(accountID int) ([]int, error) {
+	if accountID <= 0 {
+		return []int{}, nil
+	}
+	var ids []int
+	current := DB.Model(&Channel{}).Select("id, COALESCE(created_time, 0)")
+	err := DB.Model(&UpstreamChannelBinding{}).
+		Where("account_id = ? AND (channel_id, channel_created_time) IN (?)", accountID, current).
+		Order("channel_id").
+		Pluck("channel_id", &ids).Error
+	if ids == nil {
+		ids = []int{}
+	}
+	return ids, err
+}
+
+func ReverifyUpstreamBinding(accountID, channelID int, remoteStatus string, verify func(*Channel) error) (*UpstreamChannelBinding, error) {
+	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
+		lock := sqliteChannelKeyLock(channelID)
+		lock.Lock()
+		defer lock.Unlock()
+	}
+	var updated UpstreamChannelBinding
+	err := withUpstreamAccountLocked(accountID, func(tx *gorm.DB) error {
+		var channel Channel
+		if err := lockForUpdate(tx).First(&channel, channelID).Error; err != nil {
+			return err
+		}
+		var binding UpstreamChannelBinding
+		if err := lockForUpdate(tx).Where("account_id = ? AND channel_id = ?", accountID, channelID).First(&binding).Error; err != nil {
+			return err
+		}
+		if err := verify(&channel); err != nil {
+			return err
+		}
+		newFP := UpstreamRatioFingerprint(&channel)
+		updates := map[string]any{
+			"channel_created_time": channel.CreatedTime,
+			"channel_fp":           newFP,
+			"stale":                false,
+			"remote_status":        remoteStatus,
+			"ratio_sync_error":     "",
+		}
+		if err := tx.Model(&UpstreamChannelBinding{}).
+			Where("id = ?", binding.ID).
+			Select("channel_created_time", "channel_fp", "stale", "remote_status", "ratio_sync_error").
+			Updates(updates).Error; err != nil {
+			return err
+		}
+		binding.ChannelCreatedTime = channel.CreatedTime
+		binding.ChannelFP = newFP
+		binding.Stale = false
+		binding.RemoteStatus = remoteStatus
+		binding.RatioSyncError = ""
+		updated = binding
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &updated, nil
+}
+
 func UpdateUpstreamBinding(id int, updates map[string]any) error {
 	result := DB.Model(&UpstreamChannelBinding{}).Where("id = ?", id).Select("remote_status", "stale", "ratio_sync_enabled", "ratio_sync_factor", "ratio_sync_error").Updates(updates)
 	return result.Error

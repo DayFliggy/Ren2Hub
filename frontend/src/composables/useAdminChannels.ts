@@ -135,6 +135,7 @@ export function useAdminChannels() {
     { id: string; name: string; source: string; count: number }[]
   >([])
   const status = ref('')
+  const upstreamAccount = ref('')
   const sortBy = ref<AdminChannelSortBy>('id')
   const sortOrder = ref<AdminChannelSortOrder>('desc')
   const loading = ref(true)
@@ -224,6 +225,7 @@ export function useAdminChannels() {
       type: type.value || undefined,
       lab: lab.value || undefined,
       status: status.value || undefined,
+      upstream_account: upstreamAccount.value || undefined,
       sort_by: sortBy.value,
       sort_order: sortOrder.value,
       keyword: searchParam('channel'),
@@ -237,7 +239,9 @@ export function useAdminChannels() {
   }
 
   const hasFilters = computed(() =>
-    [searchText, type, lab, status].some((filter) => filter.value.trim())
+    [searchText, type, lab, status, upstreamAccount].some((filter) =>
+      filter.value.trim()
+    )
   )
 
   /** Clears every list filter; sorting is a view preference and stays. */
@@ -246,6 +250,7 @@ export function useAdminChannels() {
     type.value = ''
     lab.value = ''
     status.value = ''
+    upstreamAccount.value = ''
   }
 
   /**
@@ -310,7 +315,10 @@ export function useAdminChannels() {
   watch(searchScope, () => {
     if (searchText.value.trim()) reloadFromFirstPage()
   })
-  watch([type, lab, status, sortBy, sortOrder], reloadFromFirstPage)
+  watch(
+    [type, lab, status, upstreamAccount, sortBy, sortOrder],
+    reloadFromFirstPage
+  )
   watch(pageSize, reloadFromFirstPage)
   watch(page, () => void load())
 
@@ -927,6 +935,7 @@ export function useAdminChannels() {
     lab,
     labs,
     status,
+    upstreamAccount,
     hasFilters,
     resetFilters,
     sortBy,

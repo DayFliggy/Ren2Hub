@@ -94,6 +94,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  'open-upstream-ratio': []
 }>()
 
 const { t, locale } = useI18n()
@@ -914,6 +915,15 @@ async function submit() {
         >
           {{ t('upstreams.channelLink.formOpen') }}
         </RouterLink>
+        <button
+          v-if="editing"
+          type="button"
+          class="font-medium text-[var(--accent-text)] hover:underline focus-ring"
+          data-channel-form-open-ratio
+          @click="emit('open-upstream-ratio')"
+        >
+          {{ t('upstreams.channelLink.manageRatioSync') }}
+        </button>
       </div>
       <p
         v-if="settingsError"

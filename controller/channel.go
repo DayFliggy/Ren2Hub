@@ -158,9 +158,13 @@ func GetAllChannels(c *gin.Context) {
 		}
 	}
 
-	labIDs, err := channelLabFilterIDs(c)
+	labIDs, filterStatus, err := channelFilterIDs(c)
 	if err != nil {
-		common.ApiError(c, err)
+		if filterStatus != 0 && filterStatus != http.StatusInternalServerError {
+			common.ApiErrorStatus(c, filterStatus, err)
+		} else {
+			common.ApiError(c, err)
+		}
 		return
 	}
 
@@ -323,6 +327,15 @@ func FixChannelsAbilities(c *gin.Context) {
 }
 
 func SearchChannels(c *gin.Context) {
+	upstreamIDs, filterStatus, err := channelUpstreamAccountFilterIDs(c)
+	if err != nil {
+		if filterStatus != 0 && filterStatus != http.StatusInternalServerError {
+			common.ApiErrorStatus(c, filterStatus, err)
+		} else {
+			common.ApiError(c, err)
+		}
+		return
+	}
 	keyword := c.Query("keyword")
 	modelKeyword := c.Query("model")
 	statusParam := c.Query("status")
@@ -387,6 +400,7 @@ func SearchChannels(c *gin.Context) {
 		}
 		channelData = filtered
 	}
+	channelData = filterChannelsByIDs(channelData, upstreamIDs)
 
 	// calculate type counts for search results
 	typeCounts := make(map[int64]int64)

@@ -51,6 +51,52 @@ function answer(url: string) {
       ...row,
       account_id: Number(url.split('/')[4]),
     }))
+  if (url === '/api/channel/')
+    return {
+      items: [
+        {
+          id: 9,
+          name: 'NewAPI Relay',
+          type: 60,
+          channel_ratio: '2.5',
+          max_concurrency: 0,
+          in_flight: 0,
+          lab: { id: 'newapi', name: 'NewAPI', source: 'vendor' },
+          status: 1,
+          priority: 0,
+          weight: 1,
+          used_quota: 0,
+          balance: 0,
+          response_time: 0,
+          test_time: 0,
+          base_url: '',
+          models: 'gpt-4o',
+          model_mapping: '',
+        },
+      ],
+      total: 1,
+      type_counts: { '60': 1 },
+    }
+  if (url === '/api/channel/upstream_ratios')
+    return [
+      {
+        channel_id: 9,
+        kind: 'newapi',
+        source: 'newapi',
+        mode: 'auto',
+        status: 'ok',
+        ratio: '1.25',
+        effective_ratio: '1.25',
+        group_name: 'standard',
+        mapping: 'account',
+        token_name: 'limited',
+        stale: false,
+        received_at: 1800000000,
+        next_probe_at: 1800001800,
+        last_error: '',
+        version: 1,
+      },
+    ]
   throw new Error(`Unexpected API request: ${url}`)
 }
 
@@ -353,4 +399,30 @@ it('explains a disabled recovery action in the banner', async () => {
   expect(
     banner.get('[data-upstream-alert-action]').attributes()
   ).toHaveProperty('disabled')
+})
+
+it('shows linked channel name, live ratio formula preview, and reverify action on bindings tab', async () => {
+  signIn(null)
+  const view = await mountWorkspace({ account: account(), tab: 'bindings' })
+  await flushPromises()
+
+  expect(view.text()).toContain('NewAPI Relay')
+  expect(view.text()).toContain('#9')
+  expect(view.get('[data-upstream-binding-ratio-preview]').text()).toContain(
+    '1.25'
+  )
+  expect(view.get('[data-upstream-binding-ratio-preview]').text()).toContain(
+    '2.5'
+  )
+
+  await view
+    .get('button[role="switch"][name="upstream-ratio-sync-9"]')
+    .trigger('click')
+  await view.get('input[name="upstream-ratio-factor-9"]').setValue('2')
+  expect(view.get('[data-upstream-binding-ratio-preview]').text()).toContain(
+    '预计 2.5×'
+  )
+  expect(view.get('[data-upstream-binding-ratio-preview]').text()).toContain(
+    '已一致'
+  )
 })

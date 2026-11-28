@@ -88,6 +88,12 @@ func (f *syncRemoteFixture) serve(w http.ResponseWriter, r *http.Request) {
 		default:
 			data = key
 		}
+	case "/api/token/17/key":
+		data = `{"key":"test"}`
+	case "/api/pricing":
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"success":false,"message":"login required"}`)
+		return
 	default:
 		http.NotFound(w, r)
 		return
@@ -359,4 +365,142 @@ func TestUpstreamSyncSub2APIUnknownStatusKeepsChannelEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "active", rows[0].RemoteStatus)
+}
+
+func TestRefreshChannelUpstreamRatioUsesNewAPIAccountSync(t *testing.T) {
+	f := newSyncFixture(t)
+	view, err := RefreshChannelUpstreamRatio(context.Background(), f.binding.ChannelID)
+	require.NoError(t, err)
+	require.Equal(t, model.UpstreamRatioSourceNewAPI, view.Source)
+	require.Equal(t, "account", view.Mapping)
+	require.Equal(t, model.UpstreamRatioStatusOK, view.Status)
+	require.Equal(t, "1.25", view.EffectiveRatio)
+	// RatioSyncEnabled=true with factor=2 -> 1.25 * 2 = 2.5 written immediately.
+	require.Equal(t, "2.5", f.channel(t).ChannelRatio)
+}
+
+func TestUpdateManagedBindingAndManualRatioWriteChannelRatioImmediately(t *testing.T) {
+	f := newSyncFixture(t)
+	disabled := false
+	require.NoError(t, UpdateManagedBinding(context.Background(), f.account.ID, f.binding.ChannelID, &disabled, nil))
+	require.NoError(t, f.sync())
+	require.Equal(t, "1", f.channel(t).ChannelRatio)
+
+	// Turning sync on with factor=1.5 immediately writes 1.25 * 1.5 = 1.875.
+	enabled := true
+	factor := "1.5"
+	require.NoError(t, UpdateManagedBinding(context.Background(), f.account.ID, f.binding.ChannelID, &enabled, &factor))
+	require.Equal(t, "1.875", f.channel(t).ChannelRatio)
+	require.Empty(t, f.storedBinding(t).RatioSyncError)
+
+	// Changing factor to 2 immediately updates channel_ratio to 2.5.
+	factor2 := "2"
+	require.NoError(t, UpdateManagedBinding(context.Background(), f.account.ID, f.binding.ChannelID, nil, &factor2))
+	require.Equal(t, "2.5", f.channel(t).ChannelRatio)
+
+	// Updating channel upstream ratio to manual 4 immediately writes 4 * 2 = 8.
+	rec, err := model.GetChannelUpstreamRatio(f.binding.ChannelID)
+	require.NoError(t, err)
+	view, err := UpdateChannelUpstreamRatio(f.binding.ChannelID, UpstreamRatioUpdate{
+		Mode:    model.UpstreamRatioModeManual,
+		Ratio:   "4",
+		Version: rec.Version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "4", view.EffectiveRatio)
+	require.Equal(t, "8", f.channel(t).ChannelRatio)
+
+	// Disabling sync clears any recorded sync error and stops modifying channel_ratio.
+	require.NoError(t, model.UpdateUpstreamBinding(f.binding.ID, map[string]any{"ratio_sync_error": "upstream_ratio_unavailable"}))
+	require.NoError(t, UpdateManagedBinding(context.Background(), f.account.ID, f.binding.ChannelID, &disabled, nil))
+	require.Empty(t, f.storedBinding(t).RatioSyncError)
+	require.Equal(t, "8", f.channel(t).ChannelRatio)
+}
+
+func TestSub2APIBoundMainstreamChannelAutoProbesAndWritesChannelRatio(t *testing.T) {
+	db := setupUpstreamRatioTest(t)
+	require.NoError(t, db.AutoMigrate(&model.Ability{}, &model.SystemTask{}))
+	t.Setenv("CRYPTO_SECRET", "sub2-mainstream-test")
+
+	billingServer := (&fakeUpstream{
+		billing: sub2apiBody("1.5", "1.5", "1.5", `,"peak_rate_enabled":false`),
+	}).serve(t)
+	base := billingServer.URL
+
+	// Mainstream protocol (OpenAI type 1), NOT type 59.
+	ch := model.Channel{
+		Name:         "openai-via-sub2api",
+		Type:         constant.ChannelTypeOpenAI,
+		Key:          fakeUpstreamKey,
+		BaseURL:      &base,
+		Status:       common.ChannelStatusEnabled,
+		Models:       "gpt-4o",
+		ChannelRatio: "1",
+		CreatedTime:  1800000100,
+	}
+	require.NoError(t, ch.Insert())
+
+	account := model.UpstreamAccount{
+		CredentialUID: "uid-sub2-mainstream",
+		Name:          "sub2-mainstream",
+		Platform:      model.UpstreamRatioSourceSub2API,
+		BaseURL:       base,
+		Status:        "active",
+		LastSyncAt:    time.Now().Unix(),
+	}
+	require.NoError(t, model.CreateUpstreamAccount(&account))
+
+	binding := model.UpstreamChannelBinding{
+		AccountID:          account.ID,
+		RemoteKeyID:        42,
+		ChannelID:          ch.Id,
+		ChannelCreatedTime: ch.CreatedTime,
+		ChannelFP:          upstreamRatioFingerprint(&ch),
+		RemoteStatus:       "active",
+		RatioSyncEnabled:   true,
+		RatioSyncFactor:    "2",
+	}
+	require.NoError(t, model.BindUpstreamChannel(&binding, func(*model.Channel) error { return nil }))
+
+	// 1. GetDueUpstreamRatioChannels includes mainstream OpenAI channel bound to active Sub2API account.
+	due, err := model.GetDueUpstreamRatioChannels(time.Now().Unix(), 20)
+	require.NoError(t, err)
+	require.Len(t, due, 1)
+	require.Equal(t, ch.Id, due[0].Id)
+
+	// 2. Scheduled probe cycle probes /v1/sub2api/billing directly and writes channel_ratio = 1.5 * 2 = 3.
+	summary, err := RunChannelUpstreamRatioCycle(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Statuses[model.UpstreamRatioStatusOK])
+	got, err := model.GetChannelById(ch.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, "3", got.ChannelRatio)
+
+	// 3. Updating factor via UpdateManagedBinding immediately updates channel_ratio to 1.5 * 3 = 4.5.
+	factor3 := "3"
+	require.NoError(t, UpdateManagedBinding(context.Background(), account.ID, ch.Id, nil, &factor3))
+	got, err = model.GetChannelById(ch.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, "4.5", got.ChannelRatio)
+}
+
+func TestReverifyManagedBindingRestoresStaleChannelAndSyncsRatio(t *testing.T) {
+	f := newSyncFixture(t)
+	// Simulate channel setting/proxy change -> fingerprint mismatch -> stale=true.
+	setting := `{"proxy":""}`
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", f.binding.ChannelID).Update("setting", setting).Error)
+	require.NoError(t, model.DB.Model(&model.UpstreamChannelBinding{}).Where("id = ?", f.binding.ID).Update("stale", true).Error)
+	require.True(t, f.storedBinding(t).Stale)
+
+	// Reverify with matching key restores stale=false and syncs ratio immediately (1.25 * 2 = 2.5).
+	require.NoError(t, ReverifyManagedBinding(context.Background(), f.account.ID, f.binding.ChannelID))
+	require.False(t, f.storedBinding(t).Stale)
+	require.Equal(t, "2.5", f.channel(t).ChannelRatio)
+
+	// Mismatched key is rejected and binding remains stale.
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", f.binding.ChannelID).Update("key", "sk-wrong-key").Error)
+	require.NoError(t, model.DB.Model(&model.UpstreamChannelBinding{}).Where("id = ?", f.binding.ID).Update("stale", true).Error)
+	err := ReverifyManagedBinding(context.Background(), f.account.ID, f.binding.ChannelID)
+	require.ErrorContains(t, err, "channel_key_mismatch")
+	require.True(t, f.storedBinding(t).Stale)
 }

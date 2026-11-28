@@ -369,7 +369,13 @@ func EditManagedBinding(c *gin.Context) {
 		upstreamFailure(c, 400, "invalid_upstream_request")
 		return
 	}
-	writeUpstreamResult(c, nil, service.UpdateManagedBinding(id, ch, body.Enabled, body.Factor))
+	writeUpstreamResult(c, nil, service.UpdateManagedBinding(c.Request.Context(), id, ch, body.Enabled, body.Factor))
+}
+func ReverifyManagedBinding(c *gin.Context) {
+	id, ch, ok := upstreamIDs(c, "channel_id")
+	if ok {
+		writeUpstreamResult(c, nil, service.ReverifyManagedBinding(c.Request.Context(), id, ch))
+	}
 }
 func DeleteManagedBinding(c *gin.Context) {
 	id, ch, ok := upstreamIDs(c, "channel_id")

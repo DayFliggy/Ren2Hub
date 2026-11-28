@@ -150,6 +150,13 @@ describe('upstream requests', () => {
       { ratio_sync_enabled: true },
       { signal: undefined }
     )
+    vi.mocked(api.post).mockResolvedValueOnce(null)
+    await upstreamsApi.reverifyBinding(4, 9)
+    expect(api.post).toHaveBeenLastCalledWith(
+      '/api/admin/upstreams/4/bindings/9/reverify',
+      undefined,
+      { signal: undefined, timeoutMs: 120_000 }
+    )
   })
 
   it('keeps the business code and Retry-After of a 429 answer', async () => {

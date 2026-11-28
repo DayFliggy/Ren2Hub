@@ -3,6 +3,12 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
+import { api } from '@/api/client'
+import { parseChannelPage } from '@/api/channelStatus'
+import {
+  channelUpstreamRatioApi,
+  type ChannelUpstreamRatio,
+} from '@/api/channelUpstreamRatio'
 import {
   upstreamsApi,
   type UpstreamAccount,
@@ -16,9 +22,13 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import { upstreamRatioValue } from '@/components/console/channels/upstreamRatioText'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
+import type { AdminChannel } from '@/types/console'
 import { isValidChannelRatio } from '@/utils/channelRatio'
+import { compareDecimal, isDecimal, multiplyDecimal } from '@/utils/decimal'
 import { keyStatusText, keyTone, upstreamErrorText } from '../lib/upstreamText'
 
 const props = defineProps<{
@@ -41,6 +51,7 @@ const { t, te } = useI18n()
 const auth = useAuthStore()
 const toast = useToast()
 
+const canReadChannel = computed(() => auth.hasPermission('channel', 'read'))
 const canEdit = computed(
   () =>
     auth.hasPermission('upstream', 'write') &&
@@ -52,6 +63,99 @@ const drafts = reactive<Record<number, { enabled: boolean; factor: string }>>(
 const busyChannel = ref<number | null>(null)
 const unbinding = ref<UpstreamBinding | null>(null)
 const keyById = computed(() => new Map(props.keys.map((key) => [key.id, key])))
+const channelById = ref<Record<number, AdminChannel>>({})
+const ratioByChannelId = ref<Record<number, ChannelUpstreamRatio>>({})
+const metaRequest = useLatestRequest()
+
+async function loadChannelMeta() {
+  const ids = [...new Set(props.bindings.map((item) => item.channel_id))]
+  if (!canReadChannel.value || !ids.length) {
+    metaRequest.cancel()
+    channelById.value = {}
+    ratioByChannelId.value = {}
+    return
+  }
+  const result = await metaRequest.run(async (signal) => {
+    const [channelsRes, ratiosRes] = await Promise.allSettled([
+      api
+        .get<unknown>(
+          '/api/channel/',
+          { upstream_account: props.account.id, p: 1, page_size: 500 },
+          { signal }
+        )
+        .then((raw) => parseChannelPage(raw).items),
+      channelUpstreamRatioApi.list(ids.slice(0, 500), signal),
+    ])
+    return {
+      channels: channelsRes.status === 'fulfilled' ? channelsRes.value : [],
+      ratios: ratiosRes.status === 'fulfilled' ? ratiosRes.value : [],
+    }
+  })
+  if (result.stale || !result.ok) return
+  channelById.value = Object.fromEntries(
+    result.value.channels.map((ch) => [ch.id, ch])
+  )
+  ratioByChannelId.value = Object.fromEntries(
+    result.value.ratios.map((item) => [item.channel_id, item])
+  )
+}
+
+watch(
+  () => [props.account.id, props.bindings, canReadChannel.value] as const,
+  () => void loadChannelMeta(),
+  { immediate: true }
+)
+
+function ratioPreview(binding: UpstreamBinding): {
+  upstream: string
+  target: string
+  current: string
+  matched: boolean
+} | null {
+  const ratioView = ratioByChannelId.value[binding.channel_id]
+  const channel = channelById.value[binding.channel_id]
+  const upstream = ratioView ? upstreamRatioValue(ratioView) : ''
+  const current = channel?.channel_ratio ?? ''
+  const draft = drafts[binding.channel_id]
+  const factor = draft?.factor.trim() ?? binding.ratio_sync_factor
+  if (!upstream && !current) return null
+  let target = ''
+  if (
+    upstream &&
+    isDecimal(upstream) &&
+    compareDecimal(upstream, '0') > 0 &&
+    isValidChannelRatio(factor)
+  ) {
+    const product = multiplyDecimal(upstream, factor)
+    if (
+      compareDecimal(product, '0') > 0 &&
+      compareDecimal(product, '1000') <= 0
+    ) {
+      target = product
+    }
+  }
+  const matched =
+    Boolean(target) &&
+    Boolean(current) &&
+    isDecimal(current) &&
+    compareDecimal(target, current) === 0
+  return { upstream, target, current, matched }
+}
+
+async function reverify(binding: UpstreamBinding) {
+  if (!canEdit.value) return
+  busyChannel.value = binding.channel_id
+  try {
+    await upstreamsApi.reverifyBinding(props.account.id, binding.channel_id)
+    toast.success(t('upstreams.bindings.reverified'))
+    emit('reload')
+    void loadChannelMeta()
+  } catch (error) {
+    toast.error(upstreamErrorText(error, t, te))
+  } finally {
+    busyChannel.value = null
+  }
+}
 
 function remoteKeyText(binding: UpstreamBinding) {
   const key = keyById.value.get(binding.remote_key_id)
@@ -125,6 +229,7 @@ async function save(binding: UpstreamBinding) {
     )
     toast.success(t('upstreams.bindings.saved'))
     emit('reload')
+    void loadChannelMeta()
   } catch (error) {
     toast.error(upstreamErrorText(error, t, te))
   } finally {
@@ -230,12 +335,24 @@ async function unbind() {
                   name: 'channels',
                   query: { upstream_account: String(account.id) },
                 }"
-                class="text-sm font-semibold text-[var(--accent)] hover:underline"
-                :title="t('upstreams.bindings.openChannels')"
+                class="min-w-0 truncate text-sm font-semibold text-[var(--accent)] hover:underline"
+                :title="
+                  channelById[binding.channel_id]?.name ||
+                  t('upstreams.bindings.openChannels')
+                "
               >
-                {{
-                  t('upstreams.bindings.channel', { id: binding.channel_id })
-                }}
+                <template v-if="channelById[binding.channel_id]?.name">
+                  {{ channelById[binding.channel_id]!.name }}
+                  <span
+                    class="ml-1 font-mono text-xs font-normal text-[var(--text-tertiary)]"
+                    >#{{ binding.channel_id }}</span
+                  >
+                </template>
+                <template v-else>
+                  {{
+                    t('upstreams.bindings.channel', { id: binding.channel_id })
+                  }}
+                </template>
               </RouterLink>
               <span
                 class="min-w-0 truncate text-xs text-[var(--text-tertiary)]"
@@ -303,13 +420,82 @@ async function unbind() {
             {{ t('upstreams.channelForm.factorInvalid') }}
           </p>
           <p
+            v-else-if="ratioPreview(binding)"
+            class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+            data-upstream-binding-ratio-preview
+          >
+            <template
+              v-if="
+                drafts[binding.channel_id]?.enabled &&
+                ratioPreview(binding)!.target
+              "
+            >
+              <span class="text-[var(--text-secondary)]">
+                {{
+                  t('upstreams.bindings.ratioFormula', {
+                    upstream: ratioPreview(binding)!.upstream,
+                    factor:
+                      drafts[binding.channel_id]?.factor.trim() ||
+                      binding.ratio_sync_factor,
+                    target: ratioPreview(binding)!.target,
+                  })
+                }}
+              </span>
+              <span
+                v-if="ratioPreview(binding)!.current"
+                :class="
+                  ratioPreview(binding)!.matched
+                    ? 'text-[var(--status-success-text)]'
+                    : 'text-[var(--status-warning-text)]'
+                "
+              >
+                ·
+                {{
+                  ratioPreview(binding)!.matched
+                    ? t('upstreams.bindings.ratioFormulaMatched', {
+                        current: ratioPreview(binding)!.current,
+                      })
+                    : t('upstreams.bindings.ratioFormulaDiff', {
+                        current: ratioPreview(binding)!.current,
+                      })
+                }}
+              </span>
+            </template>
+            <template v-else>
+              <span v-if="ratioPreview(binding)!.upstream">
+                {{
+                  t('upstreams.bindings.upstreamRatio', {
+                    upstream: ratioPreview(binding)!.upstream,
+                  })
+                }}
+              </span>
+              <span v-if="ratioPreview(binding)!.current">
+                {{
+                  t('upstreams.bindings.channelRatio', {
+                    current: ratioPreview(binding)!.current,
+                  })
+                }}
+              </span>
+            </template>
+          </p>
+          <div
             v-if="binding.stale"
             role="alert"
-            class="mt-2 rounded-lg bg-[var(--status-warning-soft)] px-3 py-2 text-xs text-[var(--status-warning-text)]"
+            class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--status-warning-soft)] px-3 py-2 text-xs text-[var(--status-warning-text)]"
             data-upstream-binding-stale
           >
-            {{ t('upstreams.bindings.stale') }}
-          </p>
+            <span>{{ t('upstreams.bindings.stale') }}</span>
+            <ConsoleButton
+              v-if="canEdit"
+              size="sm"
+              variant="secondary"
+              :loading="busyChannel === binding.channel_id"
+              data-upstream-binding-reverify
+              @click="reverify(binding)"
+            >
+              {{ t('upstreams.bindings.reverify') }}
+            </ConsoleButton>
+          </div>
           <p
             v-if="binding.ratio_sync_error"
             role="alert"

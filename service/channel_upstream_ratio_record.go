@@ -253,10 +253,47 @@ func verifyUpstreamRatioFingerprint(fingerprint string) func(*model.Channel) err
 	}
 }
 
+func activeUpstreamBindingForChannel(channelID int) (*model.UpstreamChannelBinding, *model.UpstreamAccount, error) {
+	b, err := model.GetUpstreamBindingForChannel(channelID)
+	if err != nil || b == nil || b.Stale {
+		return nil, nil, err
+	}
+	a, err := model.GetUpstreamAccount(b.AccountID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, nil
+	}
+	if err != nil || a.Status != "active" {
+		return nil, nil, err
+	}
+	return b, a, nil
+}
+
+// applyImmediateBoundRatioLocked assumes the caller holds lockUpstreamRatioChannel(ch.Id)
+// and never acquires lockManagedAccount, preserving strict lock hierarchy (Level 2 -> 3 -> 4 -> 5).
+func applyImmediateBoundRatioLocked(b *model.UpstreamChannelBinding, ch *model.Channel, rec *model.ChannelUpstreamRatio, now time.Time) {
+	if b == nil || b.Stale || !b.RatioSyncEnabled || b.RemoteStatus != "active" {
+		return
+	}
+	code, err := writeBoundRatio(*b, ch, rec, now)
+	if err != nil {
+		_ = handleBindingError(*b, err)
+		return
+	}
+	if code != b.RatioSyncError {
+		if updateErr := model.UpdateUpstreamBinding(b.ID, map[string]any{"ratio_sync_error": code}); updateErr == nil {
+			b.RatioSyncError = code
+		}
+	}
+}
+
 // probeAndSaveUpstreamRatio 探测并以 CAS 写回。同一渠道的探测按渠道串行：后到的探测在前一次
 // 写回之后才读取版本与指纹，因此不会因版本过期而 409，也不会复用定时探测的结果。
 func probeAndSaveUpstreamRatio(ctx context.Context, channelID int, fullDetect bool) (*model.ChannelUpstreamRatio, error) {
 	defer lockUpstreamRatioChannel(channelID)()
+	return probeAndSaveUpstreamRatioLocked(ctx, channelID, fullDetect, "")
+}
+
+func probeAndSaveUpstreamRatioLocked(ctx context.Context, channelID int, fullDetect bool, forcedSource string) (*model.ChannelUpstreamRatio, error) {
 	channel, err := model.GetChannelById(channelID, true)
 	if err != nil {
 		return nil, err
@@ -270,18 +307,36 @@ func probeAndSaveUpstreamRatio(ctx context.Context, channelID int, fullDetect bo
 		prev = nil
 	}
 	var expectedVersion int64
-	knownSource := ""
+	knownSource := forcedSource
 	if prev != nil {
-		expectedVersion, knownSource = prev.Version, prev.Source
+		expectedVersion = prev.Version
+		if knownSource == "" {
+			knownSource = prev.Source
+		}
+	}
+	binding, account, bindErr := activeUpstreamBindingForChannel(channelID)
+	if bindErr != nil {
+		return nil, bindErr
+	}
+	if binding != nil && account != nil && account.Platform == model.UpstreamRatioSourceSub2API && binding.Verify(channel) == nil {
+		if knownSource == "" {
+			knownSource = UpstreamRatioKindSub2API
+		}
 	}
 	kind := UpstreamRatioKind(channel)
 	fingerprint := upstreamRatioFingerprint(channel)
 	now := time.Now()
-	result := runUpstreamRatioProbe(ctx, channel, kind, knownSource, fullDetect, now)
+	// When an active Sub2API binding identifies a mainstream-protocol channel,
+	// probe /v1/sub2api/billing directly instead of blind dual-path fullDetect.
+	probeFullDetect := fullDetect && !(binding != nil && account != nil && account.Platform == model.UpstreamRatioSourceSub2API && knownSource == UpstreamRatioKindSub2API)
+	result := runUpstreamRatioProbe(ctx, channel, kind, knownSource, probeFullDetect, now)
 	record := applyUpstreamProbe(prev, channelID, kind, fingerprint, result, now)
 	record.ChannelCreatedTime = channel.CreatedTime
 	if err := model.SaveChannelUpstreamRatio(record, expectedVersion, verifyUpstreamRatioFingerprint(fingerprint)); err != nil {
 		return nil, err
+	}
+	if binding != nil && account != nil && account.Platform == model.UpstreamRatioSourceSub2API {
+		applyImmediateBoundRatioLocked(binding, channel, record, now)
 	}
 	return record, nil
 }
@@ -296,8 +351,30 @@ func lockUpstreamRatioChannel(channelID int) func() {
 	return mutex.Unlock
 }
 
-// RefreshChannelUpstreamRatio 是管理员手动刷新：主流协议渠道在这里做完整识别。
+// RefreshChannelUpstreamRatio 是管理员手动刷新：绑定到活跃 NewAPI 上游账号时走上游账号同步
+// 以保留已认证分组倍率（mapping="account"），其余渠道执行直接探测并在开启同步时即时回写 channel_ratio。
 func RefreshChannelUpstreamRatio(ctx context.Context, channelID int) (*ChannelUpstreamRatioView, error) {
+	binding, account, err := activeUpstreamBindingForChannel(channelID)
+	if err != nil {
+		return nil, err
+	}
+	if binding != nil && account != nil && account.Platform == model.UpstreamRatioSourceNewAPI {
+		// Verify channel identity before routing through the upstream account;
+		// if the channel changed, mark stale and fall through to direct probe.
+		if err := model.CheckUpstreamBindingIdentities(ctx, account.ID); err != nil {
+			return nil, err
+		}
+		binding, account, err = activeUpstreamBindingForChannel(channelID)
+		if err != nil {
+			return nil, err
+		}
+		if binding != nil && account != nil && account.Platform == model.UpstreamRatioSourceNewAPI {
+			if err := SyncUpstreamAccount(ctx, account.ID); err != nil {
+				return nil, err
+			}
+			return getChannelUpstreamRatioView(channelID)
+		}
+	}
 	if _, err := probeAndSaveUpstreamRatio(ctx, channelID, true); err != nil {
 		return nil, err
 	}
@@ -331,8 +408,10 @@ func normalizeManualUpstreamRatio(value string) (string, error) {
 }
 
 // UpdateChannelUpstreamRatio 处理管理员手动设置：manual 模式写入手填倍率；auto 模式可选择
-// NewAPI 分组（group_name 为空串表示取消手动关联，恢复名称匹配）。只写本表，不改渠道。
+// NewAPI 分组（group_name 为空串表示取消手动关联，恢复名称匹配）。若渠道存在开启倍率同步的
+// 活跃上游绑定，则立即按最新有效倍率 × 同步系数回写 channel_ratio。
 func UpdateChannelUpstreamRatio(channelID int, update UpstreamRatioUpdate) (*ChannelUpstreamRatioView, error) {
+	defer lockUpstreamRatioChannel(channelID)()
 	channel, err := model.GetChannelById(channelID, true)
 	if err != nil {
 		return nil, err
@@ -353,7 +432,8 @@ func UpdateChannelUpstreamRatio(channelID int, update UpstreamRatioUpdate) (*Cha
 	} else if kind := UpstreamRatioKind(channel); kind == UpstreamRatioKindSub2API || kind == UpstreamRatioKindNewAPI {
 		record.Source = kind
 	}
-	record.UpdatedAt = time.Now().Unix()
+	now := time.Now()
+	record.UpdatedAt = now.Unix()
 
 	switch update.Mode {
 	case model.UpstreamRatioModeManual:
@@ -378,6 +458,9 @@ func UpdateChannelUpstreamRatio(channelID int, update UpstreamRatioUpdate) (*Cha
 	record.ChannelCreatedTime = channel.CreatedTime
 	if err := model.SaveChannelUpstreamRatio(record, update.Version, verifyUpstreamRatioFingerprint(fingerprint)); err != nil {
 		return nil, err
+	}
+	if binding, account, bindErr := activeUpstreamBindingForChannel(channelID); bindErr == nil && binding != nil && account != nil {
+		applyImmediateBoundRatioLocked(binding, channel, record, now)
 	}
 	return getChannelUpstreamRatioView(channelID)
 }

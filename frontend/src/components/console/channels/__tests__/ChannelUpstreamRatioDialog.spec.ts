@@ -56,14 +56,16 @@ const binding: UpstreamBinding = {
 
 function setup(
   canWrite = true,
-  upstreamBinding: UpstreamBinding | null = null
+  upstreamBinding: UpstreamBinding | null = null,
+  extraProps: { canManageBinding?: boolean; accountName?: string } = {}
 ) {
   return mount(ChannelUpstreamRatioDialog, {
     props: {
-      channel: { id: 101, name: 'relay' } as AdminChannel,
+      channel: { id: 101, name: 'relay', channel_ratio: '1.5' } as AdminChannel,
       canOperate: true,
       canWrite,
       binding: upstreamBinding,
+      ...extraProps,
     },
     global: {
       plugins: [
@@ -187,5 +189,47 @@ describe('channel upstream ratio dialog', () => {
       )
       wrapper.unmount()
     }
+  })
+
+  it('edits ratio sync factor and reverifies stale bindings inline when canManageBinding is true', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue([wire])
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(null)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(null)
+
+    const wrapper = setup(true, binding, {
+      canManageBinding: true,
+      accountName: 'Demo Upstream',
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-upstream-binding-controls]').exists()).toBe(true)
+    await wrapper.get('input[name="ratio-dialog-sync-factor"]').setValue('2')
+    expect(wrapper.get('[data-upstream-ratio-preview]').text()).toContain(
+      'upstreams.bindings.ratioFormula'
+    )
+    await wrapper.get('[data-upstream-ratio-save-sync]').trigger('click')
+    await flushPromises()
+    expect(patch).toHaveBeenCalledWith(
+      '/api/admin/upstreams/4/bindings/101',
+      { ratio_sync_factor: '2' },
+      { signal: undefined }
+    )
+    expect(wrapper.emitted('binding-updated')).toHaveLength(1)
+    wrapper.unmount()
+
+    const staleWrapper = setup(
+      true,
+      { ...binding, stale: true },
+      { canManageBinding: true }
+    )
+    await flushPromises()
+    await staleWrapper.get('[data-upstream-ratio-reverify]').trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith(
+      '/api/admin/upstreams/4/bindings/101/reverify',
+      undefined,
+      { signal: undefined, timeoutMs: 120_000 }
+    )
+    expect(staleWrapper.emitted('binding-updated')).toHaveLength(1)
+    staleWrapper.unmount()
   })
 })

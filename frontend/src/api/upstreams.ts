@@ -638,6 +638,14 @@ export const upstreamsApi = {
   ) {
     return mutate('patch', bindingPath(id, channelId), input, signal)
   },
+  reverifyBinding(id: number, channelId: number, signal?: AbortSignal) {
+    return mutate(
+      'post',
+      `${bindingPath(id, channelId)}/reverify`,
+      undefined,
+      signal
+    )
+  },
   unbind(id: number, channelId: number, signal?: AbortSignal) {
     return mutate('delete', bindingPath(id, channelId), undefined, signal)
   },

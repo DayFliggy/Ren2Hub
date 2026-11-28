@@ -5,7 +5,10 @@ import { RouterLink } from 'vue-router'
 import type { UpstreamBinding } from '@/api/upstreams'
 import StatusChip from '@/components/common/StatusChip.vue'
 
-defineProps<{ binding: UpstreamBinding }>()
+const props = defineProps<{
+  binding: UpstreamBinding
+  accountName?: string
+}>()
 const { t, te } = useI18n()
 
 function remoteStatusText(status: string) {
@@ -33,10 +36,16 @@ function remoteStatusText(status: string) {
       "
     >
       {{
-        t('upstreams.channelLink.badge', {
-          account: binding.account_id,
-          key: binding.remote_key_id,
-        })
+        props.accountName
+          ? t('upstreams.channelLink.badgeNamed', {
+              name: props.accountName,
+              account: binding.account_id,
+              key: binding.remote_key_id,
+            })
+          : t('upstreams.channelLink.badge', {
+              account: binding.account_id,
+              key: binding.remote_key_id,
+            })
       }}
     </RouterLink>
     <StatusChip

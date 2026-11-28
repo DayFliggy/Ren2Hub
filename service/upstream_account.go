@@ -184,11 +184,29 @@ func DeleteManagedBinding(id, channelID int) error {
 	defer lockManagedAccount(id)()
 	return model.DeleteUpstreamBinding(id, channelID)
 }
-func UpdateManagedBinding(id, channelID int, enabled *bool, factor *string) error {
+func cachedAccountSnapshot(a *model.UpstreamAccount) (UpstreamSnapshot, bool) {
+	if a == nil || a.GroupsJSON == "" {
+		return UpstreamSnapshot{}, false
+	}
+	var groups []UpstreamGroup
+	if err := common.UnmarshalJsonStr(a.GroupsJSON, &groups); err != nil {
+		return UpstreamSnapshot{}, false
+	}
+	var meta UpstreamSiteMeta
+	if a.SiteMetaJSON != "" {
+		_ = common.UnmarshalJsonStr(a.SiteMetaJSON, &meta)
+	}
+	return UpstreamSnapshot{UpstreamSiteMeta: meta, Groups: groups}, true
+}
+
+func UpdateManagedBinding(ctx context.Context, id, channelID int, enabled *bool, factor *string) error {
 	defer lockManagedAccount(id)()
 	updates := map[string]any{}
 	if enabled != nil {
 		updates["ratio_sync_enabled"] = *enabled
+		if !*enabled {
+			updates["ratio_sync_error"] = ""
+		}
 	}
 	if factor != nil {
 		v, err := model.NormalizeChannelRatio(*factor)
@@ -201,16 +219,143 @@ func UpdateManagedBinding(id, channelID int, enabled *bool, factor *string) erro
 	if err != nil {
 		return err
 	}
-	for _, b := range rows {
-		if b.ChannelID == channelID {
-			return model.UpdateUpstreamBinding(b.ID, updates)
+	var target *model.UpstreamChannelBinding
+	for i := range rows {
+		if rows[i].ChannelID == channelID {
+			target = &rows[i]
+			break
 		}
 	}
-	return gorm.ErrRecordNotFound
+	if target == nil {
+		return gorm.ErrRecordNotFound
+	}
+	if err := model.UpdateUpstreamBinding(target.ID, updates); err != nil {
+		return err
+	}
+	if enabled != nil {
+		target.RatioSyncEnabled = *enabled
+		if !*enabled {
+			target.RatioSyncError = ""
+		}
+	}
+	if factor != nil {
+		target.RatioSyncFactor = updates["ratio_sync_factor"].(string)
+	}
+	if target.Stale || !target.RatioSyncEnabled || target.RemoteStatus != "active" {
+		return nil
+	}
+	a, err := model.GetUpstreamAccount(id)
+	if err != nil || a.Status != "active" {
+		return nil
+	}
+	// Strictly Level 1 (lockManagedAccount) -> Level 2 (lockUpstreamRatioChannel).
+	defer lockUpstreamRatioChannel(channelID)()
+	ch, err := model.GetChannelById(channelID, true)
+	if err != nil {
+		return handleBindingError(*target, err)
+	}
+	rec, err := model.GetChannelUpstreamRatio(channelID)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	needsSub2Probe := a.Platform == model.UpstreamRatioSourceSub2API &&
+		(rec == nil || !rec.BelongsTo(ch) ||
+			(rec.Mode != model.UpstreamRatioModeManual &&
+				(rec.Status != model.UpstreamRatioStatusOK || rec.CredentialFP != upstreamRatioFingerprint(ch) || now.Unix() > rec.FreshUntil)))
+	if needsSub2Probe && ctx != nil && ctx.Err() == nil {
+		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		probed, probeErr := probeAndSaveUpstreamRatioLocked(probeCtx, channelID, false, UpstreamRatioKindSub2API)
+		cancel()
+		if probeErr == nil && probed != nil {
+			// probeAndSaveUpstreamRatioLocked already applied immediate bound ratio.
+			return nil
+		}
+	}
+	applyImmediateBoundRatioLocked(target, ch, rec, now)
+	return nil
 }
+
+func ReverifyManagedBinding(ctx context.Context, id, channelID int) error {
+	_, err := withManagedAdapter(ctx, id, func(ad *upstreamAdapter) (bool, error) {
+		a, err := model.GetUpstreamAccount(id)
+		if err != nil {
+			return false, err
+		}
+		rows, err := model.ListUpstreamBindings(id)
+		if err != nil {
+			return false, err
+		}
+		var binding *model.UpstreamChannelBinding
+		for i := range rows {
+			if rows[i].ChannelID == channelID {
+				binding = &rows[i]
+				break
+			}
+		}
+		if binding == nil {
+			return false, gorm.ErrRecordNotFound
+		}
+		key, err := ad.GetKey(ctx, binding.RemoteKeyID)
+		if err != nil {
+			return false, err
+		}
+		var raw string
+		if ad.platform == "newapi" {
+			raw, err = ad.Reveal(ctx, binding.RemoteKeyID)
+			if err != nil {
+				return false, err
+			}
+		}
+		updated, err := model.ReverifyUpstreamBinding(id, channelID, key.Status, func(current *model.Channel) error {
+			sum := sha256.Sum256([]byte(current.Key))
+			if ad.platform == "sub2api" && hex.EncodeToString(sum[:]) != key.KeySHA256 ||
+				ad.platform == "newapi" && normalizeNewAPIKey(current.Key) != normalizeNewAPIKey(raw) {
+				return errors.New("channel_key_mismatch")
+			}
+			return nil
+		})
+		if err != nil {
+			return false, err
+		}
+		if key.Status != "active" {
+			return false, nil
+		}
+		if ad.platform == "newapi" {
+			snap, snapErr := ad.Snapshot(ctx)
+			if snapErr != nil {
+				return false, nil
+			}
+			return false, syncUpstreamBinding(a, *updated, key, snap)
+		}
+		// Sub2API: best-effort probe under Level 1 -> Level 2, then apply bound ratio if enabled.
+		func() {
+			defer lockUpstreamRatioChannel(channelID)()
+			probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			probed, probeErr := probeAndSaveUpstreamRatioLocked(probeCtx, channelID, false, UpstreamRatioKindSub2API)
+			if probeErr != nil || probed == nil {
+				if updated.RatioSyncEnabled {
+					if ch, chErr := model.GetChannelById(channelID, true); chErr == nil {
+						if rec, recErr := model.GetChannelUpstreamRatio(channelID); recErr == nil {
+							applyImmediateBoundRatioLocked(updated, ch, rec, time.Now())
+						}
+					}
+				}
+			}
+		}()
+		return false, nil
+	})
+	return err
+}
+
 func normalizeNewAPIKey(k string) string { return strings.TrimPrefix(strings.TrimSpace(k), "sk-") }
 func BindManagedChannel(ctx context.Context, id, keyID, channelID int) error {
 	_, err := withManagedAdapter(ctx, id, func(ad *upstreamAdapter) (bool, error) {
+		a, err := model.GetUpstreamAccount(id)
+		if err != nil {
+			return false, err
+		}
 		key, err := ad.GetKey(ctx, keyID)
 		if err != nil {
 			return false, err
@@ -227,7 +372,7 @@ func BindManagedChannel(ctx context.Context, id, keyID, channelID int) error {
 			return false, err
 		}
 		b := &model.UpstreamChannelBinding{AccountID: id, RemoteKeyID: keyID, ChannelID: channelID, ChannelCreatedTime: ch.CreatedTime, RemoteStatus: key.Status}
-		return false, model.BindUpstreamChannel(b, func(current *model.Channel) error {
+		err = model.BindUpstreamChannel(b, func(current *model.Channel) error {
 			sum := sha256.Sum256([]byte(current.Key))
 			if ad.platform == "sub2api" && hex.EncodeToString(sum[:]) != key.KeySHA256 || ad.platform == "newapi" && normalizeNewAPIKey(current.Key) != normalizeNewAPIKey(raw) {
 				return errors.New("channel_key_mismatch")
@@ -235,6 +380,15 @@ func BindManagedChannel(ctx context.Context, id, keyID, channelID int) error {
 			b.ChannelFP = upstreamRatioFingerprint(current)
 			return nil
 		})
+		if err != nil {
+			return false, err
+		}
+		if a.Platform == "newapi" && key.Status == "active" {
+			if snap, ok := cachedAccountSnapshot(a); ok {
+				_, _ = managedRatioRecord(a, ch, *b, key, snap, b.Verify)
+			}
+		}
+		return false, nil
 	})
 	return err
 }
@@ -316,6 +470,9 @@ func CreateManagedChannel(ctx context.Context, id, keyID int, newKey *UpstreamKe
 	}
 	b := &model.UpstreamChannelBinding{AccountID: id, RemoteKeyID: key.ID, RemoteStatus: key.Status}
 	err = model.CreateBoundUpstreamChannel(b, ch, upstreamRatioFingerprint)
+	if err == nil && a.Platform == "newapi" && key.Status == "active" {
+		_, _ = managedRatioRecord(a, ch, *b, key, snapshot, b.Verify)
+	}
 	return ch.Id, err
 }
 func sameUpstreamOrigin(base, channel string) bool {

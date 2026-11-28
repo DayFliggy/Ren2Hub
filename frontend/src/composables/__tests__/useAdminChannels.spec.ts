@@ -639,4 +639,34 @@ describe('channel priority transaction', () => {
       expect(put).not.toHaveBeenCalled()
     }
   )
+
+  it('forwards upstream_account filter to server list and search endpoints and resets cleanly', async () => {
+    const get = vi
+      .spyOn(api, 'get')
+      .mockImplementation(async (path) =>
+        path === '/api/channel/labs' ? { items: [] } : page
+      )
+    const state = await setup()
+    get.mockClear()
+
+    state.upstreamAccount.value = '4'
+    await flushPromises()
+    expect(get).toHaveBeenCalledWith(
+      '/api/channel/',
+      expect.objectContaining({ upstream_account: '4' }),
+      expect.any(Object)
+    )
+    expect(state.hasFilters.value).toBe(true)
+
+    get.mockClear()
+    state.resetFilters()
+    await flushPromises()
+    expect(state.upstreamAccount.value).toBe('')
+    expect(state.hasFilters.value).toBe(false)
+    expect(get).toHaveBeenCalledWith(
+      '/api/channel/',
+      expect.objectContaining({ upstream_account: undefined }),
+      expect.any(Object)
+    )
+  })
 })

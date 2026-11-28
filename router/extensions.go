@@ -95,6 +95,7 @@ func registerUpstreamRoutes(api *gin.RouterGroup) {
 	handlePermissionRoute(up, http.MethodPost, "/:id/keys/:key_id/channel", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.CreateManagedChannel)
 	handlePermissionRoute(up, http.MethodPost, "/:id/channels", authz.UpstreamSensitiveWrite, controller.RequireUpstreamChannelWrite, controller.CreateManagedChannel)
 	handlePermissionRoute(up, http.MethodPatch, "/:id/bindings/:channel_id", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.EditManagedBinding)
+	handlePermissionRoute(up, http.MethodPost, "/:id/bindings/:channel_id/reverify", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.ReverifyManagedBinding)
 	handlePermissionRoute(up, http.MethodDelete, "/:id/bindings/:channel_id", authz.UpstreamWrite, controller.RequireUpstreamChannelWrite, controller.DeleteManagedBinding)
 }
 
